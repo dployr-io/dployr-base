@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/service-v1.0.0.schema.json",
+  "title": "Service",
+  "description": "Service configuration schema",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Service name",
+      "minLength": 3,
+      "pattern": "^[a-zA-Z0-9-_ ]+$"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["image", "remote"],
+      "description": "Service source type"
+    },
+    "runtime": {
+      "type": "string",
+      "enum": ["node-js", "python", "go", "rust", "java", "php", "ruby", "static", "docker", "k3s"],
+      "description": "Runtime environment"
+    },
+    "workingDir": {
+      "type": ["string", "null"],
+      "description": "Working directory path",
+      "default": null
+    },
+    "outputDir": {
+      "type": ["string", "null"],
+      "description": "Output directory for build artifacts",
+      "default": null
+    },
+    "runCmd": {
+      "type": ["string", "null"],
+      "description": "Command to run the service",
+      "pattern": ".*[a-zA-Z].*[a-zA-Z].*",
+      "default": null
+    },
+    "port": {
+      "type": ["integer", "null"],
+      "description": "Port number for the service",
+      "minimum": 1024,
+      "maximum": 9999,
+      "default": null
+    },
+    "domain": {
+      "type": ["string", "null"],
+      "description": "Custom domain for the service",
+      "pattern": "^(?!:\\/\\/)([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}$",
+      "default": null
+    },
+    "dnsProvider": {
+      "type": ["string", "null"],
+      "enum": ["cloudflare", "route53", "godaddy", "namecheap", null],
+      "description": "DNS provider for domain management",
+      "default": null
+    },
+    "remote": {
+      "type": ["object", "null"],
+      "description": "Remote repository configuration",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Remote repository ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Repository owner/organization name"
+        },
+        "repository": {
+          "type": "string",
+          "description": "Repository name"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Git provider (github, gitlab, etc.)"
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": ["id"]
+        },
+        {
+          "required": ["name", "repository", "provider"]
+        }
+      ],
+      "default": null
+    },
+    "ciRemote": {
+      "type": ["object", "null"],
+      "description": "Remote repository configuration",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Remote repository ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Repository owner/organization name"
+        },
+        "repository": {
+          "type": "string",
+          "description": "Repository name"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Git provider (github, gitlab, etc.)"
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": ["id"]
+        },
+        {
+          "required": ["name", "repository", "provider"]
+        }
+      ],
+      "default": null
+    },
+    "image": {
+      "type": ["string", "null"],
+      "description": "Docker image name",
+      "default": null
+    },
+    "spec": {
+      "type": ["string", "null"],
+      "description": "Kubernetes specification",
+      "default": null
+    },
+    "envVars": {
+      "type": "string",
+      "description": "Environment variables",
+      "default": ""
+    },
+    "secrets": {
+      "type": "string",
+      "description": "Secret variables",
+      "default": ""
+    }
+  },
+  "required": ["name", "source", "runtime"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "source": { "const": "remote" } }
+      },
+      "then": {
+        "required": ["remote"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "source": { "const": "image" } }
+      },
+      "then": {
+        "required": ["image"]
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          { "properties": { "source": { "const": "remote" } } },
+          { "not": { "properties": { "runtime": { "const": "static" } } } }
+        ]
+      },
+      "then": {
+        "required": ["runCmd"]
+      }
+    },
+    {
+      "if": {
+        "not": { "properties": { "runtime": { "const": "static" } } }
+      },
+      "then": {
+        "properties": {
+          "port": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 9999
+          }
+        },
+        "required": ["port"]
+      }
+    }
+  ]
+}

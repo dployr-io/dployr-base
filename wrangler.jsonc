@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dployr-base", 
+  "account_id": "81602a8fc518f9542c732a96aa9018f2",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-13",
+  "assets": {
+    "directory": "./public"
+  },
+  "vars": {
+    "ENVIRONMENT": "production"
+  },
+  "observability": {
+    "logs": {
+      "enabled": true
+    }
+  },
+  "env": {
+    "production": {
+      "name": "dployr-base",        
+      "vars": {
+        "ENVIRONMENT": "production"
+      }
+    },
+    "staging": {
+      "name": "dployr-base-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+    }
+  }
+}

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300..700&display=swap" rel="stylesheet">
+    <title>About - dployr</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-width: 100vw;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .main-content {
+            min-height: 0;
+            min-width: 0;
+        }
+
+        .footer {
+            width: 100%;
+            padding: 1rem 0;
+            background: none;
+            color: #888;
+            font-size: 0.95rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 1.2rem;
+        }
+
+        .footer-links a {
+            color: #888;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: #177E89;
+            font-weight: 600;
+        }
+
+        [data-theme="dark"] .footer,
+        [data-theme="dark"] .footer-links a {
+            color: #aaa;
+        }
+
+        [data-theme="dark"] .footer-links a:hover {
+            color: #fff;
+        }
+
+        .mobile-menu {
+            display: none;
+            flex-direction: column;
+            width: 100%;
+            background-color: var(--navbar-color);
+            position: absolute;
+            top: 64px;
+            left: 0;
+            padding: 1rem 2rem;
+            gap: 1rem;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .mobile-menu.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .mobile-menu a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .mobile-menu a:last-child {
+            border-bottom: none;
+        }
+
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hamburger {
+                display: flex;
+            }
+
+            .mobile-menu {
+                display: flex;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar" id="navbar">
+        <div class="navbar-content">
+            <div class="logo">
+                <a href="/">
+                    <img src="https://ik.imagekit.io/dployr/shared/logo.svg?updatedAt=1751365002259"
+                        alt="dployr.io logo" id="logo">
+                </a>
+            </div>
+            <div class="nav-links">
+                <a href="/index.html#install">Install</a>
+                <a href="/index.html#docs">Docs</a>
+                <a href="/index.html#blog">Blog</a>
+                <a href="/index.html#tutorials">Tutorials</a>
+                <a href="#" class="contact-btn" onclick="openContactForm(); return false;">Contact</a>
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                    <svg id="theme-icon" viewBox="0 0 24 24">
+                        <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+                    </svg>
+                </button>
+            </div>
+            <button class="hamburger" onclick="toggleMobileMenu()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobile-menu">
+            <a href="/index.html#install">Install</a>
+            <a href="/index.html#docs">Docs</a>
+            <a href="/index.html#blog">Blog</a>
+            <a href="/index.html#tutorials">Tutorials</a>
+            <a href="#" class="contact-btn" onclick="openContactForm(); return false;">Contact</a>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+                </svg>
+            </button>
+        </div>
+    </nav>
+    <div class="main-content">
+        <div class="about-container">
+            <h1>About dployr</h1>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque euismod, nisi eu consectetur
+                consectetur, nisl nisi consectetur nisi, euismod euismod nisi nisi euismod. Etiam vitae nisi sit amet
+                lorem accumsan porta. Duis nec velit vel lacus dictum placerat. Integer euismod, urna eu tincidunt
+                consectetur, nisi nisl aliquam nunc, vitae euismod nisl nunc euismod nunc.</p>
+            <a href="/" class="back-link">Back</a>
+        </div>
+    </div>
+    <footer class="footer">
+        <span>&copy; 2025 dployr.io - An Open Source Project</span>
+        <nav class="footer-links">
+            <a href="/about">About</a>
+            <a href="https://github.com/tobimadehin/dployr" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://x.com/@_techcyborg" target="_blank" rel="noopener">X</a>
+            <a href="https://discord.gg/dployr" target="_blank" rel="noopener">Discord</a>
+        </nav>
+    </footer>
+    <script src="/scripts.js"></script>
+    <div class="modal-overlay" id="contactModal">
+        <form class="contact-form">
+            <button type="button" class="close-btn" onclick="closeContactForm()"></button>
+            <h2>Contact Us</h2>
+
+            <div class="form-group">
+                <label>I'm reaching out:</label>
+                <div class="radio-group">
+                    <label><input type="radio" name="type" value="personal" checked> Personally</label>
+                    <label><input type="radio" name="type" value="company"> On behalf of a company</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="category">Category:</label>
+                <select id="category" name="category" required>
+                    <option value="support">Technical Support</option>
+                    <option value="enquiry">General Enquiry</option>
+                    <option value="migration">Professional Deployment Assistance</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="subject">Subject:</label>
+                <input type="text" id="subject" name="subject" required>
+            </div>
+
+            <div class="form-group">
+                <label for="message">Message:</label>
+                <textarea id="message" name="message" required
+                    placeholder="Please describe your inquiry in detail..."></textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeContactForm()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Send Message</button>
+            </div>
+        </form>
+    </div>
+</body>
+
+</html>
