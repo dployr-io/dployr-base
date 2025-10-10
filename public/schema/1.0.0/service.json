@@ -1,80 +1,101 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/service-v1.0.0.schema.json",
-  "title": "Service",
-  "description": "Service configuration schema",
+  "title": "service",
+  "description": "service configuration schema",
   "type": "object",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Service name",
+      "description": "service name",
       "minLength": 3,
       "pattern": "^[a-zA-Z0-9-_ ]+$"
     },
     "source": {
       "type": "string",
       "enum": ["image", "remote"],
-      "description": "Service source type"
+      "description": "service source type"
     },
     "runtime": {
       "type": "string",
-      "enum": ["node-js", "python", "go", "rust", "java", "php", "ruby", "static", "docker", "k3s"],
-      "description": "Runtime environment"
+      "enum": [
+        "node_js",
+        "python",
+        "go",
+        "rust",
+        "java",
+        "php",
+        "ruby",
+        "static",
+        "docker",
+        "k3s"
+      ],
+      "description": "runtime environment"
     },
-    "workingDir": {
+    "working_dir": {
       "type": ["string", "null"],
-      "description": "Working directory path",
+      "description": "working directory path",
       "default": null
     },
-    "outputDir": {
+    "output_dir": {
       "type": ["string", "null"],
-      "description": "Output directory for build artifacts",
+      "description": "output directory for build artifacts",
       "default": null
     },
-    "runCmd": {
+    "run_cmd": {
       "type": ["string", "null"],
-      "description": "Command to run the service",
+      "description": "command to run the service",
       "pattern": ".*[a-zA-Z].*[a-zA-Z].*",
       "default": null
     },
     "port": {
       "type": ["integer", "null"],
-      "description": "Port number for the service",
+      "description": "port number for the service",
       "minimum": 1024,
       "maximum": 9999,
       "default": null
     },
     "domain": {
       "type": ["string", "null"],
-      "description": "Custom domain for the service",
+      "description": "custom domain for the service",
       "pattern": "^(?!:\\/\\/)([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}$",
       "default": null
     },
-    "dnsProvider": {
+    "dns_provider": {
       "type": ["string", "null"],
       "enum": ["cloudflare", "route53", "godaddy", "namecheap", null],
-      "description": "DNS provider for domain management",
+      "description": "dns provider for domain management",
       "default": null
     },
     "remote": {
       "type": ["object", "null"],
-      "description": "Remote repository configuration",
+      "description": "remote repository configuration",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Remote repository ID"
+          "description": "remote repository id"
         },
         "name": {
           "type": "string",
-          "description": "Repository owner/organization name"
+          "description": "repository owner/organization name"
         },
         "repository": {
           "type": "string",
-          "description": "Repository name"
+          "description": "repository name"
         },
         "provider": {
           "type": "string",
-          "description": "Git provider (github, gitlab, etc.)"
+          "description": "git provider (github, gitlab, etc.)"
+        },
+        "branch": {
+          "type": ["string", "null"],
+          "description": "repository branch name",
+          "default": null
+        },
+        "commit_hash": {
+          "type": ["string", "null"],
+          "description": "git commit hash",
+          "default": null
         }
       },
       "additionalProperties": false,
@@ -88,25 +109,25 @@
       ],
       "default": null
     },
-    "ciRemote": {
+    "ci_remote": {
       "type": ["object", "null"],
-      "description": "Remote repository configuration",
+      "description": "ci remote repository configuration",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Remote repository ID"
+          "description": "remote repository id"
         },
         "name": {
           "type": "string",
-          "description": "Repository owner/organization name"
+          "description": "repository owner/organization name"
         },
         "repository": {
           "type": "string",
-          "description": "Repository name"
+          "description": "repository name"
         },
         "provider": {
           "type": "string",
-          "description": "Git provider (github, gitlab, etc.)"
+          "description": "git provider (github, gitlab, etc.)"
         }
       },
       "additionalProperties": false,
@@ -122,22 +143,22 @@
     },
     "image": {
       "type": ["string", "null"],
-      "description": "Docker image name",
+      "description": "docker image name",
       "default": null
     },
     "spec": {
       "type": ["string", "null"],
-      "description": "Kubernetes specification",
+      "description": "kubernetes specification",
       "default": null
     },
-    "envVars": {
+    "env_vars": {
       "type": "string",
-      "description": "Environment variables",
+      "description": "environment variables",
       "default": ""
     },
     "secrets": {
       "type": "string",
-      "description": "Secret variables",
+      "description": "secret variables",
       "default": ""
     }
   },
@@ -168,7 +189,7 @@
         ]
       },
       "then": {
-        "required": ["runCmd"]
+        "required": ["run_cmd"]
       }
     },
     {
