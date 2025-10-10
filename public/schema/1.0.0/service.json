@@ -17,20 +17,31 @@
       "description": "service source type"
     },
     "runtime": {
-      "type": "string",
-      "enum": [
-        "node_js",
-        "python",
-        "go",
-        "rust",
-        "java",
-        "php",
-        "ruby",
-        "static",
-        "docker",
-        "k3s"
-      ],
-      "description": "runtime environment"
+      "type": "object",
+      "description": "Runtime environment configuration",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "node_js",
+            "python",
+            "go",
+            "rust",
+            "java",
+            "php",
+            "ruby",
+            "static",
+            "docker",
+            "k3s"
+          ],
+          "description": "Runtime type"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version of the runtime (e.g., '18', '3.10', '1.20')"
+        }
+      },
+      "required": ["type"]
     },
     "working_dir": {
       "type": ["string", "null"],
