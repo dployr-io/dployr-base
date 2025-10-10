@@ -2,6 +2,7 @@
 
 HOME_DIR=$(getent passwd "$USER" | cut -d: -f6)
 STATE_DIR="$HOME_DIR/.dployr/state"
+TMP_DIR="/tmp/dployr"
 mkdir -p "$STATE_DIR"
 CDN="https://github.com/tobimadehin/dployr"
 INSTALL_START_TIME=$(date +%s)
@@ -132,9 +133,9 @@ download_dployr() {
     DOWNLOAD_URL="$CDN/releases/download/$LATEST_TAG/dployr-$LATEST_TAG.zip"
     log_info "Downloading from: $DOWNLOAD_URL"
 
-    if curl -fsSL "$DOWNLOAD_URL" -o /tmp/dployr.zip; then
+    if curl -fsSL "$DOWNLOAD_URL" -o $TMP_DIR/dployr.zip; then
         log_info "Extracting archive..."
-        cd /tmp || exit 1
+        cd $TMP_DIR || exit 1
 
         unzip -oq dployr.zip -d $server_dir
         rm -rf dployr.zip
@@ -540,7 +541,7 @@ main() {
     echo "Starting dployr installer..."
     echo ""
 
-    LOG_FILE="/tmp/dployr-install-$(date +%Y%m%d-%H%M%S).log"
+    LOG_FILE="$TMP_DIR/dployr-install-$(date +%Y%m%d-%H%M%S).log"
     echo "Installation started at $(date)" > "$LOG_FILE"
     
     check_sudo
