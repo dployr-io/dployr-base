@@ -4,7 +4,7 @@ HOME_DIR=$(getent passwd "$USER" | cut -d: -f6)
 STATE_DIR="$HOME_DIR/.dployr/state"
 TMP_DIR="/tmp/dployr"
 mkdir -p "$STATE_DIR"
-CDN="https://github.com/tobimadehin/dployr"
+CDN="https://github.com/dployr-io/dployr"
 INSTALL_START_TIME=$(date +%s)
 
 # console color codes
@@ -96,18 +96,15 @@ EOF
 }
 
 get_latest_tag() {
-    local headers
-    local tag
-    headers=$(curl -sLI "https://github.com/tobimadehin/dployr/releases/latest")
+    local headers tag
+    headers=$(curl -sLI "$CDN/releases/latest")
     tag=$(echo "$headers" | grep -i "location:" | grep -o 'tag/v\?[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?' | head -1 | cut -d'/' -f2)
     
     if [ -z "$tag" ]; then
         echo "Error: No version found in redirect" >&2
         return 1
     fi
-    if [[ ! "$tag" =~ ^v ]]; then
-        tag="v$tag"
-    fi
+    [[ "$tag" =~ ^v ]] || tag="v$tag"
     echo "$tag"
 }
 
@@ -130,15 +127,15 @@ download_dployr() {
         exit 1
     fi
 
-    DOWNLOAD_URL="$CDN/releases/download/$LATEST_TAG/dployr-$LATEST_TAG.zip"
+    DOWNLOAD_URL="$CDN/archive/refs/tags/$LATEST_TAG.zip"
     log_info "Downloading from: $DOWNLOAD_URL"
 
     if curl -fsSL "$DOWNLOAD_URL" -o $TMP_DIR/dployr.zip; then
         log_info "Extracting archive..."
         cd $TMP_DIR || exit 1
 
-        unzip -oq dployr.zip -d $server_dir
-        rm -rf dployr.zip
+        bsdtar -xf dployr.zip -C $server_dir --strip-components 1 || exit 1
+        rm -rf dployr.zip 
 
         log_success "dployr has been downloaded successfully"
     else
@@ -246,7 +243,7 @@ install_requirements() {
             apt-get update -qq
             
             PHP_PACKAGES="php8.3-fpm php8.3-cli php8.3-common php8.3-dom php8.3-curl php8.3-mbstring php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl php8.3-gd php8.3-sqlite3 php8.3-tokenizer composer"
-            PACKAGES="curl wget git jq caddy ca-certificates gnupg ufw openssl net-tools unzip ansible $PHP_PACKAGES"
+            PACKAGES="curl wget git jq libarchive-tools caddy ca-certificates gnupg ufw openssl net-tools unzip ansible $PHP_PACKAGES"
             
             apt-get install -y $PACKAGES
             
@@ -267,7 +264,7 @@ install_requirements() {
 
             PHP_PACKAGES="php php-fpm php-cli php-common php-dom php-curl php-mbstring php-xml php-zip php-bcmath php-intl php-gd php-sqlite3 composer"
             
-            yum install -y curl wget git jq caddy ufw openssl ansible $PHP_PACKAGES
+            yum install -y curl wget libarchive-tools git jq caddy ufw openssl ansible $PHP_PACKAGES
 
             log_info "Starting fpm..."
             systemctl enable php-fpm
