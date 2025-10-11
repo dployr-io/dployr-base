@@ -133,6 +133,8 @@ download_dployr() {
     DOWNLOAD_URL="$CDN/releases/download/$LATEST_TAG/dployr-$LATEST_TAG.zip"
     log_info "Downloading from: $DOWNLOAD_URL"
 
+    mkdir -p $TMP_DIR
+
     if curl -fsSL "$DOWNLOAD_URL" -o $TMP_DIR/dployr.zip; then
         log_info "Extracting archive..."
         cd $TMP_DIR || exit 1
