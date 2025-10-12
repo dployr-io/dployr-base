@@ -127,7 +127,7 @@ download_dployr() {
         exit 1
     fi
 
-    DOWNLOAD_URL="$CDN/archive/refs/tags/$LATEST_TAG.zip"
+    DOWNLOAD_URL="$CDN/releases/download/$LATEST_TAG/dployr-$LATEST_TAG.zip"
     log_info "Downloading from: $DOWNLOAD_URL"
 
     if curl -fsSL "$DOWNLOAD_URL" -o $TMP_DIR/dployr.zip; then
