@@ -98,7 +98,7 @@ EOF
 get_latest_tag() {
     local headers tag
     headers=$(curl -sLI "$CDN/releases/latest")
-    tag=$(echo "$headers" | grep -i "location:" | grep -o 'tag/v\?[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?' | head -1 | cut -d'/' -f2)
+    tag=$(echo "$headers" | grep -i "location:" | grep -o 'tag/v\?[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?[-a-zA-Z0-9._]*' | head -1 | cut -d'/' -f2)
     
     if [ -z "$tag" ]; then
         echo "Error: No version found in redirect" >&2
