@@ -157,27 +157,30 @@ configure_dployr() {
     
     cd /home/dployr || exit 1
 
-    chown -R dployr:caddy /home/dployr
+    chown -R dployr:caddy /home/dployr || exit 1
     
     log_info "Installing Composer dependencies..."
     sudo -u dployr composer install --no-dev --optimize-autoloader
     
-    sudo -u dployr cp .env.example .env
+    sudo -u dployr cp .env.example .env || exit 1
     log_info "Created .env file from example"
     
-    log_info "Generating application key..."
-    sudo -u dployr php artisan key:generate --force
+    log_info "Generating application key..." 
+    sudo -u dployr php artisan key:generate --force || exit 1
 
     log_info "Setting up database..."
-    sudo -u dployr touch database/database.sqlite
+    sudo -u dployr touch database/database.sqlite || exit 1
+
+    log_info "Setting up framework directories..."
+    sudo -u dployr mkdir -p storage/framework/{cache/data,sessions,views} || exit 1
     
     log_info "Setting proper permissions..."
     find /home/dployr -type d -exec chmod 775 {} \;
     find /home/dployr -type f -exec chmod 664 {} \;
-    chmod -R 775 storage bootstrap/cache database
-    chown -R dployr:caddy storage bootstrap/cache database
-    chown dployr:caddy .env
-    chmod 664 .env
+    chmod -R 775 storage bootstrap/cache database || exit 1
+    chown -R dployr:caddy storage bootstrap/cache database || exit 1
+    chown dployr:caddy .env || exit 1
+    chmod 664 .env || exit 1
 
     sed -i "s|^APP_URL=.*|APP_URL=http://${PUBLIC_IP}:7879|" .env
     sed -i "s|^ASSET_URL=.*|ASSET_URL=http://${PUBLIC_IP}:7879|" .env
