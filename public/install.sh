@@ -134,7 +134,7 @@ download_dployr() {
         log_info "Extracting archive..."
         cd $TMP_DIR || exit 1
 
-        bsdtar -xf dployr.zip -C $server_dir --strip-components 1 || exit 1
+        bsdtar -xf dployr.zip -C $server_dir || exit 1
         rm -rf dployr.zip 
 
         log_success "dployr has been downloaded successfully"
@@ -162,10 +162,8 @@ configure_dployr() {
     log_info "Installing Composer dependencies..."
     sudo -u dployr composer install --no-dev --optimize-autoloader
     
-    if [ ! -f .env ]; then
-        sudo -u dployr cp .env.example .env
-        log_info "Created .env file from example"
-    fi
+    sudo -u dployr cp .env.example .env
+    log_info "Created .env file from example"
     
     log_info "Generating application key..."
     sudo -u dployr php artisan key:generate --force
