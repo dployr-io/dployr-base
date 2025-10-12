@@ -77,22 +77,10 @@ create_dployr_user() {
         log_warning "User dployr already exists"
     fi
     
-    cat > /etc/sudoers.d/dployr << EOF
-dployr ALL=(ALL) NOPASSWD: /bin/systemctl start dployr
-dployr ALL=(ALL) NOPASSWD: /bin/systemctl stop dployr
-dployr ALL=(ALL) NOPASSWD: /bin/systemctl restart dployr
-dployr ALL=(ALL) NOPASSWD: /bin/systemctl restart caddy
-dployr ALL=(ALL) NOPASSWD: /bin/systemctl reload caddy
-dployr ALL=(ALL) NOPASSWD: /bin/systemctl restart php8.3-fpm
-dployr ALL=(ALL) NOPASSWD: /bin/systemctl reload php8.3-fpm
-dployr ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/caddy/Caddyfile
-dployr ALL=(ALL) NOPASSWD: /usr/bin/caddy validate --config /etc/caddy/Caddyfile
-dployr ALL=(ALL) NOPASSWD: /bin/chown caddy\:caddy *
-dployr ALL=(ALL) NOPASSWD: /bin/chmod * *
-EOF
-    
     chmod 440 /etc/sudoers.d/dployr
     log_success "Configured safe sudo permissions for dployr"
+
+    touch "$flag_file"
 }
 
 get_latest_tag() {
@@ -461,6 +449,47 @@ EOF
     fi
 }
 
+setup_priviledged_commands() {
+    local flag_file="$STATE_DIR/setup_priviledged_commands.flag"
+    if [ -f "$flag_file" ]; then
+        log_info "Privileged commands already setup. Skipping..."
+        return 0
+    fi
+    log_info "Setting up privileged commands..."
+
+    local SYSTEMCTL TEE CADDY CHOWN CHMOD
+    SYSTEMCTL=$(command -v systemctl)
+    TEE=$(command -v tee)
+    CADDY=$(command -v caddy)
+    CHOWN=$(command -v chown)
+    CHMOD=$(command -v chmod)
+
+    for cmd in SYSTEMCTL TEE CADDY CHOWN CHMOD; do
+        if [ -z "${!cmd}" ]; then
+            log_error "Command $cmd not found. Cannot configure sudoers."
+            return 1
+        fi
+    done
+
+    cat > /etc/sudoers.d/dployr << EOF
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL start dployr
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL stop dployr
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL restart dployr
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL restart caddy
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL reload caddy
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL restart php8.3-fpm
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL reload php8.3-fpm
+dployr ALL=(ALL) NOPASSWD: $TEE /etc/caddy/Caddyfile
+dployr ALL=(ALL) NOPASSWD: $CADDY validate --config /etc/caddy/Caddyfile
+dployr ALL=(ALL) NOPASSWD: $CHMOD * *
+dployr ALL=(ALL) NOPASSWD: $CHOWN caddy\:caddy *
+EOF
+    
+    chmod 440 /etc/sudoers.d/dployr
+    log_success "Configured safe sudo permissions for dployr"
+
+    touch "$flag_file"
+}
 
 start_dployr() {
     log_info "Starting dployr..."
@@ -546,7 +575,7 @@ main() {
     
     check_sudo
     
-    TOTAL_STEPS=9
+    TOTAL_STEPS=10
     CURRENT_STEP=0
     
     show_progress $CURRENT_STEP $TOTAL_STEPS "Creating user..."
@@ -592,6 +621,12 @@ main() {
     ((CURRENT_STEP++))
     show_progress $CURRENT_STEP $TOTAL_STEPS "Setting up caddy..."
     if ! setup_caddy >> "$LOG_FILE" 2>&1; then
+        exit 1
+    fi
+
+    ((CURRENT_STEP++))
+    show_progress $CURRENT_STEP $TOTAL_STEPS "Configuring safe privileged commands..."
+    if ! setup_priviledged_commands >> "$LOG_FILE" 2>&1; then
         exit 1
     fi
     
