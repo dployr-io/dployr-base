@@ -76,9 +76,6 @@ create_dployr_user() {
     else
         log_warning "User dployr already exists"
     fi
-    
-    chmod 440 /etc/sudoers.d/dployr
-    log_success "Configured safe sudo permissions for dployr"
 
     touch "$flag_file"
 }
@@ -392,7 +389,7 @@ EOF
         return 1
     fi
 
-     if ! usermod -aG caddy dployr; then
+    if ! usermod -aG caddy dployr; then
         handle_error "Permission error" "Failed to add dployr to caddy group"
         return 1
     fi
@@ -415,7 +412,7 @@ EOF
         return 1
     fi
 
-    if ! chmod -R 755 /etc/caddy/sites-enabled; then 
+    if ! chmod -R 770 /etc/caddy/sites-enabled; then 
         handle_error "Permission error" "Failed to set permissions for caddy sites-enabled configurations"
         return 1
     fi
@@ -480,7 +477,7 @@ dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL reload caddy
 dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL restart php8.3-fpm
 dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL reload php8.3-fpm
 dployr ALL=(ALL) NOPASSWD: $TEE /etc/caddy/Caddyfile
-dployr ALL=(ALL) NOPASSWD: $CADDY validate --config /etc/caddy/Caddyfile
+dployr ALL=(ALL) NOPASSWD: $CADDY validate --config /etc/caddy/Caddyfile --adapter caddyfile
 dployr ALL=(ALL) NOPASSWD: $CHMOD * *
 dployr ALL=(ALL) NOPASSWD: $CHOWN caddy\:caddy *
 EOF
