@@ -167,8 +167,11 @@ configure_dployr() {
     chown dployr:caddy .env || exit 1
     chmod 664 .env || exit 1
 
+    BETA_SUFFIX=$(echo "$LATEST_TAG" | grep -oP 'beta.\K\d+')
+
     sed -i "s|^APP_URL=.*|APP_URL=http://${PUBLIC_IP}:7879|" .env
     sed -i "s|^ASSET_URL=.*|ASSET_URL=http://${PUBLIC_IP}:7879|" .env
+    sed -i "s|^BETA=.*|BETA=beta.$BETA_SUFFIX|" .env
     #TODO: Re-enable the production settings (debug enabled temporarily for troubleshooting)
     # sed -i "s|^APP_DEBUG=.*|APP_DEBUG=false|" .env
     # sed -i "s|^APP_ENV=.*|APP_ENV=production|" .env
@@ -399,7 +402,7 @@ EOF
         return 1
     fi
 
-    if ! chown -R caddy:caddy /etc/caddy/sites-enabled; then
+    if ! chown -R dployr:caddy /etc/caddy/sites-enabled; then
         handle_error "Permission error" "Failed to set Caddyfile ownership"
         return 1
     fi
