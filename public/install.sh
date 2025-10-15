@@ -2,6 +2,7 @@
 
 HOME_DIR=$(getent passwd "$USER" | cut -d: -f6)
 STATE_DIR="$HOME_DIR/.dployr/state"
+SERVER_DIR="/home/dployr"
 TMP_DIR="/tmp/dployr"
 mkdir -p "$STATE_DIR"
 CDN="https://github.com/dployr-io/dployr"
@@ -101,9 +102,9 @@ download_dployr() {
     fi
 
     log_info "Downloading dployr..."
-    local server_dir="/home/dployr"
+    
 
-    mkdir -p $server_dir
+    mkdir -p $SERVER_DIR
     log_info "Getting latest release information..."
 
     LATEST_TAG=$(get_latest_tag)
@@ -119,7 +120,7 @@ download_dployr() {
         log_info "Extracting archive..."
         cd $TMP_DIR || exit 1
 
-        bsdtar -xf dployr.zip -C $server_dir || exit 1
+        bsdtar -xf dployr.zip -C $SERVER_DIR || exit 1
         rm -rf dployr.zip 
 
         log_success "dployr has been downloaded successfully"
@@ -192,6 +193,81 @@ configure_dployr() {
     log_success "Environment configured successfully"
     touch "$flag_file"
 }
+
+setup_asdf() {
+    local flag_file="$STATE_DIR/setup_asdf.flag"
+    if [ -f "$flag_file" ]; then
+        log_info "asdf already installed. Skipping."
+        return 0
+    fi
+
+    log_info "Setting up asdf..."
+
+    local version="0.18.0"
+    local os=""
+    local arch=""
+    
+    # Detect OS
+    case "$(uname -s)" in
+        Linux*)  os="linux" ;;
+        Darwin*) os="darwin" ;;
+        *)
+            handle_error "Unsupported OS" "Cannot determine OS type"
+            return 1
+            ;;
+    esac
+    
+    # Detect architecture
+    case "$(uname -m)" in
+        x86_64)  arch="amd64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        i386|i686) arch="386" ;;
+        *)
+            handle_error "Unsupported architecture" "Cannot determine system architecture"
+            return 1
+            ;;
+    esac
+    
+    local filename="asdf-v${version}-${os}-${arch}.tar.gz"
+    local url="https://github.com/asdf-vm/asdf/releases/download/v${version}/${filename}"
+    
+    log_info "Downloading asdf v${version} for ${os}-${arch}..."
+    
+    if ! curl -fsSL "$url" -o "/tmp/${filename}"; then
+        handle_error "Download failed" "Failed to download asdf from $url"
+        return 1
+    fi
+    
+    local install_dir="/usr/share/asdf"
+    mkdir -p "$install_dir"
+    tar -xzf "/tmp/${filename}" -C "$install_dir"
+    rm "/tmp/${filename}"
+    chown -R dployr:dployr "$install_dir"
+    curl -fsSL "https://raw.githubusercontent.com/asdf-vm/asdf/refs/tags/v${version}/asdf.sh" -o "$install_dir/asdf.sh"
+
+    echo "export ASDF_DATA_DIR=\"$install_dir\"" | tee /etc/profile.d/asdf.sh > /dev/null
+    echo "export PATH=\"\$ASDF_DATA_DIR/shims:\$ASDF_DATA_DIR:\$PATH\"" | tee -a /etc/profile.d/asdf.sh > /dev/null
+    echo ". $install_dir/asdf.sh" | tee -a /etc/profile.d/asdf.sh > /dev/null
+
+    echo "export ASDF_DATA_DIR=\"$install_dir\"" | tee -a /etc/bash.bashrc > /dev/null
+    echo "export PATH=\"\$ASDF_DATA_DIR/shims:\$ASDF_DATA_DIR:\$PATH\"" | tee -a /etc/bash.bashrc > /dev/null
+    echo ". $install_dir/asdf.sh" | tee -a /etc/bash.bashrc > /dev/null
+    
+
+    export ASDF_DATA_DIR="$install_dir"
+    export PATH="$ASDF_DATA_DIR/shims:$install_dir:$PATH"
+    # shellcheck disable=SC1091
+    . "$install_dir/asdf.sh"
+
+    if bash -lc "asdf --version" >/dev/null 2>&1; then
+        log_success "asdf installed successfully and available immediately"
+        touch "$flag_file"
+    else
+        handle_error "asdf not found" "Setup completed but command not available in current session"
+        return 1
+    fi
+}
+
 
 install_requirements() {
     local flag_file="$STATE_DIR/install_requirements.flag"
@@ -575,7 +651,7 @@ main() {
     
     check_sudo
     
-    TOTAL_STEPS=10
+    TOTAL_STEPS=11
     CURRENT_STEP=0
     
     show_progress $CURRENT_STEP $TOTAL_STEPS "Creating user..."
@@ -603,6 +679,12 @@ main() {
     ((CURRENT_STEP++))
     show_progress $CURRENT_STEP $TOTAL_STEPS "Configuring Environment..."
     if ! configure_dployr >> "$LOG_FILE" 2>&1; then
+        exit 1
+    fi
+
+    ((CURRENT_STEP++))
+    show_progress $CURRENT_STEP $TOTAL_STEPS "Setting up asdf..."
+    if ! setup_asdf >> "$LOG_FILE" 2>&1; then
         exit 1
     fi
     
