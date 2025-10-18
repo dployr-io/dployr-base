@@ -243,6 +243,9 @@ setup_asdf() {
     tar -xzf "/tmp/${filename}" -C "$install_dir"
     rm "/tmp/${filename}"
     chown -R dployr:dployr "$install_dir"
+    chmod -R g+rwxs "$install_dir"
+    find "$install_dir" -type d -exec chmod 2775 {} \;
+    chmod g+s "$install_dir"
     curl -fsSL "https://raw.githubusercontent.com/asdf-vm/asdf/refs/tags/v${version}/asdf.sh" -o "$install_dir/asdf.sh"
 
     echo "export ASDF_DATA_DIR=\"$install_dir\"" | tee /etc/profile.d/asdf.sh > /dev/null
@@ -253,7 +256,6 @@ setup_asdf() {
     echo "export PATH=\"\$ASDF_DATA_DIR/shims:\$ASDF_DATA_DIR:\$PATH\"" | tee -a /etc/bash.bashrc > /dev/null
     echo ". $install_dir/asdf.sh" | tee -a /etc/bash.bashrc > /dev/null
     
-
     export ASDF_DATA_DIR="$install_dir"
     export PATH="$ASDF_DATA_DIR/shims:$install_dir:$PATH"
     # shellcheck disable=SC1091
@@ -268,6 +270,27 @@ setup_asdf() {
     fi
 }
 
+setup_runtime_plugins() {
+    log_info "Installing asdf plugins"
+
+    asdf plugin add python https://github.com/asdf-community/asdf-python.git 
+
+    asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
+
+    asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git
+
+    asdf plugin add golang https://github.com/asdf-community/asdf-golang.git
+
+    asdf plugin add php https://github.com/asdf-community/asdf-php.git
+
+    asdf plugin add java https://github.com/halcyon/asdf-java.git
+
+    asdf plugin add dotnet https://github.com/hensou/asdf-dotnet.git
+
+    chown -R dployr:dployr /usr/share/asdf
+
+    log_info "Successfully updated asdf plugins"
+}
 
 install_requirements() {
     local flag_file="$STATE_DIR/install_requirements.flag"
@@ -548,13 +571,13 @@ setup_priviledged_commands() {
     done
 
     cat > /etc/sudoers.d/dployr << EOF
-dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL start dployr
-dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL stop dployr
-dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL restart dployr
-dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL restart caddy
-dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL reload caddy
-dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL restart php8.3-fpm
-dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL reload php8.3-fpm
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL daemon-reload
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL start *
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL stop *
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL restart *
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL reload *
+dployr ALL=(ALL) NOPASSWD: $SYSTEMCTL enable *
+dployr ALL=(ALL) NOPASSWD: $TEE /etc/systemd/system/*.service
 dployr ALL=(ALL) NOPASSWD: $TEE /etc/caddy/Caddyfile
 dployr ALL=(ALL) NOPASSWD: $CADDY validate --config /etc/caddy/Caddyfile --adapter caddyfile
 dployr ALL=(ALL) NOPASSWD: $CHMOD * *
@@ -651,7 +674,7 @@ main() {
     
     check_sudo
     
-    TOTAL_STEPS=11
+    TOTAL_STEPS=12
     CURRENT_STEP=0
     
     show_progress $CURRENT_STEP $TOTAL_STEPS "Creating user..."
@@ -685,6 +708,12 @@ main() {
     ((CURRENT_STEP++))
     show_progress $CURRENT_STEP $TOTAL_STEPS "Setting up asdf..."
     if ! setup_asdf >> "$LOG_FILE" 2>&1; then
+        exit 1
+    fi
+
+    ((CURRENT_STEP++))
+    show_progress $CURRENT_STEP $TOTAL_STEPS "Setting up runtime plugins..."
+    if ! setup_runtime_plugins >> "$LOG_FILE" 2>&1; then
         exit 1
     fi
     
