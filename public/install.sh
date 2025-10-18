@@ -314,6 +314,11 @@ install_requirements() {
             apt-get update -qq
             apt install -y debian-keyring debian-archive-keyring apt-transport-https software-properties-common
             
+            log_info "Installing build tools and Python dependencies..."
+            apt-get install -y build-essential libssl-dev zlib1g-dev \
+            libncurses5-dev libffi-dev libsqlite3-dev libreadline-dev \
+            libtk8.6 tcl8.6-dev libbz2-dev liblzma-dev
+
             log_info "Download PHP 8.3 repository..."
             if [ "$OS_TYPE" = "ubuntu" ]; then
                 add-apt-repository -y ppa:ondrej/php
@@ -341,6 +346,10 @@ install_requirements() {
             ;;
         centos|rhel|rocky|alma)
             yum install -y epel-release
+
+            log_info "Installing development tools and Python dependencies..."
+            yum groupinstall -y "Development Tools"
+            yum install -y openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel ncurses-devel readline-devel
             
             log_info "Instally remy repository for PHP 8.3..."
             yum install -y "https://rpms.remirepo.net/enterprise/remi-release-$(rpm -E %rhel).rpm"
