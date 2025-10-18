@@ -351,7 +351,7 @@ install_requirements() {
             yum groupinstall -y "Development Tools"
             yum install -y openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel ncurses-devel readline-devel
             
-            log_info "Instally remy repository for PHP 8.3..."
+            log_info "Installing remi's repository for PHP 8.3..."
             yum install -y "https://rpms.remirepo.net/enterprise/remi-release-$(rpm -E %rhel).rpm"
             yum-config-manager --enable remi-php83
             
