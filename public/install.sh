@@ -207,7 +207,6 @@ setup_asdf() {
     local os=""
     local arch=""
     
-    # Detect OS
     case "$(uname -s)" in
         Linux*)  os="linux" ;;
         Darwin*) os="darwin" ;;
@@ -217,7 +216,6 @@ setup_asdf() {
             ;;
     esac
     
-    # Detect architecture
     case "$(uname -m)" in
         x86_64)  arch="amd64" ;;
         aarch64|arm64) arch="arm64" ;;
@@ -238,34 +236,31 @@ setup_asdf() {
         return 1
     fi
     
-    local install_dir="/usr/share/asdf"
-    mkdir -p "$install_dir"
-    tar -xzf "/tmp/${filename}" -C "$install_dir"
+    tar -xzf "/tmp/${filename}" -C /usr/local/bin
     rm "/tmp/${filename}"
-    chown -R dployr:dployr "$install_dir"
-    chmod -R g+rwxs "$install_dir"
-    find "$install_dir" -type d -exec chmod 2775 {} \;
-    chmod g+s "$install_dir"
-    curl -fsSL "https://raw.githubusercontent.com/asdf-vm/asdf/refs/tags/v${version}/asdf.sh" -o "$install_dir/asdf.sh"
-
-    echo "export ASDF_DATA_DIR=\"$install_dir\"" | tee /etc/profile.d/asdf.sh > /dev/null
-    echo "export PATH=\"\$ASDF_DATA_DIR/shims:\$ASDF_DATA_DIR:\$PATH\"" | tee -a /etc/profile.d/asdf.sh > /dev/null
-    echo ". $install_dir/asdf.sh" | tee -a /etc/profile.d/asdf.sh > /dev/null
-
-    echo "export ASDF_DATA_DIR=\"$install_dir\"" | tee -a /etc/bash.bashrc > /dev/null
-    echo "export PATH=\"\$ASDF_DATA_DIR/shims:\$ASDF_DATA_DIR:\$PATH\"" | tee -a /etc/bash.bashrc > /dev/null
-    echo ". $install_dir/asdf.sh" | tee -a /etc/bash.bashrc > /dev/null
+    chmod +x /usr/local/bin/asdf
     
-    export ASDF_DATA_DIR="$install_dir"
-    export PATH="$ASDF_DATA_DIR/shims:$install_dir:$PATH"
-    # shellcheck disable=SC1091
-    . "$install_dir/asdf.sh"
+    # Set up data directory
+    local data_dir="/usr/share/asdf"
+    mkdir -p "$data_dir"
+    chown -R dployr:dployr "$data_dir"
+    chmod -R g+rwxs "$data_dir"
+    find "$data_dir" -type d -exec chmod 2775 {} \;
+    
+    # Add shims to PATH system-wide
+    cat > /etc/profile.d/asdf.sh << 'EOF'
+export ASDF_DATA_DIR="/usr/share/asdf"
+export PATH="${ASDF_DATA_DIR}/shims:$PATH"
+EOF
 
-    if bash -lc "asdf --version" >/dev/null 2>&1; then
-        log_success "asdf installed successfully and available immediately"
+    export ASDF_DATA_DIR="$data_dir"
+    export PATH="${ASDF_DATA_DIR}/shims:$PATH"
+
+    if command -v asdf >/dev/null 2>&1; then
+        log_success "asdf installed successfully"
         touch "$flag_file"
     else
-        handle_error "asdf not found" "Setup completed but command not available in current session"
+        handle_error "asdf not found" "Binary not on PATH"
         return 1
     fi
 }
