@@ -83,7 +83,7 @@ app.post("/api/dns/create", authMiddleware, async (c) => {
     }
 
     const { subdomain, host } = result.data;
-    const fullDomain = `${subdomain}.${c.env.DPLOYR_BASE_URL}`;
+    const fullDomain = `${subdomain}.${c.env.BASE_URL}`;
 
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/zones/${c.env.CLOUDFLARE_ZONE_ID}/dns_records`,

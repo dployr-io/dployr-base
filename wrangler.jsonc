@@ -9,7 +9,7 @@
   },
   "vars": {
     "ENVIRONMENT": "production",
-    "APP_URL": "https://dployr.dev"
+    "BASE_URL": "https://dployr.dev"
   },
   "observability": {
     "logs": {

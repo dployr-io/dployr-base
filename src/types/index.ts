@@ -18,8 +18,8 @@ export type Bindings = {
   BASE_KV: KVNamespace;
 
   // App config
-  DPLOYR_WEB_URL: string;
-  DPLOYR_BASE_URL: string;
+  WEB_URL: string;
+  BASE_URL: string;
 };
 
 export type OAuthProvider = "google" | "apple" | "microsoft";

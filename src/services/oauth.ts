@@ -41,7 +41,7 @@ export class OAuthService {
 
   getAuthUrl(provider: OAuthProvider, state: string): string {
     const config = providers[provider](this.env);
-    const redirectUri = `${this.env.DPLOYR_BASE_URL}/api/auth/callback/${provider}`;
+    const redirectUri = `${this.env.BASE_URL}/api/auth/callback/${provider}`;
 
     const params = new URLSearchParams({
       client_id: this.getClientId(provider),
@@ -60,7 +60,7 @@ export class OAuthService {
 
   async exchangeCode(provider: OAuthProvider, code: string): Promise<string> {
     const config = providers[provider](this.env);
-    const redirectUri = `${this.env.DPLOYR_BASE_URL}/api/auth/callback/${provider}`;
+    const redirectUri = `${this.env.BASE_URL}/api/auth/callback/${provider}`;
 
     const body = new URLSearchParams({
       client_id: this.getClientId(provider),
