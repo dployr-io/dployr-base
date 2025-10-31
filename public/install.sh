@@ -307,12 +307,19 @@ install_requirements() {
     case "$OS_TYPE" in
         ubuntu|debian)
             apt-get update -qq
-            apt install -y debian-keyring debian-archive-keyring apt-transport-https software-properties-common
+            apt install -y debian-keyring debian-archive-keyring apt-transport-https software-properties-common 
             
             log_info "Installing build tools and Python dependencies..."
-            apt-get install -y build-essential libssl-dev zlib1g-dev \
+            apt-get install -y build-essential libssl-dev zlib1g-dev pkg-config libcurl4-openssl-dev  \
             libncurses5-dev libffi-dev libsqlite3-dev libreadline-dev \
-            libtk8.6 tcl8.6-dev libbz2-dev liblzma-dev
+            libtk8.6 tcl8.6-dev libbz2-dev liblzma-dev \
+            libgd-dev libonig-dev libpng-dev libjpeg-dev libfreetype6-dev libxpm-dev libicu-dev libzip-dev
+
+            log_info "Installing psql client"
+            apt-get install -y libpq-dev postgresql-client
+
+            log_info "Installing maven..."
+            apt-get install -y maven
 
             log_info "Download PHP 8.3 repository..."
             if [ "$OS_TYPE" = "ubuntu" ]; then
@@ -330,7 +337,7 @@ install_requirements() {
             
             apt-get update -qq
             
-            PHP_PACKAGES="php8.3-fpm php8.3-cli php8.3-common php8.3-dom php8.3-curl php8.3-mbstring php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl php8.3-gd php8.3-sqlite3 php8.3-tokenizer composer"
+            PHP_PACKAGES="php8.3-fpm php8.3-cli php8.3-common php8.3-dom php8.3-curl php8.3-mbstring php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl php8.3-gd php8.3-sqlite3 php8.3-tokenizer composer autoconf re2c bison libxml2-dev"
             PACKAGES="curl wget git jq libarchive-tools caddy ca-certificates gnupg ufw openssl net-tools unzip ansible $PHP_PACKAGES"
             
             apt-get install -y $PACKAGES
@@ -344,8 +351,14 @@ install_requirements() {
 
             log_info "Installing development tools and Python dependencies..."
             yum groupinstall -y "Development Tools"
-            yum install -y openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel ncurses-devel readline-devel
+            yum install -y openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel ncurses-devel readline-devel pkgconf gd-dev oniguruma-dev libcurl-devel libpng-devel libjpeg-turbo-devel libwebp-devel freetype-devel libXpm-devel libicu-devel libzip-devel
             
+            log_info "Installing psql client"
+            yum install -y postgresql-devel postgresql
+
+            log_info "Installing maven..."
+            yum install -y maven
+
             log_info "Installing remi's repository for PHP 8.3..."
             yum install -y "https://rpms.remirepo.net/enterprise/remi-release-$(rpm -E %rhel).rpm"
             yum-config-manager --enable remi-php83
@@ -354,9 +367,9 @@ install_requirements() {
             yum install -y yum-plugin-copr
             yum copr enable -y @caddy/caddy
 
-            PHP_PACKAGES="php php-fpm php-cli php-common php-dom php-curl php-mbstring php-xml php-zip php-bcmath php-intl php-gd php-sqlite3 composer"
+            PHP_PACKAGES="php php-fpm php-cli php-common php-dom php-curl php-mbstring php-xml php-zip php-bcmath php-intl php-gd php-sqlite3 composer autoconf re2c bison libxml2-devel"
             
-            yum install -y curl wget libarchive-tools git jq caddy ufw openssl ansible $PHP_PACKAGES
+            yum install -y curl wget libarchive-tools git jq caddy ufw openssl ansible  $PHP_PACKAGES
 
             log_info "Starting fpm..."
             systemctl enable php-fpm
