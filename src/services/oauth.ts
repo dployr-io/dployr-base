@@ -26,18 +26,18 @@ const providers: Record<OAuthProvider, (env: Bindings) => OAuthConfig> = {
     authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     userInfoUrl: "https://graph.microsoft.com/v1.0/me",
-    scope: "openid email profile",
+    scope: "https://graph.microsoft.com/User.Read openid email profile",
   }),
-  apple: (env) => ({
-    authUrl: "https://appleid.apple.com/auth/authorize",
-    tokenUrl: "https://appleid.apple.com/auth/token",
-    userInfoUrl: "", // Apple returns user info in ID token
-    scope: "name email",
+  github: (env) => ({
+    authUrl: "https://github.com/login/oauth/authorize",
+    tokenUrl: "https://github.com/login/oauth/access_token",
+    userInfoUrl: "https://api.github.com/user",
+    scope: "user:email",
   }),
 };
 
 export class OAuthService {
-  constructor(private env: Bindings) {}
+  constructor(private env: Bindings) { }
 
   getAuthUrl(provider: OAuthProvider, state: string): string {
     const config = providers[provider](this.env);
@@ -51,9 +51,7 @@ export class OAuthService {
       state,
     });
 
-    if (provider === "apple") {
-      params.append("response_mode", "form_post");
-    }
+
 
     return `${config.authUrl}?${params}`;
   }
@@ -70,14 +68,25 @@ export class OAuthService {
       redirect_uri: redirectUri,
     });
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+
+    // GitHub requires Accept header for JSON response
+    if (provider === "github") {
+      headers["Accept"] = "application/json";
+    }
+
     const response = await fetch(config.tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers,
       body: body.toString(),
     });
 
     if (!response.ok) {
-      throw new Error(`Token exchange failed: ${await response.text()}`);
+      const error = await response.text();
+      console.error(error);
+      throw new Error(`Token exchange failed: ${error}`);
     }
 
     const data = (await response.json()) as TokenResponse;
@@ -90,20 +99,37 @@ export class OAuthService {
   ): Promise<OAuthUser> {
     const config = providers[provider](this.env);
 
-    if (provider === "apple") {
-      // Decode ID token for Apple
-      return this.decodeAppleIdToken(accessToken);
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+    };
+
+    // GitHub requires User-Agent header
+    if (provider === "github") {
+      headers["User-Agent"] = "dployr";
     }
 
-    const response = await fetch(config.userInfoUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const response = await fetch(config.userInfoUrl, { headers });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch user info: ${await response.text()}`);
+      const errorText = await response.text();
+      console.error(`User info error response: ${errorText}`);
+      throw new Error(`Failed to fetch user info: ${errorText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
+
+    // For GitHub, we need to fetch email separately if it's not public
+    if (provider === "github" && !data.email) {
+      const emailResponse = await fetch("https://api.github.com/user/emails", { headers });
+      if (emailResponse.ok) {
+        const emails = await emailResponse.json() as any[];
+        const primaryEmail = emails.find((email: any) => email.primary);
+        if (primaryEmail) {
+          data.email = primaryEmail.email;
+        }
+      }
+    }
+
     return this.normalizeUserInfo(provider, data);
   }
 
@@ -125,32 +151,26 @@ export class OAuthService {
           picture: "",
           provider: "microsoft",
         };
+      case "github":
+        return {
+          id: data.id.toString(),
+          email: data.email,
+          name: data.name || data.login,
+          picture: data.avatar_url,
+          provider: "github",
+        };
       default:
         throw new Error(`Unknown provider: ${provider}`);
     }
   }
 
-  private decodeAppleIdToken(idToken: string): OAuthUser {
-    // Simple JWT decode 
-    // TODO: use a proper library
-    const payload = JSON.parse(
-      atob(idToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
-    );
-
-    return {
-      id: payload.sub,
-      email: payload.email,
-      name: payload.name,
-      provider: "apple",
-    };
-  }
 
   private getClientId(provider: OAuthProvider): string {
     switch (provider) {
       case "google":
         return this.env.GOOGLE_CLIENT_ID;
-      case "apple":
-        return this.env.APPLE_CLIENT_ID;
+      case "github":
+        return this.env.GITHUB_CLIENT_ID;
       case "microsoft":
         return this.env.MICROSOFT_CLIENT_ID;
     }
@@ -160,16 +180,10 @@ export class OAuthService {
     switch (provider) {
       case "google":
         return this.env.GOOGLE_CLIENT_SECRET;
+      case "github":
+        return this.env.GITHUB_CLIENT_SECRET;
       case "microsoft":
         return this.env.MICROSOFT_CLIENT_SECRET;
-      case "apple":
-        return this.generateAppleClientSecret();
     }
-  }
-
-  private generateAppleClientSecret(): string {
-    // Apple requires JWT signed with private key
-    // TOOD: Use a proper library
-    throw new Error("Apple client secret generation not implemented");
   }
 }

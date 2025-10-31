@@ -4,9 +4,10 @@ import { ulid } from "ulid"
 
 const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
 const STATE_TTL = 60 * 10; // 10 minutes
+const OTP_TTL = 60 * 10; // 10 minutes
 
 export class KVStore {
-  constructor(private kv: KVNamespace) { }
+  constructor(public kv: KVNamespace) { }
 
   // Session management
   async createSession(sessionId: string, user: OAuthUser): Promise<Session> {
@@ -61,6 +62,67 @@ export class KVStore {
 
     await this.kv.delete(`state:${state}`);
     return true;
+  }
+
+  // OTP generation for email authentication
+  async createOTP(email: string): Promise<string> {
+    const code = this.generateOTPCode();
+
+    await this.kv.put(
+      `otp:${email}`,
+      JSON.stringify({
+        code,
+        email,
+        createdAt: Date.now(),
+        attempts: 0
+      }),
+      { expirationTtl: OTP_TTL }
+    );
+
+    return code;
+  }
+
+  async validateOTP(email: string, code: string): Promise<boolean> {
+    const data = await this.kv.get(`otp:${email}`);
+    if (!data) return false;
+
+    const otpData = JSON.parse(data) as {
+      code: string;
+      email: string;
+      createdAt: number;
+      attempts: number;
+    };
+
+    // Check if too many attempts
+    if (otpData.attempts >= 3) {
+      await this.kv.delete(`otp:${email}`);
+      return false;
+    }
+
+    // Increment attempts
+    otpData.attempts++;
+    await this.kv.put(
+      `otp:${email}`,
+      JSON.stringify(otpData),
+      { expirationTtl: OTP_TTL }
+    );
+
+    // Check if code matches
+    if (otpData.code === code) {
+      await this.kv.delete(`otp:${email}`);
+      return true;
+    }
+
+    return false;
+  }
+
+  private generateOTPCode(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   }
 
   async saveUser(user: OAuthUser): Promise<void> {

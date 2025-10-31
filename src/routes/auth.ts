@@ -11,7 +11,7 @@ const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 auth.get("/login/:provider", async (c) => {
   const provider = c.req.param("provider") as OAuthProvider;
 
-  if (!["google", "apple", "microsoft"].includes(provider)) {
+  if (!["google", "github", "microsoft"].includes(provider)) {
     return c.json({ error: "Invalid provider" }, 400);
   }
 
@@ -65,7 +65,7 @@ auth.get("/callback/:provider", async (c) => {
     });
 
     // Redirect to app
-    return c.redirect(`${c.env.DPLOYR_WEB_URL}/dashboard`);
+    return c.redirect(`${c.env.WEB_URL}/dashboard`);
   } catch (error) {
     console.error("OAuth error:", error);
     return c.json({ error: "Authentication failed" }, 500);
@@ -88,6 +88,83 @@ auth.get("/me", async (c) => {
   }
 
   return c.json({ user });
+});
+
+// Email authentication - Send OTP
+auth.post("/login/email", async (c) => {
+  try {
+    const { email } = await c.req.json();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json({ error: "Valid email is required" }, 400);
+    }
+
+    const kv = new KVStore(c.env.BASE_KV);
+    const otpCode = await kv.createOTP(email);
+
+    // TODO: Send email with OTP code
+
+    return c.json({
+      message: "OTP sent to your email",
+      success: true,
+    });
+  } catch (error) {
+    console.error("Send OTP error:", error);
+    return c.json({ error: "Failed to send code" }, 500);
+  }
+});
+
+// Email authentication - Verify OTP
+auth.post("/login/email/verify", async (c) => {
+  try {
+    const { email, code } = await c.req.json();
+
+    if (!email || !code) {
+      return c.json({ error: "Email and code are required" }, 400);
+    }
+
+    const kv = new KVStore(c.env.BASE_KV);
+    const isValid = await kv.validateOTP(email, code.toUpperCase());
+
+    if (!isValid) {
+      return c.json({ error: "Invalid or expired code" }, 400);
+    }
+
+    let user = await kv.getUser(email);
+    if (!user) {
+      user = {
+        id: email,
+        email,
+        name: email.split('@')[0],
+        provider: "email" as OAuthProvider
+      };
+      await kv.saveUser(user);
+    }
+
+    const sessionId = crypto.randomUUID();
+    await kv.createSession(sessionId, user);
+
+    setCookie(c, "session", sessionId, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
+    });
+
+    return c.json({
+      message: "Successfully authenticated",
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        provider: user.provider
+      }
+    });
+  } catch (error) {
+    console.error("Verify OTP error:", error);
+    return c.json({ error: "Failed to verify OTP" }, 500);
+  }
 });
 
 // Logout

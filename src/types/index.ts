@@ -7,10 +7,8 @@ export type Bindings = {
   // OAuth
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
-  APPLE_CLIENT_ID: string;
-  APPLE_TEAM_ID: string;
-  APPLE_KEY_ID: string;
-  APPLE_PRIVATE_KEY: string;
+  GITHUB_CLIENT_ID: string;
+  GITHUB_CLIENT_SECRET: string;
   MICROSOFT_CLIENT_ID: string;
   MICROSOFT_CLIENT_SECRET: string;
 
@@ -22,7 +20,7 @@ export type Bindings = {
   BASE_URL: string;
 };
 
-export type OAuthProvider = "google" | "apple" | "microsoft";
+export type OAuthProvider = "google" | "github" | "microsoft" | "email";
 
 export interface OAuthUser {
   id: string;
