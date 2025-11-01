@@ -50,7 +50,10 @@ auth.get("/callback/:provider", async (c) => {
 
     const user = await oauth.getUserInfo(provider, accessToken);
 
-    await kv.saveUser(user);
+    let exists = await kv.getUser(user.email);
+    if (!exists) {
+      await kv.saveUser(user);
+    }
 
     const sessionId = crypto.randomUUID();
     await kv.createSession(sessionId, user);
@@ -62,7 +65,10 @@ auth.get("/callback/:provider", async (c) => {
       sameSite: "Lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
+      domain: ".dployr.dev"
     });
+
+    // Upsert user Org
 
     // Redirect to app
     return c.redirect(`${c.env.WEB_URL}/dashboard`);
@@ -74,20 +80,37 @@ auth.get("/callback/:provider", async (c) => {
 
 // Get current user
 auth.get("/me", async (c) => {
-  const session = c.get("session");
+  const sessionId = getCookie(c, "session");
 
-  if (!session) {
+  if (!sessionId) {
     return c.json({ error: "Not authenticated" }, 401);
   }
 
   const kv = new KVStore(c.env.BASE_KV);
-  const user = await kv.getUser(session.userId);
+  const session = await kv.getSession(sessionId);
+
+  if (!session) {
+    return c.json({ error: "Invalid or expired session" }, 401);
+  }
+
+  const user = await kv.getUser(session.email);
+
+  let org = await kv.getOrganization(session.email)
 
   if (!user) {
     return c.json({ error: "User not found" }, 404);
   }
 
-  return c.json({ user });
+  if (!org) {
+    org = await kv.createOrganization({
+      email: session.email,
+      name: session.email.split("@")[0],
+      users: [session.email],
+      roles: { owner: [session.email] }
+    });
+  }
+
+  return c.json({ user, org });
 });
 
 // Email authentication - Send OTP
@@ -99,7 +122,7 @@ auth.post("/login/email", async (c) => {
     }
 
     const kv = new KVStore(c.env.BASE_KV);
-    const otpCode = await kv.createOTP(email);
+    const code = await kv.createOTP(email);
 
     // TODO: Send email with OTP code
 
@@ -132,10 +155,9 @@ auth.post("/login/email/verify", async (c) => {
     let user = await kv.getUser(email);
     if (!user) {
       user = {
-        id: email,
         email,
-        name: email.split('@')[0],
-        provider: "email" as OAuthProvider
+        name: email.split("@")[0],
+        provider: "email" as OAuthProvider,
       };
       await kv.saveUser(user);
     }
@@ -149,17 +171,12 @@ auth.post("/login/email/verify", async (c) => {
       sameSite: "Lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
+      domain: ".dployr.dev"
     });
 
     return c.json({
-      message: "Successfully authenticated",
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        provider: user.provider
-      }
+      email: user.email,
+      name: user.name,
     });
   } catch (error) {
     console.error("Verify OTP error:", error);

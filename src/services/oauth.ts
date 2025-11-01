@@ -34,6 +34,9 @@ const providers: Record<OAuthProvider, (env: Bindings) => OAuthConfig> = {
     userInfoUrl: "https://api.github.com/user",
     scope: "user:email",
   }),
+  email: function (env: Bindings): OAuthConfig {
+    throw new Error("Email signin is not an OAuth provider.");
+  }
 };
 
 export class OAuthService {
@@ -137,7 +140,6 @@ export class OAuthService {
     switch (provider) {
       case "google":
         return {
-          id: data.id,
           email: data.email,
           name: data.name,
           picture: data.picture,
@@ -145,7 +147,6 @@ export class OAuthService {
         };
       case "microsoft":
         return {
-          id: data.id,
           email: data.mail || data.userPrincipalName,
           name: data.displayName,
           picture: "",
@@ -153,7 +154,6 @@ export class OAuthService {
         };
       case "github":
         return {
-          id: data.id.toString(),
           email: data.email,
           name: data.name || data.login,
           picture: data.avatar_url,
@@ -173,6 +173,8 @@ export class OAuthService {
         return this.env.GITHUB_CLIENT_ID;
       case "microsoft":
         return this.env.MICROSOFT_CLIENT_ID;
+      default:
+        throw new Error(`Unknown provider: ${provider}`);
     }
   }
 
@@ -184,6 +186,8 @@ export class OAuthService {
         return this.env.GITHUB_CLIENT_SECRET;
       case "microsoft":
         return this.env.MICROSOFT_CLIENT_SECRET;
+      default:
+        throw new Error(`Unknown provider: ${provider}`);
     }
   }
 }

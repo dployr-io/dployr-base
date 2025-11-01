@@ -1,29 +1,25 @@
 // lib/kv.ts
-import { Session, OAuthUser, Instance, Organization } from '@/types';
-import { ulid } from "ulid"
+import { Session, OAuthUser, Instance, Organization } from "@/types";
 
 const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
 const STATE_TTL = 60 * 10; // 10 minutes
 const OTP_TTL = 60 * 10; // 10 minutes
 
 export class KVStore {
-  constructor(public kv: KVNamespace) { }
+  constructor(public kv: KVNamespace) {}
 
   // Session management
   async createSession(sessionId: string, user: OAuthUser): Promise<Session> {
     const session: Session = {
-      userId: user.id,
       email: user.email,
       provider: user.provider,
       createdAt: Date.now(),
       expiresAt: Date.now() + SESSION_TTL * 1000,
     };
 
-    await this.kv.put(
-      `session:${sessionId}`,
-      JSON.stringify(session),
-      { expirationTtl: SESSION_TTL }
-    );
+    await this.kv.put(`session:${sessionId}`, JSON.stringify(session), {
+      expirationTtl: SESSION_TTL,
+    });
 
     return session;
   }
@@ -49,11 +45,9 @@ export class KVStore {
 
   // OAuth state management (CSRF protection)
   async createState(state: string): Promise<void> {
-    await this.kv.put(
-      `state:${state}`,
-      Date.now().toString(),
-      { expirationTtl: STATE_TTL }
-    );
+    await this.kv.put(`state:${state}`, Date.now().toString(), {
+      expirationTtl: STATE_TTL,
+    });
   }
 
   async validateState(state: string): Promise<boolean> {
@@ -74,7 +68,7 @@ export class KVStore {
         code,
         email,
         createdAt: Date.now(),
-        attempts: 0
+        attempts: 0,
       }),
       { expirationTtl: OTP_TTL }
     );
@@ -101,11 +95,9 @@ export class KVStore {
 
     // Increment attempts
     otpData.attempts++;
-    await this.kv.put(
-      `otp:${email}`,
-      JSON.stringify(otpData),
-      { expirationTtl: OTP_TTL }
-    );
+    await this.kv.put(`otp:${email}`, JSON.stringify(otpData), {
+      expirationTtl: OTP_TTL,
+    });
 
     // Check if code matches
     if (otpData.code === code) {
@@ -117,8 +109,8 @@ export class KVStore {
   }
 
   private generateOTPCode(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = '';
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "";
     for (let i = 0; i < 6; i++) {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
@@ -126,31 +118,28 @@ export class KVStore {
   }
 
   async saveUser(user: OAuthUser): Promise<void> {
-    await this.kv.put(`user:${user.id}`, JSON.stringify(user));
+    await this.kv.put(`user:${user.email}`, JSON.stringify(user));
   }
 
-  async getUser(userId: string): Promise<OAuthUser | null> {
-    const data = await this.kv.get(`user:${userId}`);
+  async getUser(email: string): Promise<OAuthUser | null> {
+    const data = await this.kv.get(`user:${email}`);
     return data ? JSON.parse(data) : null;
   }
 
   // Instance management
-  async createInstance(instanceData: Omit<Instance, 'id' | 'createdAt' | 'updatedAt'>): Promise<Instance> {
-    const id = ulid();
+  async createInstance(
+    instanceData: Omit<Instance, "createdAt" | "updatedAt">
+  ): Promise<Instance> {
     const instance: Instance = {
-      id,
       ...instanceData,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
 
-    await this.kv.put(
-      `instance:${id}`,
-      JSON.stringify(instance),
-    );
+    await this.kv.put(`instance:${instanceData.tag}`, JSON.stringify(instance));
 
     // Index by org for quick lookup
-    await this.addInstanceToOrg(instanceData.orgId, id);
+    await this.addInstanceToOrg(instanceData.orgEmail, instanceData.tag);
 
     return instance;
   }
@@ -160,8 +149,11 @@ export class KVStore {
     return data ? JSON.parse(data) : null;
   }
 
-  async updateInstance(instanceId: string, updates: Partial<Omit<Instance, 'id' | 'createdAt'>>): Promise<Instance | null> {
-    const existing = await this.getInstance(instanceId);
+  async updateInstance(
+    tag: string,
+    updates: Partial<Omit<Instance, "id" | "createdAt">>
+  ): Promise<Instance | null> {
+    const existing = await this.getInstance(tag);
     if (!existing) return null;
 
     const updated: Instance = {
@@ -170,24 +162,21 @@ export class KVStore {
       updatedAt: Date.now(),
     };
 
-    await this.kv.put(
-      `instance:${instanceId}`,
-      JSON.stringify(updated),
-    );
+    await this.kv.put(`instance:${tag}`, JSON.stringify(updated));
 
     return updated;
   }
 
-  async deleteInstance(instanceId: string): Promise<void> {
-    const instance = await this.getInstance(instanceId);
+  async deleteInstance(tag: string): Promise<void> {
+    const instance = await this.getInstance(tag);
     if (instance) {
-      await this.removeInstanceFromOrg(instance.orgId, instanceId);
+      await this.removeInstanceFromOrg(instance.orgEmail, tag);
     }
-    await this.kv.delete(`instance:${instanceId}`);
+    await this.kv.delete(`instance:${tag}`);
   }
 
-  async getInstancesByOrg(orgId: string): Promise<Instance[]> {
-    const instanceIds = await this.getOrgInstanceIds(orgId);
+  async getInstancesByOrg(email: string): Promise<Instance[]> {
+    const instanceIds = await this.getOrgInstanceIds(email);
     const instances: Instance[] = [];
 
     for (const id of instanceIds) {
@@ -199,19 +188,16 @@ export class KVStore {
   }
 
   // Organization management
-  async createOrganization(orgData: Omit<Organization, 'id' | 'createdAt' | 'updatedAt'>): Promise<Organization> {
-    const id = ulid();
+  async createOrganization(
+    orgData: Omit<Organization, "id" | "createdAt" | "updatedAt">
+  ): Promise<Organization> {
     const org: Organization = {
-      id,
       ...orgData,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
 
-    await this.kv.put(
-      `org:${id}`,
-      JSON.stringify(org),
-    );
+    await this.kv.put(`org:${orgData.email}`, JSON.stringify(org));
 
     return org;
   }
@@ -221,8 +207,11 @@ export class KVStore {
     return data ? JSON.parse(data) : null;
   }
 
-  async updateOrganization(orgId: string, updates: Partial<Omit<Organization, 'id' | 'createdAt'>>): Promise<Organization | null> {
-    const existing = await this.getOrganization(orgId);
+  async updateOrganization(
+    email: string,
+    updates: Partial<Omit<Organization, "id" | "createdAt">>
+  ): Promise<Organization | null> {
+    const existing = await this.getOrganization(email);
     if (!existing) return null;
 
     const updated: Organization = {
@@ -231,33 +220,33 @@ export class KVStore {
       updatedAt: Date.now(),
     };
 
-    await this.kv.put(
-      `org:${orgId}`,
-      JSON.stringify(updated),
-    );
+    await this.kv.put(`org:${email}`, JSON.stringify(updated));
 
     return updated;
   }
 
-  async deleteOrganization(orgId: string): Promise<void> {
+  async deleteOrganization(email: string): Promise<void> {
     // Clean up related data
-    const instances = await this.getInstancesByOrg(orgId);
+    const instances = await this.getInstancesByOrg(email);
     for (const instance of instances) {
-      await this.deleteInstance(instance.id);
+      await this.deleteInstance(instance.tag);
     }
 
-    await this.kv.delete(`org:${orgId}`);
-    await this.kv.delete(`org:${orgId}:instances`);
+    await this.kv.delete(`org:${email}`);
+    await this.kv.delete(`org:${email}:instances`);
   }
 
   // User-Organization relationship management
-  async addUserToOrg(orgId: string, userId: string, roles: string[] = ['member']): Promise<void> {
-    const org = await this.getOrganization(orgId);
-    if (!org) throw new Error('Organization not found');
+  async addUserToOrg(
+    email: string,
+    roles: string[] = ["member"]
+  ): Promise<void> {
+    const org = await this.getOrganization(email);
+    if (!org) throw new Error("Organization not found");
 
     // Add user to org users list
-    if (!org.users.includes(userId)) {
-      org.users.push(userId);
+    if (!org.users.includes(email)) {
+      org.users.push(email);
     }
 
     // Add user to roles
@@ -265,53 +254,64 @@ export class KVStore {
       if (!org.roles[role]) {
         org.roles[role] = [];
       }
-      if (!org.roles[role].includes(userId)) {
-        org.roles[role].push(userId);
+      if (!org.roles[role].includes(email)) {
+        org.roles[role].push(email);
       }
     }
 
-    await this.updateOrganization(orgId, { users: org.users, roles: org.roles });
+    await this.updateOrganization(email, {
+      users: org.users,
+      roles: org.roles,
+    });
 
     // Create user-org index for quick lookup
-    await this.kv.put(`user:${userId}:orgs`, JSON.stringify([
-      ...(await this.getUserOrgs(userId)),
-      orgId
-    ].filter((id, index, arr) => arr.indexOf(id) === index)));
+    await this.kv.put(
+      `user:${email}:orgs`,
+      JSON.stringify(
+        [...(await this.getUserOrgs(email)), email].filter(
+          (id, index, arr) => arr.indexOf(id) === index
+        )
+      )
+    );
   }
 
-  async removeUserFromOrg(orgId: string, userId: string): Promise<void> {
-    const org = await this.getOrganization(orgId);
+  async removeUserFromOrg(email: string, userId: string): Promise<void> {
+    const org = await this.getOrganization(email);
     if (!org) return;
 
     // Remove from users list
-    org.users = org.users.filter(id => id !== userId);
+    org.users = org.users.filter((id) => id !== userId);
 
     // Remove from all roles
     for (const role in org.roles) {
-      org.roles[role] = org.roles[role].filter(id => id !== userId);
+      org.roles[role] = org.roles[role].filter((id) => id !== userId);
     }
 
-    await this.updateOrganization(orgId, { users: org.users, roles: org.roles });
+    await this.updateOrganization(email, {
+      users: org.users,
+      roles: org.roles,
+    });
 
     // Update user-org index
     const userOrgs = await this.getUserOrgs(userId);
-    await this.kv.put(`user:${userId}:orgs`, JSON.stringify(
-      userOrgs.filter(id => id !== orgId)
-    ));
+    await this.kv.put(
+      `user:${userId}:orgs`,
+      JSON.stringify(userOrgs.filter((email) => email !== email))
+    );
   }
 
-  async getUserOrgs(userId: string): Promise<string[]> {
-    const data = await this.kv.get(`user:${userId}:orgs`);
+  async getUserOrgs(email: string): Promise<string[]> {
+    const data = await this.kv.get(`user:${email}:orgs`);
     return data ? JSON.parse(data) : [];
   }
 
-  async getUserRoleInOrg(userId: string, orgId: string): Promise<string[]> {
-    const org = await this.getOrganization(orgId);
+  async getUserRoleInOrg(email: string): Promise<string[]> {
+    const org = await this.getOrganization(email);
     if (!org) return [];
 
     const userRoles: string[] = [];
     for (const [role, users] of Object.entries(org.roles)) {
-      if (users.includes(userId)) {
+      if (users.includes(email)) {
         userRoles.push(role);
       }
     }
@@ -320,20 +320,26 @@ export class KVStore {
   }
 
   // Helper methods for instance-org relationships
-  private async addInstanceToOrg(orgId: string, instanceId: string): Promise<void> {
-    const instanceIds = await this.getOrgInstanceIds(orgId);
+  private async addInstanceToOrg(
+    email: string,
+    instanceId: string
+  ): Promise<void> {
+    const instanceIds = await this.getOrgInstanceIds(email);
     instanceIds.push(instanceId);
-    await this.kv.put(`org:${orgId}:instances`, JSON.stringify(instanceIds));
+    await this.kv.put(`org:${email}:instances`, JSON.stringify(instanceIds));
   }
 
-  private async removeInstanceFromOrg(orgId: string, instanceId: string): Promise<void> {
-    const instanceIds = await this.getOrgInstanceIds(orgId);
-    const filtered = instanceIds.filter(id => id !== instanceId);
-    await this.kv.put(`org:${orgId}:instances`, JSON.stringify(filtered));
+  private async removeInstanceFromOrg(
+    email: string,
+    instanceId: string
+  ): Promise<void> {
+    const instanceIds = await this.getOrgInstanceIds(email);
+    const filtered = instanceIds.filter((id) => id !== instanceId);
+    await this.kv.put(`org:${email}:instances`, JSON.stringify(filtered));
   }
 
-  private async getOrgInstanceIds(orgId: string): Promise<string[]> {
-    const data = await this.kv.get(`org:${orgId}:instances`);
+  private async getOrgInstanceIds(email: string): Promise<string[]> {
+    const data = await this.kv.get(`org:${email}:instances`);
     return data ? JSON.parse(data) : [];
   }
 }

@@ -23,7 +23,6 @@ export type Bindings = {
 export type OAuthProvider = "google" | "github" | "microsoft" | "email";
 
 export interface OAuthUser {
-  id: string;
   email: string;
   name?: string;
   picture?: string;
@@ -31,7 +30,6 @@ export interface OAuthUser {
 }
 
 export interface Session {
-  userId: string;
   email: string;
   provider: OAuthProvider;
   createdAt: number;
@@ -44,19 +42,18 @@ export type Variables = {
 };
 
 export interface Instance {
-  id: string;
   address: string;
   tag: string;
-  orgId: string;
+  orgEmail: string; 
   createdAt: number;
   updatedAt: number;
 }
 
 export interface Organization {
-  id: string;
+  email: string;
   name: string;
-  users: string[]; // Array of user IDs
-  roles: Record<string, string[]>; // role -> array of user IDs
+  users: string[]; // Array of user emails
+  roles: Record<string, string[]>; // role -> array of user emails
   createdAt: number;
   updatedAt: number;
 }
