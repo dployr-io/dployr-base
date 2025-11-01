@@ -1,11 +1,22 @@
 // routes/auth.ts
 import { Hono } from "hono";
-import { Bindings, Variables, OAuthProvider } from "@/types";
+import { Bindings, Variables, OAuthProvider, Cluster } from "@/types";
 import { OAuthService } from "@/services/oauth";
-import { KVStore } from "@/lib/kv";
+import { KVStore } from "@/lib/db/store/kv";
 import { setCookie, getCookie } from "hono/cookie";
+import { D1Store } from "@/lib/db/store";
+import z from "zod";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+const loginSchema = z.object({
+  email: z.email(),
+});
+
+const otpSchema = z.object({
+  email: z.email(),
+  code: z.string().min(6).max(6),
+});
 
 // Initiate OAuth flow
 auth.get("/login/:provider", async (c) => {
@@ -37,6 +48,7 @@ auth.get("/callback/:provider", async (c) => {
   }
 
   const kv = new KVStore(c.env.BASE_KV);
+  const d1 = new D1Store(c.env.BASE_DB);
 
   const isValidState = await kv.validateState(state);
   if (!isValidState) {
@@ -50,13 +62,14 @@ auth.get("/callback/:provider", async (c) => {
 
     const user = await oauth.getUserInfo(provider, accessToken);
 
-    let exists = await kv.getUser(user.email);
-    if (!exists) {
-      await kv.saveUser(user);
+    let existingUser = await d1.users.get(user.email);
+    if (!existingUser) {
+      await d1.users.save(user);
     }
 
     const sessionId = crypto.randomUUID();
-    await kv.createSession(sessionId, user);
+    const clusters = await d1.clusters.listUserClusters(user.id)
+    await kv.createSession(sessionId, user, clusters);
 
     // Set session cookie
     setCookie(c, "session", sessionId, {
@@ -65,10 +78,8 @@ auth.get("/callback/:provider", async (c) => {
       sameSite: "Lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
-      domain: ".dployr.dev"
+      domain: ".dployr.dev",
     });
-
-    // Upsert user Org
 
     // Redirect to app
     return c.redirect(`${c.env.WEB_URL}/dashboard`);
@@ -87,41 +98,38 @@ auth.get("/me", async (c) => {
   }
 
   const kv = new KVStore(c.env.BASE_KV);
+  const d1 = new D1Store(c.env.BASE_DB);
+
   const session = await kv.getSession(sessionId);
 
   if (!session) {
     return c.json({ error: "Invalid or expired session" }, 401);
   }
 
-  const user = await kv.getUser(session.email);
-
-  let org = await kv.getOrganization(session.email)
+  const user = await d1.users.get(session.email);
 
   if (!user) {
     return c.json({ error: "User not found" }, 404);
   }
 
-  if (!org) {
-    org = await kv.createOrganization({
-      email: session.email,
-      name: session.email.split("@")[0],
-      users: [session.email],
-      roles: { owner: [session.email] }
-    });
-  }
+  const cluster = await d1.clusters.create(user.id);
 
-  return c.json({ user, org });
+  return c.json({ user, cluster });
 });
 
 // Email authentication - Send OTP
 auth.post("/login/email", async (c) => {
   try {
-    const { email } = await c.req.json();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return c.json({ error: "Valid email is required" }, 400);
+    const data = await c.req.json()
+    const { email } = data;
+    if (!loginSchema.safeParse(data)) {
+      return c.json({ error: loginSchema.safeParse(data) }, 400);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
+    const d1 = new D1Store(c.env.BASE_DB);
+
+    await d1.users.save(email);
     const code = await kv.createOTP(email);
 
     // TODO: Send email with OTP code
@@ -136,34 +144,32 @@ auth.post("/login/email", async (c) => {
   }
 });
 
-// Email authentication - Verify OTP
+// Email with magic code - Verify OTP
 auth.post("/login/email/verify", async (c) => {
   try {
-    const { email, code } = await c.req.json();
+    const data = await c.req.json();
+    const { email, code } = data;
 
-    if (!email || !code) {
+    if (!otpSchema.safeParse(data)) {
       return c.json({ error: "Email and code are required" }, 400);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
+    const d1 = new D1Store(c.env.BASE_DB);
     const isValid = await kv.validateOTP(email, code.toUpperCase());
 
     if (!isValid) {
       return c.json({ error: "Invalid or expired code" }, 400);
     }
 
-    let user = await kv.getUser(email);
+    let user = await d1.users.get(email);
     if (!user) {
-      user = {
-        email,
-        name: email.split("@")[0],
-        provider: "email" as OAuthProvider,
-      };
-      await kv.saveUser(user);
+      return c.json({ error: "User not found" }, 404);
     }
 
     const sessionId = crypto.randomUUID();
-    await kv.createSession(sessionId, user);
+    const clusters = await d1.clusters.listUserClusters(user.id)
+    await kv.createSession(sessionId, user, clusters);
 
     setCookie(c, "session", sessionId, {
       httpOnly: true,
@@ -171,7 +177,7 @@ auth.post("/login/email/verify", async (c) => {
       sameSite: "Lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
-      domain: ".dployr.dev"
+      domain: ".dployr.dev",
     });
 
     return c.json({
@@ -185,7 +191,7 @@ auth.post("/login/email/verify", async (c) => {
 });
 
 // Logout
-auth.post("/logout", async (c) => {
+auth.get("/logout", async (c) => {
   const sessionId = getCookie(c, "session");
 
   if (sessionId) {

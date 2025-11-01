@@ -2,7 +2,7 @@
 import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
 import { Bindings, Variables } from "@/types";
-import { KVStore } from "@/lib/kv";
+import { KVStore } from "@/lib/db/store/kv";
 
 export async function authMiddleware(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,

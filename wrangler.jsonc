@@ -23,6 +23,13 @@
       "id": "6af4d8180fc24b5f90346de823001722"
     }
   ],
+  "d1_databases": [
+    {
+      "binding": "BASE_DB",
+      "database_name": "dployr",
+      "database_id": "895c2d8d-49f9-445f-9300-63a7a0488c18"
+    }
+  ],
   "env": {
     "production": {
       "name": "dployr-base",

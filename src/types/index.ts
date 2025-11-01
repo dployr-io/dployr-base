@@ -12,8 +12,9 @@ export type Bindings = {
   MICROSOFT_CLIENT_ID: string;
   MICROSOFT_CLIENT_SECRET: string;
 
-  // KV Storage
+  // Storage
   BASE_KV: KVNamespace;
+  BASE_DB: D1Database;
 
   // App config
   WEB_URL: string;
@@ -22,38 +23,47 @@ export type Bindings = {
 
 export type OAuthProvider = "google" | "github" | "microsoft" | "email";
 
-export interface OAuthUser {
+export type Role = "owner" | "admin" | "developer" | "viewer";
+
+export interface User {
+  id: string;
   email: string;
-  name?: string;
-  picture?: string;
+  name?: string | undefined;
+  picture?: string | undefined;
   provider: OAuthProvider;
+  metadata?: Record<string, any> | undefined
+  created_at: number;
+  updated_at: number;
 }
 
 export interface Session {
   email: string;
   provider: OAuthProvider;
+  clusters: string[],
   createdAt: number;
   expiresAt: number;
 }
 
 export type Variables = {
-  user?: OAuthUser;
-  session?: Session;
+  user?: User | undefined;
+  session?: Session | undefined;
 };
 
 export interface Instance {
+  id: string;
   address: string;
   tag: string;
-  orgEmail: string; 
+  metadata?: Record<string, any> | undefined
   createdAt: number;
   updatedAt: number;
 }
 
-export interface Organization {
-  email: string;
+export interface Cluster {
+  id: string;
   name: string;
   users: string[]; // Array of user emails
-  roles: Record<string, string[]>; // role -> array of user emails
+  roles: Record<Role, string[]>; // role -> array of user emails
+  metadata?: Record<string, any> | undefined
   createdAt: number;
   updatedAt: number;
 }

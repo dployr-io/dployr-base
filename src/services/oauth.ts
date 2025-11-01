@@ -1,5 +1,5 @@
 // services/oauth.ts
-import { OAuthProvider, OAuthUser, Bindings } from "@/types";
+import { OAuthProvider, User, Bindings } from "@/types";
 
 interface OAuthConfig {
   authUrl: string;
@@ -36,11 +36,11 @@ const providers: Record<OAuthProvider, (env: Bindings) => OAuthConfig> = {
   }),
   email: function (env: Bindings): OAuthConfig {
     throw new Error("Email signin is not an OAuth provider.");
-  }
+  },
 };
 
 export class OAuthService {
-  constructor(private env: Bindings) { }
+  constructor(private env: Bindings) {}
 
   getAuthUrl(provider: OAuthProvider, state: string): string {
     const config = providers[provider](this.env);
@@ -53,8 +53,6 @@ export class OAuthService {
       scope: config.scope,
       state,
     });
-
-
 
     return `${config.authUrl}?${params}`;
   }
@@ -99,7 +97,7 @@ export class OAuthService {
   async getUserInfo(
     provider: OAuthProvider,
     accessToken: string
-  ): Promise<OAuthUser> {
+  ): Promise<User> {
     const config = providers[provider](this.env);
 
     const headers: Record<string, string> = {
@@ -119,13 +117,15 @@ export class OAuthService {
       throw new Error(`Failed to fetch user info: ${errorText}`);
     }
 
-    const data = await response.json() as any;
+    const data = (await response.json()) as any;
 
     // For GitHub, we need to fetch email separately if it's not public
     if (provider === "github" && !data.email) {
-      const emailResponse = await fetch("https://api.github.com/user/emails", { headers });
+      const emailResponse = await fetch("https://api.github.com/user/emails", {
+        headers,
+      });
       if (emailResponse.ok) {
-        const emails = await emailResponse.json() as any[];
+        const emails = (await emailResponse.json()) as any[];
         const primaryEmail = emails.find((email: any) => email.primary);
         if (primaryEmail) {
           data.email = primaryEmail.email;
@@ -136,7 +136,7 @@ export class OAuthService {
     return this.normalizeUserInfo(provider, data);
   }
 
-  private normalizeUserInfo(provider: OAuthProvider, data: any): OAuthUser {
+  private normalizeUserInfo(provider: OAuthProvider, data: any): User {
     switch (provider) {
       case "google":
         return {
@@ -163,7 +163,6 @@ export class OAuthService {
         throw new Error(`Unknown provider: ${provider}`);
     }
   }
-
 
   private getClientId(provider: OAuthProvider): string {
     switch (provider) {
