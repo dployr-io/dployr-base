@@ -22,7 +22,18 @@ const dnsSchema = z.object({
     ),
 });
 
-app.use("/api/*", cors());
+app.use(
+  "/api/*",
+  cors({
+    origin: (origin) => {
+      const allowedOrigins = ["https://app.dployr.dev"];
+      return allowedOrigins.includes(origin) ? origin : null;
+    },
+    credentials: true,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  })
+);
 
 app.route("/api/auth", auth);
 

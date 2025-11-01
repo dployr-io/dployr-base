@@ -10,7 +10,7 @@
   "vars": {
     "ENVIRONMENT": "production",
     "BASE_URL": "https://dployr.dev",
-    "WEB_URL": "http://localhost:5173" // TODO: Update to actual address
+    "WEB_URL": "http://app.dployr.dev" 
   },
   "observability": {
     "logs": {
