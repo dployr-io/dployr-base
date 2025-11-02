@@ -1,5 +1,4 @@
-export const init = `-- Users table
-CREATE TABLE users (
+export const init = `CREATE TABLE users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
@@ -9,7 +8,6 @@ CREATE TABLE users (
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
--- Clusters table
 CREATE TABLE clusters (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -18,7 +16,6 @@ CREATE TABLE clusters (
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
--- User-Cluster relationships
 CREATE TABLE user_clusters (
   user_id TEXT NOT NULL,
   cluster_id TEXT NOT NULL,
@@ -30,7 +27,6 @@ CREATE TABLE user_clusters (
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
--- Instances table
 CREATE TABLE instances (
   id TEXT PRIMARY KEY,
   cluster_id TEXT NOT NULL,
@@ -42,7 +38,6 @@ CREATE TABLE instances (
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
--- Indexes 
 CREATE INDEX idx_user_clusters_user ON user_clusters(user_id);
 CREATE INDEX idx_user_clusters_org ON user_clusters(cluster_id);
 CREATE INDEX idx_instances_org ON instances(cluster_id);
