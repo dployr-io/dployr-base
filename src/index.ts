@@ -31,10 +31,9 @@ app.use(
   })
 );
 
-app.route("/api", app)
-app.route("/auth", auth);
-app.route("/instances", instances);
-app.get("/health", (c) => {
+app.route("/api/auth", auth);
+app.route("/api/instances", instances);
+app.get("/api/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
