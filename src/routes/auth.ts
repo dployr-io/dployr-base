@@ -6,6 +6,7 @@ import { KVStore } from "@/lib/db/store/kv";
 import { setCookie, getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
 import z from "zod";
+import { ulid } from "ulid";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -62,13 +63,21 @@ auth.get("/callback/:provider", async (c) => {
 
     const user = await oauth.getUserInfo(provider, accessToken);
 
+    const newUser = {
+      ...user,
+      id: ulid(),
+      provider: provider,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    };
+    
     let existingUser = await d1.users.get(user.email);
     if (!existingUser) {
-      await d1.users.save(user);
+      await d1.users.save(newUser);
     }
 
     const sessionId = crypto.randomUUID();
-    const clusters = await d1.clusters.listUserClusters(user.id)
+    const clusters = await d1.clusters.listUserClusters(newUser.id);
     await kv.createSession(sessionId, user, clusters);
 
     // Set session cookie
@@ -120,16 +129,28 @@ auth.get("/me", async (c) => {
 // Email authentication - Send OTP
 auth.post("/login/email", async (c) => {
   try {
-    const data = await c.req.json()
+    const data = await c.req.json();
     const { email } = data;
-    if (!loginSchema.safeParse(data)) {
-      return c.json({ error: loginSchema.safeParse(data) }, 400);
+    const validation = loginSchema.safeParse(data);
+    if (!validation.success) {
+      return c.json({ error: "Invalid email format" }, 400);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
     const d1 = new D1Store(c.env.BASE_DB);
 
-    await d1.users.save(email);
+    let user = await d1.users.get(email);
+    if (!user) {
+      const newUser = {
+        id: ulid(),
+        email,
+        provider: "email" as OAuthProvider,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      };
+      await d1.users.save(newUser);
+    }
+
     const code = await kv.createOTP(email);
 
     // TODO: Send email with OTP code
@@ -150,8 +171,9 @@ auth.post("/login/email/verify", async (c) => {
     const data = await c.req.json();
     const { email, code } = data;
 
-    if (!otpSchema.safeParse(data)) {
-      return c.json({ error: "Email and code are required" }, 400);
+    const validation = otpSchema.safeParse(data);
+    if (!validation.success) {
+      return c.json({ error: "Invalid email or code format" }, 400);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
@@ -168,7 +190,7 @@ auth.post("/login/email/verify", async (c) => {
     }
 
     const sessionId = crypto.randomUUID();
-    const clusters = await d1.clusters.listUserClusters(user.id)
+    const clusters = await d1.clusters.listUserClusters(user.id);
     await kv.createSession(sessionId, user, clusters);
 
     setCookie(c, "session", sessionId, {

@@ -8,7 +8,7 @@ export class KVStore {
   constructor(public kv: KVNamespace) {}
 
   // Session management
-  async createSession(sessionId: string, user: User, clusters: string[]): Promise<Session> {
+  async createSession(sessionId: string, user: Omit<User, "id" | "created_at" | "updated_at">, clusters: string[]): Promise<Session> {
     const session: Session = {
       email: user.email,
       provider: user.provider,

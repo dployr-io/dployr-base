@@ -97,7 +97,7 @@ export class OAuthService {
   async getUserInfo(
     provider: OAuthProvider,
     accessToken: string
-  ): Promise<User> {
+  ): Promise<Omit<User, "id" | "created_at" | "updated_at">> {
     const config = providers[provider](this.env);
 
     const headers: Record<string, string> = {
@@ -136,7 +136,10 @@ export class OAuthService {
     return this.normalizeUserInfo(provider, data);
   }
 
-  private normalizeUserInfo(provider: OAuthProvider, data: any): User {
+  private normalizeUserInfo(
+    provider: OAuthProvider,
+    data: any
+  ): Omit<User, "id" | "created_at" | "updated_at"> {
     switch (provider) {
       case "google":
         return {
