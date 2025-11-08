@@ -1,4 +1,3 @@
-// types/index.ts
 export type Bindings = {
   ZEPTO_API_KEY: string;
   CLOUDFLARE_API_TOKEN: string;

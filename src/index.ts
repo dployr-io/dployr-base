@@ -1,10 +1,9 @@
-// src/index.ts
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { Bindings, Variables } from "@/types";
 import auth from "@/routes/auth";
-import instances from "./routes/instances";
-import { initializeDatabase } from "@/lib/migrate";
+import instances from "@/routes/instances";
+import { initializeDatabase } from "@/lib/db/migrate";
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Initialize database on first request

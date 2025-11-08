@@ -1,6 +1,6 @@
 // routes/auth.ts
 import { Hono } from "hono";
-import { Bindings, Variables, OAuthProvider, Cluster } from "@/types";
+import { Bindings, Variables, OAuthProvider } from "@/types";
 import { OAuthService } from "@/services/oauth";
 import { KVStore } from "@/lib/db/store/kv";
 import { setCookie, getCookie } from "hono/cookie";
