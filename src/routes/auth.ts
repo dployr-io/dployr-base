@@ -1,6 +1,5 @@
-// routes/auth.ts
 import { Hono } from "hono";
-import { Bindings, Variables, OAuthProvider } from "@/types";
+import { Bindings, Variables, OAuthProvider, User } from "@/types";
 import { OAuthService } from "@/services/oauth";
 import { KVStore } from "@/lib/db/store/kv";
 import { setCookie, getCookie } from "hono/cookie";
@@ -58,38 +57,38 @@ auth.get("/callback/:provider", async (c) => {
 
   try {
     const oauth = new OAuthService(c.env);
-
     const accessToken = await oauth.exchangeCode(provider, code);
+    const oAuthUser = await oauth.getUserInfo(provider, accessToken);
 
-    const user = await oauth.getUserInfo(provider, accessToken);
+    let existingUser = await d1.users.get(oAuthUser.email);
 
-    const newUser = {
-      ...user,
-      id: ulid(),
-      provider: provider,
-      created_at: Date.now(),
-      updated_at: Date.now(),
-    };
-    
-    let existingUser = await d1.users.get(user.email);
     if (!existingUser) {
-      await d1.users.save(newUser);
+      const userToSave = {
+        email: oAuthUser.email,
+        name: oAuthUser.name,
+        picture: oAuthUser.picture,
+        provider: provider,
+        metadata: oAuthUser.metadata,
+      };
+      existingUser = await d1.users.save(userToSave);
     }
 
-    const sessionId = crypto.randomUUID();
-    const clusters = await d1.clusters.listUserClusters(newUser.id);
-    await kv.createSession(sessionId, user, clusters);
+    const user = existingUser;
 
-    // Set session cookie
-    setCookie(c, "session", sessionId, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-      domain: ".dployr.dev",
-    });
-
+    if (user) {
+      const sessionId = crypto.randomUUID();
+      const clusters = await d1.clusters.listUserClusters(user.id);
+      await kv.createSession(sessionId, user, clusters);
+      // Set session cookie
+      setCookie(c, "session", sessionId, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+        path: "/",
+        domain: ".dployr.dev",
+      });
+    }
     // Redirect to app
     return c.redirect(`${c.env.WEB_URL}/dashboard`);
   } catch (error) {
@@ -126,6 +125,32 @@ auth.get("/me", async (c) => {
   return c.json({ user, cluster });
 });
 
+auth.patch("/me", async (c) => {
+  const sessionId = getCookie(c, "session");
+
+  if (!sessionId) {
+    return c.json({ error: "Not authenticated" }, 401);
+  }
+
+  const kv = new KVStore(c.env.BASE_KV);
+  const d1 = new D1Store(c.env.BASE_DB);
+
+  const session = await kv.getSession(sessionId);
+
+  if (!session) {
+    return c.json({ error: "Invalid or expired session" }, 401);
+  }
+
+  const updates: Partial<Omit<User, "id" | "createdAt">> = await c.req.json();
+  const user = await d1.users.update(session.email, updates);
+
+  if (!user) {
+    return c.json({ error: "User not found" }, 404);
+  }
+
+  return c.json({ user });
+});
+
 // Email authentication - Send OTP
 auth.post("/login/email", async (c) => {
   try {
@@ -141,14 +166,10 @@ auth.post("/login/email", async (c) => {
 
     let user = await d1.users.get(email);
     if (!user) {
-      const newUser = {
-        id: ulid(),
+      await d1.users.save({
         email,
         provider: "email" as OAuthProvider,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-      };
-      await d1.users.save(newUser);
+      });
     }
 
     const code = await kv.createOTP(email);
@@ -203,8 +224,8 @@ auth.post("/login/email/verify", async (c) => {
     });
 
     return c.json({
-      email: user.email,
-      name: user.name,
+      message: "Login successful",
+      success: true,
     });
   } catch (error) {
     console.error("Verify OTP error:", error);

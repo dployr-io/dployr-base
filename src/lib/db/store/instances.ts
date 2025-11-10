@@ -4,19 +4,21 @@ import { BaseStore } from "./base";
 export class InstanceStore extends BaseStore {
     async create(
         clusterId: string,
+        publicKey: string,
         data: Omit<Instance, "id" | "createdAt" | "updatedAt">
     ): Promise<Instance> {
         const id = this.generateId();
         const now = this.now();
 
         const stmt = this.db.prepare(`
-      INSERT INTO instances (id, cluster_id, address, tag, metadata, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO instances (id, cluster_id, public_key, address, tag, metadata, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
         await stmt.bind(
             id,
             clusterId,
+            publicKey,
             data.address,
             data.tag,
             JSON.stringify(data.metadata || {}),
@@ -34,7 +36,7 @@ export class InstanceStore extends BaseStore {
 
     async get(id: string): Promise<Instance | null> {
         const stmt = this.db.prepare(`
-      SELECT id, address, tag, metadata, created_at, updated_at
+      SELECT id, address, public_key, tag, metadata, created_at, updated_at
       FROM instances WHERE id = ?
     `);
 
@@ -44,6 +46,7 @@ export class InstanceStore extends BaseStore {
         return {
             id: result.id as string,
             address: result.address as string,
+            publicKey: result.public_key as string,
             tag: result.tag as string,
             metadata: result.metadata ? JSON.parse(result.metadata as string) : {},
             createdAt: result.created_at as number,
@@ -123,6 +126,7 @@ export class InstanceStore extends BaseStore {
         return results.results.map((row) => ({
             id: row.id as string,
             address: row.address as string,
+            publicKey: row.publicKey as string,
             tag: row.tag as string,
             metadata: row.metadata ? JSON.parse(row.metadata as string) : {},
             createdAt: row.created_at as number,

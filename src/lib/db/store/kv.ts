@@ -1,15 +1,13 @@
 import { Cluster, Session, User } from "@/types";
-
-const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
-const STATE_TTL = 60 * 10; // 10 minutes
-const OTP_TTL = 60 * 10; // 10 minutes
+import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL } from "@/lib/constants";
 
 export class KVStore {
-  constructor(public kv: KVNamespace) {}
+  constructor(public kv: KVNamespace) { }
 
   // Session management
-  async createSession(sessionId: string, user: Omit<User, "id" | "created_at" | "updated_at">, clusters: string[]): Promise<Session> {
+  async createSession(sessionId: string, user: Omit<User, "created_at" | "updated_at">, clusters: string[]): Promise<Session> {
     const session: Session = {
+      user_id: user.id,
       email: user.email,
       provider: user.provider,
       clusters: clusters,
@@ -101,6 +99,12 @@ export class KVStore {
     }
 
     return false;
+  }
+
+  async createWorkflowFailedEvent(id: string, data: Record<string, unknown>): Promise<void> {
+    await this.kv.put(`workflow:${id}`, JSON.stringify(data), {
+      expirationTtl: FAILED_WORKFLOW_EVENT_TTL,
+    });
   }
 
   private generateOTP(): string {
