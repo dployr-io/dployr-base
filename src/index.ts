@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { Bindings, Variables } from "@/types";
 import auth from "@/routes/auth";
 import instances from "@/routes/instances";
+import gitHub from "@/routes/github";
 import { initializeDatabase } from "@/lib/db/migrate";
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -25,13 +26,14 @@ app.use(
       return allowedOrigins.includes(origin) ? origin : null;
     },
     credentials: true,
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   })
 );
 
 app.route("/api/auth", auth);
 app.route("/api/instances", instances);
+app.route("/api/github", gitHub)
 app.get("/api/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
 });
