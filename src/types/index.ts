@@ -11,6 +11,10 @@ export type Bindings = {
   MICROSOFT_CLIENT_ID: string;
   MICROSOFT_CLIENT_SECRET: string;
 
+  GITHUB_APP_ID: string;
+  GITHUB_PRIVATE_KEY: string;
+  GITHUB_WEBHOOK_SECRET: string;
+
   // Storage
   BASE_KV: KVNamespace;
   BASE_DB: D1Database;
@@ -24,21 +28,24 @@ export type OAuthProvider = "google" | "github" | "microsoft" | "email";
 
 export type Role = "owner" | "admin" | "developer" | "viewer";
 
+export type BootstrapType = "github";
+
 export interface User {
   id: string;
   email: string;
-  name?: string | undefined;
   picture?: string | undefined;
+  name?: string | undefined;
   provider: OAuthProvider;
-  metadata?: Record<string, any> | undefined
+  metadata?: Record<string, any> | undefined;
   created_at: number;
   updated_at: number;
 }
 
 export interface Session {
+  user_id: string;
   email: string;
   provider: OAuthProvider;
-  clusters: string[],
+  clusters: string[];
   createdAt: number;
   expiresAt: number;
 }
@@ -51,8 +58,9 @@ export type Variables = {
 export interface Instance {
   id: string;
   address: string;
+  publicKey: string;
   tag: string;
-  metadata?: Record<string, any> | undefined
+  metadata?: Record<string, any> | undefined;
   createdAt: number;
   updatedAt: number;
 }
@@ -62,7 +70,14 @@ export interface Cluster {
   name: string;
   users: string[]; // Array of user emails
   roles: Record<Role, string[]>; // role -> array of user emails
-  metadata?: Record<string, any> | undefined
+  bootstrapId: number | null;
+  metadata?: Record<string, any> | undefined;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface Bootstrap {
+  id: number;
+  type: BootstrapType;
+  createdAt: number;
 }

@@ -47,14 +47,15 @@ export class ClusterStore extends BaseStore {
     const isNew = result.is_new as number;
     const clusterId = result.id as string;
     const clusterName = result.name as string;
+    const bootstrapId = null;
 
     // Only create if new
     if (isNew) {
       const statements = [
         this.db.prepare(`
-          INSERT INTO clusters (id, name, metadata, created_at, updated_at)
-          VALUES (?, ?, '{}', ?, ?)
-        `).bind(clusterId, clusterName, now, now),
+          INSERT INTO clusters (id, name, bootstrap_id, metadata, created_at, updated_at)
+          VALUES (?, ?, ?, '{}', ?, ?)
+        `).bind(clusterId, clusterName, bootstrapId, now, now),
 
         this.db.prepare(`
           INSERT INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, 'owner')
@@ -68,6 +69,7 @@ export class ClusterStore extends BaseStore {
       id: clusterId,
       name: clusterName,
       users: [adminUserId],
+      bootstrapId,
       roles: {
         owner: [adminUserId],
         admin: [],
@@ -82,7 +84,7 @@ export class ClusterStore extends BaseStore {
 
   async get(id: string): Promise<Cluster | null> {
     const clusterStmt = this.db.prepare(`
-      SELECT id, name, metadata, created_at, updated_at 
+      SELECT id, name, bootstrap_id, metadata, created_at, updated_at 
       FROM clusters WHERE id = ?
     `);
 
@@ -120,6 +122,7 @@ export class ClusterStore extends BaseStore {
       id: cluster.id as string,
       name: cluster.name as string,
       users,
+      bootstrapId: cluster.bootstrap_id as number,
       roles,
       metadata: cluster.metadata ? JSON.parse(cluster.metadata as string) : {},
       createdAt: cluster.created_at as number,
@@ -131,7 +134,7 @@ export class ClusterStore extends BaseStore {
     id: string,
     updates: Partial<Omit<Cluster, "id" | "createdAt">>
   ): Promise<Cluster | null> {
-    if (!updates.name && !updates.metadata && !updates.roles) {
+    if (!updates.name && !updates.bootstrapId && !updates.metadata && !updates.roles) {
       return this.get(id);
     }
 
@@ -145,6 +148,27 @@ export class ClusterStore extends BaseStore {
     // Handle cluster table updates
     const clusterUpdates: Record<string, any> = {};
     if (updates.name) clusterUpdates.name = updates.name;
+
+    if (updates.bootstrapId !== undefined) {
+      // Get the current cluster and check if there's no bootstrap id
+      const cluster = await this.db.prepare(`
+        SELECT bootstrap_id FROM clusters WHERE id = ?
+      `).bind(id).first();
+
+      if (!cluster) {
+        throw new Error(`Cluster ${id} not found`);
+      }
+
+      const bootstrapId = cluster.bootstrap_id as number | null;
+
+      // Bootstrap id can be set only once 
+      // throw error if it's already set (non-null)
+      if (bootstrapId !== null) {
+        throw new Error('Bootstrap ID can only be assigned once');
+      }
+
+      clusterUpdates.bootstrap_id = updates.bootstrapId;
+    }
 
     if (updates.metadata) {
       // Use atomic JSON merge

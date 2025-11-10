@@ -1,4 +1,4 @@
-import { WORKFLOW_NAME } from "./constants";
+import { WORKFLOW_NAME } from "@/lib/constants";
 
 export const BOOTSTRAP_TEMPLATE = `name: ${WORKFLOW_NAME}
 
