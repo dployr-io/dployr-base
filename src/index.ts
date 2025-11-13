@@ -5,6 +5,11 @@ import auth from "@/routes/auth";
 import instances from "@/routes/instances";
 import gitHub from "@/routes/github";
 import { initializeDatabase } from "@/lib/db/migrate";
+import clusters from "@/routes/clusters";
+import deployments from "@/routes/deployments";
+import bootstrap from "@/routes/bootstrap";
+import users from "@/routes/users";
+
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Initialize database on first request
@@ -19,7 +24,7 @@ app.use("*", async (c, next) => {
 
 // CORS
 app.use(
-  "/api/*",
+  "/v1/*",
   cors({
     origin: (origin) => {
       const allowedOrigins = ["https://app.dployr.dev"];
@@ -31,10 +36,14 @@ app.use(
   })
 );
 
-app.route("/api/auth", auth);
-app.route("/api/instances", instances);
-app.route("/api/github", gitHub)
-app.get("/api/health", (c) => {
+app.route("/v1/auth", auth);
+app.route("/v1/users", users);
+app.route("/v1/instances", instances);
+app.route("/v1/clusters", clusters);
+app.route("/v1/deployments", deployments);
+app.route("/v1/bootstrap", bootstrap);
+app.route("/v1/github", gitHub)
+app.get("/v1/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 

@@ -1,13 +1,15 @@
 import { Hono } from "hono";
-import { Bindings, Variables } from "@/types";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";
 import { D1Store } from "@/lib/db/store";
 import { verifyGitHubWebhook } from "@/services/utils";
 import { GitHubService } from "@/services/github";
 import { getCookie } from "hono/cookie";
-import { WORKFLOW_NAME } from "@/lib/constants";
+import { BAD_SESSION, BAD_WEBHOOK_SIGNATURE, INTERNAL_SERVER_ERROR, WORKFLOW_NAME } from "@/lib/constants";
+import { authMiddleware } from "@/middleware/auth";
 
 const gitHub = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+gitHub.use("*", authMiddleware);
 
 // List available GitHub repositories 
 // This list reposistories that are accessible to the GitHub installation
@@ -15,7 +17,7 @@ gitHub.get("/remotes", async (c) => {
   const sessionId = getCookie(c, "session");
 
   if (!sessionId) {
-    return c.json({ error: "Not authenticated" }, 401);
+    return c.json(createErrorResponse({ message: "Not authenticated", code: BAD_SESSION }), 401);
   }
 
   const kv = new KVStore(c.env.BASE_KV);
@@ -23,7 +25,7 @@ gitHub.get("/remotes", async (c) => {
   const session = await kv.getSession(sessionId);
 
   if (!session) {
-    return c.json({ error: "Invalid or expired session" }, 401);
+    return c.json(createErrorResponse({ message: "Invalid or expired session", code: BAD_SESSION }), 401);
   }
 
   try {
@@ -34,7 +36,7 @@ gitHub.get("/remotes", async (c) => {
     const clusterIdParam = c.req.query("cluster_id");
     const clusterIds = clusterIdParam
       ? [clusterIdParam]
-      : await d1.clusters.listUserClusters(session.user_id);
+      : await d1.clusters.listUserClusters(session.userId);
 
     // Get clusters where user is owner and collect bootstrap IDs
     const clusterData = await Promise.all(
@@ -42,7 +44,7 @@ gitHub.get("/remotes", async (c) => {
         const cluster = await d1.clusters.get(clusterId);
         if (!cluster) return null;
 
-        const isOwner = await d1.clusters.isOwner(session.user_id, clusterId);
+        const isOwner = await d1.clusters.isOwner(session.userId, clusterId);
         if (!isOwner) return null;
 
         return {
@@ -58,7 +60,6 @@ gitHub.get("/remotes", async (c) => {
       (c) => c !== null && c.bootstrapId !== null
     );
 
-    // Fetch remotes for each bootstrap ID and flatten into a single list
     const remotesArrays = await Promise.all(
       validClusters.map(async (cluster) => {
         if (!cluster || cluster.bootstrapId === null) return [];
@@ -76,16 +77,23 @@ gitHub.get("/remotes", async (c) => {
       })
     );
 
-    // Flatten the array of arrays into a single array
     const allRemotes = remotesArrays.flat();
 
-    return c.json({
-      success: true,
-      remotes: allRemotes,
-    });
+    // Apply pagination
+    const { page, pageSize, offset } = parsePaginationParams(
+      c.req.query("page"),
+      c.req.query("pageSize")
+    );
+
+    const total = allRemotes.length;
+    const paginatedRemotes = allRemotes.slice(offset, offset + pageSize);
+    const paginatedData = createPaginatedResponse(paginatedRemotes, page, pageSize, total);
+
+    return c.json(createSuccessResponse(paginatedData));
   } catch (error) {
     console.error("List remotes error:", error);
-    return c.json({ error: "Failed to list remotes" }, 500);
+     const helpLink = "https://monitoring.dployr.dev";
+    return c.json(createErrorResponse({ message: "Failed to list remotes", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
   }
 });
 
@@ -95,9 +103,10 @@ gitHub.post("/webhook", async (c) => {
     const signature = c.req.header("x-hub-signature-256");
     const event = c.req.header("x-github-event");
     const payload = await c.req.text();
+    const body = JSON.parse(payload);
 
     if (!signature) {
-      return c.json({ error: "Missing signature" }, 401);
+      return c.json(createErrorResponse({ message: "Missing signature", code: BAD_WEBHOOK_SIGNATURE }), 401);
     }
 
     const isValid = await verifyGitHubWebhook(
@@ -107,13 +116,8 @@ gitHub.post("/webhook", async (c) => {
     );
 
     if (!isValid) {
-      return c.json({ error: "Invalid signature" }, 401);
+      return c.json(createErrorResponse({ message: "Invalid signature", code: BAD_WEBHOOK_SIGNATURE }), 401);
     }
-
-    const body = JSON.parse(payload);
-
-    // [DEBUG]
-    console.debug(`Recieved debug information -> ${payload}`)
 
     const d1 = new D1Store(c.env.BASE_DB);
     const kv = new KVStore(c.env.BASE_KV);
@@ -122,7 +126,6 @@ gitHub.post("/webhook", async (c) => {
     if (event === "installation" && body.action === "created") {
       const installation = body.installation;
 
-      // Store installation data
       await d1.bootstraps.create(installation.id);
 
       console.log(`GitHub App installed: ${installation.id}`);
@@ -174,10 +177,11 @@ gitHub.post("/webhook", async (c) => {
       );
     }
 
-    return c.json({ message: "Webhook processed" });
+    return c.json(createSuccessResponse({}, "Webhook processed"));
   } catch (error) {
     console.error("Webhook error:", error);
-    return c.json({ error: "Internal server error" }, 500);
+     const helpLink = "https://monitoring.dployr.dev";
+    return c.json(createErrorResponse({ message: "Internal server error", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
   }
 });
 

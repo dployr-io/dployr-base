@@ -111,26 +111,44 @@ export class InstanceStore extends BaseStore {
         await this.db.prepare(`DELETE FROM instances WHERE id = ?`).bind(id).run();
     }
 
-    async getByClusters(clusterIds: string[]): Promise<Instance[]> {
-        if (clusterIds.length === 0) return [];
+    async getByClusters(
+        clusterIds: string[],
+        limit?: number,
+        offset?: number
+    ): Promise<{ instances: Instance[]; total: number }> {
+        if (clusterIds.length === 0) return { instances: [], total: 0 };
 
         const placeholders = clusterIds.map(() => '?').join(',');
+
+        // Get total count
+        const countStmt = this.db.prepare(`
+            SELECT COUNT(*) as count
+            FROM instances WHERE cluster_id IN (${placeholders})
+        `);
+        const countResult = await countStmt.bind(...clusterIds).first();
+        const total = (countResult?.count as number) || 0;
+        const limitClause = limit !== undefined ? `LIMIT ${limit}` : '';
+        const offsetClause = offset !== undefined ? `OFFSET ${offset}` : '';
+
         const stmt = this.db.prepare(`
-            SELECT id, address, tag, metadata, created_at, updated_at
+            SELECT id, address, public_key, tag, metadata, created_at, updated_at
             FROM instances WHERE cluster_id IN (${placeholders})
             ORDER BY created_at DESC
+            ${limitClause} ${offsetClause}
         `);
 
         const results = await stmt.bind(...clusterIds).all();
 
-        return results.results.map((row) => ({
+        const instances = results.results.map((row) => ({
             id: row.id as string,
             address: row.address as string,
-            publicKey: row.publicKey as string,
+            publicKey: row.public_key as string,
             tag: row.tag as string,
             metadata: row.metadata ? JSON.parse(row.metadata as string) : {},
             createdAt: row.created_at as number,
             updatedAt: row.updated_at as number,
         }));
+
+        return { instances, total };
     }
 }

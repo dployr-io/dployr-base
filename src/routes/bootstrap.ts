@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { Bindings, Variables } from "@/types";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types";
 import { getCookie } from "hono/cookie";
 import { KVStore } from "@/lib/db/store/kv";
 import { D1Store } from "@/lib/db/store";
@@ -7,8 +7,11 @@ import z from "zod";
 import { generateSecretKey } from "@/services/utils";
 import { BOOTSTRAP_TEMPLATE } from "@/lib/constants/bootstrap_template";
 import { GitHubService } from "@/services/github";
+import { authMiddleware } from "@/middleware/auth";
+import { BAD_REQUEST, BOOTSTRAP_RUN_FAILURE, BOOTSTRAP_SETUP_FAILURE } from "@/lib/constants";
 
 const bootstrap = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+bootstrap.use("*", authMiddleware);
 
 const setupRepoSchema = z.object({
   id: z.number(),
@@ -25,19 +28,6 @@ const initiateWorkflowSchema = z.object({
 // This creates a temporary workflow on the user's repository
 // that will be used for provisioning a new dployr instance
 bootstrap.post("/", async (c) => {
-  const sessionId = getCookie(c, "session");
-
-  if (!sessionId) {
-    return c.json({ error: "Not authenticated" }, 401);
-  }
-
-  const kv = new KVStore(c.env.BASE_KV);
-  const session = await kv.getSession(sessionId);
-
-  if (!session) {
-    return c.json({ error: "Invalid or expired session" }, 401);
-  }
-
   try {
     const data = await c.req.json();
     const { id, repository } = data;
@@ -48,7 +38,7 @@ bootstrap.post("/", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json({ error: "Validation failed", details: errors }, 400);
+      return c.json(createErrorResponse({ message: "Validation failed " + errors, code: BAD_REQUEST }), 400);
     }
 
     const [owner, repo] = repository.split("/");
@@ -62,29 +52,18 @@ bootstrap.post("/", async (c) => {
       BOOTSTRAP_TEMPLATE,
       "Add dployr bootstrap workflow"
     );
+
+    return c.json(createSuccessResponse({ repository }, "Bootstrap workflow created successfully"));
   } catch (error) {
     console.error("Setup repository error:", error);
-    return c.json({ error: "Failed to setup repository" }, 500);
+    const helpLink = "https://monitoring.dployr.dev";
+    return c.json(createErrorResponse({ message: "Failed to setup repository", code: BOOTSTRAP_SETUP_FAILURE, helpLink }), 500);
   }
 });
 
 // Initiate a workflow
 // This initiates a GitHub workflow dipatch to bootstrap the new dployr instance
 bootstrap.post("/run", async (c) => {
-  const sessionId = getCookie(c, "session");
-
-  if (!sessionId) {
-    return c.json({ error: "Not authenticated" }, 401);
-  }
-
-  const kv = new KVStore(c.env.BASE_KV);
-  const d1 = new D1Store(c.env.BASE_DB);
-  const session = await kv.getSession(sessionId);
-
-  if (!session) {
-    return c.json({ error: "Invalid or expired session" }, 401);
-  }
-
   try {
     const data = await c.req.json();
     const { id, repository, branch } = data;
@@ -95,7 +74,7 @@ bootstrap.post("/run", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json({ error: "Validation failed", details: errors }, 400);
+      return c.json(createErrorResponse({ message: "Validation failed " + errors, code: BAD_REQUEST }), 400);
     }
 
     const bootstrapToken = generateSecretKey();
@@ -118,14 +97,11 @@ bootstrap.post("/run", async (c) => {
       }
     );
 
-    return c.json({
-      success: true,
-      deploymentId,
-      message: "Deployment workflow triggered",
-    });
+    return c.json(createSuccessResponse({ deploymentId }, "Deployment workflow triggered"));
   } catch (error) {
     console.error("Deploy trigger error:", error);
-    return c.json({ error: "Failed to trigger deployment" }, 500);
+    const helpLink = "https://monitoring.dployr.dev";
+    return c.json(createErrorResponse({ message: "Failed to trigger deployment", code: BOOTSTRAP_RUN_FAILURE, helpLink }), 500);
   }
 });
 

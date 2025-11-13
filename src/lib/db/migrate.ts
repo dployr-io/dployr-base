@@ -32,21 +32,42 @@ function getMigrations(): Record<string, string> {
   return migrationMap;
 }
 
+
 async function applyMigration(db: D1Database, filename: string, sql: string): Promise<void> {
   console.log(`Applying migration: ${filename}`);
 
-  const statements = sql
-    .split(';')
-    .map(stmt => stmt.trim())
-    .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
+  // Check if already applied
+  try {
+    const existing = await db.prepare("SELECT filename FROM _migrations WHERE filename = ?")
+      .bind(filename)
+      .first();
 
-  for (const statement of statements) {
-    if (statement.trim()) {
-      await db.prepare(statement).run();
+    if (existing) {
+      console.log(`Migration ${filename} already applied, skipping`);
+      return;
     }
+  } catch (e) {
+    // Continue
   }
 
-  await db.prepare("INSERT INTO _migrations (filename) VALUES (?)")
+  // filter and split trigger functions
+  const statements = sql.match(
+    /CREATE\s+TRIGGER[\s\S]*?BEGIN[\s\S]*?END;(?:\s*END;)?|CREATE\s+(?:TABLE|INDEX)[\s\S]*?;/gi
+  ) || [];
+
+  for (const statement of statements) {
+      const trimmed = statement.trim();
+      if (trimmed) {
+        try {
+          await db.prepare(trimmed).run();
+        } catch (error) {
+          console.error(`Failed statement: ${trimmed}`);
+          throw error;
+        }
+      }
+    }
+
+  await db.prepare("INSERT OR IGNORE INTO _migrations (filename) VALUES (?)")
     .bind(filename)
     .run();
 

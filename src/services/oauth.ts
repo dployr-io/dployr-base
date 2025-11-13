@@ -44,7 +44,7 @@ export class OAuthService {
 
   getAuthUrl(provider: OAuthProvider, state: string): string {
     const config = providers[provider](this.env);
-    const redirectUri = `${this.env.BASE_URL}/api/auth/callback/${provider}`;
+    const redirectUri = `${this.env.BASE_URL}/v1/auth/callback/${provider}`;
 
     const params = new URLSearchParams({
       client_id: this.getClientId(provider),
@@ -59,7 +59,7 @@ export class OAuthService {
 
   async exchangeCode(provider: OAuthProvider, code: string): Promise<string> {
     const config = providers[provider](this.env);
-    const redirectUri = `${this.env.BASE_URL}/api/auth/callback/${provider}`;
+    const redirectUri = `${this.env.BASE_URL}/v1/auth/callback/${provider}`;
 
     const body = new URLSearchParams({
       client_id: this.getClientId(provider),
@@ -97,7 +97,7 @@ export class OAuthService {
   async getUserInfo(
     provider: OAuthProvider,
     accessToken: string
-  ): Promise<Omit<User, "id" | "created_at" | "updated_at">> {
+  ): Promise<Omit<User, "id" | "createdAt" | "updatedAt">> {
     const config = providers[provider](this.env);
 
     const headers: Record<string, string> = {
@@ -139,7 +139,7 @@ export class OAuthService {
   private normalizeUserInfo(
     provider: OAuthProvider,
     data: any
-  ): Omit<User, "id" | "created_at" | "updated_at"> {
+  ): Omit<User, "id" | "createdAt" | "updatedAt"> {
     switch (provider) {
       case "google":
         return {

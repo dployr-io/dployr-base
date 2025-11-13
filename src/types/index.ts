@@ -20,13 +20,13 @@ export type Bindings = {
   BASE_DB: D1Database;
 
   // App config
-  WEB_URL: string;
+  APP_URL: string;
   BASE_URL: string;
 };
 
 export type OAuthProvider = "google" | "github" | "microsoft" | "email";
 
-export type Role = "owner" | "admin" | "developer" | "viewer";
+export type Role = "owner" | "admin" | "developer" | "viewer" | "invited";
 
 export type BootstrapType = "github";
 
@@ -37,12 +37,12 @@ export interface User {
   name?: string | undefined;
   provider: OAuthProvider;
   metadata?: Record<string, any> | undefined;
-  created_at: number;
-  updated_at: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface Session {
-  user_id: string;
+  userId: string;
   email: string;
   provider: OAuthProvider;
   clusters: string[];
@@ -81,3 +81,6 @@ export interface Bootstrap {
   type: BootstrapType;
   createdAt: number;
 }
+
+// Export response types
+export * from "./responses";

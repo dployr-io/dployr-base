@@ -1,17 +1,20 @@
 import { Hono } from "hono";
-import { Bindings, Variables } from "@/types";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";
 import { getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
+import { BAD_SESSION } from "@/lib/constants";
+import { authMiddleware } from "@/middleware/auth";
 
 const deployments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+deployments.use("*", authMiddleware);
 
 // List all deployments
 deployments.get("/", async (c) => {
   const sessionId = getCookie(c, "session");
 
   if (!sessionId) {
-    return c.json({ error: "Not authenticated" }, 401);
+    return c.json(createErrorResponse({message: "Not authenticated", code: BAD_SESSION}), 401);
   }
 
   const kv = new KVStore(c.env.BASE_KV);
@@ -19,13 +22,13 @@ deployments.get("/", async (c) => {
   const session = await kv.getSession(sessionId);
 
   if (!session) {
-    return c.json({ error: "Invalid or expired session" }, 401);
+    return c.json(createErrorResponse({ message: "Invalid or expired session", code: BAD_SESSION}), 401);
   }
 
   const instances = await d1.instances.getByClusters(session.clusters);
 
-  
-  return c.json({});
+  // TODO: Implement deployment listing logic
+  return c.json(createSuccessResponse({ deployments: [], instances }));
 });
 
 export default deployments;

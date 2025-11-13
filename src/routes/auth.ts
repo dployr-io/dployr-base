@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import { Bindings, Variables, OAuthProvider, User } from "@/types";
+import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorResponse } from "@/types";
 import { OAuthService } from "@/services/oauth";
 import { KVStore } from "@/lib/db/store/kv";
 import { setCookie, getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
 import z from "zod";
-import { ulid } from "ulid";
+import { BAD_OAUTH_STATE, BAD_REQUEST, INVALID_OAUTH_PROVIDER, INVALID_OTP, MISSING_PARAMS, MISSING_RESOURCE } from "@/lib/constants";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -23,7 +23,7 @@ auth.get("/login/:provider", async (c) => {
   const provider = c.req.param("provider") as OAuthProvider;
 
   if (!["google", "github", "microsoft"].includes(provider)) {
-    return c.json({ error: "Invalid provider" }, 400);
+    return c.json(createErrorResponse({ message: "Invalid provider", code: INVALID_OAUTH_PROVIDER }), 400);
   }
 
   const oauth = new OAuthService(c.env);
@@ -44,7 +44,7 @@ auth.get("/callback/:provider", async (c) => {
   const state = c.req.query("state");
 
   if (!code || !state) {
-    return c.json({ error: "Missing code or state" }, 400);
+    return c.json(createErrorResponse({ message: "Missing code or state", code: MISSING_PARAMS }), 400);
   }
 
   const kv = new KVStore(c.env.BASE_KV);
@@ -52,7 +52,7 @@ auth.get("/callback/:provider", async (c) => {
 
   const isValidState = await kv.validateState(state);
   if (!isValidState) {
-    return c.json({ error: "Invalid state" }, 400);
+    return c.json(createErrorResponse({ message: "Invalid state", code: BAD_OAUTH_STATE }), 400);
   }
 
   try {
@@ -90,65 +90,11 @@ auth.get("/callback/:provider", async (c) => {
       });
     }
     // Redirect to app
-    return c.redirect(`${c.env.WEB_URL}/dashboard`);
+    return c.redirect(`${c.env.APP_URL}/dashboard`);
   } catch (error) {
     console.error("OAuth error:", error);
-    return c.json({ error: "Authentication failed" }, 500);
+    return c.redirect(`${c.env.APP_URL}/?authError=${encodeURIComponent(`Failed to sign-in with ${provider}. Try email instead.`)}`);
   }
-});
-
-// Get current user
-auth.get("/me", async (c) => {
-  const sessionId = getCookie(c, "session");
-
-  if (!sessionId) {
-    return c.json({ error: "Not authenticated" }, 401);
-  }
-
-  const kv = new KVStore(c.env.BASE_KV);
-  const d1 = new D1Store(c.env.BASE_DB);
-
-  const session = await kv.getSession(sessionId);
-
-  if (!session) {
-    return c.json({ error: "Invalid or expired session" }, 401);
-  }
-
-  const user = await d1.users.get(session.email);
-
-  if (!user) {
-    return c.json({ error: "User not found" }, 404);
-  }
-
-  const cluster = await d1.clusters.create(user.id);
-
-  return c.json({ user, cluster });
-});
-
-auth.patch("/me", async (c) => {
-  const sessionId = getCookie(c, "session");
-
-  if (!sessionId) {
-    return c.json({ error: "Not authenticated" }, 401);
-  }
-
-  const kv = new KVStore(c.env.BASE_KV);
-  const d1 = new D1Store(c.env.BASE_DB);
-
-  const session = await kv.getSession(sessionId);
-
-  if (!session) {
-    return c.json({ error: "Invalid or expired session" }, 401);
-  }
-
-  const updates: Partial<Omit<User, "id" | "createdAt">> = await c.req.json();
-  const user = await d1.users.update(session.email, updates);
-
-  if (!user) {
-    return c.json({ error: "User not found" }, 404);
-  }
-
-  return c.json({ user });
 });
 
 // Email authentication - Send OTP
@@ -158,7 +104,11 @@ auth.post("/login/email", async (c) => {
     const { email } = data;
     const validation = loginSchema.safeParse(data);
     if (!validation.success) {
-      return c.json({ error: "Invalid email format" }, 400);
+      const errors = validation.error.issues.map((err) => ({
+        field: err.path.join("."),
+        message: err.message,
+      }));
+      return c.json(createErrorResponse({ message: "Invalid email format " + errors, code: BAD_REQUEST }), 400);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
@@ -176,13 +126,10 @@ auth.post("/login/email", async (c) => {
 
     // TODO: Send email with OTP code
 
-    return c.json({
-      message: "OTP sent to your email",
-      success: true,
-    });
+    return c.json(createSuccessResponse({ email }, "OTP sent to your email"));
   } catch (error) {
     console.error("Send OTP error:", error);
-    return c.json({ error: "Failed to send code" }, 500);
+    return c.redirect(`${c.env.APP_URL}/?authError=${encodeURIComponent("Failed to send code. Wait a few moments and try again.")}`);
   }
 });
 
@@ -194,7 +141,11 @@ auth.post("/login/email/verify", async (c) => {
 
     const validation = otpSchema.safeParse(data);
     if (!validation.success) {
-      return c.json({ error: "Invalid email or code format" }, 400);
+      const errors = validation.error.issues.map((err) => ({
+        field: err.path.join("."),
+        message: err.message,
+      }));
+      return c.json(createErrorResponse({ message: "Invalid email or code format " + errors, code: BAD_REQUEST }), 400);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
@@ -202,12 +153,12 @@ auth.post("/login/email/verify", async (c) => {
     const isValid = await kv.validateOTP(email, code.toUpperCase());
 
     if (!isValid) {
-      return c.json({ error: "Invalid or expired code" }, 400);
+      return c.json(createErrorResponse({ message: "Invalid or expired code", code: INVALID_OTP }), 400);
     }
 
     let user = await d1.users.get(email);
     if (!user) {
-      return c.json({ error: "User not found" }, 404);
+      return c.json(createErrorResponse({ message: "User not found", code: MISSING_RESOURCE }), 404);
     }
 
     const sessionId = crypto.randomUUID();
@@ -223,13 +174,10 @@ auth.post("/login/email/verify", async (c) => {
       domain: ".dployr.dev",
     });
 
-    return c.json({
-      message: "Login successful",
-      success: true,
-    });
+    return c.json(createSuccessResponse({ email }, "Login successful"));
   } catch (error) {
     console.error("Verify OTP error:", error);
-    return c.json({ error: "Failed to verify OTP" }, 500);
+    return c.redirect(`${c.env.APP_URL}/?authError=${encodeURIComponent("Failed to verify code. Cross-check and try again.")}`);
   }
 });
 
@@ -247,7 +195,7 @@ auth.get("/logout", async (c) => {
     path: "/",
   });
 
-  return c.json({ message: "Logged out successfully" });
+  return c.json(createSuccessResponse({}, "Logged out successfully"));
 });
 
 export default auth;

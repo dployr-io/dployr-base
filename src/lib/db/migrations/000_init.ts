@@ -1,4 +1,5 @@
-export const init = `CREATE TABLE users (
+export const init = `
+CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
@@ -9,13 +10,13 @@ export const init = `CREATE TABLE users (
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
-CREATE TABLE bootstraps (
+CREATE TABLE IF NOT EXISTS bootstraps (
   id INTEGER PRIMARY KEY,
   type TEXT NOT NULL,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
-CREATE TABLE clusters (
+CREATE TABLE IF NOT EXISTS clusters (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   bootstrap_id INTEGER,
@@ -25,10 +26,10 @@ CREATE TABLE clusters (
   FOREIGN KEY (bootstrap_id) REFERENCES bootstraps(id) ON DELETE SET NULL
 );
 
-CREATE TABLE user_clusters (
+CREATE TABLE IF NOT EXISTS user_clusters (
   user_id TEXT NOT NULL,
   cluster_id TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('owner', 'admin', 'developer', 'viewer')),
+  role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('owner', 'admin', 'developer', 'viewer', 'invited')),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
   PRIMARY KEY (user_id, cluster_id),
@@ -36,7 +37,7 @@ CREATE TABLE user_clusters (
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
-CREATE TABLE instances (
+CREATE TABLE IF NOT EXISTS instances (
   id TEXT PRIMARY KEY,
   cluster_id TEXT NOT NULL,
   address TEXT NOT NULL UNIQUE,
@@ -48,10 +49,55 @@ CREATE TABLE instances (
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_user_clusters_user ON user_clusters(user_id);
-CREATE INDEX idx_user_clusters_org ON user_clusters(cluster_id);
-CREATE INDEX idx_instances_org ON instances(cluster_id);
-CREATE INDEX idx_user_email ON users(email);
-CREATE INDEX idx_instances_address ON instances(address);
-CREATE INDEX idx_instances_tag ON instances(tag);
-CREATE INDEX idx_clusters_github_installation ON clusters(bootstrap_id);`;
+CREATE INDEX IF NOT EXISTS idx_user_clusters_user ON user_clusters(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_clusters_org ON user_clusters(cluster_id);
+CREATE INDEX IF NOT EXISTS idx_instances_org ON instances(cluster_id);
+CREATE INDEX IF NOT EXISTS idx_user_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_instances_address ON instances(address);
+CREATE INDEX IF NOT EXISTS idx_instances_tag ON instances(tag);
+CREATE INDEX IF NOT EXISTS idx_clusters_github_installation ON clusters(bootstrap_id);
+
+CREATE TRIGGER IF NOT EXISTS prevent_email_update
+BEFORE UPDATE OF email ON users
+BEGIN
+  SELECT RAISE(ABORT, 'email is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_bootstrap_id_update
+BEFORE UPDATE OF bootstrap_id ON clusters
+BEGIN
+  SELECT CASE 
+    WHEN OLD.bootstrap_id IS NOT NULL 
+    THEN RAISE(ABORT, 'bootstrap_id is immutable once set')
+  END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_role_downgrade_to_invited
+BEFORE UPDATE OF role ON user_clusters
+BEGIN
+  SELECT CASE 
+    WHEN OLD.role != 'invited' AND NEW.role = 'invited'
+    THEN RAISE(ABORT, 'cannot downgrade role back to invited')
+  END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_single_owner_on_insert
+BEFORE INSERT ON user_clusters
+WHEN NEW.role = 'owner'
+BEGIN
+  SELECT CASE
+    WHEN (SELECT COUNT(*) FROM user_clusters WHERE cluster_id = NEW.cluster_id AND role = 'owner' AND user_id != NEW.user_id) > 0
+    THEN RAISE(ABORT, 'cluster can only have one owner')
+  END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_single_owner_on_update
+BEFORE UPDATE OF role ON user_clusters
+WHEN NEW.role = 'owner'
+BEGIN
+  SELECT CASE
+    WHEN (SELECT COUNT(*) FROM user_clusters WHERE cluster_id = NEW.cluster_id AND role = 'owner' AND user_id != NEW.user_id) > 0
+    THEN RAISE(ABORT, 'cluster can only have one owner')
+  END;
+END;
+`;

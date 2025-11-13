@@ -1,84 +1,89 @@
-import { Cluster, Role } from "@/types";
+import { Cluster, OAuthProvider, Role as UserRole, User } from "@/types";
 import { BaseStore } from "./base";
 
 export class ClusterStore extends BaseStore {
   private readonly ROLE_HIERARCHY = {
+    invited: 0,
     viewer: 1,
     developer: 2,
     admin: 3,
     owner: 4,
   } as const;
 
-  async create(adminUserId: string): Promise<Cluster> {
-    const id = this.generateId();
-    const now = this.now();
-
-    // Get user info and check for existing cluster
-    const stmt = this.db.prepare(`
-      WITH user_info AS (
-        SELECT email, 
-               substr(email, 1, instr(email, '@') - 1) as cluster_name
-        FROM users WHERE id = ?
-      ),
-      existing_cluster AS (
+  async save(adminUserId: string): Promise<Cluster> {
+    // Check if user already owns a cluster
+    const existingCluster = await this.db
+      .prepare(`
         SELECT c.id, c.name, c.metadata, c.created_at, c.updated_at
         FROM clusters c
-        JOIN user_clusters uc ON c.id = uc.cluster_id
+        JOIN user_clusters uc ON uc.cluster_id = c.id
         WHERE uc.user_id = ? AND uc.role = 'owner'
-      )
-      SELECT 
-        COALESCE(ec.id, ?) as id,
-        COALESCE(ec.name, ui.cluster_name) as name,
-        COALESCE(ec.metadata, '{}') as metadata,
-        COALESCE(ec.created_at, ?) as created_at,
-        COALESCE(ec.updated_at, ?) as updated_at,
-        ui.email,
-        CASE WHEN ec.id IS NULL THEN 1 ELSE 0 END as is_new
-      FROM user_info ui
-      LEFT JOIN existing_cluster ec ON 1=1
-    `);
+      `)
+      .bind(adminUserId)
+      .first();
 
-    const result = await stmt.bind(adminUserId, adminUserId, id, now, now).first();
+    if (existingCluster) {
+      return {
+        id: existingCluster.id as string,
+        name: existingCluster.name as string,
+        users: [adminUserId],
+        bootstrapId: null,
+        roles: {
+          owner: [adminUserId],
+          admin: [],
+          developer: [],
+          viewer: [],
+          invited: [],
+        },
+        metadata: existingCluster.metadata ? JSON.parse(existingCluster.metadata as string) : {},
+        createdAt: existingCluster.created_at as number,
+        updatedAt: existingCluster.updated_at as number,
+      };
+    }
 
-    if (!result) {
+    // Create new cluster
+    const id = this.generateId();
+
+    const user = await this.db
+      .prepare(`SELECT email FROM users WHERE id = ?`)
+      .bind(adminUserId)
+      .first();
+
+    if (!user) {
       throw new Error(`User ${adminUserId} not found`);
     }
 
-    const isNew = result.is_new as number;
-    const clusterId = result.id as string;
-    const clusterName = result.name as string;
-    const bootstrapId = null;
+    const name = (user.email as string).split('@')[0];
 
-    // Only create if new
-    if (isNew) {
-      const statements = [
-        this.db.prepare(`
-          INSERT INTO clusters (id, name, bootstrap_id, metadata, created_at, updated_at)
-          VALUES (?, ?, ?, '{}', ?, ?)
-        `).bind(clusterId, clusterName, bootstrapId, now, now),
+    await this.db.batch([
+      this.db.prepare(`INSERT INTO clusters (id, name, bootstrap_id) VALUES (?, ?, NULL)`).bind(id, name),
+      this.db.prepare(`INSERT INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, 'owner')`).bind(adminUserId, id),
+    ]);
 
-        this.db.prepare(`
-          INSERT INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, 'owner')
-        `).bind(adminUserId, clusterId)
-      ];
+    const clusterRow = await this.db
+      .prepare(`SELECT id, name, metadata, created_at, updated_at FROM clusters WHERE id = ?`)
+      .bind(id)
+      .first();
 
-      await this.db.batch(statements);
+    if (!clusterRow) {
+      throw new Error(`Failed to create cluster for user ${adminUserId}`);
     }
 
     return {
-      id: clusterId,
-      name: clusterName,
+      id: clusterRow.id as string,
+      name: clusterRow.name as string,
       users: [adminUserId],
-      bootstrapId,
+      bootstrapId: null,
       roles: {
         owner: [adminUserId],
         admin: [],
         developer: [],
         viewer: [],
+        invited: [],
       },
-      metadata: result.metadata ? JSON.parse(result.metadata as string) : {},
-      createdAt: result.created_at as number,
-      updatedAt: result.updated_at as number,
+      metadata: clusterRow.metadata ? JSON.parse(clusterRow.metadata as string) : {},
+      createdAt: clusterRow.created_at as number,
+      updatedAt: clusterRow.updated_at as number,
     };
   }
 
@@ -97,16 +102,17 @@ export class ClusterStore extends BaseStore {
 
     const userRoles = await usersStmt.bind(id).all();
     const users: string[] = [];
-    const roles: Record<Role, string[]> = {
+    const roles: Record<UserRole, string[]> = {
       owner: [],
       admin: [],
       developer: [],
       viewer: [],
+      invited: [],
     };
 
     for (const userRole of userRoles.results) {
       const userId = userRole.user_id as string;
-      const role = userRole.role as Role;
+      const role = userRole.role as UserRole;
 
       if (!users.includes(userId)) {
         users.push(userId);
@@ -148,27 +154,7 @@ export class ClusterStore extends BaseStore {
     // Handle cluster table updates
     const clusterUpdates: Record<string, any> = {};
     if (updates.name) clusterUpdates.name = updates.name;
-
-    if (updates.bootstrapId !== undefined) {
-      // Get the current cluster and check if there's no bootstrap id
-      const cluster = await this.db.prepare(`
-        SELECT bootstrap_id FROM clusters WHERE id = ?
-      `).bind(id).first();
-
-      if (!cluster) {
-        throw new Error(`Cluster ${id} not found`);
-      }
-
-      const bootstrapId = cluster.bootstrap_id as number | null;
-
-      // Bootstrap id can be set only once 
-      // throw error if it's already set (non-null)
-      if (bootstrapId !== null) {
-        throw new Error('Bootstrap ID can only be assigned once');
-      }
-
-      clusterUpdates.bootstrap_id = updates.bootstrapId;
-    }
+    if (updates.bootstrapId) clusterUpdates.bootstrap_id = updates.bootstrapId;
 
     if (updates.metadata) {
       // Use atomic JSON merge
@@ -218,27 +204,155 @@ export class ClusterStore extends BaseStore {
     await this.db.prepare(`DELETE FROM clusters WHERE id = ?`).bind(id).run();
   }
 
-  async addUser(
-    clusterId: string,
-    userId: string,
-    role: Exclude<Role, 'owner'> = "viewer"
-  ): Promise<void> {
-    const stmt = this.db.prepare(
-      `INSERT OR REPLACE INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, ?)`
-    );
-    await stmt.bind(userId, clusterId, role).run();
-  }
+  /**
+   * Add multiple users to a cluster (excluding owner role).
+   * Creates users if they don't exist and adds them with 'invited' role.
+   * 
+   * @param clusterId - The cluster ID
+   * @param userEmails - Array of user emails with their target roles
+   */
+  async addUsers(clusterId: string, userEmails: string[]): Promise<void> {
+    if (userEmails.length === 0) return;
 
-  async removeUser(clusterId: string, userId: string): Promise<void> {
-    const userRole = await this.getUserRole(userId, clusterId);
-    if (userRole === 'owner') {
-      throw new Error('Cannot remove cluster owner. Transfer ownership first using transferOwnership().');
+    const now = this.now();
+    const statements: D1PreparedStatement[] = [];
+
+    for (const email of userEmails) {
+      const userId = this.generateId();
+      const name = email.split("@")[0];
+      const provider = "email";
+
+      // Insert user if doesn't exist
+      statements.push(
+        this.db.prepare(`
+          INSERT INTO users (id, name, email, provider, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(email) DO NOTHING
+        `).bind(userId, name, email, provider, now, now)
+      );
+
+      // Link user to cluster with 'invited' role
+      statements.push(
+        this.db.prepare(`
+          INSERT OR IGNORE INTO user_clusters (user_id, cluster_id, role)
+          SELECT id, ?, 'invited' FROM users WHERE email = ?
+        `).bind(clusterId, email)
+      );
     }
 
-    await this.db
-      .prepare(`DELETE FROM user_clusters WHERE cluster_id = ? AND user_id = ?`)
-      .bind(clusterId, userId)
-      .run();
+    await this.db.batch(statements);
+  }
+
+  /**
+  * Remove multiple users from a cluster.
+  * Cannot remove cluster owners - use transferOwnership() first.
+  * 
+  * @param clusterId - The cluster ID
+  * @param userIds - Array of user IDs to remove
+  */
+  async removeUsers(clusterId: string, userIds: string[]): Promise<void> {
+    if (userIds.length === 0) return;
+
+    // Check if any user is an owner
+    for (const userId of userIds) {
+      const userRole = await this.getUserRole(userId, clusterId);
+      if (userRole === 'owner') {
+        throw new Error('Cannot remove cluster owner. Transfer ownership using transferOwnership().');
+      }
+    }
+
+    const statements: D1PreparedStatement[] = [];
+
+    for (const userId of userIds) {
+      statements.push(
+        this.db.prepare(`DELETE FROM user_clusters WHERE cluster_id = ? AND user_id = ?`)
+          .bind(clusterId, userId)
+      );
+
+      // Check if user has any other clusters
+      // By design, if user has a cluster we're sure their account has been initialized.
+      // Clean up uninitialized accounts (users with no clusters and provider = 'email')
+      statements.push(
+        this.db.prepare(`
+          DELETE FROM users 
+          WHERE id = ? 
+          AND provider = 'email'
+          AND NOT EXISTS (
+            SELECT 1 FROM user_clusters WHERE user_id = ?
+          )
+        `).bind(userId, userId)
+      );
+    }
+
+    await this.db.batch(statements);
+  }
+
+  /**
+   * Accept a cluster invite and upgrade to specified role.
+   * 
+   * @param userId - The user ID accepting the invite
+   * @param clusterId - The cluster ID
+   */
+  async acceptInvite(
+    userId: string,
+    clusterId: string
+  ): Promise<void> {
+    const stmt = this.db.prepare(`
+      UPDATE user_clusters 
+      SET role = 'viewer', updated_at = ?
+      WHERE user_id = ? AND cluster_id = ? AND role = 'invited'
+    `);
+
+    const result = await stmt.bind(this.now(), userId, clusterId).run();
+
+    if (result.meta.changes === 0) {
+      throw new Error('No invite found');
+    }
+  }
+
+  /**
+   * Decline a cluster invite (removes the user from cluster).
+   * 
+   * @param userId - The user ID declining the invite
+   * @param clusterId - The cluster ID
+   */
+  async declineInvite(userId: string, clusterId: string): Promise<void> {
+    const stmt = this.db.prepare(`
+      DELETE FROM user_clusters 
+      WHERE user_id = ? AND cluster_id = ? AND role = 'invited'
+    `);
+
+    const result = await stmt.bind(userId, clusterId).run();
+
+    if (result.meta.changes === 0) {
+      throw new Error('No invite found');
+    }
+  }
+
+  /**
+   * List pending invites for a user.
+   * 
+   * @param userId - The user ID
+   * @returns Array of cluster IDs with pending invites
+   */
+  async listPendingInvites(userId: string): Promise<{ clusterId: string; clusterName: string; ownerName: string }[]> {
+    const stmt = this.db.prepare(`
+      SELECT 
+        uc.cluster_id,
+        c.name as cluster_name,
+        u.name as owner_name
+      FROM user_clusters uc
+      JOIN clusters c ON uc.cluster_id = c.id
+      JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'
+      JOIN users u ON owner_uc.user_id = u.id
+      WHERE uc.user_id = ? AND uc.role = 'invited'
+    `);
+    const results = await stmt.bind(userId).all();
+    return results.results.map((r) => ({
+      clusterId: r.cluster_id as string,
+      clusterName: r.cluster_name as string,
+      ownerName: r.owner_name as string
+    }));
   }
 
   /**
@@ -264,64 +378,133 @@ export class ClusterStore extends BaseStore {
   async transferOwnership(
     clusterId: string,
     newOwnerId: string,
-    previousOwnerRole?: Exclude<Role, 'owner'> | null
+    previousOwnerRole: Exclude<UserRole, 'owner'> = 'admin'
   ): Promise<void> {
-    // Default to 'admin' if not specified
-    const roleForPreviousOwner = previousOwnerRole === undefined ? 'admin' : previousOwnerRole;
+    // Demote the previous owner
+    await this.db
+      .prepare(
+        `UPDATE user_clusters SET role = ? WHERE cluster_id = ? AND user_id != ? AND role = 'owner'`
+      )
+      .bind(previousOwnerRole, clusterId, newOwnerId)
+      .run();
 
-    // Get current owner
-    const currentOwnerStmt = this.db.prepare(`
-      SELECT user_id FROM user_clusters WHERE cluster_id = ? AND role = 'owner'
-    `);
-    const currentOwner = await currentOwnerStmt.bind(clusterId).first();
-
-    if (!currentOwner) {
-      throw new Error('No current owner found for cluster');
-    }
-
-    const currentOwnerId = currentOwner.user_id as string;
-
-    if (currentOwnerId === newOwnerId) {
-      throw new Error('User is already the owner of this cluster');
-    }
-
-    const statements = [];
-
-    // Remove current owner
-    statements.push(
-      this.db.prepare(`DELETE FROM user_clusters WHERE cluster_id = ? AND user_id = ?`)
-        .bind(clusterId, currentOwnerId)
-    );
-
-    // Add new owner
-    statements.push(
-      this.db.prepare(`INSERT OR REPLACE INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, 'owner')`)
-        .bind(newOwnerId, clusterId)
-    );
-
-    // Assign role to previous owner (if specified)
-    if (roleForPreviousOwner) {
-      statements.push(
-        this.db.prepare(`INSERT INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, ?)`)
-          .bind(currentOwnerId, clusterId, roleForPreviousOwner)
-      );
-    }
-
-    await this.db.batch(statements);
+    // Promote the new owner
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, 'owner')`
+      )
+      .bind(newOwnerId, clusterId)
+      .run();
   }
 
   /**
-   * Gets a list of clusters that belongs to a user.
+   * Gets a list of clusters that belongs to a user (excludes invited).
    * 
    * @param userId - The user ID
    * @returns A list of cluster IDs
    */
   async listUserClusters(userId: string): Promise<string[]> {
     const stmt = this.db.prepare(
-      `SELECT DISTINCT cluster_id FROM user_clusters WHERE user_id = ?`
+      `SELECT DISTINCT cluster_id FROM user_clusters WHERE user_id = ? AND role != 'invited'`
     );
     const results = await stmt.bind(userId).all();
     return results.results.map((r) => r.cluster_id as string);
+  }
+
+  /**
+ * Gets a list of users in a cluster (excludes invited users)
+ * 
+ * @param clusterId - The cluster ID
+ * @param limit - Optional limit for pagination
+ * @param offset - Optional offset for pagination
+ * @returns A custom object of users and their roles with total count
+ */
+  async listClusterUsers(
+    clusterId: string,
+    limit?: number,
+    offset?: number
+  ): Promise<{ users: (User & { role: UserRole })[]; total: number }> {
+    // Get total count
+    const countStmt = this.db.prepare(`
+      SELECT COUNT(*) as count
+      FROM users u
+      JOIN user_clusters uc ON u.id = uc.user_id
+      WHERE uc.cluster_id = ? AND uc.role != 'invited'
+    `);
+    const countResult = await countStmt.bind(clusterId).first();
+    const total = (countResult?.count as number) || 0;
+    const limitClause = limit !== undefined ? `LIMIT ${limit}` : '';
+    const offsetClause = offset !== undefined ? `OFFSET ${offset}` : '';
+
+    const stmt = this.db.prepare(`
+      SELECT u.id, u.name, u.email, u.picture, u.provider, u.created_at, u.updated_at, uc.role
+      FROM users u
+      JOIN user_clusters uc ON u.id = uc.user_id
+      WHERE uc.cluster_id = ? AND uc.role != 'invited'
+      ORDER BY uc.role DESC, u.email ASC
+      ${limitClause} ${offsetClause}
+    `);
+    const results = await stmt.bind(clusterId).all();
+    const users = results.results.map((row) => ({
+      id: row.id as string,
+      name: row.name as string,
+      email: row.email as string,
+      picture: row.picture as string,
+      provider: row.provider as OAuthProvider,
+      role: row.role as UserRole,
+      createdAt: row.created_at as number,
+      updatedAt: row.updated_at as number,
+    }));
+
+    return { users, total };
+  }
+
+  /**
+  * Gets a list of invites in a cluster 
+  * 
+  * @param clusterId - The cluster ID
+  * @param limit - Optional limit for pagination
+  * @param offset - Optional offset for pagination
+  * @returns A custom object of users and their roles with total count
+  */
+  async listClusterInvites(
+    clusterId: string,
+    limit?: number,
+    offset?: number
+  ): Promise<{ users: (User & { role: UserRole })[]; total: number }> {
+    // Get total count
+    const countStmt = this.db.prepare(`
+      SELECT COUNT(*) as count
+      FROM users u
+      JOIN user_clusters uc ON u.id = uc.user_id
+      WHERE uc.cluster_id = ? AND uc.role = 'invited'
+    `);
+    const countResult = await countStmt.bind(clusterId).first();
+    const total = (countResult?.count as number) || 0;
+    const limitClause = limit !== undefined ? `LIMIT ${limit}` : '';
+    const offsetClause = offset !== undefined ? `OFFSET ${offset}` : '';
+
+    const stmt = this.db.prepare(`
+      SELECT u.id, u.name, u.email, u.picture, u.provider, u.created_at, u.updated_at, uc.role
+      FROM users u
+      JOIN user_clusters uc ON u.id = uc.user_id
+      WHERE uc.cluster_id = ? AND uc.role = 'invited'
+      ORDER BY uc.role DESC, u.email ASC
+      ${limitClause} ${offsetClause}
+    `);
+    const results = await stmt.bind(clusterId).all();
+    const users = results.results.map((row) => ({
+      id: row.id as string,
+      name: row.name as string,
+      email: row.email as string,
+      picture: row.picture as string,
+      provider: row.provider as OAuthProvider,
+      role: row.role as UserRole,
+      createdAt: row.created_at as number,
+      updatedAt: row.updated_at as number,
+    }));
+
+    return { users, total };
   }
 
   /**
@@ -331,12 +514,12 @@ export class ClusterStore extends BaseStore {
    * @param clusterId - The cluster ID
    * @returns The role, or null if relationship doesn't exist
    */
-  async getUserRole(userId: string, clusterId: string): Promise<Role | null> {
+  async getUserRole(userId: string, clusterId: string): Promise<UserRole | null> {
     const stmt = this.db.prepare(
       `SELECT role FROM user_clusters WHERE user_id = ? AND cluster_id = ?`
     );
     const result = await stmt.bind(userId, clusterId).first();
-    return result ? (result.role as Role) : null;
+    return result ? (result.role as UserRole) : null;
   }
 
   /**
@@ -354,7 +537,7 @@ export class ClusterStore extends BaseStore {
   }
 
   /**
-   * Gets all users with a specific role in a cluster. (excluding owner role).
+   * Gets all users with a specific role in a cluster.
    * Owner role cannot be retrieved through this method - use getOwner() instead.
    * 
    * @param clusterId - The cluster ID
@@ -367,7 +550,7 @@ export class ClusterStore extends BaseStore {
    * // Returns: ["user456", "user789"]
    * ```
    */
-  async getUsersByRole(clusterId: string, role: Exclude<Role, 'owner'>): Promise<string[]> {
+  async getUsersByRole(clusterId: string, role: Exclude<UserRole, 'owner'>): Promise<string[]> {
     const stmt = this.db.prepare(
       `SELECT user_id FROM user_clusters WHERE cluster_id = ? AND role = ?`
     );
@@ -395,7 +578,7 @@ export class ClusterStore extends BaseStore {
   private async hasMinRole(
     userId: string,
     clusterId: string,
-    minRole: Role
+    minRole: UserRole
   ): Promise<boolean> {
     const userRole = await this.getUserRole(userId, clusterId);
     if (!userRole) return false;
@@ -417,19 +600,19 @@ export class ClusterStore extends BaseStore {
    */
   private async prepareRoleUpdateStatements(
     clusterId: string,
-    roles: Record<Exclude<Role, 'owner'>, string[]>
+    roles: Record<Exclude<UserRole, 'owner'>, string[]>
   ): Promise<D1PreparedStatement[]> {
     const { ...members } = roles;
 
     // Calculate highest role per user
-    const userRoleMap = new Map<string, Role>();
+    const userRoleMap = new Map<string, UserRole>();
     for (const [role, userIds] of Object.entries(members)) {
-      const roleLevel = this.ROLE_HIERARCHY[role as Role];
+      const roleLevel = this.ROLE_HIERARCHY[role as UserRole];
       for (const userId of userIds) {
         const currentRole = userRoleMap.get(userId);
         const currentLevel = currentRole ? this.ROLE_HIERARCHY[currentRole] : 0;
         if (roleLevel > currentLevel) {
-          userRoleMap.set(userId, role as Role);
+          userRoleMap.set(userId, role as UserRole);
         }
       }
     }
@@ -464,24 +647,5 @@ export class ClusterStore extends BaseStore {
     }
 
     return statements;
-  }
-
-  /**
-   * Updates cluster roles (excluding owner role).
-   * Owner role cannot be changed through this method - use transferOwnership() instead.
-   * 
-   * @private
-   * @param clusterId - The cluster ID
-   * @param roles - New role assignments (owner role is ignored if present)
-   */
-  private async updateRoles(
-    clusterId: string,
-    roles: Record<Exclude<Role, 'owner'>, string[]>
-  ): Promise<void> {
-    const statements = await this.prepareRoleUpdateStatements(clusterId, roles);
-
-    if (statements.length > 0) {
-      await this.db.batch(statements);
-    }
   }
 }

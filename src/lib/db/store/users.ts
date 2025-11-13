@@ -2,7 +2,7 @@ import { User } from "@/types";
 import { BaseStore } from "./base";
 
 export class UserStore extends BaseStore {
-    async save(user: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User | null> {
+    async save(user: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<User | null> {
         const stmt = this.db.prepare(`
       INSERT INTO users (id, email, name, picture, provider, metadata, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
