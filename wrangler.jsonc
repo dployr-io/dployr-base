@@ -4,13 +4,10 @@
   "account_id": "81602a8fc518f9542c732a96aa9018f2",
   "main": "src/index.ts",
   "compatibility_date": "2025-02-04",
-  "assets": {
-    "directory": "./public"
-  },
   "vars": {
     "ENVIRONMENT": "production",
-    "BASE_URL": "https://dployr.dev",
-    "WEB_URL": "http://app.dployr.dev" 
+    "BASE_URL": "https://base.dployr.dev",
+    "APP_URL": "http://app.dployr.dev"
   },
   "observability": {
     "logs": {
@@ -27,7 +24,7 @@
     {
       "binding": "BASE_DB",
       "database_name": "dployr",
-      "database_id": "895c2d8d-49f9-445f-9300-63a7a0488c18"
+      "database_id": "3ecb42a8-3094-4d51-b198-8237aa454eed"
     }
   ],
   "env": {
