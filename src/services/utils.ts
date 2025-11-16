@@ -37,3 +37,14 @@ export async function verifyGitHubWebhook(
   
   return signature === digest;
 }
+/** enforce same-origin/local paths to avoid open-redirects */
+export function sanitizeReturnTo(returnTo: string) {
+  try {
+    if (returnTo.startsWith("/")) return returnTo;
+    const url = new URL(returnTo);
+    // TODO: use env
+    if (url.origin === "https://app.dployr.dev") return url.pathname + url.search + url.hash;
+  } catch (e) { /* ignore */ }
+  return "/dashboard";
+}
+

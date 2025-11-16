@@ -1,3 +1,10 @@
+/**
+ * Helper type to make specific properties required while keeping others optional
+ */ 
+export type RequiredOnly<T, K extends keyof T> =
+  Required<Pick<T, K>> &
+  Partial<Omit<T, K>>;
+
 export type Bindings = {
   ZEPTO_API_KEY: string;
   CLOUDFLARE_API_TOKEN: string;
@@ -29,6 +36,10 @@ export type OAuthProvider = "google" | "github" | "microsoft" | "email";
 export type Role = "owner" | "admin" | "developer" | "viewer" | "invited";
 
 export type BootstrapType = "github";
+
+export const integrationIds = ["resendMail", "mailChimp", "mailerSend", "discord", "slack", "gitHub", "gitLab", "bitBucket", "godaddy", "cloudflare", "route53"] as const;
+
+export type IntegrationType = (typeof integrationIds)[number];
 
 export interface User {
   id: string;
@@ -70,16 +81,58 @@ export interface Cluster {
   name: string;
   users: string[]; // Array of user emails
   roles: Record<Role, string[]>; // role -> array of user emails
-  bootstrapId: number | null;
   metadata?: Record<string, any> | undefined;
   createdAt: number;
   updatedAt: number;
 }
 
-export interface Bootstrap {
-  id: number;
-  type: BootstrapType;
-  createdAt: number;
+export interface GitHubIntegration {
+  loginId: string;
+  installUrl: string;
+  installationId: number;
+  remotesCount: number;
+}
+
+export interface GitLabIntegration {
+  loginId: string;
+  installationId: number;
+  remotesCount: number;
+}
+
+export interface BitBucketIntegration {
+  loginId: string;
+  installationId: number;
+  remotesCount: number;
+}
+
+export interface ResendMailIntegration {}
+
+export interface ZohoMailIntegration {}
+
+export interface MailerSendIntegration {}
+
+export interface MailChimpIntegration {}
+
+export interface DiscordIntegration {}
+
+export interface SlackIntegration {}
+
+export interface Integrations {
+  email: {
+    resendMail: ResendMailIntegration,
+    zohoMail: ZohoMailIntegration,
+    mailerSend: MailerSendIntegration,
+    mailChimp: MailChimpIntegration,
+  },
+  remote: {
+    gitHub: GitHubIntegration,
+    gitLab: GitLabIntegration,
+    bitBucket: BitBucketIntegration,
+  },
+  domain: {
+    discord: DiscordIntegration,
+    slack: SlackIntegration,
+  }
 }
 
 // Export response types

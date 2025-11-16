@@ -41,18 +41,28 @@ export class KVStore {
   }
 
   // OAuth state management (CSRF protection)
-  async createState(state: string): Promise<void> {
-    await this.kv.put(`state:${state}`, Date.now().toString(), {
+  async createState(state: string, redirectUrl: string): Promise<void> {
+    await this.kv.put(`state:${state}`, JSON.stringify({
+      state,
+      redirectUrl,
+      createdAt: Date.now()
+    }), {
       expirationTtl: STATE_TTL,
     });
   }
 
-  async validateState(state: string): Promise<boolean> {
-    const value = await this.kv.get(`state:${state}`);
-    if (!value) return false;
+  async validateState(state: string): Promise<string | null> {
+    const data = await this.kv.get(`state:${state}`);
+    if (!data) return null;
+
+    const stateData = JSON.parse(data) as {
+      state: string;
+      redirectUrl: string;
+      createdAt: number;
+    };
 
     await this.kv.delete(`state:${state}`);
-    return true;
+    return stateData.redirectUrl;
   }
 
   async createOTP(email: string): Promise<string> {

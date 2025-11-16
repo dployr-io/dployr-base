@@ -1,4 +1,4 @@
-import { Cluster, OAuthProvider, Role as UserRole, User } from "@/types";
+import { Cluster, OAuthProvider, Role as UserRole, User, Integrations, GitHubIntegration } from "@/types";
 import { BaseStore } from "./base";
 
 export class ClusterStore extends BaseStore {
@@ -27,7 +27,6 @@ export class ClusterStore extends BaseStore {
         id: existingCluster.id as string,
         name: existingCluster.name as string,
         users: [adminUserId],
-        bootstrapId: null,
         roles: {
           owner: [adminUserId],
           admin: [],
@@ -45,7 +44,7 @@ export class ClusterStore extends BaseStore {
     const id = this.generateId();
 
     const user = await this.db
-      .prepare(`SELECT email FROM users WHERE id = ?`)
+      .prepare(`SELECT email, metadata FROM users WHERE id = ?`)
       .bind(adminUserId)
       .first();
 
@@ -56,7 +55,7 @@ export class ClusterStore extends BaseStore {
     const name = (user.email as string).split('@')[0];
 
     await this.db.batch([
-      this.db.prepare(`INSERT INTO clusters (id, name, bootstrap_id) VALUES (?, ?, NULL)`).bind(id, name),
+      this.db.prepare(`INSERT INTO clusters (id, name, metadata) VALUES (?, ?)`).bind(id, name),
       this.db.prepare(`INSERT INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, 'owner')`).bind(adminUserId, id),
     ]);
 
@@ -73,7 +72,6 @@ export class ClusterStore extends BaseStore {
       id: clusterRow.id as string,
       name: clusterRow.name as string,
       users: [adminUserId],
-      bootstrapId: null,
       roles: {
         owner: [adminUserId],
         admin: [],
@@ -89,7 +87,7 @@ export class ClusterStore extends BaseStore {
 
   async get(id: string): Promise<Cluster | null> {
     const clusterStmt = this.db.prepare(`
-      SELECT id, name, bootstrap_id, metadata, created_at, updated_at 
+      SELECT id, name, metadata, created_at, updated_at 
       FROM clusters WHERE id = ?
     `);
 
@@ -128,7 +126,6 @@ export class ClusterStore extends BaseStore {
       id: cluster.id as string,
       name: cluster.name as string,
       users,
-      bootstrapId: cluster.bootstrap_id as number,
       roles,
       metadata: cluster.metadata ? JSON.parse(cluster.metadata as string) : {},
       createdAt: cluster.created_at as number,
@@ -140,7 +137,7 @@ export class ClusterStore extends BaseStore {
     id: string,
     updates: Partial<Omit<Cluster, "id" | "createdAt">>
   ): Promise<Cluster | null> {
-    if (!updates.name && !updates.bootstrapId && !updates.metadata && !updates.roles) {
+    if (!updates.name && !updates.metadata && !updates.roles) {
       return this.get(id);
     }
 
@@ -154,7 +151,6 @@ export class ClusterStore extends BaseStore {
     // Handle cluster table updates
     const clusterUpdates: Record<string, any> = {};
     if (updates.name) clusterUpdates.name = updates.name;
-    if (updates.bootstrapId) clusterUpdates.bootstrap_id = updates.bootstrapId;
 
     if (updates.metadata) {
       // Use atomic JSON merge
@@ -203,6 +199,32 @@ export class ClusterStore extends BaseStore {
   async delete(id: string): Promise<void> {
     await this.db.prepare(`DELETE FROM clusters WHERE id = ?`).bind(id).run();
   }
+
+  async installGitHubIntegration(
+    integration: Partial<Omit<GitHubIntegration, "remotesCount">>
+  ): Promise<Cluster | null> {
+    const cluster = await this.db.prepare(`
+      SELECT id, metadata FROM clusters 
+      WHERE json_extract(metadata, '$.gitHub.loginId') = ?
+    `).bind(integration.loginId).first();
+
+    if (!cluster) {
+      return null;
+    }
+
+    const clusterId = cluster.id as string;
+
+    // Update the cluster's GitHub integration metadata
+    const updatesJson = JSON.stringify(integration);
+    await this.db.prepare(`
+      UPDATE clusters 
+      SET metadata = json_patch(COALESCE(metadata, '{}'), json_object('gitHub', json(?)))
+          WHERE id = ?
+    `).bind(updatesJson, clusterId).run();
+
+    return this.get(clusterId);
+  }
+
 
   /**
    * Add multiple users to a cluster (excluding owner role).
@@ -556,6 +578,40 @@ export class ClusterStore extends BaseStore {
     );
     const results = await stmt.bind(clusterId, role).all();
     return results.results.map((r) => r.user_id as string);
+  }
+
+  /**
+  * Gets a list of integrations active in a cluster
+  * 
+  * @param clusterId - The cluster ID
+  * @returns Integration containing a mapping of each optional role
+  */
+  async listClusterIntegrations(
+    clusterId: string,
+  ): Promise<Integrations> {
+    const stmt = this.db.prepare(`
+      SELECT metadata FROM clusters WHERE id = ?
+    `);
+    const result = await stmt.bind(clusterId).first();
+    const metadata = result?.metadata ? JSON.parse(result.metadata as string) : {};
+    const integrations: Integrations = {
+      remote: {
+        gitHub: metadata?.gitHub,
+        gitLab: metadata?.gitLab,
+        bitBucket: metadata?.bitBucket,
+      },
+      email: {
+        resendMail: metadata?.resendMail,
+        zohoMail: metadata?.zohoMail,
+        mailerSend: metadata?.mailerSend,
+        mailChimp: metadata?.mailChimp,
+      },
+      domain: {
+        discord: metadata?.discord,
+        slack: metadata?.slack,
+      }
+    };
+    return integrations;
   }
 
   // Permission checks

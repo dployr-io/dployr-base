@@ -161,6 +161,11 @@ export class OAuthService {
           name: data.name || data.login,
           picture: data.avatar_url,
           provider: "github",
+          metadata: {
+            gitHub: {
+              loginId: data.login,
+            }
+          }
         };
       default:
         throw new Error(`Unknown provider: ${provider}`);

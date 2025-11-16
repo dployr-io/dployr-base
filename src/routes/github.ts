@@ -1,101 +1,11 @@
 import { Hono } from "hono";
-import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";
 import { D1Store } from "@/lib/db/store";
 import { verifyGitHubWebhook } from "@/services/utils";
-import { GitHubService } from "@/services/github";
-import { getCookie } from "hono/cookie";
-import { BAD_SESSION, BAD_WEBHOOK_SIGNATURE, INTERNAL_SERVER_ERROR, WORKFLOW_NAME } from "@/lib/constants";
-import { authMiddleware } from "@/middleware/auth";
+import { BAD_WEBHOOK_SIGNATURE, INTERNAL_SERVER_ERROR, WORKFLOW_NAME } from "@/lib/constants";
 
 const gitHub = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-gitHub.use("*", authMiddleware);
-
-// List available GitHub repositories 
-// This list reposistories that are accessible to the GitHub installation
-gitHub.get("/remotes", async (c) => {
-  const sessionId = getCookie(c, "session");
-
-  if (!sessionId) {
-    return c.json(createErrorResponse({ message: "Not authenticated", code: BAD_SESSION }), 401);
-  }
-
-  const kv = new KVStore(c.env.BASE_KV);
-  const d1 = new D1Store(c.env.BASE_DB);
-  const session = await kv.getSession(sessionId);
-
-  if (!session) {
-    return c.json(createErrorResponse({ message: "Invalid or expired session", code: BAD_SESSION }), 401);
-  }
-
-  try {
-    const gitHub = new GitHubService(c.env);
-
-    // Get query param cluster_id
-    // if none is set, list all user clusters
-    const clusterIdParam = c.req.query("cluster_id");
-    const clusterIds = clusterIdParam
-      ? [clusterIdParam]
-      : await d1.clusters.listUserClusters(session.userId);
-
-    // Get clusters where user is owner and collect bootstrap IDs
-    const clusterData = await Promise.all(
-      clusterIds.map(async (clusterId) => {
-        const cluster = await d1.clusters.get(clusterId);
-        if (!cluster) return null;
-
-        const isOwner = await d1.clusters.isOwner(session.userId, clusterId);
-        if (!isOwner) return null;
-
-        return {
-          clusterId: cluster.id,
-          clusterName: cluster.name,
-          bootstrapId: cluster.bootstrapId,
-        };
-      })
-    );
-
-    // Filter out nulls and clusters without bootstrap IDs
-    const validClusters = clusterData.filter(
-      (c) => c !== null && c.bootstrapId !== null
-    );
-
-    const remotesArrays = await Promise.all(
-      validClusters.map(async (cluster) => {
-        if (!cluster || cluster.bootstrapId === null) return [];
-
-        try {
-          const remotes = await gitHub.listRemotes(cluster.bootstrapId);
-          return remotes.map((remote) => ({
-            ...remote,
-            clusterId: cluster.clusterId,
-          }));
-        } catch (error) {
-          console.error(`Failed to fetch remotes for cluster ${cluster.clusterId}:`, error);
-          return [];
-        }
-      })
-    );
-
-    const allRemotes = remotesArrays.flat();
-
-    // Apply pagination
-    const { page, pageSize, offset } = parsePaginationParams(
-      c.req.query("page"),
-      c.req.query("pageSize")
-    );
-
-    const total = allRemotes.length;
-    const paginatedRemotes = allRemotes.slice(offset, offset + pageSize);
-    const paginatedData = createPaginatedResponse(paginatedRemotes, page, pageSize, total);
-
-    return c.json(createSuccessResponse(paginatedData));
-  } catch (error) {
-    console.error("List remotes error:", error);
-     const helpLink = "https://monitoring.dployr.dev";
-    return c.json(createErrorResponse({ message: "Failed to list remotes", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
-  }
-});
 
 // Webhook to subscribe to events
 gitHub.post("/webhook", async (c) => {
@@ -125,10 +35,19 @@ gitHub.post("/webhook", async (c) => {
     // Handle installation events
     if (event === "installation" && body.action === "created") {
       const installation = body.installation;
+      const account = installation.account;
 
-      await d1.bootstraps.create(installation.id);
+      if (!installation.id || !account?.login) {
+        console.warn(`GitHub installation webhook has a bad payload. Missing installation id or account login:`, installation);
+      } else {
+        await d1.clusters.installGitHubIntegration({
+          loginId: account.login,
+          installUrl: installation.html_url || `https://github.com/settings/installations/${installation.id}`,
+          installationId: installation.id,
+        });
 
-      console.log(`GitHub App installed: ${installation.id}`);
+        console.log(`GitHub app installed: ${installation.id} for ${account.login}`);
+      }
     }
 
     // Handle meta events (app deleted)
@@ -180,9 +99,13 @@ gitHub.post("/webhook", async (c) => {
     return c.json(createSuccessResponse({}, "Webhook processed"));
   } catch (error) {
     console.error("Webhook error:", error);
-     const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.dev";
     return c.json(createErrorResponse({ message: "Internal server error", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
   }
+});
+
+gitHub.get("/connection/manage", async (c) => {
+  return c.redirect(`https://github.com/settings/connections/applications/${c.env.GITHUB_CLIENT_ID}`);
 });
 
 export default gitHub;

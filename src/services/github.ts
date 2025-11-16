@@ -82,4 +82,15 @@ export class GitHubService {
       owner: repo.owner.login,
     }));
   }
+
+  async remoteCount(installationId: number) {
+    const octokit = await this.getOctokit(installationId);
+
+    const repos = await octokit.paginate(
+      octokit.rest.apps.listReposAccessibleToInstallation,
+      { per_page: 100 }
+    );
+
+    return repos.length;
+  }
 }

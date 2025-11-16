@@ -1,39 +1,68 @@
-import { User } from "@/types";
+import { User, type RequiredOnly } from "@/types";
 import { BaseStore } from "./base";
 
 export class UserStore extends BaseStore {
-    async save(user: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<User | null> {
-        const stmt = this.db.prepare(`
-      INSERT INTO users (id, email, name, picture, provider, metadata, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(email) DO UPDATE SET
-        name = COALESCE(users.name, excluded.name),
-        picture = COALESCE(users.picture, excluded.picture),
-        provider = excluded.provider,
-        metadata = COALESCE(excluded.metadata, users.metadata),
-        updated_at = excluded.updated_at
-    `);
+    async save(user: RequiredOnly<Omit<User, "id" | "createdAt" | "updatedAt">,
+        "email" | "provider" | "metadata"
+    >): Promise<User | null> {
         const id = this.generateId();
         const now = this.now();
-        await stmt.bind(
-            id,
-            user.email,
-            user.name || null,
-            user.picture || null,
-            user.provider,
-            JSON.stringify(user.metadata || {}),
-            now,
-            now
-        ).run();
+        const metadataJson = JSON.stringify(user.metadata || {});
+
+        const statements = [];
+
+        // Insert or update user
+        statements.push(
+            this.db.prepare(`
+                INSERT INTO users (id, email, name, picture, provider, metadata, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(email) DO UPDATE SET
+                    name = COALESCE(excluded.name, users.name),
+                    picture = COALESCE(excluded.picture, users.picture),
+                    provider = excluded.provider,
+                    metadata = COALESCE(excluded.metadata, users.metadata),
+                    updated_at = excluded.updated_at
+            `).bind(
+                id,
+                user.email,
+                user.name || null,
+                user.picture || null,
+                user.provider,
+                metadataJson,
+                now,
+                now
+            )
+        );
+
+        // TODO: Optimize to avoid writing on every request, when there's no new changes (writes are expensive)
+        
+        // Sync metadata to admin clusters - merge new items from user metadata into cluster metadata
+        if (user.metadata && Object.keys(user.metadata).length > 0) {
+            statements.push(
+                this.db.prepare(`
+                    UPDATE clusters
+                    SET metadata = json_patch(COALESCE(metadata, '{}'), ?),
+                        updated_at = ?
+                    WHERE id IN (
+                        SELECT uc.cluster_id 
+                        FROM user_clusters uc
+                        JOIN users u ON uc.user_id = u.id
+                        WHERE u.email = ? AND uc.role IN ('owner', 'admin')
+                    )
+                `).bind(metadataJson, now, user.email)
+            );
+        }
+
+        await this.db.batch(statements);
 
         return this.get(user.email);
     }
 
     async get(email: string): Promise<User | null> {
         const stmt = this.db.prepare(`
-      SELECT id, email, name, picture, provider, metadata, created_at, updated_at 
-      FROM users WHERE email = ?
-    `);
+            SELECT id, email, name, picture, provider, metadata, created_at, updated_at 
+            FROM users WHERE email = ?
+        `);
 
         const result = await stmt.bind(email).first();
         if (!result) return null;

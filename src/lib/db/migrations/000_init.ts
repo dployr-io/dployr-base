@@ -10,20 +10,12 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
-CREATE TABLE IF NOT EXISTS bootstraps (
-  id INTEGER PRIMARY KEY,
-  type TEXT NOT NULL,
-  created_at INTEGER NOT NULL DEFAULT (unixepoch())
-);
-
 CREATE TABLE IF NOT EXISTS clusters (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  bootstrap_id INTEGER,
   metadata JSON NOT NULL DEFAULT '{}',
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  FOREIGN KEY (bootstrap_id) REFERENCES bootstraps(id) ON DELETE SET NULL
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
 CREATE TABLE IF NOT EXISTS user_clusters (
@@ -55,21 +47,13 @@ CREATE INDEX IF NOT EXISTS idx_instances_org ON instances(cluster_id);
 CREATE INDEX IF NOT EXISTS idx_user_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_instances_address ON instances(address);
 CREATE INDEX IF NOT EXISTS idx_instances_tag ON instances(tag);
-CREATE INDEX IF NOT EXISTS idx_clusters_github_installation ON clusters(bootstrap_id);
+CREATE INDEX IF NOT EXISTS idx_clusters_login_id ON clusters (json_extract(metadata, '$.gitHub.loginId'));
+CREATE INDEX IF NOT EXISTS idx_clusters_installation_id ON clusters (json_extract(metadata, '$.gitHub.installationId'));
 
 CREATE TRIGGER IF NOT EXISTS prevent_email_update
 BEFORE UPDATE OF email ON users
 BEGIN
   SELECT RAISE(ABORT, 'email is immutable');
-END;
-
-CREATE TRIGGER IF NOT EXISTS prevent_bootstrap_id_update
-BEFORE UPDATE OF bootstrap_id ON clusters
-BEGIN
-  SELECT CASE 
-    WHEN OLD.bootstrap_id IS NOT NULL 
-    THEN RAISE(ABORT, 'bootstrap_id is immutable once set')
-  END;
 END;
 
 CREATE TRIGGER IF NOT EXISTS prevent_role_downgrade_to_invited

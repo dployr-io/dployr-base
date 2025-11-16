@@ -3,7 +3,10 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse, parseP
 import { D1Store } from "@/lib/db/store";
 import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth";
 import z from "zod";
-import { BAD_REQUEST, INTERNAL_SERVER_ERROR, MISSING_RESOURCE } from "@/lib/constants";
+import { BAD_REQUEST, BAD_SESSION, INTERNAL_SERVER_ERROR, MISSING_RESOURCE } from "@/lib/constants";
+import { KVStore } from "@/lib/db/store/kv";
+import { getCookie } from "hono/cookie";
+import { GitHubService } from "@/services/github";
 
 const clusters = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 clusters.use("*", authMiddleware);
@@ -270,6 +273,77 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
     console.error("Transfer ownership error:", error);
     const helpLink = "https://monitoring.dployr.dev";
     return c.json(createErrorResponse({ message: "Failed to transfer ownership", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
+  }
+});
+
+/**
+ * List available connected integrations 
+ */
+clusters.get("/:id/integrations", async (c) => {
+  const d1 = new D1Store(c.env.BASE_DB);
+  const clusterId = c.req.param("id");
+
+  try {
+    let integrations = await d1.clusters.listClusterIntegrations(clusterId);
+    const gitHub = new GitHubService(c.env)
+    const installationId = integrations.remote.gitHub?.installationId
+    let remoteCount = 0
+
+    if (installationId) {
+      remoteCount = await gitHub.remoteCount(installationId);
+    }
+
+    if (integrations.remote.gitHub) {
+      integrations.remote.gitHub.remotesCount = remoteCount;
+      integrations.remote.gitHub.installUrl = "https://github.com/apps/dployr-io";
+    }
+
+    return c.json(createSuccessResponse(integrations));
+  } catch (error) {
+    console.error("List remotes error:", error);
+    const helpLink = "https://monitoring.dployr.dev";
+    return c.json(createErrorResponse({ message: "Failed to list remotes", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
+  }
+});
+
+/** 
+ * List available GitHub repositories 
+ * This list reposistories that are accessible to the GitHub installation
+ */
+clusters.get("/:id/remotes", async (c) => {
+  const sessionId = getCookie(c, "session");
+  const clusterId = c.req.param("id");
+
+  if (!sessionId) {
+    return c.json(createErrorResponse({ message: "Not authenticated", code: BAD_SESSION }), 401);
+  }
+
+  const kv = new KVStore(c.env.BASE_KV);
+  const d1 = new D1Store(c.env.BASE_DB);
+  const session = await kv.getSession(sessionId);
+
+  if (!session) {
+    return c.json(createErrorResponse({ message: "Invalid or expired session", code: BAD_SESSION }), 401);
+  }
+
+  try {
+    const gitHub = new GitHubService(c.env);
+    const integrations = await d1.clusters.listClusterIntegrations(clusterId);
+    const remotes = await gitHub.listRemotes(integrations.remote.gitHub?.installationId);
+    const { page, pageSize, offset } = parsePaginationParams(
+      c.req.query("page"),
+      c.req.query("pageSize")
+    );
+
+    const total = remotes.length;
+    const paginatedRemotes = remotes.slice(offset, offset + pageSize);
+    const paginatedData = createPaginatedResponse(paginatedRemotes, page, pageSize, total);
+
+    return c.json(createSuccessResponse(paginatedData));
+  } catch (error) {
+    console.error("List remotes error:", error);
+    const helpLink = "https://monitoring.dployr.dev";
+    return c.json(createErrorResponse({ message: "Failed to list remotes", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
   }
 });
 

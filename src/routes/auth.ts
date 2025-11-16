@@ -6,6 +6,7 @@ import { setCookie, getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
 import z from "zod";
 import { BAD_OAUTH_STATE, BAD_REQUEST, INVALID_OAUTH_PROVIDER, INVALID_OTP, MISSING_PARAMS, MISSING_RESOURCE } from "@/lib/constants";
+import { sanitizeReturnTo } from "@/services/utils";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -28,9 +29,13 @@ auth.get("/login/:provider", async (c) => {
 
   const oauth = new OAuthService(c.env);
   const kv = new KVStore(c.env.BASE_KV);
-
   const state = crypto.randomUUID();
-  await kv.createState(state);
+  const returnTo = c.req.query("redirect_to") || "/dashboard";
+  const redirectUrl = sanitizeReturnTo(returnTo);
+
+  console.log(redirectUrl)
+
+  await kv.createState(state, redirectUrl);
 
   const authUrl = oauth.getAuthUrl(provider, state);
 
@@ -50,8 +55,11 @@ auth.get("/callback/:provider", async (c) => {
   const kv = new KVStore(c.env.BASE_KV);
   const d1 = new D1Store(c.env.BASE_DB);
 
-  const isValidState = await kv.validateState(state);
-  if (!isValidState) {
+  const redirectUrl = await kv.validateState(state);
+
+  // If there's no redirect url in the payload we can,
+  // confirm that it is a bad request
+  if (!redirectUrl) {
     return c.json(createErrorResponse({ message: "Invalid state", code: BAD_OAUTH_STATE }), 400);
   }
 
@@ -62,16 +70,22 @@ auth.get("/callback/:provider", async (c) => {
 
     let existingUser = await d1.users.get(oAuthUser.email);
 
-    if (!existingUser) {
-      const userToSave = {
+    const userToSave = existingUser
+      ? {
+        email: oAuthUser.email,
+        name: existingUser.name,
+        provider: provider,
+        metadata: oAuthUser.metadata || {},
+      }
+      : {
         email: oAuthUser.email,
         name: oAuthUser.name,
         picture: oAuthUser.picture,
         provider: provider,
-        metadata: oAuthUser.metadata,
+        metadata: oAuthUser.metadata || {},
       };
-      existingUser = await d1.users.save(userToSave);
-    }
+
+    existingUser = await d1.users.save(userToSave);
 
     const user = existingUser;
 
@@ -89,8 +103,8 @@ auth.get("/callback/:provider", async (c) => {
         domain: ".dployr.dev",
       });
     }
-    // Redirect to app
-    return c.redirect(`${c.env.APP_URL}/dashboard`);
+
+    return c.redirect(new URL(redirectUrl, c.env.APP_URL).toString());
   } catch (error) {
     console.error("OAuth error:", error);
     return c.redirect(`${c.env.APP_URL}/?authError=${encodeURIComponent(`Failed to sign-in with ${provider}. Try email instead.`)}`);
@@ -119,6 +133,7 @@ auth.post("/login/email", async (c) => {
       await d1.users.save({
         email,
         provider: "email" as OAuthProvider,
+        metadata: {}
       });
     }
 
