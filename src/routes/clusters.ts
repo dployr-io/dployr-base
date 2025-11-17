@@ -235,7 +235,11 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
         id: session.userId,
         type: "user",
       },
-      targets: users.map((user) => ({ id: user })),
+      targets: [
+        {
+          id,
+        },
+      ],
       type: EVENTS.CLUSTER.REMOVED_USER.code,
       request: c.req.raw,
     });

@@ -73,7 +73,7 @@ export class KVStore {
         const event = {
           ...baseEvent,
           id: ulid(),
-          target
+          targets: [target],
         };
 
         const actorKey = `actor:${actor.id}:event:${event.id}`;
@@ -99,6 +99,14 @@ export class KVStore {
 
   async getEvents(userId: string): Promise<any[]> {
     const result = await this.kv.list({ prefix: `actor:${userId}:event:` });
+    const events = await Promise.all(
+      result.keys.map(key => this.kv.get(key.name, "json"))
+    );
+    return events.filter(e => e !== null).sort((a: any, b: any) => a.timestamp - b.timestamp);
+  }
+
+  async getClusterEvents(clusterId: string): Promise<any[]> {
+    const result = await this.kv.list({ prefix: `target:${clusterId}:event:` });
     const events = await Promise.all(
       result.keys.map(key => this.kv.get(key.name, "json"))
     );

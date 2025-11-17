@@ -119,6 +119,7 @@ auth.get("/callback/:provider", async (c) => {
           id: user.id,
           type: "user",
         },
+        targets: clusters.map((cluster) => ({ id: cluster.id })),
         type: EVENTS.AUTH.SESSION_CREATED.code,
         request: c.req.raw,
       });
@@ -222,6 +223,7 @@ auth.post("/login/email/verify", async (c) => {
         id: user.id,
         type: "user",
       },
+      targets: clusters.map((cluster) => ({ id: cluster.id })),
       type: EVENTS.AUTH.SESSION_CREATED.code,
       request: c.req.raw,
     });
