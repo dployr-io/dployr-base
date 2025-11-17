@@ -1,5 +1,6 @@
-import { Cluster, Session, User } from "@/types";
+import { ActorType, Cluster, Session, User } from "@/types";
 import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL } from "@/lib/constants";
+import { ulid } from "ulid";
 
 export class KVStore {
   constructor(public kv: KVNamespace) { }
@@ -38,6 +39,70 @@ export class KVStore {
 
   async deleteSession(sessionId: string): Promise<void> {
     await this.kv.delete(`session:${sessionId}`);
+  }
+
+  // Event management
+  async logEvent({
+    type,
+    actor,
+    targets,
+    request
+  }: {
+    type: string;
+    actor: { id: string; type: ActorType };
+    targets?: { id: string }[];
+    request: Request;
+  }): Promise<void> {
+    const cf = request.cf;
+    const timezone = (cf?.timezone as string) || 'UTC'; // e.g., "America/New_York"
+
+    const baseEvent = {
+      type,
+      actor,
+      timestamp: Date.now(),
+      timezone,
+      timezoneOffset: new Date().toLocaleString('en-US', {
+        timeZone: timezone,
+        timeZoneName: 'shortOffset'
+      })
+    };
+
+    if (targets && targets.length > 0) {
+      // Create separate events for each target
+      for (const target of targets) {
+        const event = {
+          ...baseEvent,
+          id: ulid(),
+          target
+        };
+
+        const actorKey = `actor:${actor.id}:event:${event.id}`;
+        const targetKey = `target:${target.id}:event:${event.id}`;
+
+        await Promise.all([
+          this.kv.put(actorKey, JSON.stringify(event)),
+          this.kv.put(targetKey, JSON.stringify(event))
+        ]);
+      }
+    } else {
+      // No targets, create single event
+      const event = {
+        ...baseEvent,
+        id: ulid()
+      };
+
+      const actorKey = `actor:${actor.id}:event:${event.id}`;
+      await this.kv.put(actorKey, JSON.stringify(event));
+    }
+  }
+
+
+  async getEvents(userId: string): Promise<any[]> {
+    const result = await this.kv.list({ prefix: `actor:${userId}:event:` });
+    const events = await Promise.all(
+      result.keys.map(key => this.kv.get(key.name, "json"))
+    );
+    return events.filter(e => e !== null).sort((a: any, b: any) => a.timestamp - b.timestamp);
   }
 
   // OAuth state management (CSRF protection)

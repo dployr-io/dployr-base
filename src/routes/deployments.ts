@@ -3,8 +3,8 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse } from 
 import { KVStore } from "@/lib/db/store/kv";
 import { getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
-import { BAD_SESSION } from "@/lib/constants";
 import { authMiddleware } from "@/middleware/auth";
+import { ERROR } from "@/lib/constants";
 
 const deployments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 deployments.use("*", authMiddleware);
@@ -14,7 +14,10 @@ deployments.get("/", async (c) => {
   const sessionId = getCookie(c, "session");
 
   if (!sessionId) {
-    return c.json(createErrorResponse({message: "Not authenticated", code: BAD_SESSION}), 401);
+    return c.json(createErrorResponse({
+      message: "Not authenticated",
+      code: ERROR.AUTH.BAD_SESSION.code
+    }), ERROR.AUTH.BAD_SESSION.status);
   }
 
   const kv = new KVStore(c.env.BASE_KV);
@@ -22,7 +25,10 @@ deployments.get("/", async (c) => {
   const session = await kv.getSession(sessionId);
 
   if (!session) {
-    return c.json(createErrorResponse({ message: "Invalid or expired session", code: BAD_SESSION}), 401);
+    return c.json(createErrorResponse({
+      message: "Invalid or expired session",
+      code: ERROR.AUTH.BAD_SESSION.code
+    }), ERROR.AUTH.BAD_SESSION.status);
   }
 
   const instances = await d1.instances.getByClusters(session.clusters);

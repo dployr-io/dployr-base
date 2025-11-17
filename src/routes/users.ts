@@ -5,8 +5,8 @@ import { KVStore } from "@/lib/db/store/kv";
 import { setCookie, getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
 import z from "zod";
-import { BAD_OAUTH_STATE, BAD_REQUEST, BAD_SESSION, INTERNAL_SERVER_ERROR, INVALID_OAUTH_PROVIDER, MISSING_PARAMS, MISSING_RESOURCE } from "@/lib/constants";
 import { authMiddleware } from "@/middleware/auth";
+import { ERROR } from "@/lib/constants";
 
 const users = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 users.use("*", authMiddleware);
@@ -23,7 +23,10 @@ users.get("/me", async (c) => {
     const sessionId = getCookie(c, "session");
 
     if (!sessionId) {
-        return c.json(createErrorResponse({ message: "Not authenticated", code: BAD_SESSION }), 401);
+        return c.json(createErrorResponse({ 
+            message: "Not authenticated", 
+            code: ERROR.AUTH.BAD_SESSION.code 
+        }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
@@ -32,13 +35,19 @@ users.get("/me", async (c) => {
     const session = await kv.getSession(sessionId);
 
     if (!session) {
-        return c.json(createErrorResponse({ message: "Invalid or expired session", code: BAD_SESSION }), 401);
+        return c.json(createErrorResponse({ 
+            message: "Invalid or expired session", 
+            code: ERROR.AUTH.BAD_SESSION.code 
+        }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const user = await d1.users.get(session.email);
 
     if (!user) {
-        return c.json(createErrorResponse({ message: "User not found", code: MISSING_RESOURCE }), 404);
+        return c.json(createErrorResponse({ 
+            message: "User not found", 
+            code: ERROR.RESOURCE.MISSING_RESOURCE.code
+        }), ERROR.RESOURCE.MISSING_RESOURCE.status);
     }
 
     try {
@@ -50,7 +59,11 @@ users.get("/me", async (c) => {
     } catch (error) {
         const helpLink = "https://monitoring.dployr.dev";
         console.error(`Failed to save cluster for user ${user.id}:`, error);
-        return c.json(createErrorResponse({ message: "Failed to load user data", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
+        return c.json(createErrorResponse({ 
+            message: "Failed to load user data", 
+            code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+            helpLink 
+        }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
     }
 });
 
@@ -58,7 +71,10 @@ users.patch("/me", async (c) => {
     const sessionId = getCookie(c, "session");
 
     if (!sessionId) {
-        return c.json(createErrorResponse({ message: "Not authenticated", code: BAD_SESSION }), 401);
+        return c.json(createErrorResponse({ 
+            message: "Not authenticated", 
+            code: ERROR.AUTH.BAD_SESSION.code 
+        }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
@@ -67,7 +83,10 @@ users.patch("/me", async (c) => {
     const session = await kv.getSession(sessionId);
 
     if (!session) {
-        return c.json(createErrorResponse({ message: "Invalid or expired session", code: BAD_SESSION }), 401);
+        return c.json(createErrorResponse({ 
+            message: "Invalid or expired session", 
+            code: ERROR.AUTH.BAD_SESSION.code 
+        }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const data = await c.req.json();
@@ -77,14 +96,20 @@ users.patch("/me", async (c) => {
             field: err.path.join("."),
             message: err.message,
         }));
-        return c.json(createErrorResponse({ message: "Invalid email format " + errors, code: BAD_REQUEST }), 400);
+        return c.json(createErrorResponse({ 
+            message: "Invalid email format " + errors, 
+            code: ERROR.REQUEST.BAD_REQUEST.code 
+        }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
     const updates: Partial<Omit<User, "id" | "createdAt">> = await c.req.json();
     const user = await d1.users.update(session.email, updates);
 
     if (!user) {
-        return c.json(createErrorResponse({ message: "User not found", code: MISSING_RESOURCE }), 404);
+        return c.json(createErrorResponse({ 
+            message: "User not found", 
+            code: ERROR.RESOURCE.MISSING_RESOURCE.code 
+        }), ERROR.RESOURCE.MISSING_RESOURCE.status);
     }
 
     return c.json(createSuccessResponse({ user }));

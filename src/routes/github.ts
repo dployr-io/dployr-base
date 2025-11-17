@@ -3,7 +3,7 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse } from 
 import { KVStore } from "@/lib/db/store/kv";
 import { D1Store } from "@/lib/db/store";
 import { verifyGitHubWebhook } from "@/services/utils";
-import { BAD_WEBHOOK_SIGNATURE, INTERNAL_SERVER_ERROR, WORKFLOW_NAME } from "@/lib/constants";
+import { ERROR, WORKFLOW_NAME } from "@/lib/constants";
 
 const gitHub = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -16,7 +16,10 @@ gitHub.post("/webhook", async (c) => {
     const body = JSON.parse(payload);
 
     if (!signature) {
-      return c.json(createErrorResponse({ message: "Missing signature", code: BAD_WEBHOOK_SIGNATURE }), 401);
+      return c.json(createErrorResponse({ 
+        message: "Missing signature", 
+        code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code 
+      }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
     }
 
     const isValid = await verifyGitHubWebhook(
@@ -26,7 +29,10 @@ gitHub.post("/webhook", async (c) => {
     );
 
     if (!isValid) {
-      return c.json(createErrorResponse({ message: "Invalid signature", code: BAD_WEBHOOK_SIGNATURE }), 401);
+      return c.json(createErrorResponse({ 
+        message: "Invalid signature", 
+        code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code 
+      }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
     }
 
     const d1 = new D1Store(c.env.BASE_DB);
@@ -100,7 +106,11 @@ gitHub.post("/webhook", async (c) => {
   } catch (error) {
     console.error("Webhook error:", error);
     const helpLink = "https://monitoring.dployr.dev";
-    return c.json(createErrorResponse({ message: "Internal server error", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
+    return c.json(createErrorResponse({ 
+      message: "Internal server error", 
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code, 
+      helpLink 
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
 

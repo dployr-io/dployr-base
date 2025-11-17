@@ -1,14 +1,11 @@
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types";
-import { getCookie } from "hono/cookie";
-import { KVStore } from "@/lib/db/store/kv";
-import { D1Store } from "@/lib/db/store";
 import z from "zod";
 import { generateSecretKey } from "@/services/utils";
 import { BOOTSTRAP_TEMPLATE } from "@/lib/constants/bootstrap_template";
 import { GitHubService } from "@/services/github";
 import { authMiddleware } from "@/middleware/auth";
-import { BAD_REQUEST, BOOTSTRAP_RUN_FAILURE, BOOTSTRAP_SETUP_FAILURE } from "@/lib/constants";
+import { ERROR } from "@/lib/constants";
 
 const bootstrap = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 bootstrap.use("*", authMiddleware);
@@ -38,7 +35,10 @@ bootstrap.post("/", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({ message: "Validation failed " + errors, code: BAD_REQUEST }), 400);
+      return c.json(createErrorResponse({
+        message: "Validation failed " + errors,
+        code: ERROR.REQUEST.BAD_REQUEST.code
+      }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
     const [owner, repo] = repository.split("/");
@@ -57,7 +57,11 @@ bootstrap.post("/", async (c) => {
   } catch (error) {
     console.error("Setup repository error:", error);
     const helpLink = "https://monitoring.dployr.dev";
-    return c.json(createErrorResponse({ message: "Failed to setup repository", code: BOOTSTRAP_SETUP_FAILURE, helpLink }), 500);
+    return c.json(createErrorResponse({
+      message: "Failed to setup repository",
+      code: ERROR.DEPLOYMENT.BOOTSTRAP_SETUP_FAILURE.code,
+      helpLink
+    }), ERROR.DEPLOYMENT.BOOTSTRAP_SETUP_FAILURE.status);
   }
 });
 
@@ -74,7 +78,10 @@ bootstrap.post("/run", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({ message: "Validation failed " + errors, code: BAD_REQUEST }), 400);
+      return c.json(createErrorResponse({
+        message: "Validation failed " + errors,
+        code: ERROR.REQUEST.BAD_REQUEST.code
+      }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
     const bootstrapToken = generateSecretKey();
@@ -101,7 +108,11 @@ bootstrap.post("/run", async (c) => {
   } catch (error) {
     console.error("Deploy trigger error:", error);
     const helpLink = "https://monitoring.dployr.dev";
-    return c.json(createErrorResponse({ message: "Failed to trigger deployment", code: BOOTSTRAP_RUN_FAILURE, helpLink }), 500);
+    return c.json(createErrorResponse({
+      message: "Failed to trigger deployment",
+      code: ERROR.DEPLOYMENT.BOOTSTRAP_RUN_FAILURE.code,
+      helpLink
+    }), ERROR.DEPLOYMENT.BOOTSTRAP_RUN_FAILURE.status);
   }
 });
 

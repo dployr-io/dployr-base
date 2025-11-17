@@ -3,9 +3,9 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse, parseP
 import { KVStore } from "@/lib/db/store/kv";
 import { getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
-import z, { codec } from "zod";
+import z from "zod";
 import { authMiddleware } from "@/middleware/auth";
-import { BAD_REQUEST, BAD_SESSION, INTERNAL_SERVER_ERROR } from "@/lib/constants";
+import { ERROR } from "@/lib/constants";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 instances.use("*", authMiddleware);
@@ -23,7 +23,10 @@ instances.get("/", async (c) => {
   const sessionId = getCookie(c, "session");
 
   if (!sessionId) {
-    return c.json(createErrorResponse({ message: "Not authenticated", code: BAD_SESSION }), 401);
+    return c.json(createErrorResponse({ 
+      message: "Not authenticated", 
+      code: ERROR.AUTH.BAD_SESSION.code 
+    }), ERROR.AUTH.BAD_SESSION.status);
   }
 
   const kv = new KVStore(c.env.BASE_KV);
@@ -31,7 +34,10 @@ instances.get("/", async (c) => {
   const session = await kv.getSession(sessionId);
 
   if (!session) {
-    return c.json(createErrorResponse({ message: "Invalid or expired session", code: BAD_SESSION }), 401);
+    return c.json(createErrorResponse({ 
+      message: "Invalid or expired session", 
+      code: ERROR.AUTH.BAD_SESSION.code 
+    }), ERROR.AUTH.BAD_SESSION.status);
   }
 
   const { page, pageSize, offset } = parsePaginationParams(
@@ -56,7 +62,10 @@ instances.post("/", async (c) => {
     const sessionId = getCookie(c, "session");
 
     if (!sessionId) {
-      return c.json(createErrorResponse({ message: "Not authenticated", code: BAD_SESSION }), 401);
+      return c.json(createErrorResponse({ 
+        message: "Not authenticated", 
+        code: ERROR.AUTH.BAD_SESSION.code 
+      }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
@@ -64,7 +73,10 @@ instances.post("/", async (c) => {
     const session = await kv.getSession(sessionId);
 
     if (!session) {
-      return c.json(createErrorResponse({ message: "Invalid or expired session", code: BAD_SESSION }), 401);
+      return c.json(createErrorResponse({ 
+        message: "Invalid or expired session", 
+        code: ERROR.AUTH.BAD_SESSION.code 
+      }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const data = await c.req.json();
@@ -75,7 +87,10 @@ instances.post("/", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({ message: "Validation failed " + errors, code: BAD_REQUEST }), 400);
+      return c.json(createErrorResponse({ 
+        message: "Validation failed " + errors, 
+        code: ERROR.REQUEST.BAD_REQUEST.code 
+      }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
     const { clusterId, address, publicKey, tag, metadata } = validation.data;
@@ -106,8 +121,12 @@ instances.post("/", async (c) => {
     return c.json(createSuccessResponse({ instance }, "Instance created successfully"));
   } catch (error) {
     console.error("Failed to create instance", error);
-     const helpLink = "https://monitoring.dployr.dev";
-    return c.json(createErrorResponse({ message: "Instance creation failed", code: INTERNAL_SERVER_ERROR, helpLink }), 500);
+    const helpLink = "https://monitoring.dployr.dev";
+    return c.json(createErrorResponse({ 
+      message: "Instance creation failed", 
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      helpLink 
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
 

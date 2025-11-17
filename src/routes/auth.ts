@@ -5,8 +5,10 @@ import { KVStore } from "@/lib/db/store/kv";
 import { setCookie, getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
 import z from "zod";
-import { BAD_OAUTH_STATE, BAD_REQUEST, INVALID_OAUTH_PROVIDER, INVALID_OTP, MISSING_PARAMS, MISSING_RESOURCE } from "@/lib/constants";
 import { sanitizeReturnTo } from "@/services/utils";
+import { EmailService } from "@/services/email";
+import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode";
+import { ERROR, EVENTS } from "@/lib/constants";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -24,7 +26,10 @@ auth.get("/login/:provider", async (c) => {
   const provider = c.req.param("provider") as OAuthProvider;
 
   if (!["google", "github", "microsoft"].includes(provider)) {
-    return c.json(createErrorResponse({ message: "Invalid provider", code: INVALID_OAUTH_PROVIDER }), 400);
+    return c.json(createErrorResponse({
+      message: "Invalid provider",
+      code: ERROR.REQUEST.BAD_REQUEST.code
+    }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
   const oauth = new OAuthService(c.env);
@@ -49,7 +54,10 @@ auth.get("/callback/:provider", async (c) => {
   const state = c.req.query("state");
 
   if (!code || !state) {
-    return c.json(createErrorResponse({ message: "Missing code or state", code: MISSING_PARAMS }), 400);
+    return c.json(createErrorResponse({
+      message: "Missing code or state",
+      code: ERROR.REQUEST.BAD_REQUEST.code
+    }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
   const kv = new KVStore(c.env.BASE_KV);
@@ -60,7 +68,10 @@ auth.get("/callback/:provider", async (c) => {
   // If there's no redirect url in the payload we can,
   // confirm that it is a bad request
   if (!redirectUrl) {
-    return c.json(createErrorResponse({ message: "Invalid state", code: BAD_OAUTH_STATE }), 400);
+    return c.json(createErrorResponse({
+      message: "Invalid state",
+      code: ERROR.REQUEST.BAD_REQUEST.code
+    }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
   try {
@@ -102,6 +113,15 @@ auth.get("/callback/:provider", async (c) => {
         path: "/",
         domain: ".dployr.dev",
       });
+
+      await kv.logEvent({
+        actor: {
+          id: user.id,
+          type: "user",
+        },
+        type: EVENTS.AUTH.SESSION_CREATED.code,
+        request: c.req.raw,
+      });
     }
 
     return c.redirect(new URL(redirectUrl, c.env.APP_URL).toString());
@@ -122,7 +142,10 @@ auth.post("/login/email", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({ message: "Invalid email format " + errors, code: BAD_REQUEST }), 400);
+      return c.json(createErrorResponse({
+        message: "Invalid email format " + errors,
+        code: ERROR.REQUEST.BAD_REQUEST.code
+      }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
@@ -138,8 +161,13 @@ auth.post("/login/email", async (c) => {
     }
 
     const code = await kv.createOTP(email);
+    const name = email.split('@')[0]
+    const emailService = new EmailService({
+      env: c.env,
+      to: email,
+    });
 
-    // TODO: Send email with OTP code
+    emailService.sendEmail("Verify your account", loginCodeTemplate(name, code))
 
     return c.json(createSuccessResponse({ email }, "OTP sent to your email"));
   } catch (error) {
@@ -160,7 +188,10 @@ auth.post("/login/email/verify", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({ message: "Invalid email or code format " + errors, code: BAD_REQUEST }), 400);
+      return c.json(createErrorResponse({
+        message: "Invalid email or code format " + errors,
+        code: ERROR.REQUEST.BAD_REQUEST.code
+      }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
     const kv = new KVStore(c.env.BASE_KV);
@@ -168,17 +199,32 @@ auth.post("/login/email/verify", async (c) => {
     const isValid = await kv.validateOTP(email, code.toUpperCase());
 
     if (!isValid) {
-      return c.json(createErrorResponse({ message: "Invalid or expired code", code: INVALID_OTP }), 400);
+      return c.json(createErrorResponse({
+        message: "Invalid or expired code",
+        code: ERROR.REQUEST.INVALID_OTP.code
+      }), ERROR.REQUEST.INVALID_OTP.status);
     }
 
     let user = await d1.users.get(email);
     if (!user) {
-      return c.json(createErrorResponse({ message: "User not found", code: MISSING_RESOURCE }), 404);
+      return c.json(createErrorResponse({
+        message: "User not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code
+      }), ERROR.RESOURCE.MISSING_RESOURCE.status);
     }
 
     const sessionId = crypto.randomUUID();
     const clusters = await d1.clusters.listUserClusters(user.id);
     await kv.createSession(sessionId, user, clusters);
+
+    await kv.logEvent({
+      actor: {
+        id: user.id,
+        type: "user",
+      },
+      type: EVENTS.AUTH.SESSION_CREATED.code,
+      request: c.req.raw,
+    });
 
     setCookie(c, "session", sessionId, {
       httpOnly: true,
