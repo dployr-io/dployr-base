@@ -425,12 +425,24 @@ export class ClusterStore extends BaseStore {
    * @param userId - The user ID
    * @returns A list of cluster IDs
    */
-  async listUserClusters(userId: string): Promise<string[]> {
-    const stmt = this.db.prepare(
-      `SELECT DISTINCT cluster_id FROM user_clusters WHERE user_id = ? AND role != 'invited'`
-    );
+  async listUserClusters(userId: string): Promise<{ id: string, name: string, owner: string }[]> {
+    const stmt = this.db.prepare(`
+      SELECT 
+        c.id,
+        c.name,
+        owner_u.name as owner
+      FROM user_clusters uc
+      JOIN clusters c ON uc.cluster_id = c.id
+      JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'
+      JOIN users owner_u ON owner_uc.user_id = owner_u.id
+      WHERE uc.user_id = ? AND uc.role != 'invited'
+    `);
     const results = await stmt.bind(userId).all();
-    return results.results.map((r) => r.cluster_id as string);
+    return results.results.map((r) => ({
+      id: r.id as string,
+      name: r.name as string,
+      owner: r.owner as string
+    }));
   }
 
   /**

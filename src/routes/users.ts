@@ -42,8 +42,11 @@ users.get("/me", async (c) => {
     }
 
     try {
-        const cluster = await d1.clusters.save(user.id);
-        return c.json(createSuccessResponse({ user, cluster }));
+        await d1.clusters.save(user.id);
+
+        const clusters = await d1.clusters.listUserClusters(user.id);
+
+        return c.json(createSuccessResponse({ user, clusters }));
     } catch (error) {
         const helpLink = "https://monitoring.dployr.dev";
         console.error(`Failed to save cluster for user ${user.id}:`, error);
