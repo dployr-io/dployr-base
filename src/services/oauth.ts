@@ -57,7 +57,7 @@ export class OAuthService {
     return `${config.authUrl}?${params}`;
   }
 
-  async exchangeCode(provider: OAuthProvider, code: string): Promise<string> {
+  async exchangeCode({ provider, code }: { provider: OAuthProvider; code: string }): Promise<string> {
     const config = providers[provider](this.env);
     const redirectUri = `${this.env.BASE_URL}/v1/auth/callback/${provider}`;
 
@@ -94,10 +94,13 @@ export class OAuthService {
     return data.access_token;
   }
 
-  async getUserInfo(
-    provider: OAuthProvider,
-    accessToken: string
-  ): Promise<Omit<User, "id" | "createdAt" | "updatedAt">> {
+  async getUserInfo({
+    provider,
+    accessToken,
+  }: {
+    provider: OAuthProvider;
+    accessToken: string;
+  }): Promise<Omit<User, "id" | "createdAt" | "updatedAt">> {
     const config = providers[provider](this.env);
 
     const headers: Record<string, string> = {

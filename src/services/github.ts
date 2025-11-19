@@ -21,14 +21,21 @@ export class GitHubService {
     return new Octokit({ auth: auth.token });
   }
 
-  async createFile(
-    installationId: number,
-    owner: string,
-    repo: string,
-    path: string,
-    content: string,
-    message: string
-  ) {
+  async createFile({
+    installationId,
+    owner,
+    repo,
+    path,
+    content,
+    message,
+  }: {
+    installationId: number;
+    owner: string;
+    repo: string;
+    path: string;
+    content: string;
+    message: string;
+  }) {
     const octokit = await this.getOctokit(installationId);
     const encoded = Buffer.from(content).toString("base64");
 
@@ -47,14 +54,21 @@ export class GitHubService {
     }
   }
 
-  async triggerWorkflow(
-    installationId: number,
-    owner: string,
-    repo: string,
-    workflow: string,
-    ref: string,
-    inputs: Record<string, string>
-  ) {
+  async triggerWorkflow({
+    installationId,
+    owner,
+    repo,
+    workflow,
+    ref,
+    inputs,
+  }: {
+    installationId: number;
+    owner: string;
+    repo: string;
+    workflow: string;
+    ref: string;
+    inputs: Record<string, string>;
+  }) {
     const octokit = await this.getOctokit(installationId);
 
     await octokit.actions.createWorkflowDispatch({
@@ -68,7 +82,7 @@ export class GitHubService {
     return { triggered: true };
   }
 
-  async listRemotes(installationId: number) {
+    async listRemotes({ installationId }: { installationId: number }) {
     const octokit = await this.getOctokit(installationId);
 
     const res = await octokit.apps.listReposAccessibleToInstallation();
@@ -83,7 +97,7 @@ export class GitHubService {
     }));
   }
 
-  async remoteCount(installationId: number) {
+  async remoteCount({ installationId }: { installationId: number }) {
     const octokit = await this.getOctokit(installationId);
 
     const repos = await octokit.paginate(

@@ -76,8 +76,8 @@ auth.get("/callback/:provider", async (c) => {
 
   try {
     const oauth = new OAuthService(c.env);
-    const accessToken = await oauth.exchangeCode(provider, code);
-    const oAuthUser = await oauth.getUserInfo(provider, accessToken);
+    const accessToken = await oauth.exchangeCode({ provider, code });
+    const oAuthUser = await oauth.getUserInfo({ provider, accessToken });
 
     let existingUser = await d1.users.get(oAuthUser.email);
 

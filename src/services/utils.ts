@@ -1,4 +1,10 @@
-export function generateSecretKey(length: number = 32, encoding: 'hex' | 'base64' | 'base64url' = 'hex'): string {
+export function generateSecretKey({
+  length = 32,
+  encoding = 'hex',
+}: {
+  length?: number;
+  encoding?: 'hex' | 'base64' | 'base64url';
+}): string {
   const buffer = new Uint8Array(length);
   crypto.getRandomValues(buffer);
   
@@ -11,11 +17,15 @@ export function generateSecretKey(length: number = 32, encoding: 'hex' | 'base64
   }
 }
 
-export async function verifyGitHubWebhook(
-  payload: string,
-  signature: string,
-  secret: string
-): Promise<boolean> {
+export async function verifyGitHubWebhook({
+  payload,
+  signature,
+  secret,
+}: {
+  payload: string;
+  signature: string;
+  secret: string;
+}): Promise<boolean> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw',

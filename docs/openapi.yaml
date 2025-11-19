@@ -788,13 +788,67 @@ paths:
                           provisioningStatus:
                             type: object
                             additionalProperties: true
-
+  /v1/instances/{instanceId}:
+    patch:
+      tags:
+        - Instances
+      summary: Update an instance
+      x-requiredRole: owner
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clusterId]
+              properties:
+                clusterId:
+                  type: string
+                  description: Cluster ULID
+                address:
+                  type: string
+                  minLength: 10
+                  maxLength: 16
+                tag:
+                  type: string
+                  minLength: 3
+                  maxLength: 15
+                publicKey:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+      responses:
+        '200':
+          description: Instance updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          instance:
+                            $ref: '#/components/schemas/Instance'
+                          provisioningStatus:
+                            type: object
+                            additionalProperties: true
   /v1/instances/{instanceId}/logs:
     get:
       tags:
         - Instances
       summary: Get instance logs
-      x-requiredRole: viewer
+      x-requiredRole: admin
       parameters:
         - in: path
           name: instanceId

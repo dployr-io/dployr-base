@@ -11,9 +11,9 @@ export class InstanceStore extends BaseStore {
         const now = this.now();
 
         const stmt = this.db.prepare(`
-      INSERT INTO instances (id, cluster_id, public_key, address, tag, metadata, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+            INSERT INTO instances (id, cluster_id, public_key, address, tag, metadata, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
 
         await stmt.bind(
             id,

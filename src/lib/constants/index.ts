@@ -25,9 +25,9 @@ export const ERROR = {
     RESOURCE: {
         MISSING_RESOURCE: { code: "resource.missing_resource", status: 404, message: "Resource not found" }
     },
-    DEPLOYMENT: {
-        BOOTSTRAP_SETUP_FAILURE: { code: "deployment.bootstrap_setup_failure", status: 500, message: "Bootstrap setup failed" },
-        BOOTSTRAP_RUN_FAILURE: { code: "deployment.bootstrap_run_failure", status: 500, message: "Bootstrap run failed" },
+    BOOTSTRAP: {
+        BOOTSTRAP_SETUP_FAILURE: { code: "bootstrap.bootstrap_setup_failure", status: 500, message: "Bootstrap setup failed" },
+        BOOTSTRAP_RUN_FAILURE: { code: "bootstrap.bootstrap_run_failure", status: 500, message: "Bootstrap run failed" },
     },
     RUNTIME: {
         BAD_WEBHOOK_SIGNATURE: { code: "runtime.bad_webhook_signature", status: 500, message: "Invalid webhook signature" },
@@ -57,11 +57,10 @@ export const EVENTS = {
         RESOURCE_UPDATED: { code: "resource.resource_updated", message: "Resource updated successfully" },
         RESOURCE_DELETED: { code: "resource.resource_deleted", message: "Resource deleted successfully" }
     },
-    DEPLOYMENT: {
-        BOOTSTRAP_SETUP_STARTED: { code: "deployment.bootstrap_setup_started", message: "Bootstrap setup initiated" },
-        BOOTSTRAP_SETUP_COMPLETED: { code: "deployment.bootstrap_setup_completed", message: "Bootstrap setup completed successfully" },
-        BOOTSTRAP_RUN_STARTED: { code: "deployment.bootstrap_run_started", message: "Bootstrap run initiated" },
-        BOOTSTRAP_RUN_COMPLETED: { code: "deployment.bootstrap_run_completed", message: "Bootstrap run completed successfully" },
+    BOOTSTRAP: {
+        BOOTSTRAP_SETUP_COMPLETED: { code: "bootstrap.bootstrap_setup_completed", message: "Bootstrap setup completed successfully" },
+        BOOTSTRAP_RUN_STARTED: { code: "bootstrap.bootstrap_run_started", message: "Bootstrap run initiated" },
+        BOOTSTRAP_RUN_COMPLETED: { code: "bootstrap.bootstrap_run_completed", message: "Bootstrap run completed successfully" },
     },
     RUNTIME: {
         WEBHOOK_RECEIVED: { code: "runtime.webhook_received", message: "Webhook received successfully" },

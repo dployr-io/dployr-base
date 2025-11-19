@@ -22,11 +22,11 @@ gitHub.post("/webhook", async (c) => {
       }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
     }
 
-    const isValid = await verifyGitHubWebhook(
+    const isValid = await verifyGitHubWebhook({
       payload,
       signature,
-      c.env.GITHUB_WEBHOOK_SECRET
-    );
+      secret: c.env.GITHUB_WEBHOOK_SECRET
+    });
 
     if (!isValid) {
       return c.json(createErrorResponse({ 

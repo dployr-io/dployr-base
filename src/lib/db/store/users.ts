@@ -1,4 +1,4 @@
-import { User, type RequiredOnly } from "@/types";
+import { type OAuthProvider, User, type RequiredOnly } from "@/types";
 import { BaseStore } from "./base";
 
 export class UserStore extends BaseStore {
@@ -12,31 +12,28 @@ export class UserStore extends BaseStore {
         const statements = [];
 
         // Insert or update user
-        statements.push(
-            this.db.prepare(`
-                INSERT INTO users (id, email, name, picture, provider, metadata, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(email) DO UPDATE SET
-                    name = COALESCE(excluded.name, users.name),
-                    picture = COALESCE(excluded.picture, users.picture),
-                    provider = excluded.provider,
-                    metadata = COALESCE(excluded.metadata, users.metadata),
-                    updated_at = excluded.updated_at
-            `).bind(
-                id,
-                user.email,
-                user.name || null,
-                user.picture || null,
-                user.provider,
-                metadataJson,
-                now,
-                now
-            )
+        const userStatement = this.db.prepare(`
+            INSERT INTO users (id, email, name, picture, provider, metadata, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(email) DO UPDATE SET
+                name = COALESCE(excluded.name, users.name),
+                picture = COALESCE(excluded.picture, users.picture),
+                provider = excluded.provider,
+                metadata = COALESCE(excluded.metadata, users.metadata),
+                updated_at = excluded.updated_at
+            RETURNING id, email, name, picture, provider, metadata, created_at, updated_at
+        `).bind(
+            id,
+            user.email,
+            user.name || null,
+            user.picture || null,
+            user.provider,
+            metadataJson,
+            now,
+            now
         );
-
-        // TODO: Optimize to avoid writing on every request, when there's no new changes (writes are expensive)
         
-        // Sync metadata to admin clusters - merge new items from user metadata into cluster metadata
+        // Sync metadata to admin clusters
         if (user.metadata && Object.keys(user.metadata).length > 0) {
             statements.push(
                 this.db.prepare(`
@@ -53,9 +50,33 @@ export class UserStore extends BaseStore {
             );
         }
 
-        await this.db.batch(statements);
+        const savedUser = await userStatement.first<{
+            id: string;
+            email: string;
+            name: string | null;
+            picture: string | null;
+            provider: string;
+            metadata: string;
+            created_at: number;
+            updated_at: number;
+        }>();
 
-        return this.get(user.email);
+        if (statements.length > 0) {
+            await this.db.batch(statements);
+        }
+
+        if (!savedUser) return null;
+
+        return {
+            id: savedUser.id,
+            email: savedUser.email,
+            name: savedUser.name || "",
+            picture: savedUser.picture || "",
+            provider: savedUser.provider as OAuthProvider,
+            metadata: JSON.parse(savedUser.metadata),
+            createdAt: savedUser.created_at,
+            updatedAt: savedUser.updated_at,
+        };
     }
 
     async get(email: string): Promise<User | null> {
@@ -84,49 +105,61 @@ export class UserStore extends BaseStore {
             return this.get(email);
         }
 
-        // Prepare all statements for atomic execution
-        const statements = [];
+        const now = this.now();
 
-        // Handle metadata update atomically
-        if (updates.metadata) {
-            const updatesJson = JSON.stringify(updates.metadata);
-            statements.push(
-                this.db.prepare(`
-                    UPDATE users 
-                    SET metadata = json_patch(COALESCE(metadata, '{}'), ?),
-                        updated_at = ?
-                    WHERE email = ?
-                `).bind(updatesJson, this.now(), email)
-            );
+        // Build a single UPDATE statement that handles all fields
+        const setClauses: string[] = [];
+        const values: any[] = [];
+
+        if (updates.name !== undefined) {
+            setClauses.push("name = ?");
+            values.push(updates.name);
+        }
+        if (updates.picture !== undefined) {
+            setClauses.push("picture = ?");
+            values.push(updates.picture);
+        }
+        if (updates.provider !== undefined) {
+            setClauses.push("provider = ?");
+            values.push(updates.provider);
+        }
+        if (updates.metadata !== undefined) {
+            setClauses.push("metadata = json_patch(COALESCE(metadata, '{}'), ?)");
+            values.push(JSON.stringify(updates.metadata));
         }
 
-        // Handle other field updates
-        const updateData: Record<string, any> = {};
-        if (updates.name) updateData.name = updates.name;
-        if (updates.picture) updateData.picture = updates.picture;
-        if (updates.provider) updateData.provider = updates.provider;
+        setClauses.push("updated_at = ?");
+        values.push(now, email);
 
-        if (Object.keys(updateData).length > 0) {
-            const fields: string[] = [];
-            const values: any[] = [];
+        const query = `
+            UPDATE users 
+            SET ${setClauses.join(", ")} 
+            WHERE email = ?
+            RETURNING id, email, name, picture, provider, metadata, created_at, updated_at
+        `;
 
-            for (const [field, value] of Object.entries(updateData)) {
-                fields.push(`${field} = ?`);
-                values.push(value);
-            }
+        const result = await this.db.prepare(query).bind(...values).first<{
+            id: string;
+            email: string;
+            name: string | null;
+            picture: string | null;
+            provider: string;
+            metadata: string;
+            created_at: number;
+            updated_at: number;
+        }>();
 
-            fields.push("updated_at = ?");
-            values.push(this.now(), email);
+        if (!result) return null;
 
-            const query = `UPDATE users SET ${fields.join(", ")} WHERE email = ?`;
-            statements.push(this.db.prepare(query).bind(...values));
-        }
-
-        // Execute all updates atomically
-        if (statements.length > 0) {
-            await this.db.batch(statements);
-        }
-
-        return this.get(email);
+        return {
+            id: result.id,
+            email: result.email,
+            name: result.name || "",
+            picture: result.picture || "",
+            provider: result.provider as OAuthProvider,
+            metadata: JSON.parse(result.metadata),
+            createdAt: result.created_at,
+            updatedAt: result.updated_at,
+        };
     }
 }

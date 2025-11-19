@@ -380,7 +380,7 @@ clusters.get("/:id/integrations", async (c) => {
     let remoteCount = 0
 
     if (installationId) {
-      remoteCount = await gitHub.remoteCount(installationId);
+      remoteCount = await gitHub.remoteCount({ installationId });
     }
 
     if (integrations.remote.gitHub) {
@@ -429,7 +429,7 @@ clusters.get("/:id/remotes", async (c) => {
   try {
     const gitHub = new GitHubService(c.env);
     const integrations = await d1.clusters.listClusterIntegrations(clusterId);
-    const remotes = await gitHub.listRemotes(integrations.remote.gitHub?.installationId);
+    const remotes = await gitHub.listRemotes({ installationId: integrations.remote.gitHub?.installationId });
     const { page, pageSize, offset } = parsePaginationParams(
       c.req.query("page"),
       c.req.query("pageSize")

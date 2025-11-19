@@ -11,11 +11,18 @@ import { ERROR } from "@/lib/constants";
 const users = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 users.use("*", authMiddleware);
 
-const userSchema = z.object({
+const createUserSchema = z.object({
     name: z.string().min(3).max(30).regex(/^[a-zA-Z]+$/, "Name must contain only alphabets"),
     picture: z.string().min(3).max(100),
     provider: z.enum(["google", "github", "microsoft", "email"]),
     metadata: z.object(),
+});
+
+const updateUserSchema = z.object({
+    name: z.string().min(3).max(30).regex(/^[a-zA-Z]+$/, "Name must contain only alphabets").optional(),
+    picture: z.string().min(3).max(100).optional(),
+    provider: z.enum(["google", "github", "microsoft", "email"]).optional(),
+    metadata: z.object().optional(),
 });
 
 // Get current user
@@ -90,7 +97,7 @@ users.patch("/me", async (c) => {
     }
 
     const data = await c.req.json();
-    const validation = userSchema.safeParse(data);
+    const validation = updateUserSchema.safeParse(data);
     if (!validation.success) {
         const errors = validation.error.issues.map((err) => ({
             field: err.path.join("."),
