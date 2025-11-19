@@ -25,6 +25,24 @@ servers:
   - url: https://base.dployr.dev
     description: Production
 
+tags:
+  - name: Health
+    description: Service health checks.
+  - name: Auth
+    description: Authentication and session management.
+  - name: Users
+    description: Current user profile.
+  - name: Clusters
+    description: Cluster membership, roles, and integrations.
+  - name: Instances
+    description: Base instances and logs.
+  - name: Deployments
+    description: Application deployments.
+  - name: GitHub
+    description: GitHub App webhooks.
+  - name: Runtime
+    description: Runtime events and activity.
+
 components:
   securitySchemes:
     sessionCookie:
@@ -130,7 +148,10 @@ components:
 paths:
   /v1/health:
     get:
+      tags:
+        - Health
       summary: Health check
+      x-requiredRole: public
       description: Returns basic health information for the API.
       responses:
         '200':
@@ -149,7 +170,10 @@ paths:
 
   /v1/auth/login/{provider}:
     get:
+      tags:
+        - Auth
       summary: Initiate OAuth login
+      x-requiredRole: public
       description: Redirects to the OAuth provider for authentication.
       parameters:
         - in: path
@@ -175,7 +199,10 @@ paths:
 
   /v1/auth/callback/{provider}:
     get:
+      tags:
+        - Auth
       summary: OAuth callback
+      x-requiredRole: public
       description: Handles the OAuth callback, creates user & session, and sets the `session` cookie.
       parameters:
         - in: path
@@ -206,7 +233,10 @@ paths:
 
   /v1/auth/login/email:
     post:
+      tags:
+        - Auth
       summary: Request email OTP
+      x-requiredRole: public
       description: Sends a one-time code to the specified email address.
       requestBody:
         required: true
@@ -244,7 +274,10 @@ paths:
 
   /v1/auth/login/email/verify:
     post:
+      tags:
+        - Auth
       summary: Verify email OTP
+      x-requiredRole: public
       description: Verifies the OTP and creates a session.
       requestBody:
         required: true
@@ -277,7 +310,10 @@ paths:
 
   /v1/auth/logout:
     get:
+      tags:
+        - Auth
       summary: Logout
+      x-requiredRole: viewer
       description: Deletes the current session and clears the `session` cookie.
       security:
         - sessionCookie: []
@@ -291,7 +327,10 @@ paths:
 
   /v1/users/me:
     get:
+      tags:
+        - Users
       summary: Get current user
+      x-requiredRole: viewer
       security:
         - sessionCookie: []
       responses:
@@ -321,7 +360,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
     patch:
+      tags:
+        - Users
       summary: Update current user
+      x-requiredRole: viewer
       security:
         - sessionCookie: []
       requestBody:
@@ -371,7 +413,10 @@ paths:
 
   /v1/clusters:
     get:
+      tags:
+        - Clusters
       summary: List clusters for current user
+      x-requiredRole: viewer
       security:
         - sessionCookie: []
       responses:
@@ -394,7 +439,10 @@ paths:
 
   /v1/clusters/users/invites:
     get:
+      tags:
+        - Clusters
       summary: List pending cluster invites for current user
+      x-requiredRole: viewer
       security:
         - sessionCookie: []
       responses:
@@ -407,7 +455,10 @@ paths:
 
   /v1/clusters/{id}/users/invites/accept:
     get:
+      tags:
+        - Clusters
       summary: Accept cluster invite
+      x-requiredRole: viewer
       security:
         - sessionCookie: []
       parameters:
@@ -426,7 +477,10 @@ paths:
 
   /v1/clusters/{id}/users/invites/decline:
     get:
+      tags:
+        - Clusters
       summary: Decline cluster invite
+      x-requiredRole: viewer
       security:
         - sessionCookie: []
       parameters:
@@ -445,7 +499,10 @@ paths:
 
   /v1/clusters/{id}/users:
     get:
+      tags:
+        - Clusters
       summary: List users in a cluster
+      x-requiredRole: admin
       security:
         - sessionCookie: []
       parameters:
@@ -477,7 +534,10 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
 
     post:
+      tags:
+        - Clusters
       summary: Add users to cluster (invite)
+      x-requiredRole: admin
       security:
         - sessionCookie: []
       parameters:
@@ -508,7 +568,10 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
 
     patch:
+      tags:
+        - Clusters
       summary: Update cluster roles
+      x-requiredRole: admin
       security:
         - sessionCookie: []
       parameters:
@@ -553,7 +616,10 @@ paths:
 
   /v1/clusters/{id}/users/remove:
     post:
+      tags:
+        - Clusters
       summary: Remove users from cluster
+      x-requiredRole: admin
       security:
         - sessionCookie: []
       parameters:
@@ -585,7 +651,10 @@ paths:
 
   /v1/clusters/{id}/users/owner:
     post:
+      tags:
+        - Clusters
       summary: Transfer cluster ownership
+      x-requiredRole: owner
       security:
         - sessionCookie: []
       parameters:
@@ -619,7 +688,10 @@ paths:
 
   /v1/clusters/{id}/integrations:
     get:
+      tags:
+        - Clusters
       summary: List cluster integrations
+      x-requiredRole: viewer
       security:
         - sessionCookie: []
       parameters:
@@ -638,7 +710,10 @@ paths:
 
   /v1/instances:
     get:
+      tags:
+        - Instances
       summary: List instances for clusters the user has access to
+      x-requiredRole: viewer
       security:
         - sessionCookie: []
       parameters:
@@ -666,7 +741,10 @@ paths:
                         $ref: '#/components/schemas/PaginatedResponse'
 
     post:
+      tags:
+        - Instances
       summary: Create an instance
+      x-requiredRole: viewer
       security:
         - sessionCookie: []
       requestBody:
@@ -713,7 +791,10 @@ paths:
 
   /v1/instances/{instanceId}/logs:
     get:
+      tags:
+        - Instances
       summary: Get instance logs
+      x-requiredRole: viewer
       parameters:
         - in: path
           name: instanceId
@@ -736,7 +817,10 @@ paths:
 
   /v1/deployments:
     get:
+      tags:
+        - Deployments
       summary: List deployments
+      x-requiredRole: viewer
       description: Lists deployments for the current user's clusters. Implementation is currently TODO in the code.
       security:
         - sessionCookie: []
@@ -750,7 +834,10 @@ paths:
 
   /v1/github/webhook:
     post:
+      tags:
+        - GitHub
       summary: GitHub webhook
+      x-requiredRole: public
       description: Handles GitHub App webhook events including installation, meta, workflow_run, and push.
       parameters:
         - in: header
@@ -792,7 +879,10 @@ paths:
 
   /v1/runtime/events:
     get:
+      tags:
+        - Runtime
       summary: Get runtime events for a cluster
+      x-requiredRole: developer
       security:
         - sessionCookie: []
       parameters:
