@@ -25,6 +25,8 @@ export type Bindings = {
   // Storage
   BASE_KV: KVNamespace;
   BASE_DB: D1Database;
+  INSTANCE_LOGS: R2Bucket;
+  INSTANCE_OBJECT: DurableObjectNamespace;
 
   // App config
   APP_URL: string;
@@ -70,6 +72,8 @@ export type ActorType = 'user' | 'headless'
 
 export type EventStatus = 'started' | 'completed' | 'unknown';
 
+export type InstanceStatus = 'running' | 'stopped' | 'unknown';
+
 export interface Event {
   id: string;
   timestamp: number;
@@ -84,11 +88,18 @@ export interface Event {
   status: EventStatus;
 }
 
+
 export interface Instance {
   id: string;
   address: string;
   publicKey: string;
   tag: string;
+  resources: {
+    cpu: number;
+    memory: number;
+    disk: number;
+  };
+  status: InstanceStatus;
   metadata?: Record<string, any> | undefined;
   createdAt: number;
   updatedAt: number;

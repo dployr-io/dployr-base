@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@dployr-io/dployr-sdk':
-        specifier: ^1.0.0
-        version: 1.0.0
+        specifier: ^1.2.0
+        version: 1.2.0
       '@octokit/auth-app':
         specifier: ^8.1.2
         version: 8.1.2
@@ -20,9 +20,6 @@ importers:
       buffer:
         specifier: ^6.0.3
         version: 6.0.3
-      crypto:
-        specifier: ^1.0.1
-        version: 1.0.1
       hono:
         specifier: ^4.8.4
         version: 4.10.4
@@ -95,8 +92,8 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@dployr-io/dployr-sdk@1.0.0':
-    resolution: {integrity: sha512-f2iVufF0XMW3EIgdCJ+6QL/MwsZmwjRHZIxmHV9FnFifVHASUlExSKSbPPhOxh08YpJXEIoptMAy1GSuJjszXw==}
+  '@dployr-io/dployr-sdk@1.2.0':
+    resolution: {integrity: sha512-pNEOxfBk08VR9suF6rfRx0JVzLhbxE/t2z7PP4TcHCeV/Ci7i8LqWYdhApao/6UE06pRtbRg8HEy8yumXav+hA==}
 
   '@emnapi/runtime@1.7.0':
     resolution: {integrity: sha512-oAYoQnCYaQZKVS53Fq23ceWMRxq5EhQsE0x0RdQ55jT7wagMu5k+fS39v1fiSLrtrLQlXwVINenqhLMtTrV/1Q==}
@@ -525,10 +522,6 @@ packages:
     resolution: {integrity: sha512-9Kr/j4O16ISv8zBBhJoi4bXOYNTkFLOqSL3UDB0njXxCXNezjeyVrJyGOWtgfs/q2km1gwBcfH8q1yEGoMYunA==}
     engines: {node: '>=18'}
 
-  crypto@1.0.1:
-    resolution: {integrity: sha512-VxBKmeNcqQdiUQUW2Tzq0t377b54N2bMtXO/qiLa+6eRRmmC4qT3D4OnTGoT/U6O9aklQ/jTwbOtRMTTY8G0Ig==}
-    deprecated: This package is no longer supported. It's now a built-in Node module. If you've depended on crypto, you should switch to the one that's built-in.
-
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
@@ -726,7 +719,7 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@dployr-io/dployr-sdk@1.0.0':
+  '@dployr-io/dployr-sdk@1.2.0':
     dependencies:
       '@microsoft/kiota-bundle': 1.0.0-preview.99
 
@@ -1093,8 +1086,6 @@ snapshots:
       color-string: 1.9.1
 
   cookie@1.0.2: {}
-
-  crypto@1.0.1: {}
 
   detect-libc@2.1.2: {}
 

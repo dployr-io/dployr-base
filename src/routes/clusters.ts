@@ -14,6 +14,7 @@ clusters.use("*", authMiddleware);
 const addUsersSchema = z.object({
   users: z.array(z.email())
 });
+
 const removeUsersSchema = z.object({
   users: z.array(z.ulid())
 });

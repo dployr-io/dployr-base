@@ -34,10 +34,13 @@ export class InstanceStore extends BaseStore {
         };
     }
 
-    async get(id: string): Promise<Instance | null> {
+    async get(id: string): Promise<(Omit<Instance, "resources" | "status"> & { clusterId: string }) | null> {
         const stmt = this.db.prepare(`
-      SELECT id, address, public_key, tag, metadata, created_at, updated_at
-      FROM instances WHERE id = ?
+      SELECT instances.id, instances.address, instances.public_key, instances.tag, instances.metadata, instances.created_at, instances.updated_at, clusters.id as clusterId
+      FROM instances
+      JOIN user_clusters ON user_clusters.cluster_id = instances.cluster_id
+      JOIN clusters ON clusters.id = user_clusters.cluster_id
+      WHERE instances.id = ?
     `);
 
         const result = await stmt.bind(id).first();
@@ -51,13 +54,14 @@ export class InstanceStore extends BaseStore {
             metadata: result.metadata ? JSON.parse(result.metadata as string) : {},
             createdAt: result.created_at as number,
             updatedAt: result.updated_at as number,
+            clusterId: result.clusterId as string,
         };
     }
 
     async update(
         id: string,
-        updates: Partial<Omit<Instance, "id" | "createdAt">>
-    ): Promise<Instance | null> {
+        updates: Partial<Omit<Instance, "id" | "resources" | "status" | "createdAt">>
+    ): Promise<(Omit<Instance, "resources" | "status"> & { clusterId: string }) | null> {
         if (!updates.address && !updates.tag && !updates.metadata) {
             return this.get(id);
         }
@@ -115,7 +119,7 @@ export class InstanceStore extends BaseStore {
         clusterIds: string[],
         limit?: number,
         offset?: number
-    ): Promise<{ instances: Instance[]; total: number }> {
+    ): Promise<{ instances: Omit<Instance, "resources" | "status">[]; total: number }> {
         if (clusterIds.length === 0) return { instances: [], total: 0 };
 
         const placeholders = clusterIds.map(() => '?').join(',');

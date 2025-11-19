@@ -1,0 +1,843 @@
+openapi: 3.0.4
+info:
+  title: Dployr Base API
+  version: 1.0.0
+  description: |
+    Your app, your server, your rules!
+    
+    ## Authentication
+    Authenticate using OAuth2.0 with providers like Google, GitHub, Microsoft,
+    or via email. Session-based authentication with a cookie.
+
+    ### Authentication Flow
+    See https://docs.dployr.dev/auth for more details.
+    
+    ## Authorization
+    Role-based access control with four levels:
+    - **Owner**: Full system control, can manage admins
+    - **Admin**: Infrastructure management, user management, secrets
+    - **Developer**: Deploy apps, view logs and events
+    - **Viewer**: Read-only access to services
+
+    See https://docs.dployr.dev/auth for more details.
+
+servers:
+  - url: https://base.dployr.dev
+    description: Production
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+        code:
+          type: string
+        helpLink:
+          type: string
+          format: uri
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          description: Response payload
+          nullable: true
+
+    PaginatedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          nullable: true
+        picture:
+          type: string
+          nullable: true
+        provider:
+          type: string
+          enum: [google, github, microsoft, email]
+        metadata:
+          type: object
+          additionalProperties: true
+
+    Cluster:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        roles:
+          type: object
+          additionalProperties: true
+
+    Instance:
+      type: object
+      properties:
+        id:
+          type: string
+        clusterId:
+          type: string
+        address:
+          type: string
+        tag:
+          type: string
+        publicKey:
+          type: string
+
+paths:
+  /v1/health:
+    get:
+      summary: Health check
+      description: Returns basic health information for the API.
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /v1/auth/login/{provider}:
+    get:
+      summary: Initiate OAuth login
+      description: Redirects to the OAuth provider for authentication.
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [google, github, microsoft]
+        - in: query
+          name: redirect_to
+          schema:
+            type: string
+            description: Path to redirect to after successful login.
+      responses:
+        '302':
+          description: Redirect to OAuth provider
+        '400':
+          description: Invalid provider or missing parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/callback/{provider}:
+    get:
+      summary: OAuth callback
+      description: Handles the OAuth callback, creates user & session, and sets the `session` cookie.
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [google, github, microsoft]
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: state
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to application with session set
+        '400':
+          description: Invalid state or missing parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/login/email:
+    post:
+      summary: Request email OTP
+      description: Sends a one-time code to the specified email address.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: OTP sent
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          email:
+                            type: string
+                            format: email
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/login/email/verify:
+    post:
+      summary: Verify email OTP
+      description: Verifies the OTP and creates a session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/logout:
+    get:
+      summary: Logout
+      description: Deletes the current session and clears the `session` cookie.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/users/me:
+    get:
+      summary: Get current user
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Returns the current user and clusters
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          user:
+                            $ref: '#/components/schemas/User'
+                          clusters:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Cluster'
+        '401':
+          description: Not authenticated or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      summary: Update current user
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                picture:
+                  type: string
+                provider:
+                  type: string
+                  enum: [google, github, microsoft, email]
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          user:
+                            $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/clusters:
+    get:
+      summary: List clusters for current user
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: List of clusters for the current user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          clusters:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Cluster'
+
+  /v1/clusters/users/invites:
+    get:
+      summary: List pending cluster invites for current user
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Pending invites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/clusters/{id}/users/invites/accept:
+    get:
+      summary: Accept cluster invite
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/clusters/{id}/users/invites/decline:
+    get:
+      summary: Decline cluster invite
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite declined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/clusters/{id}/users:
+    get:
+      summary: List users in a cluster
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: showInvites
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Paginated list of users or invites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+    post:
+      summary: Add users to cluster (invite)
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [users]
+              properties:
+                users:
+                  type: array
+                  items:
+                    type: string
+                    format: email
+      responses:
+        '200':
+          description: Invites sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+    patch:
+      summary: Update cluster roles
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles]
+              properties:
+                roles:
+                  type: object
+                  properties:
+                    admin:
+                      type: array
+                      items:
+                        type: string
+                        format: email
+                    developer:
+                      type: array
+                      items:
+                        type: string
+                        format: email
+                    viewer:
+                      type: array
+                      items:
+                        type: string
+                        format: email
+      responses:
+        '200':
+          description: Roles updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/clusters/{id}/users/remove:
+    post:
+      summary: Remove users from cluster
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [users]
+              properties:
+                users:
+                  type: array
+                  items:
+                    type: string
+                    description: User ULID
+      responses:
+        '200':
+          description: Users removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/clusters/{id}/users/owner:
+    post:
+      summary: Transfer cluster ownership
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newOwnerId]
+              properties:
+                newOwnerId:
+                  type: string
+                  description: User ULID of the new owner
+                previousOwnerRole:
+                  type: string
+                  enum: [admin, developer, viewer]
+                  default: viewer
+      responses:
+        '200':
+          description: Ownership transferred
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/clusters/{id}/integrations:
+    get:
+      summary: List cluster integrations
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Integrations for the cluster
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/instances:
+    get:
+      summary: List instances for clusters the user has access to
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Paginated list of instances
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaginatedResponse'
+
+    post:
+      summary: Create an instance
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clusterId, address, tag, publicKey]
+              properties:
+                clusterId:
+                  type: string
+                  description: Cluster ULID
+                address:
+                  type: string
+                  minLength: 10
+                  maxLength: 16
+                tag:
+                  type: string
+                  minLength: 3
+                  maxLength: 15
+                publicKey:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+      responses:
+        '200':
+          description: Instance created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          instance:
+                            $ref: '#/components/schemas/Instance'
+                          provisioningStatus:
+                            type: object
+                            additionalProperties: true
+
+  /v1/instances/{instanceId}/logs:
+    get:
+      summary: Get instance logs
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instance logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Logs not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/deployments:
+    get:
+      summary: List deployments
+      description: Lists deployments for the current user's clusters. Implementation is currently TODO in the code.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Deployments (may be an empty list)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/github/webhook:
+    post:
+      summary: GitHub webhook
+      description: Handles GitHub App webhook events including installation, meta, workflow_run, and push.
+      parameters:
+        - in: header
+          name: x-hub-signature-256
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: x-github-event
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad or missing signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/runtime/events:
+    get:
+      summary: Get runtime events for a cluster
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Paginated list of runtime events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaginatedResponse'
+        '400':
+          description: Missing clusterId or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permission for cluster
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

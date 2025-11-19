@@ -3,6 +3,7 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse, parseP
 import { KVStore } from "@/lib/db/store/kv";
 import { getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
+import { InstanceService } from "@/services/instances";
 import z from "zod";
 import { authMiddleware } from "@/middleware/auth";
 import { ERROR } from "@/lib/constants";
@@ -12,10 +13,9 @@ instances.use("*", authMiddleware);
 
 const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
-  address: z.string().min(10, "Address is required"),
-  publicKey: z.string().min(50, "Public key is too short").max(500, "Public key is too long"),
-  tag: z.string().min(3).max(16, "Choose a valid tag"),
-  metadata: z.record(z.string(), z.any()).optional(),
+  address: z.string().min(10, "Address with a minimum of 10 characters is required").max(16, "Address must be a maximum of 16 characters"),
+  tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(15, "Tag must be a maximum of 15 characters"),
+  publicKey: z.string().min(1, "Public key is required").max(255, "Public key must be a maximum of 255 characters"),
 });
 
 // List all instances
@@ -45,8 +45,10 @@ instances.get("/", async (c) => {
     c.req.query("pageSize")
   );
 
+  const clusterIds = session.clusters.map((c) => c.id);
+
   const { instances, total } = await d1.instances.getByClusters(
-    session.clusters,
+    clusterIds,
     pageSize,
     offset
   );
@@ -70,6 +72,7 @@ instances.post("/", async (c) => {
 
     const kv = new KVStore(c.env.BASE_KV);
     const d1 = new D1Store(c.env.BASE_DB);
+    const service = new InstanceService(c.env);
     const session = await kv.getSession(sessionId);
 
     if (!session) {
@@ -93,14 +96,16 @@ instances.post("/", async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const { clusterId, address, publicKey, tag, metadata } = validation.data;
+    const { clusterId, address, publicKey, tag } = validation.data;
 
-    const instance = await d1.instances.create(clusterId, publicKey, {
+    const instance = await service.createInstance(
+      clusterId,
       address,
       publicKey,
       tag,
-      metadata: metadata || {},
-    });
+    );
+
+    const provisioningStatus = await service.startInstance(instance.id);
 
     // Connect to your Dployr instance
     // const { client, tokenManager } = createDployrClient(address);
@@ -118,7 +123,12 @@ instances.post("/", async (c) => {
     // const deployments = await client.deployments.get();
     // const services = await client.services.get();
 
-    return c.json(createSuccessResponse({ instance }, "Instance created successfully"));
+    return c.json(
+      createSuccessResponse(
+        { instance, provisioningStatus },
+        "Instance created successfully",
+      ),
+    );
   } catch (error) {
     console.error("Failed to create instance", error);
     const helpLink = "https://monitoring.dployr.dev";
@@ -127,6 +137,41 @@ instances.post("/", async (c) => {
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
       helpLink 
     }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
+});
+
+// Get instance logs
+instances.get("/:instanceId/logs", async (c) => {
+  try {
+    const instanceId = c.req.param("instanceId");
+
+    const object = await c.env.INSTANCE_LOGS.get(`instance/${instanceId}.log`);
+
+    if (!object) {
+      return c.json(
+        createErrorResponse({
+          message: "Logs not found",
+          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+        }),
+        ERROR.RESOURCE.MISSING_RESOURCE.status,
+      );
+    }
+
+    const text = await object.text();
+    const logs = JSON.parse(text);
+
+    return c.json(
+      createSuccessResponse(logs, "Instance logs fetched successfully"),
+    );
+  } catch (error) {
+    console.error("Get instance logs error:", error);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to fetch instance logs",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 

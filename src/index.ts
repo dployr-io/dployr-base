@@ -7,7 +7,6 @@ import gitHub from "@/routes/github";
 import { initializeDatabase } from "@/lib/db/migrate";
 import clusters from "@/routes/clusters";
 import deployments from "@/routes/deployments";
-import bootstrap from "@/routes/bootstrap";
 import users from "@/routes/users";
 import runtime from "@/routes/runtime";
 
@@ -42,7 +41,6 @@ app.route("/v1/users", users);
 app.route("/v1/instances", instances);
 app.route("/v1/clusters", clusters);
 app.route("/v1/deployments", deployments);
-app.route("/v1/bootstrap", bootstrap);
 app.route("/v1/github", gitHub);
 app.route("/v1/runtime", runtime);
 app.get("/v1/health", (c) => {
@@ -50,3 +48,4 @@ app.get("/v1/health", (c) => {
 });
 
 export default app;
+export { InstanceObject } from "@/durable/instance";

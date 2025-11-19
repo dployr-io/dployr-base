@@ -225,7 +225,6 @@ export class ClusterStore extends BaseStore {
     return this.get(clusterId);
   }
 
-
   /**
    * Add multiple users to a cluster (excluding owner role).
    * Creates users if they don't exist and adds them with 'invited' role.
@@ -417,6 +416,34 @@ export class ClusterStore extends BaseStore {
       )
       .bind(newOwnerId, clusterId)
       .run();
+  }
+
+   /**
+   * Gets a cluster that belongs to a user (excludes invited).
+   * 
+   * @param userId - The user ID
+   * @returns A cluster
+   */
+  async getUserOwnedCluster(userId: string): Promise<Pick<Cluster, "id" | "name" | "metadata"> | null> {
+    const stmt = this.db.prepare(`
+      SELECT 
+        c.id,
+        c.name,
+        c.metadata,
+        owner_u.name as owner
+      FROM user_clusters uc
+      JOIN clusters c ON uc.cluster_id = c.id
+      JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'
+      JOIN users owner_u ON owner_uc.user_id = owner_u.id
+      WHERE uc.user_id = ? AND uc.role != 'invited'
+    `);
+    const result = await stmt.bind(userId).first();
+
+    return result ? {
+      id: result.id as string,
+      name: result.name as string,
+      metadata: result.metadata as Record<string, any>,
+    } : null;
   }
 
   /**
