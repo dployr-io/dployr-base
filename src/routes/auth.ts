@@ -108,7 +108,7 @@ auth.get("/callback/:provider", async (c) => {
       setCookie(c, "session", sessionId, {
         httpOnly: true,
         secure: true,
-        sameSite: "None",
+        sameSite: "Lax",
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: "/",
         domain: ".dployr.dev",
@@ -231,7 +231,7 @@ auth.post("/login/email/verify", async (c) => {
     setCookie(c, "session", sessionId, {
       httpOnly: true,
       secure: true,
-      sameSite: "None",
+      sameSite: "Lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
       domain: ".dployr.dev",
