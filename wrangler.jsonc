@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "dployr-base",
+	"name": "dployr-base-docs",
 	"account_id": "81602a8fc518f9542c732a96aa9018f2",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-02-04",
