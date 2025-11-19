@@ -20,7 +20,7 @@ export class EmailService {
                 }
             }],
             from: {
-                address: 'noreply@zeipo.ai'
+                address: 'noreply@dployr.dev'
             },
             subject,
             htmlbody: body
