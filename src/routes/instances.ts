@@ -25,15 +25,23 @@ const updateInstanceSchema = z.object({
   publicKey: z.string().min(1, "Public key is required").max(255, "Public key must be a maximum of 255 characters").optional(),
 });
 
-// List all instances
+// List all instances by cluster
 instances.get("/", async (c) => {
   const sessionId = getCookie(c, "session");
+  const clusterId = c.req.param("clusterId");
 
   if (!sessionId) {
     return c.json(createErrorResponse({ 
       message: "Not authenticated", 
       code: ERROR.AUTH.BAD_SESSION.code 
     }), ERROR.AUTH.BAD_SESSION.status);
+  }
+
+  if (!clusterId) {
+    return c.json(createErrorResponse({ 
+      message: "Cluster ID is required", 
+      code: ERROR.REQUEST.BAD_REQUEST.code 
+    }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
   const kv = new KVStore(c.env.BASE_KV);
@@ -52,10 +60,8 @@ instances.get("/", async (c) => {
     c.req.query("pageSize")
   );
 
-  const clusterIds = session.clusters.map((c) => c.id);
-
-  const { instances, total } = await d1.instances.getByClusters(
-    clusterIds,
+  const { instances, total } = await d1.instances.getByCluster(
+    clusterId,
     pageSize,
     offset
   );

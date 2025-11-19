@@ -115,33 +115,31 @@ export class InstanceStore extends BaseStore {
         await this.db.prepare(`DELETE FROM instances WHERE id = ?`).bind(id).run();
     }
 
-    async getByClusters(
-        clusterIds: string[],
+    async getByCluster(
+        clusterId: string,
         limit?: number,
         offset?: number
     ): Promise<{ instances: Omit<Instance, "resources" | "status">[]; total: number }> {
-        if (clusterIds.length === 0) return { instances: [], total: 0 };
-
-        const placeholders = clusterIds.map(() => '?').join(',');
+        if (clusterId.length === 0) return { instances: [], total: 0 };
 
         // Get total count
         const countStmt = this.db.prepare(`
             SELECT COUNT(*) as count
-            FROM instances WHERE cluster_id IN (${placeholders})
+            FROM instances WHERE cluster_id = ?
         `);
-        const countResult = await countStmt.bind(...clusterIds).first();
+        const countResult = await countStmt.bind(clusterId).first();
         const total = (countResult?.count as number) || 0;
         const limitClause = limit !== undefined ? `LIMIT ${limit}` : '';
         const offsetClause = offset !== undefined ? `OFFSET ${offset}` : '';
 
         const stmt = this.db.prepare(`
             SELECT id, address, public_key, tag, metadata, created_at, updated_at
-            FROM instances WHERE cluster_id IN (${placeholders})
+            FROM instances WHERE cluster_id = ?
             ORDER BY created_at DESC
             ${limitClause} ${offsetClause}
         `);
 
-        const results = await stmt.bind(...clusterIds).all();
+        const results = await stmt.bind(clusterId).all();
 
         const instances = results.results.map((row) => ({
             id: row.id as string,

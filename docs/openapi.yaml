@@ -718,6 +718,11 @@ paths:
         - sessionCookie: []
       parameters:
         - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+        - in: query
           name: page
           schema:
             type: integer
