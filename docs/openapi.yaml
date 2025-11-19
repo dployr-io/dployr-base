@@ -776,7 +776,7 @@ paths:
                   minLength: 1
                   maxLength: 255
       responses:
-        '200':
+        '201':
           description: Instance created
           content:
             application/json:
@@ -857,6 +857,11 @@ paths:
       parameters:
         - in: path
           name: instanceId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: clusterId
           required: true
           schema:
             type: string
