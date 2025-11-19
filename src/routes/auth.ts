@@ -108,7 +108,7 @@ auth.get("/callback/:provider", async (c) => {
       setCookie(c, "session", sessionId, {
         httpOnly: true,
         secure: true,
-        sameSite: "Lax",
+        sameSite: "None",
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: "/",
         domain: ".dployr.dev",
@@ -168,7 +168,7 @@ auth.post("/login/email", async (c) => {
       to: email,
     });
 
-    emailService.sendEmail("Verify your account", loginCodeTemplate(name, code))
+    await emailService.sendEmail("Verify your account", loginCodeTemplate(name, code))
 
     return c.json(createSuccessResponse({ email }, "OTP sent to your email"));
   } catch (error) {
@@ -231,7 +231,7 @@ auth.post("/login/email/verify", async (c) => {
     setCookie(c, "session", sessionId, {
       httpOnly: true,
       secure: true,
-      sameSite: "Lax",
+      sameSite: "None",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
       domain: ".dployr.dev",
