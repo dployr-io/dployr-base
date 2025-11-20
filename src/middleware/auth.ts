@@ -27,6 +27,46 @@ export async function authMiddleware(
   await next();
 }
 
+export async function requireClusterViewer(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  next: Next
+) {
+  const session = c.get("session");
+
+  if (!session) {
+    return c.json({ 
+      error: "Not authenticated", 
+      code: ERROR.AUTH.BAD_SESSION.code 
+    }, ERROR.AUTH.BAD_SESSION.status);
+  }
+
+  let data;
+  try {
+    data = await c.req.json();
+  } catch {
+    data = {};
+  }
+  const param = c.req.param("id");
+  const query = c.req.query("clusterId");
+  const clusterId = data.clusterId || param || query;
+
+  if (!clusterId) {
+    return c.json({ error: "clusterId is required" }, 400);
+  }
+
+  const d1 = new D1Store(c.env.BASE_DB);
+  const canRead = await d1.clusters.canRead(session.userId, clusterId);
+
+  if (!canRead) {
+    return c.json({ 
+      error: "Insufficient permissions. Viewer role is required to perform this action", 
+      code: ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.code 
+    }, ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.status);
+  }
+
+  await next();
+}
+
 export async function requireClusterDeveloper(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
   next: Next
@@ -40,9 +80,15 @@ export async function requireClusterDeveloper(
     }, ERROR.AUTH.BAD_SESSION.status);
   }
 
-  const data = await c.req.json();
+  let data;
+  try {
+    data = await c.req.json();
+  } catch {
+    data = {};
+  }
   const param = c.req.param("id");
-  const clusterId = data.clusterId || param;
+  const query = c.req.query("clusterId");
+  const clusterId = data.clusterId || param || query;
 
   if (!clusterId) {
     return c.json({ error: "clusterId is required" }, 400);
@@ -71,9 +117,15 @@ export async function requireClusterAdmin(
     return c.json({ error: "Not authenticated" }, 401);
   }
 
-  const data = await c.req.json();
+  let data;
+  try {
+    data = await c.req.json();
+  } catch {
+    data = {};
+  }
   const param = c.req.param("id");
-  const clusterId = data.clusterId || param;
+  const query = c.req.query("clusterId");
+  const clusterId = data.clusterId || param || query;
 
   if (!clusterId) {
     return c.json({ error: "clusterId is required" }, 400);
@@ -102,8 +154,15 @@ export async function requireClusterOwner(
     return c.json({ error: "Not authenticated" }, 401);
   }
 
-  const data = await c.req.json();
-  const clusterId = data.clusterId;
+  let data;
+  try {
+    data = await c.req.json();
+  } catch {
+    data = {};
+  }
+  const param = c.req.param("id");
+  const query = c.req.query("clusterId");
+  const clusterId = data.clusterId || param || query;
 
   if (!clusterId) {
     return c.json({ error: "clusterId is required" }, 400);

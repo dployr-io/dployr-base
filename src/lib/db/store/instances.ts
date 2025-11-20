@@ -36,12 +36,12 @@ export class InstanceStore extends BaseStore {
 
     async get(id: string): Promise<(Omit<Instance, "resources" | "status"> & { clusterId: string }) | null> {
         const stmt = this.db.prepare(`
-      SELECT instances.id, instances.address, instances.public_key, instances.tag, instances.metadata, instances.created_at, instances.updated_at, clusters.id as clusterId
-      FROM instances
-      JOIN user_clusters ON user_clusters.cluster_id = instances.cluster_id
-      JOIN clusters ON clusters.id = user_clusters.cluster_id
-      WHERE instances.id = ?
-    `);
+            SELECT instances.id, instances.address, instances.public_key, instances.tag, instances.metadata, instances.created_at, instances.updated_at, clusters.id as clusterId
+            FROM instances
+            JOIN user_clusters ON user_clusters.cluster_id = instances.cluster_id
+            JOIN clusters ON clusters.id = user_clusters.cluster_id
+            WHERE instances.id = ?
+        `);
 
         const result = await stmt.bind(id).first();
         if (!result) return null;
@@ -66,51 +66,57 @@ export class InstanceStore extends BaseStore {
             return this.get(id);
         }
 
-        // Prepare all statements for atomic execution
-        const statements = [];
+        const now = this.now();
+        const setClauses: string[] = [];
+        const values: any[] = [];
 
-        // Handle metadata update atomically
-        if (updates.metadata) {
-            const updatesJson = JSON.stringify(updates.metadata);
-            statements.push(
-                this.db.prepare(`
-                    UPDATE instances 
-                    SET metadata = json_patch(COALESCE(metadata, '{}'), ?),
-                        updated_at = ?
-                    WHERE id = ?
-                `).bind(updatesJson, this.now(), id)
-            );
+        if (updates.address !== undefined) {
+            setClauses.push("address = ?");
+            values.push(updates.address);
+        }
+        if (updates.tag !== undefined) {
+            setClauses.push("tag = ?");
+            values.push(updates.tag);
+        }
+        if (updates.metadata !== undefined) {
+            setClauses.push("metadata = json_patch(COALESCE(metadata, '{}'), ?)");
+            values.push(JSON.stringify(updates.metadata));
         }
 
-        // Handle other field updates
-        const updateData: Record<string, any> = {};
-        if (updates.address) updateData.address = updates.address;
-        if (updates.tag) updateData.tag = updates.tag;
+        setClauses.push("updated_at = ?");
+        values.push(now, id);
 
-        if (Object.keys(updateData).length > 0) {
-            const fields: string[] = [];
-            const values: any[] = [];
+        const query = `
+            UPDATE instances 
+            SET ${setClauses.join(", ")} 
+            WHERE id = ?
+            RETURNING id, cluster_id, public_key, address, tag, metadata, created_at, updated_at
+        `;
 
-            for (const [field, value] of Object.entries(updateData)) {
-                fields.push(`${field} = ?`);
-                values.push(value);
-            }
+        const result = await this.db.prepare(query).bind(...values).first<{
+            id: string;
+            cluster_id: string;
+            public_key: string;
+            address: string;
+            tag: string;
+            metadata: string;
+            created_at: number;
+            updated_at: number;
+        }>();
 
-            fields.push("updated_at = ?");
-            values.push(this.now(), id);
+        if (!result) return null;
 
-            const query = `UPDATE instances SET ${fields.join(", ")} WHERE id = ?`;
-            statements.push(this.db.prepare(query).bind(...values));
-        }
-
-        // Execute all updates atomically
-        if (statements.length > 0) {
-            await this.db.batch(statements);
-        }
-
-        return this.get(id);
+        return {
+            id: result.id,
+            clusterId: result.cluster_id,
+            publicKey: result.public_key,
+            address: result.address,
+            tag: result.tag,
+            metadata: result.metadata ? JSON.parse(result.metadata) : {},
+            createdAt: result.created_at,
+            updatedAt: result.updated_at,
+        };
     }
-
     async delete(id: string): Promise<void> {
         await this.db.prepare(`DELETE FROM instances WHERE id = ?`).bind(id).run();
     }

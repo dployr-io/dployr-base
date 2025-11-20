@@ -106,8 +106,6 @@ export class UserStore extends BaseStore {
         }
 
         const now = this.now();
-
-        // Build a single UPDATE statement that handles all fields
         const setClauses: string[] = [];
         const values: any[] = [];
 

@@ -405,26 +405,16 @@ clusters.get("/:id/integrations", async (c) => {
  * This list reposistories that are accessible to the GitHub installation
  */
 clusters.get("/:id/remotes", async (c) => {
-  const sessionId = getCookie(c, "session");
+
   const clusterId = c.req.param("id");
 
-  if (!sessionId) {
-    return c.json(createErrorResponse({
-      message: "Not authenticated",
-      code: ERROR.AUTH.BAD_SESSION.code
-    }), ERROR.AUTH.BAD_SESSION.status);
-  }
+
 
   const kv = new KVStore(c.env.BASE_KV);
   const d1 = new D1Store(c.env.BASE_DB);
-  const session = await kv.getSession(sessionId);
+  const session = c.get("session")!;
 
-  if (!session) {
-    return c.json(createErrorResponse({
-      message: "Invalid or expired session",
-      code: ERROR.AUTH.BAD_SESSION.code
-    }), ERROR.AUTH.BAD_SESSION.status);
-  }
+
 
   try {
     const gitHub = new GitHubService(c.env);

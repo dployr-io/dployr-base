@@ -1,11 +1,10 @@
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";
-import { getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
 import { InstanceService } from "@/services/instances";
 import z from "zod";
-import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth";
+import { authMiddleware, requireClusterAdmin, requireClusterOwner, requireClusterViewer } from "@/middleware/auth";
 import { ERROR, EVENTS } from "@/lib/constants";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -26,17 +25,8 @@ const updateInstanceSchema = z.object({
 });
 
 // List all instances by cluster
-instances.get("/", async (c) => {
-  const sessionId = getCookie(c, "session");
-  const clusterId = c.req.param("clusterId");
-
-  if (!sessionId) {
-    return c.json(createErrorResponse({ 
-      message: "Not authenticated", 
-      code: ERROR.AUTH.BAD_SESSION.code 
-    }), ERROR.AUTH.BAD_SESSION.status);
-  }
-
+instances.get("/", requireClusterViewer, async (c) => {
+  const clusterId = c.req.query("clusterId");
   if (!clusterId) {
     return c.json(createErrorResponse({ 
       message: "Cluster ID is required", 
@@ -44,16 +34,7 @@ instances.get("/", async (c) => {
     }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const kv = new KVStore(c.env.BASE_KV);
   const d1 = new D1Store(c.env.BASE_DB);
-  const session = await kv.getSession(sessionId);
-
-  if (!session) {
-    return c.json(createErrorResponse({ 
-      message: "Invalid or expired session", 
-      code: ERROR.AUTH.BAD_SESSION.code 
-    }), ERROR.AUTH.BAD_SESSION.status);
-  }
 
   const { page, pageSize, offset } = parsePaginationParams(
     c.req.query("page"),
@@ -74,27 +55,8 @@ instances.get("/", async (c) => {
 // Create a new instance
 instances.post("/", requireClusterOwner, async (c) => {
   try {
-    const sessionId = getCookie(c, "session");
-
-    if (!sessionId) {
-      return c.json(createErrorResponse({ 
-        message: "Not authenticated", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
-    }
-
-    const kv = new KVStore(c.env.BASE_KV);
-    const d1 = new D1Store(c.env.BASE_DB);
+    const session = c.get("session")!;
     const service = new InstanceService(c.env);
-    const session = await kv.getSession(sessionId);
-
-    if (!session) {
-      return c.json(createErrorResponse({ 
-        message: "Invalid or expired session", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
-    }
-
     const data = await c.req.json();
 
     const validation = createInstanceSchema.safeParse(data);
@@ -126,27 +88,12 @@ instances.post("/", requireClusterOwner, async (c) => {
       c,
     });
 
-    // Connect to your Dployr instance
-    // const { client, tokenManager } = createDployrClient(address);
-
-    // // Login to get authentication tokens
-    // const auth = await client.auth.request.post({
-    //   email: session.email,
-    //   secret: 
-    // });
-
-    // // Store tokens for authenticated requests
-    // tokenManager.setTokens(auth?.accessToken || '', auth?.refreshToken || '');
-
-    // // Now you can make authenticated API calls
-    // const deployments = await client.deployments.get();
-    // const services = await client.services.get();
-
     return c.json(
       createSuccessResponse(
         { instance, provisioningStatus },
-        "Instance created successfully",
+        "Instance provisioning started",
       ),
+      { status: 202 }
     );
   } catch (error) {
     console.error("Failed to create instance", error);
@@ -162,28 +109,9 @@ instances.post("/", requireClusterOwner, async (c) => {
 // Update an instance 
 instances.patch("/:instanceId", requireClusterOwner, async (c) => {
   try {
-    const sessionId = getCookie(c, "session");
+    const session = c.get("session")!;
     const instanceId = c.req.param("instanceId");
-
-    if (!sessionId) {
-      return c.json(createErrorResponse({ 
-        message: "Not authenticated", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
-    }
-
-    const kv = new KVStore(c.env.BASE_KV);
-    const d1 = new D1Store(c.env.BASE_DB);
     const service = new InstanceService(c.env);
-    const session = await kv.getSession(sessionId);
-
-    if (!session) {
-      return c.json(createErrorResponse({ 
-        message: "Invalid or expired session", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
-    }
-
     const data = await c.req.json();
 
     const validation = updateInstanceSchema.safeParse(data);
@@ -201,6 +129,7 @@ instances.patch("/:instanceId", requireClusterOwner, async (c) => {
     const { clusterId, address, publicKey, tag } = validation.data;
 
     const instance = await service.updateInstance({
+      instanceId,
       clusterId,
       address,
       publicKey,
@@ -209,39 +138,26 @@ instances.patch("/:instanceId", requireClusterOwner, async (c) => {
       c,
     });
 
-    const provisioningStatus = await service.startInstance({
-      instanceId,
-      session,
-      c,
-    });
-
-    // Connect to your Dployr instance
-    // const { client, tokenManager } = createDployrClient(address);
-
-    // // Login to get authentication tokens
-    // const auth = await client.auth.request.post({
-    //   email: session.email,
-    //   secret: 
-    // });
-
-    // // Store tokens for authenticated requests
-    // tokenManager.setTokens(auth?.accessToken || '', auth?.refreshToken || '');
-
-    // // Now you can make authenticated API calls
-    // const deployments = await client.deployments.get();
-    // const services = await client.services.get();
+    c.executionCtx.waitUntil(
+      service.startInstance({
+        instanceId,
+        session,
+        c,
+      }),
+    );
 
     return c.json(
       createSuccessResponse(
-        { instance, provisioningStatus },
-        "Instance created successfully",
+        { instance },
+        "Instance update provisioning started",
       ),
+      { status: 202 }
     );
   } catch (error) {
-    console.error("Failed to create instance", error);
+    console.error("Failed to update instance", error);
     const helpLink = "https://monitoring.dployr.dev";
     return c.json(createErrorResponse({ 
-      message: "Instance creation failed", 
+      message: "Instance update failed", 
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
       helpLink 
     }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
@@ -252,8 +168,16 @@ instances.patch("/:instanceId", requireClusterOwner, async (c) => {
 instances.get("/:instanceId/logs", requireClusterAdmin, async (c) => {
   try {
     const instanceId = c.req.param("instanceId");
+    const clusterId = c.req.query("clusterId")!;
 
-    const object = await c.env.INSTANCE_LOGS.get(`instance/${instanceId}.log`);
+    if (!clusterId) {
+      return c.json(createErrorResponse({ 
+        message: "Cluster ID is required", 
+        code: ERROR.REQUEST.BAD_REQUEST.code 
+      }), ERROR.REQUEST.BAD_REQUEST.status);
+    }
+
+    const object = await c.env.INSTANCE_LOGS.get(`${clusterId}/${instanceId}.log`);
 
     if (!object) {
       return c.json(
@@ -265,11 +189,26 @@ instances.get("/:instanceId/logs", requireClusterAdmin, async (c) => {
       );
     }
 
-    const text = await object.text();
-    const logs = JSON.parse(text);
+    const session = c.get("session");
+    const userId = session?.userId!;
+
+    const kv = new KVStore(c.env.BASE_KV);
+
+    await kv.logEvent({
+      actor: {
+        id: userId,
+        type: "user",
+      },
+      targets: [{ id: clusterId }],
+      type: EVENTS.READ.BOOTSTRAP_LOGS.code,
+      request: c.req.raw,
+    });
+
+    const logs = await object.text();
+    const data = JSON.parse(logs);
 
     return c.json(
-      createSuccessResponse(logs, "Instance logs fetched successfully"),
+      createSuccessResponse(data, "Instance logs fetched successfully"),
     );
   } catch (error) {
     console.error("Get instance logs error:", error);

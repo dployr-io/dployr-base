@@ -48,6 +48,7 @@ export class InstanceService {
   }
 
   async updateInstance({
+    instanceId,
     clusterId,
     address,
     publicKey,
@@ -55,6 +56,7 @@ export class InstanceService {
     session,
     c,
   }: {
+    instanceId: string;
     clusterId: string;
     address?: string;
     publicKey?: string;
@@ -65,7 +67,7 @@ export class InstanceService {
     const d1 = new D1Store(this.env.BASE_DB);
     const kv = new KVStore(this.env.BASE_KV);
 
-    const instance = await d1.instances.update(clusterId, {
+    const instance = await d1.instances.update(instanceId, {
       id: clusterId,  
       address,
       tag,
@@ -121,7 +123,7 @@ export class InstanceService {
       request: c.req.raw,
     });
 
-    const id = this.env.INSTANCE_OBJECT.idFromString(instanceId);
+    const id = this.env.INSTANCE_OBJECT.idFromName(instanceId);
     const stub = this.env.INSTANCE_OBJECT.get(id);
 
     const response = await stub.fetch(

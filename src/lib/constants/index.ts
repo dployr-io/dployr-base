@@ -20,7 +20,8 @@ export const ERROR = {
     PERMISSION: {
         OWNER_ROLE_REQUIRED: { code: "permission.owner_role_required", status: 403, message: "Owner role required" },
         ADMIN_ROLE_REQUIRED: { code: "permission.admin_role_required", status: 403, message: "Admin role required" },
-        DEVELOPER_ROLE_REQUIRED: { code: "permission.developer_role_required", status: 403, message: "Developer role required" }
+        DEVELOPER_ROLE_REQUIRED: { code: "permission.developer_role_required", status: 403, message: "Developer role required" },
+        VIEWER_ROLE_REQUIRED: { code: "permission.viewer_role_required", status: 403, message: "Viewer role required" }
     },
     RESOURCE: {
         MISSING_RESOURCE: { code: "resource.missing_resource", status: 404, message: "Resource not found" }
@@ -68,5 +69,8 @@ export const EVENTS = {
     },
     INTEGRATIONS: {
         GITHUB_INSTALLED: { code: "integrations.github_installed", message: "GitHub integration setup successfully" }
+    },
+    READ: {
+        BOOTSTRAP_LOGS: { code: "read.bootstrap_logs", message: "Bootstrap logs read" }   
     }
 } as const;
