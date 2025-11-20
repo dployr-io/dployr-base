@@ -776,8 +776,8 @@ paths:
                   minLength: 1
                   maxLength: 255
       responses:
-        '201':
-          description: Instance created
+        '202':
+          description: Instance started provisioning
           content:
             application/json:
               schema:
@@ -831,8 +831,8 @@ paths:
                   minLength: 1
                   maxLength: 255
       responses:
-        '200':
-          description: Instance updated
+        '202':
+          description: Instance update provisioning started
           content:
             application/json:
               schema:
