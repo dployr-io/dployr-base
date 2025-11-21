@@ -14,7 +14,6 @@ const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
   address: z.string().min(10, "Address with a minimum of 10 characters is required").max(16, "Address must be a maximum of 16 characters"),
   tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(15, "Tag must be a maximum of 15 characters"),
-  publicKey: z.string().min(1, "Public key is required").max(255, "Public key must be a maximum of 255 characters"),
 });
 
 const updateInstanceSchema = z.object({
@@ -22,6 +21,11 @@ const updateInstanceSchema = z.object({
   address: z.string().min(10, "Address with a minimum of 10 characters is required").max(16, "Address must be a maximum of 16 characters" ).optional(),
   tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(15, "Tag must be a maximum of 15 characters").optional(),
   publicKey: z.string().min(1, "Public key is required").max(255, "Public key must be a maximum of 255 characters").optional(),
+});
+
+const registerInstanceSchema = z.object({
+  token: z.string().min(1, "Token is required"),
+  publicKey: z.string().min(1, "Public key is required").max(255, "Public key must be a maximum of 255 characters"),
 });
 
 // List all instances by cluster
@@ -71,12 +75,11 @@ instances.post("/", requireClusterOwner, async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const { clusterId, address, publicKey, tag } = validation.data;
+    const { clusterId, address, tag } = validation.data;
 
     const instance = await service.createInstance({
       clusterId,
       address,
-      publicKey,
       tag,
       session,
       c,
@@ -220,6 +223,55 @@ instances.get("/:instanceId/logs", requireClusterAdmin, async (c) => {
       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
     );
   }
+});
+
+instances.post("/register", async (c) => {
+  const body = await c.req.json();
+  const validation = registerInstanceSchema.safeParse(body);
+  if (!validation.success) {
+    const errors = validation.error.issues.map((err) => ({
+      field: err.path.join("."),
+      message: err.message,
+    }));
+    return c.json(
+      createErrorResponse({
+        message: "Validation failed " + JSON.stringify(errors),
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
+  }
+
+  const { token, publicKey } = validation.data;
+
+  const service = new InstanceService(c.env);
+  const result = await service.registerInstance({ token, publicKey });
+
+  if (!result.ok) {
+    if (result.reason === "invalid_token") {
+      return c.json(createErrorResponse({ 
+        message: "Invalid or expired token", 
+        code: ERROR.AUTH.BAD_TOKEN.code 
+      }), ERROR.AUTH.BAD_TOKEN.status);
+    }
+
+    if (result.reason === "invalid_type") {
+      return c.json(createErrorResponse({ 
+        message: "Invalid token type", 
+        code: ERROR.AUTH.BAD_TOKEN.code 
+      }), ERROR.AUTH.BAD_TOKEN.status);
+    }
+
+    return c.json(createErrorResponse({ 
+      message: "Token already used", 
+      code: ERROR.AUTH.BAD_TOKEN.code 
+    }), ERROR.AUTH.BAD_TOKEN.status);
+  }
+
+  return c.json(createSuccessResponse({ 
+    instanceId: result.instanceId,
+    jwksUrl: result.jwksUrl,
+  }));
 });
 
 export default instances;

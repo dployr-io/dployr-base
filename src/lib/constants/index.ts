@@ -14,8 +14,9 @@ export const ERROR = {
     },
     AUTH: {
         BAD_SESSION: { code: "auth.bad_session", status: 401, message: "Session invalid" },
+        BAD_TOKEN: { code: "auth.bad_token", status: 401, message: "Invalid token" },
         INVALID_OAUTH_PROVIDER: { code: "auth.invalid_oauth_provider", status: 401, message: "OAuth provider not supported" },
-        BAD_OAUTH_STATE: { code: "auth.bad_oauth_state", status: 401, message: "Invalid OAuth state" }
+        BAD_OAUTH_STATE: { code: "auth.bad_oauth_state", status: 401, message: "Invalid OAuth state" },
     },
     PERMISSION: {
         OWNER_ROLE_REQUIRED: { code: "permission.owner_role_required", status: 403, message: "Owner role required" },

@@ -1,5 +1,6 @@
 import { Bindings } from "@/types";
 import { D1Store } from "@/lib/db/store";
+import { createDployrClient } from '@dployr-io/dployr-sdk';
 
 export class InstanceObject {
   constructor(private state: DurableObjectState, private env: Bindings) {}
@@ -36,8 +37,7 @@ export class InstanceObject {
       });
     }
 
-    // Artificial delay for provisioning placeholder
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const client = createDployrClient(this.env.BASE_URL);
 
     const logEntry = {
       ts: Date.now(),

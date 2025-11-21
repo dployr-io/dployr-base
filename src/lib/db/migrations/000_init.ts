@@ -41,6 +41,13 @@ CREATE TABLE IF NOT EXISTS instances (
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS bootstrap_tokens (
+  instance_id TEXT PRIMARY KEY,
+  nonce TEXT UNIQUE NOT NULL,
+  used_at INTEGER NULL,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
 CREATE INDEX IF NOT EXISTS idx_user_clusters_user ON user_clusters(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_clusters_org ON user_clusters(cluster_id);
 CREATE INDEX IF NOT EXISTS idx_instances_org ON instances(cluster_id);
@@ -49,6 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_instances_address ON instances(address);
 CREATE INDEX IF NOT EXISTS idx_instances_tag ON instances(tag);
 CREATE INDEX IF NOT EXISTS idx_clusters_login_id ON clusters (json_extract(metadata, '$.gitHub.loginId'));
 CREATE INDEX IF NOT EXISTS idx_clusters_installation_id ON clusters (json_extract(metadata, '$.gitHub.installationId'));
+CREATE INDEX IF NOT EXISTS idx_bootstrap_nonce ON bootstrap_tokens(nonce);
 
 CREATE TRIGGER IF NOT EXISTS prevent_email_update
 BEFORE UPDATE OF email ON users

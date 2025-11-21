@@ -4,7 +4,6 @@ import { D1Store } from "@/lib/db/store";
 import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth";
 import z from "zod";
 import { KVStore } from "@/lib/db/store/kv";
-import { getCookie } from "hono/cookie";
 import { GitHubService } from "@/services/github";
 import { ERROR, EVENTS } from "@/lib/constants";
 

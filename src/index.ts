@@ -9,6 +9,7 @@ import clusters from "@/routes/clusters";
 import deployments from "@/routes/deployments";
 import users from "@/routes/users";
 import runtime from "@/routes/runtime";
+import jwks from "@/routes/jwks";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -46,6 +47,7 @@ app.route("/v1/clusters", clusters);
 app.route("/v1/deployments", deployments);
 app.route("/v1/github", gitHub);
 app.route("/v1/runtime", runtime);
+app.route("/v1/jwks", jwks);
 app.get("/v1/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
 });

@@ -1,6 +1,8 @@
 import { ActorType, Cluster, Session, User } from "@/types";
 import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL } from "@/lib/constants";
 import { ulid } from "ulid";
+import { importPKCS8 } from "jose";
+import { generateKeyPair } from "@/lib/crypto/keystore";
 
 export class KVStore {
   constructor(public kv: KVNamespace) { }
@@ -39,6 +41,30 @@ export class KVStore {
 
   async deleteSession(sessionId: string): Promise<void> {
     await this.kv.delete(`session:${sessionId}`);
+  }
+
+  async getOrCreateKeys() {
+    let keys = await this.kv.get('jwt_keys', 'json') as {
+      privateKey: string;
+      publicKeyJwk: JsonWebKey;
+    } | null;
+
+    if (!keys) {
+      keys = await generateKeyPair();
+      await this.kv.put('jwt_keys', JSON.stringify(keys));
+    }
+
+    return keys;
+  }
+
+  async getPublicKey(): Promise<JsonWebKey> {
+    const keys = await this.getOrCreateKeys();
+    return keys.publicKeyJwk;
+  }
+
+  async getPrivateKey(): Promise<CryptoKey> {
+    const keys = await this.getOrCreateKeys();
+    return await importPKCS8(keys.privateKey, 'RS256');
   }
 
   // Event management
@@ -96,13 +122,12 @@ export class KVStore {
     }
   }
 
-
   async getEvents(userId: string): Promise<any[]> {
     const result = await this.kv.list({ prefix: `actor:${userId}:event:` });
     const events = await Promise.all(
       result.keys.map(key => this.kv.get(key.name, "json"))
     );
-    return events.filter(e => e !== null).sort((a: any, b: any) => a.timestamp - b.timestamp);
+    return events.filter(e => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
   }
 
   async getClusterEvents(clusterId: string): Promise<any[]> {
@@ -110,7 +135,7 @@ export class KVStore {
     const events = await Promise.all(
       result.keys.map(key => this.kv.get(key.name, "json"))
     );
-    return events.filter(e => e !== null).sort((a: any, b: any) => a.timestamp - b.timestamp);
+    return events.filter(e => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
   }
 
   // OAuth state management (CSRF protection)

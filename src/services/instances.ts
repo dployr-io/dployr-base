@@ -3,6 +3,8 @@ import { D1Store } from "@/lib/db/store";
 import { ERROR, EVENTS } from "@/lib/constants";
 import { KVStore } from "@/lib/db/store/kv";
 import { Context } from "hono";
+import { KeyStore } from "@/lib/crypto/keystore";
+import { JWTService } from "@/services/jwt";
 
 export class InstanceService {
   constructor(private env: Bindings) {}
@@ -10,14 +12,12 @@ export class InstanceService {
   async createInstance({
     clusterId,
     address,
-    publicKey,
     tag,
     session,
     c,
   }: {
     clusterId: string;
     address: string;
-    publicKey: string;
     tag: string;
     session: Session;
     c: Context;
@@ -25,7 +25,7 @@ export class InstanceService {
     const d1 = new D1Store(this.env.BASE_DB);
     const kv = new KVStore(this.env.BASE_KV);
 
-    const instance = await d1.instances.create(clusterId, publicKey, {
+    const instance = await d1.instances.create(clusterId, "", {
       address,
       tag,
     } as any);
@@ -43,6 +43,12 @@ export class InstanceService {
       type: EVENTS.BOOTSTRAP.BOOTSTRAP_SETUP_COMPLETED.code,
       request: c.req.raw,
     });
+    
+    const keyStore = new KeyStore(this.env.BASE_KV);
+    const jwtService = new JWTService(keyStore);
+    const bootstrapToken = await jwtService.createBootstrapToken(instance.id);
+    const decoded = await jwtService.verifyToken(bootstrapToken);
+    await d1.bootstrapTokens.create(instance.id, decoded.nonce as string);
 
     return instance;
   }
@@ -175,5 +181,47 @@ export class InstanceService {
     });
 
     return "completed";
+  }
+
+  async registerInstance({
+    token,
+    publicKey,
+  }: {
+    token: string;
+    publicKey: string;
+  }): Promise<
+    | { ok: true; instanceId: string; jwksUrl: string }
+    | { ok: false; reason: "invalid_token" | "invalid_type" | "already_used" }
+  > {
+    const keyStore = new KeyStore(this.env.BASE_KV);
+    const jwtService = new JWTService(keyStore);
+    const d1 = new D1Store(this.env.BASE_DB);
+
+    let payload: any;
+    try {
+      payload = await jwtService.verifyToken(token);
+    } catch {
+      return { ok: false, reason: "invalid_token" };
+    }
+
+    if (payload.token_type !== "bootstrap") {
+      return { ok: false, reason: "invalid_type" };
+    }
+
+    const wasUnused = await d1.bootstrapTokens.markUsed(payload.nonce as string);
+    if (!wasUnused) {
+      return { ok: false, reason: "already_used" };
+    }
+
+    const instance = await d1.instances.update(payload.instance_id as string, {
+      publicKey,
+      metadata: { registered_at: Date.now() },
+    });
+
+    return {
+      ok: true,
+      instanceId: instance!.id,
+      jwksUrl: `${this.env.BASE_URL}/v1/jwks/.well-known/jwks.json`,
+    };
   }
 }
