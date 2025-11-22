@@ -1,6 +1,13 @@
 import { Instance } from "@/types";
 import { BaseStore } from "./base";
 
+export class InstanceConflictError extends Error {
+    constructor(public field: "address" | "tag" | "instance") {
+        super("Instance conflict on " + field);
+        this.name = "InstanceConflictError";
+    }
+}
+
 export class InstanceStore extends BaseStore {
     async create(
         clusterId: string,
@@ -14,15 +21,30 @@ export class InstanceStore extends BaseStore {
             VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
 
-        await stmt.bind(
-            id,
-            clusterId,
-            data.address || null,
-            data.tag,
-            JSON.stringify(data.metadata || {}),
-            now,
-            now
-        ).run();
+        try {
+            await stmt
+                .bind(
+                    id,
+                    clusterId,
+                    data.address || null,
+                    data.tag,
+                    JSON.stringify(data.metadata || {}),
+                    now,
+                    now,
+                )
+                .run();
+        } catch (error) {
+            if (error instanceof Error && error.message.includes("UNIQUE constraint failed:")) {
+                if (error.message.includes("instances.address")) {
+                    throw new InstanceConflictError("address");
+                }
+                if (error.message.includes("instances.tag")) {
+                    throw new InstanceConflictError("tag");
+                }
+                throw new InstanceConflictError("instance");
+            }
+            throw error;
+        }
 
         return {
             id,

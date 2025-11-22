@@ -25,7 +25,8 @@ export const ERROR = {
         VIEWER_ROLE_REQUIRED: { code: "permission.viewer_role_required", status: 403, message: "Viewer role required" }
     },
     RESOURCE: {
-        MISSING_RESOURCE: { code: "resource.missing_resource", status: 404, message: "Resource not found" }
+        MISSING_RESOURCE: { code: "resource.missing_resource", status: 404, message: "Resource not found" },
+        CONFLICT: { code: "resource.conflict", status: 409, message: "Resource conflict" }
     },
     BOOTSTRAP: {
         BOOTSTRAP_SETUP_FAILURE: { code: "bootstrap.bootstrap_setup_failure", status: 500, message: "Bootstrap setup failed" },
