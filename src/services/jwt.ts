@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose';
-import { KeyStore } from '@/lib/crypto/keystore';
+import { KVStore } from '@/lib/db/store/kv';
 
 /**
  * Service for creating and verifying JWT tokens.
@@ -9,7 +9,7 @@ export class JWTService {
    * Creates a new JWTService instance.
    * @param keyStore - The key store to use for signing and verifying tokens.
    */
-  constructor(private keyStore: KeyStore) {}
+  constructor(private keyStore: KVStore) {}
 
   /**
    * Creates a new bootstrap token for the given instance ID.

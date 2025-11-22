@@ -34,7 +34,6 @@ CREATE TABLE IF NOT EXISTS instances (
   cluster_id TEXT NOT NULL,
   address TEXT NOT NULL UNIQUE,
   tag TEXT NOT NULL UNIQUE,
-  public_key TEXT,
   metadata JSON NOT NULL DEFAULT '{}',
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),

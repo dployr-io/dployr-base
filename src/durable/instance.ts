@@ -1,6 +1,7 @@
-import { Bindings } from "@/types";
+import { Bindings, createSuccessResponse } from "@/types";
 import { D1Store } from "@/lib/db/store";
 import { createDployrClient } from '@dployr-io/dployr-sdk';
+import type { SystemStatus } from '@dployr-io/dployr-sdk/client/models';
 
 export class InstanceObject {
   constructor(private state: DurableObjectState, private env: Bindings) {}
@@ -8,14 +9,14 @@ export class InstanceObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    if (request.method === "POST" && url.pathname.endsWith("/start")) {
-      return this.handleStart(request);
+    if (request.method === "POST" && url.pathname.endsWith("/ping")) {
+      return this.handlePing(request);
     }
 
     return new Response("Not found", { status: 404 });
   }
 
-  private async handleStart(request: Request): Promise<Response> {
+  private async handlePing(request: Request): Promise<Response> {
     const { instanceId } = (await request.json().catch(() => ({}))) as {
       instanceId?: string;
     };
@@ -37,14 +38,15 @@ export class InstanceObject {
       });
     }
 
-    const client = createDployrClient(this.env.BASE_URL);
+    const dployrd = createDployrClient(instance.address);
+
+    const status: SystemStatus | undefined = await dployrd.client.system.status.get();
 
     const logEntry = {
       ts: Date.now(),
       level: "info" as const,
       message: "Instance provisioned",
       instanceId,
-      address: instance.address,
     };
 
     await this.env.INSTANCE_LOGS.put(
@@ -58,7 +60,7 @@ export class InstanceObject {
     );
 
     return new Response(
-      JSON.stringify({ instanceId, status: "completed" }),
+      JSON.stringify(createSuccessResponse({ status })),
       {
         status: 200,
         headers: { "Content-Type": "application/json" },

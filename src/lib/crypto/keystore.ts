@@ -1,5 +1,3 @@
-import { importPKCS8 } from 'jose';
-
 /**
  * Generates an RSA key pair.
  * @returns {Promise<{publicKeyJwk: JsonWebKey, privateKey: string}>} The generated key pair.
@@ -38,54 +36,4 @@ function arrayBufferToPem(buffer: ArrayBuffer, label: string): string {
   const b64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
   const pem = b64.match(/.{1,64}/g)?.join('\n') || '';
   return `-----BEGIN ${label}-----\n${pem}\n-----END ${label}-----`;
-}
-
-/**
- * Represents a key store.
- */
-export class KeyStore {
-  /**
-   * Creates a new KeyStore.
-   * @param {KVNamespace} kv - The KV namespace.
-   */
-  constructor(private kv: KVNamespace) {}
-
-  /**
-   * Retrieves or creates the key pair.
-   * @returns {Promise<{publicKeyJwk: JsonWebKey, privateKey: string}>} The key pair.
-   */
-  private async getOrCreateKeys(): Promise<{
-    publicKeyJwk: JsonWebKey;
-    privateKey: string;
-  }> {
-    let existing = await this.kv.get("jwt_keys", "json") as
-      | { publicKeyJwk: JsonWebKey; privateKey: string }
-      | null;
-
-    if (!existing) {
-      const generated = await generateKeyPair();
-      existing = generated;
-      await this.kv.put("jwt_keys", JSON.stringify(generated));
-    }
-
-    return existing;
-  }
-
-  /**
-   * Retrieves the public key.
-   * @returns {Promise<JsonWebKey>} The public key.
-   */
-  async getPublicKey(): Promise<JsonWebKey> {
-    const keys = await this.getOrCreateKeys();
-    return keys.publicKeyJwk;
-  }
-
-  /**
-   * Retrieves the private key.
-   * @returns {Promise<CryptoKey>} The private key.
-   */
-  async getPrivateKey(): Promise<CryptoKey> {
-    const keys = await this.getOrCreateKeys();
-    return importPKCS8(keys.privateKey, "RS256");
-  }
 }

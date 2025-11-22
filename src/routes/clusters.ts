@@ -404,16 +404,8 @@ clusters.get("/:id/integrations", async (c) => {
  * This list reposistories that are accessible to the GitHub installation
  */
 clusters.get("/:id/remotes", async (c) => {
-
   const clusterId = c.req.param("id");
-
-
-
-  const kv = new KVStore(c.env.BASE_KV);
   const d1 = new D1Store(c.env.BASE_DB);
-  const session = c.get("session")!;
-
-
 
   try {
     const gitHub = new GitHubService(c.env);

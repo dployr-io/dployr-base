@@ -1,12 +1,12 @@
 import { Hono } from "hono";
-import { KeyStore } from "@/lib/crypto/keystore";
+import { KVStore } from "@/lib/db/store/kv";
 import { Bindings } from "@/types";
 
 const jwks = new Hono<{ Bindings: Bindings }>();
 
 jwks.get("/.well-known/jwks.json", async (c) => {
-  const keyStore = new KeyStore(c.env.BASE_KV);
-  const publicKey = await keyStore.getPublicKey();
+  const kv = new KVStore(c.env.BASE_KV);
+  const publicKey = await kv.getPublicKey();
 
   return c.json({
     keys: [

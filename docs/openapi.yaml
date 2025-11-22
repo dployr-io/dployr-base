@@ -138,11 +138,7 @@ components:
           type: string
         clusterId:
           type: string
-        address:
-          type: string
         tag:
-          type: string
-        publicKey:
           type: string
 
 paths:
@@ -758,81 +754,18 @@ paths:
           application/json:
             schema:
               type: object
-              required: [clusterId, address, tag, publicKey]
+              required: [clusterId, tag]
               properties:
                 clusterId:
                   type: string
                   description: Cluster ULID
-                address:
-                  type: string
-                  minLength: 10
-                  maxLength: 16
                 tag:
                   type: string
                   minLength: 3
                   maxLength: 15
-                publicKey:
-                  type: string
-                  minLength: 1
-                  maxLength: 255
       responses:
         '202':
           description: Instance started provisioning
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        properties:
-                          instance:
-                            $ref: '#/components/schemas/Instance'
-                          provisioningStatus:
-                            type: object
-                            additionalProperties: true
-  /v1/instances/{instanceId}:
-    patch:
-      tags:
-        - Instances
-      summary: Update an instance
-      x-requiredRole: owner
-      security:
-        - sessionCookie: []
-      parameters:
-        - in: path
-          name: instanceId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [clusterId]
-              properties:
-                clusterId:
-                  type: string
-                  description: Cluster ULID
-                address:
-                  type: string
-                  minLength: 10
-                  maxLength: 16
-                tag:
-                  type: string
-                  minLength: 3
-                  maxLength: 15
-                publicKey:
-                  type: string
-                  minLength: 1
-                  maxLength: 255
-      responses:
-        '202':
-          description: Instance update provisioning started
           content:
             application/json:
               schema:
@@ -996,3 +929,134 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/clusters/{id}/remotes:
+    get:
+      tags:
+        - Clusters
+      summary: List GitHub remotes for a cluster. GitHub integration is required for this endpoint to work. Visit https://app.dployr.dev/clusters/{id}/settings/integrations to manage GitHub integration.
+      x-requiredRole: viewer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Paginated list of GitHub remotes for the cluster
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaginatedResponse'
+        '500':
+          description: Failed to list remotes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/github/connection/manage:
+    get:
+      tags:
+        - GitHub
+      summary: Manage GitHub connection
+      x-requiredRole: public
+      description: Redirects the user to GitHub to manage their connection to the Dployr GitHub App.
+      responses:
+        '302':
+          description: Redirect to GitHub connection management page
+
+  /v1/domains:
+    post:
+      tags:
+        - Instances
+      summary: Register instance domain
+      x-requiredRole: public
+      description: Registers an instance using a one-time token issued by the base service, during instance creation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Instance registered
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          instanceId:
+                            type: string
+                          issuer:
+                            type: string
+                          audience:
+                            type: string
+                            example: dployr-instance
+        '400':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/jwks/.well-known/jwks.json:
+    get:
+      tags:
+        - Auth
+      summary: Get JWKS public keys
+      x-requiredRole: public
+      description: Returns the JSON Web Key Set (JWKS) used to verify instance tokens.
+      responses:
+        '200':
+          description: JWKS public keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kty:
+                          type: string
+                          example: RSA
+                        use:
+                          type: string
+                          example: sig
+                        alg:
+                          type: string
+                          example: RS256
+                        n:
+                          type: string
+                        e:
+                          type: string

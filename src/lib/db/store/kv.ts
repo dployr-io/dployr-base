@@ -3,6 +3,7 @@ import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL } from "@/li
 import { ulid } from "ulid";
 import { importPKCS8 } from "jose";
 import { generateKeyPair } from "@/lib/crypto/keystore";
+import { SystemStatus } from "@dployr-io/dployr-sdk/client/models";
 
 export class KVStore {
   constructor(public kv: KVNamespace) { }
@@ -43,28 +44,34 @@ export class KVStore {
     await this.kv.delete(`session:${sessionId}`);
   }
 
-  async getOrCreateKeys() {
-    let keys = await this.kv.get('jwt_keys', 'json') as {
-      privateKey: string;
-      publicKeyJwk: JsonWebKey;
-    } | null;
+  // Retrieves or creates the key pair.
+  async getOrCreateKeys(): Promise<{
+    publicKeyJwk: JsonWebKey;
+    privateKey: string;
+  }> {
+    let existing = await this.kv.get("jwt_keys", "json") as
+      | { publicKeyJwk: JsonWebKey; privateKey: string }
+      | null;
 
-    if (!keys) {
-      keys = await generateKeyPair();
-      await this.kv.put('jwt_keys', JSON.stringify(keys));
+    if (!existing) {
+      const generated = await generateKeyPair();
+      existing = generated;
+      await this.kv.put("jwt_keys", JSON.stringify(generated));
     }
 
-    return keys;
+    return existing;
   }
 
+  // Retrieves the public key.
   async getPublicKey(): Promise<JsonWebKey> {
     const keys = await this.getOrCreateKeys();
     return keys.publicKeyJwk;
   }
 
+  // Retrieves the private key.
   async getPrivateKey(): Promise<CryptoKey> {
     const keys = await this.getOrCreateKeys();
-    return await importPKCS8(keys.privateKey, 'RS256');
+    return importPKCS8(keys.privateKey, "RS256");
   }
 
   // Event management
@@ -138,6 +145,12 @@ export class KVStore {
     return events.filter(e => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
   }
 
+  async createWorkflowFailedEvent(id: string, data: Record<string, unknown>): Promise<void> {
+    await this.kv.put(`workflow:${id}`, JSON.stringify(data), {
+      expirationTtl: FAILED_WORKFLOW_EVENT_TTL,
+    });
+  }
+
   // OAuth state management (CSRF protection)
   async createState(state: string, redirectUrl: string): Promise<void> {
     await this.kv.put(`state:${state}`, JSON.stringify({
@@ -209,12 +222,6 @@ export class KVStore {
     return false;
   }
 
-  async createWorkflowFailedEvent(id: string, data: Record<string, unknown>): Promise<void> {
-    await this.kv.put(`workflow:${id}`, JSON.stringify(data), {
-      expirationTtl: FAILED_WORKFLOW_EVENT_TTL,
-    });
-  }
-
   private generateOTP(): string {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let result = "";
@@ -222,5 +229,16 @@ export class KVStore {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return result;
+  }
+
+  // Instance data - (cache data from dployrd instances)
+  async saveInstanceStatus(instanceId: string, data: Record<string, unknown>): Promise<void> {
+    await this.kv.put(`inst:${instanceId}`, JSON.stringify(data));
+  }
+
+  async getInstanceStatus(instanceId: string): Promise<SystemStatus | undefined> {
+    const data = await this.kv.get(`inst:${instanceId}`);
+    if (!data) return undefined;
+    return JSON.parse(data);
   }
 }

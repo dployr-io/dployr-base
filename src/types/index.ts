@@ -92,14 +92,7 @@ export interface Event {
 export interface Instance {
   id: string;
   address: string;
-  publicKey: string;
   tag: string;
-  resources: {
-    cpu: number;
-    memory: number;
-    disk: number;
-  };
-  status: InstanceStatus;
   metadata?: Record<string, any> | undefined;
   createdAt: number;
   updatedAt: number;

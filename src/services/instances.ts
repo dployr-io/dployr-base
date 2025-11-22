@@ -3,7 +3,6 @@ import { D1Store } from "@/lib/db/store";
 import { ERROR, EVENTS } from "@/lib/constants";
 import { KVStore } from "@/lib/db/store/kv";
 import { Context } from "hono";
-import { KeyStore } from "@/lib/crypto/keystore";
 import { JWTService } from "@/services/jwt";
 
 export class InstanceService {
@@ -11,13 +10,11 @@ export class InstanceService {
 
   async createInstance({
     clusterId,
-    address,
     tag,
     session,
     c,
   }: {
     clusterId: string;
-    address: string;
     tag: string;
     session: Session;
     c: Context;
@@ -25,8 +22,7 @@ export class InstanceService {
     const d1 = new D1Store(this.env.BASE_DB);
     const kv = new KVStore(this.env.BASE_KV);
 
-    const instance = await d1.instances.create(clusterId, "", {
-      address,
+    const instance = await d1.instances.create(clusterId, {
       tag,
     } as any);
 
@@ -44,8 +40,7 @@ export class InstanceService {
       request: c.req.raw,
     });
     
-    const keyStore = new KeyStore(this.env.BASE_KV);
-    const jwtService = new JWTService(keyStore);
+    const jwtService = new JWTService(kv);
     const bootstrapToken = await jwtService.createBootstrapToken(instance.id);
     const decoded = await jwtService.verifyToken(bootstrapToken);
     await d1.bootstrapTokens.create(instance.id, decoded.nonce as string);
@@ -53,52 +48,7 @@ export class InstanceService {
     return instance;
   }
 
-  async updateInstance({
-    instanceId,
-    clusterId,
-    address,
-    publicKey,
-    tag,
-    session,
-    c,
-  }: {
-    instanceId: string;
-    clusterId: string;
-    address?: string;
-    publicKey?: string;
-    tag?: string;
-    session: Session;
-    c: Context;
-  }) {
-    const d1 = new D1Store(this.env.BASE_DB);
-    const kv = new KVStore(this.env.BASE_KV);
-
-    const instance = await d1.instances.update(instanceId, {
-      id: clusterId,  
-      address,
-      tag,
-      publicKey
-    } as Partial<Omit<Instance, "id" | "resources" | "status" | "createdAt">>);
-
-    await kv.logEvent({
-      actor: {
-        id: session.userId,
-        type: "user",
-      },
-      targets: [
-        {
-          id: clusterId,
-        },
-      ],
-      type: EVENTS.BOOTSTRAP.BOOTSTRAP_SETUP_COMPLETED.code,
-      request: c.req.raw,
-    });
-
-    return instance;
-  }
-
-
-  async startInstance({ 
+  async pingInstance({ 
     instanceId,
     session,
     c,
@@ -133,18 +83,18 @@ export class InstanceService {
     const stub = this.env.INSTANCE_OBJECT.get(id);
 
     const response = await stub.fetch(
-      new Request("https://instance.internal/start", {
+      new Request("https://instance.internal/ping", {
         method: "POST",
         body: JSON.stringify({ instanceId }),
         headers: { "Content-Type": "application/json" },
       }),
     );
 
-    if (!response.ok) {
-      await d1.instances.update(instanceId, {
-        metadata: { provisioningStatus: "failed" },
-      });
+    const data = await response.json();
 
+    await kv.saveInstanceStatus(instanceId, data as Record<string, unknown>);
+
+    if (!response.ok) {
       await kv.logEvent({
         actor: {
           id: session.userId,
@@ -161,10 +111,6 @@ export class InstanceService {
 
       return "failed";
     }
-
-    await d1.instances.update(instanceId, {
-      metadata: { provisioningStatus: "completed" },
-    });
 
     await kv.logEvent({
       actor: {
@@ -185,17 +131,15 @@ export class InstanceService {
 
   async registerInstance({
     token,
-    publicKey,
   }: {
     token: string;
-    publicKey: string;
   }): Promise<
     | { ok: true; instanceId: string; jwksUrl: string }
     | { ok: false; reason: "invalid_token" | "invalid_type" | "already_used" }
   > {
-    const keyStore = new KeyStore(this.env.BASE_KV);
-    const jwtService = new JWTService(keyStore);
+    const kv = new KVStore(this.env.BASE_KV);
     const d1 = new D1Store(this.env.BASE_DB);
+    const jwtService = new JWTService(kv);
 
     let payload: any;
     try {
@@ -213,14 +157,9 @@ export class InstanceService {
       return { ok: false, reason: "already_used" };
     }
 
-    const instance = await d1.instances.update(payload.instance_id as string, {
-      publicKey,
-      metadata: { registered_at: Date.now() },
-    });
-
     return {
       ok: true,
-      instanceId: instance!.id,
+      instanceId: payload.instance_id,
       jwksUrl: `${this.env.BASE_URL}/v1/jwks/.well-known/jwks.json`,
     };
   }
