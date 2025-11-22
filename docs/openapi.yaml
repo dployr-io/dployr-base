@@ -775,11 +775,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [clusterId, tag]
+              required: [clusterId, address, tag]
               properties:
                 clusterId:
                   type: string
                   description: Cluster ULID
+                address:
+                  type: string
+                  description: Instance ipv4 address
                 tag:
                   type: string
                   minLength: 3
