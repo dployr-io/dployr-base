@@ -14,6 +14,10 @@ instances.use("*", authMiddleware);
 
 const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
+  address: z.string().regex(
+    /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/,
+    "Address must be a valid IPv4 address"
+  ),
   tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(15, "Tag must be a maximum of 15 characters"),
 });
 
@@ -29,6 +33,8 @@ instances.get("/", requireClusterViewer, async (c) => {
 
   const d1 = new D1Store(c.env.BASE_DB);
   const kv = new KVStore(c.env.BASE_KV);
+  const service = new InstanceService(c.env);
+  const session = c.get("session")!;
 
   const { page, pageSize, offset } = parsePaginationParams(
     c.req.query("page"),
@@ -44,6 +50,15 @@ instances.get("/", requireClusterViewer, async (c) => {
   const instances = await Promise.all(
     _instances.map(async (instance) => {
       const status: SystemStatus | undefined = await kv.getInstanceStatus(instance.id);
+
+      c.executionCtx.waitUntil(
+        service.pingInstance({
+          instanceId: instance.id,
+          session,
+          c,
+        }),
+      );
+      
       return { ...instance, status };
     })
   );
@@ -72,24 +87,27 @@ instances.post("/", requireClusterOwner, async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const { clusterId, tag } = validation.data;
+    const { clusterId, tag, address } = validation.data;
 
     const { instance, token } = await service.createInstance({
       clusterId,
       tag,
+      address,
       session,
       c,
     });
 
-    const status = await service.pingInstance({
-      instanceId: instance.id,
-      session,
-      c,
-    });
+    c.executionCtx.waitUntil(
+      service.pingInstance({
+        instanceId: instance.id,
+        session,
+        c,
+      }),
+    );
 
     return c.json(
       createSuccessResponse(
-        { instance, status, token },
+        { instance, token },
         "Instance provisioning started",
       ),
       { status: 202 }

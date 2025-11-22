@@ -241,4 +241,14 @@ export class KVStore {
     if (!data) return undefined;
     return JSON.parse(data);
   }
+
+  async saveDomain(domain: string, address: string): Promise<void> {
+    await this.kv.put(`domain:${domain}`, address);
+  }
+
+  async getDomain(domain: string): Promise<string | null> {
+    const data = await this.kv.get(`domain:${domain}`);
+    if (!data) return null;
+    return data;
+  }
 }

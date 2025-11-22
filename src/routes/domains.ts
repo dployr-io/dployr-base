@@ -8,7 +8,6 @@ const domains = new Hono<{ Bindings: Bindings }>();
 
 const registerInstanceSchema = z.object({
   token: z.string().min(1, "Token is required"),
-  address: z.string().min(1, "Address is required"),
 });
 
 domains.post("/", async (c) => {
@@ -54,8 +53,11 @@ domains.post("/", async (c) => {
     }), ERROR.AUTH.BAD_TOKEN.status);
   }
 
+  const domain = await service.saveDomain({ instanceId: result.instanceId });
+
   return c.json(createSuccessResponse({ 
     instanceId: result.instanceId,
+    domain,
     issuer: c.env.BASE_URL,
     audience: "dployr-instance"
   }));

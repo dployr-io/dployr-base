@@ -1027,11 +1027,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [token, address]
+              required: [token]
               properties:
                 token:
-                  type: string
-                address:
                   type: string
       responses:
         '200':

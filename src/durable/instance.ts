@@ -38,33 +38,44 @@ export class InstanceObject {
       });
     }
 
-    const dployrd = createDployrClient(instance.address);
+    const dployrd = createDployrClient(`http://${instance.address}:7879`);
 
-    const status: SystemStatus | undefined = await dployrd.client.system.status.get();
+    try {
+      const status: SystemStatus | undefined =
+        await dployrd.client.system.status.get();
 
-    const logEntry = {
-      ts: Date.now(),
-      level: "info" as const,
-      message: "Instance provisioned",
-      instanceId,
-    };
+      const logEntry = {
+        ts: Date.now(),
+        level: "info" as const,
+        message: "Instance provisioned",
+        instanceId,
+      };
 
-    await this.env.INSTANCE_LOGS.put(
-      `${instance.clusterId}/${instanceId}.log`,
-      JSON.stringify([logEntry]),
-      {
-        httpMetadata: {
-          contentType: "application/json",
+      await this.env.INSTANCE_LOGS.put(
+        `${instance.clusterId}/${instanceId}.log`,
+        JSON.stringify([logEntry]),
+        {
+          httpMetadata: {
+            contentType: "application/json",
+          },
         },
-      },
-    );
+      );
 
-    return new Response(
-      JSON.stringify(createSuccessResponse({ status })),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+      return new Response(
+        JSON.stringify(createSuccessResponse({ status })),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    } catch (err) {
+      return new Response(
+        JSON.stringify({ error: "Failed to connect to instance" }),
+        {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
   }
 }

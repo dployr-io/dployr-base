@@ -17,7 +17,7 @@ export class InstanceStore extends BaseStore {
         await stmt.bind(
             id,
             clusterId,
-            data.address,
+            data.address || null,
             data.tag,
             JSON.stringify(data.metadata || {}),
             now,

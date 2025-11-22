@@ -11,11 +11,13 @@ export class InstanceService {
   async createInstance({
     clusterId,
     tag,
+    address,
     session,
     c,
   }: {
     clusterId: string;
     tag: string;
+    address: string;
     session: Session;
     c: Context;
   }): Promise<{ instance: Instance; token: string }> {
@@ -24,6 +26,7 @@ export class InstanceService {
 
     const instance = await d1.instances.create(clusterId, {
       tag,
+      address,
     } as any);
 
     await kv.logEvent({
@@ -162,5 +165,23 @@ export class InstanceService {
       instanceId: payload.instance_id,
       jwksUrl: `${this.env.BASE_URL}/v1/jwks/.well-known/jwks.json`,
     };
+  }
+
+  async saveDomain({
+    instanceId,
+  }: {
+    instanceId: string;
+  }) {
+    const d1 = new D1Store(this.env.BASE_DB);
+    const kv = new KVStore(this.env.BASE_KV);
+    const instance = await d1.instances.get(instanceId);
+
+    if (!instance) {
+      throw new Error("Instance not found");
+    }
+
+    await kv.saveDomain(instance.tag, instance.address);
+
+    return `${instance.tag}.dployr.dev`;
   }
 }
