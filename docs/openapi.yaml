@@ -805,6 +805,12 @@ paths:
                           token:
                             type: string
                             description: One-time registration token for the instance
+        '409':
+          description: Instance address or tag already in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/instances/{instanceId}/logs:
     get:
       operationId: getInstanceLogs
@@ -832,6 +838,40 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
         '404':
           description: Logs not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/instances/{instanceId}:
+    delete:
+      operationId: deleteInstance
+      tags:
+        - Instances
+      summary: Delete an instance
+      x-requiredRole: owner
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instance deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Instance not found
           content:
             application/json:
               schema:
