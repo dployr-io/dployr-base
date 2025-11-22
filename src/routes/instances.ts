@@ -3,6 +3,7 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse, parseP
 import { KVStore } from "@/lib/db/store/kv";
 import { D1Store } from "@/lib/db/store";
 import { InstanceService } from "@/services/instances";
+import { InstanceConflictError } from "@/lib/db/store/instances";
 import z from "zod";
 import { requireClusterAdmin, requireClusterOwner, requireClusterViewer } from "@/middleware/auth";
 import { ERROR, EVENTS } from "@/lib/constants";
@@ -73,6 +74,7 @@ instances.post("/", requireClusterOwner, async (c) => {
   try {
     const session = c.get("session")!;
     const service = new InstanceService(c.env);
+    const kv = new KVStore(c.env.BASE_KV);
     const data = await c.req.json();
 
     const validation = createInstanceSchema.safeParse(data);
@@ -97,6 +99,20 @@ instances.post("/", requireClusterOwner, async (c) => {
       c,
     });
 
+    await kv.logEvent({
+      actor: {
+        id: session.userId,
+        type: "user",
+      },
+      targets: [
+        {
+          id: clusterId,
+        },
+      ],
+      type: EVENTS.RESOURCE.RESOURCE_CREATED.code,
+      request: c.req.raw,
+    });
+
     c.executionCtx.waitUntil(
       service.pingInstance({
         instanceId: instance.id,
@@ -114,6 +130,25 @@ instances.post("/", requireClusterOwner, async (c) => {
     );
   } catch (error) {
     console.error("Failed to create instance", error);
+
+    if (error instanceof InstanceConflictError) {
+      const field = error.field;
+      const message =
+        field === "address"
+          ? "Instance address already in use"
+          : field === "tag"
+          ? "Instance tag already in use"
+          : "Instance already exists";
+
+      return c.json(
+        createErrorResponse({
+          message,
+          code: ERROR.RESOURCE.CONFLICT.code,
+        }),
+        ERROR.RESOURCE.CONFLICT.status,
+      );
+    }
+
     const helpLink = "https://monitoring.dployr.dev";
     return c.json(createErrorResponse({ 
       message: "Instance creation failed", 
@@ -174,6 +209,68 @@ instances.get("/:instanceId/logs", requireClusterAdmin, async (c) => {
     return c.json(
       createErrorResponse({
         message: "Failed to fetch instance logs",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
+});
+
+// Delete an instance
+instances.delete("/:instanceId", requireClusterOwner, async (c) => {
+  try {
+    const instanceId = c.req.param("instanceId");
+    const clusterId = c.req.query("clusterId");
+    const session = c.get("session")!;
+
+    if (!clusterId) {
+      return c.json(
+        createErrorResponse({
+          message: "Cluster ID is required",
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
+
+    const d1 = new D1Store(c.env.BASE_DB);
+    const kv = new KVStore(c.env.BASE_KV);
+    const instance = await d1.instances.get(instanceId);
+
+    if (!instance || instance.clusterId !== clusterId) {
+      return c.json(
+        createErrorResponse({
+          message: "Instance not found",
+          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+        }),
+        ERROR.RESOURCE.MISSING_RESOURCE.status,
+      );
+    }
+
+    await d1.instances.delete(instanceId);
+
+    await kv.logEvent({
+      actor: {
+        id: session.userId,
+        type: "user",
+      },
+      targets: [
+        {
+          id: clusterId,
+        },
+      ],
+      type: EVENTS.RESOURCE.RESOURCE_DELETED.code,
+      request: c.req.raw,
+    });
+
+    return c.json(
+      createSuccessResponse({}, "Instance deleted successfully"),
+    );
+  } catch (error) {
+    console.error("Failed to delete instance", error);
+    return c.json(
+      createErrorResponse({
+        message: "Instance deletion failed",
         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
       }),
       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,

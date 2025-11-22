@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { Bindings, createErrorResponse, createSuccessResponse } from "@/types";
-import { ERROR } from "@/lib/constants";
+import { ERROR, EVENTS } from "@/lib/constants";
+import { KVStore } from "@/lib/db/store/kv";
 import z from "zod";
 import { InstanceService } from "@/services/instances";
   
@@ -54,6 +55,21 @@ domains.post("/", async (c) => {
   }
 
   const domain = await service.saveDomain({ instanceId: result.instanceId });
+
+  const kv = new KVStore(c.env.BASE_KV);
+  await kv.logEvent({
+    actor: {
+      id: result.instanceId,
+      type: "headless",
+    },
+    targets: [
+      {
+        id: domain,
+      },
+    ],
+    type: EVENTS.RESOURCE.RESOURCE_CREATED.code,
+    request: c.req.raw,
+  });
 
   return c.json(createSuccessResponse({ 
     instanceId: result.instanceId,
