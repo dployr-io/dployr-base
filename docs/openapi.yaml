@@ -81,6 +81,7 @@ components:
         data:
           description: Response payload
           nullable: true
+          type: object
 
     PaginatedResponse:
       type: object
@@ -144,6 +145,7 @@ components:
 paths:
   /v1/health:
     get:
+      operationId: healthCheck
       tags:
         - Health
       summary: Health check
@@ -166,6 +168,7 @@ paths:
 
   /v1/auth/login/{provider}:
     get:
+      operationId: initiateOAuthLogin
       tags:
         - Auth
       summary: Initiate OAuth login
@@ -195,6 +198,7 @@ paths:
 
   /v1/auth/callback/{provider}:
     get:
+      operationId: oauthCallback
       tags:
         - Auth
       summary: OAuth callback
@@ -229,6 +233,7 @@ paths:
 
   /v1/auth/login/email:
     post:
+      operationId: requestEmailOtp
       tags:
         - Auth
       summary: Request email OTP
@@ -270,6 +275,7 @@ paths:
 
   /v1/auth/login/email/verify:
     post:
+      operationId: verifyEmailOtp
       tags:
         - Auth
       summary: Verify email OTP
@@ -306,6 +312,7 @@ paths:
 
   /v1/auth/logout:
     get:
+      operationId: logout
       tags:
         - Auth
       summary: Logout
@@ -323,6 +330,7 @@ paths:
 
   /v1/users/me:
     get:
+      operationId: getCurrentUser
       tags:
         - Users
       summary: Get current user
@@ -356,6 +364,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
     patch:
+      operationId: updateCurrentUser
       tags:
         - Users
       summary: Update current user
@@ -409,6 +418,7 @@ paths:
 
   /v1/clusters:
     get:
+      operationId: listClusters
       tags:
         - Clusters
       summary: List clusters for current user
@@ -435,6 +445,7 @@ paths:
 
   /v1/clusters/users/invites:
     get:
+      operationId: listClusterInvites
       tags:
         - Clusters
       summary: List pending cluster invites for current user
@@ -451,6 +462,7 @@ paths:
 
   /v1/clusters/{id}/users/invites/accept:
     get:
+      operationId: acceptClusterInvite
       tags:
         - Clusters
       summary: Accept cluster invite
@@ -473,6 +485,7 @@ paths:
 
   /v1/clusters/{id}/users/invites/decline:
     get:
+      operationId: declineClusterInvite
       tags:
         - Clusters
       summary: Decline cluster invite
@@ -495,6 +508,7 @@ paths:
 
   /v1/clusters/{id}/users:
     get:
+      operationId: listClusterUsers
       tags:
         - Clusters
       summary: List users in a cluster
@@ -530,6 +544,7 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
 
     post:
+      operationId: inviteClusterUsers
       tags:
         - Clusters
       summary: Add users to cluster (invite)
@@ -564,6 +579,7 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
 
     patch:
+      operationId: updateClusterRoles
       tags:
         - Clusters
       summary: Update cluster roles
@@ -612,6 +628,7 @@ paths:
 
   /v1/clusters/{id}/users/remove:
     post:
+      operationId: removeClusterUsers
       tags:
         - Clusters
       summary: Remove users from cluster
@@ -647,6 +664,7 @@ paths:
 
   /v1/clusters/{id}/users/owner:
     post:
+      operationId: transferClusterOwnership
       tags:
         - Clusters
       summary: Transfer cluster ownership
@@ -684,6 +702,7 @@ paths:
 
   /v1/clusters/{id}/integrations:
     get:
+      operationId: listClusterIntegrations
       tags:
         - Clusters
       summary: List cluster integrations
@@ -706,6 +725,7 @@ paths:
 
   /v1/instances:
     get:
+      operationId: listInstances
       tags:
         - Instances
       summary: List instances for clusters the user has access to
@@ -742,6 +762,7 @@ paths:
                         $ref: '#/components/schemas/PaginatedResponse'
 
     post:
+      operationId: createInstance
       tags:
         - Instances
       summary: Create an instance
@@ -783,6 +804,7 @@ paths:
                             additionalProperties: true
   /v1/instances/{instanceId}/logs:
     get:
+      operationId: getInstanceLogs
       tags:
         - Instances
       summary: Get instance logs
@@ -814,6 +836,7 @@ paths:
 
   /v1/deployments:
     get:
+      operationId: listDeployments
       tags:
         - Deployments
       summary: List deployments
@@ -831,6 +854,7 @@ paths:
 
   /v1/github/webhook:
     post:
+      operationId: githubWebhook
       tags:
         - GitHub
       summary: GitHub webhook
@@ -876,6 +900,7 @@ paths:
 
   /v1/runtime/events:
     get:
+      operationId: getRuntimeEvents
       tags:
         - Runtime
       summary: Get runtime events for a cluster
@@ -931,6 +956,7 @@ paths:
 
   /v1/clusters/{id}/remotes:
     get:
+      operationId: listClusterRemotes
       tags:
         - Clusters
       summary: List GitHub remotes for a cluster. GitHub integration is required for this endpoint to work. Visit https://app.dployr.dev/clusters/{id}/settings/integrations to manage GitHub integration.
@@ -974,6 +1000,7 @@ paths:
 
   /v1/github/connection/manage:
     get:
+      operationId: manageGithubConnection
       tags:
         - GitHub
       summary: Manage GitHub connection
@@ -985,6 +1012,7 @@ paths:
 
   /v1/domains:
     post:
+      operationId: registerInstanceDomain
       tags:
         - Instances
       summary: Register instance domain
@@ -1029,11 +1057,13 @@ paths:
 
   /v1/jwks/.well-known/jwks.json:
     get:
+      operationId: getJwksKeys
       tags:
         - Auth
       summary: Get JWKS public keys
       x-requiredRole: public
       description: Returns the JSON Web Key Set (JWKS) used to verify instance tokens.
+      security: []
       responses:
         '200':
           description: JWKS public keys
