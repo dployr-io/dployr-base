@@ -164,7 +164,7 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
         message: err.message,
       }));
       return c.json(createErrorResponse({
-        message: "Validation failed " + errors,
+        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
         code: ERROR.REQUEST.BAD_REQUEST.code
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
@@ -221,7 +221,7 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
         message: err.message,
       }));
       return c.json(createErrorResponse({
-        message: "Validation failed " + errors[0].message,
+        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
         code: ERROR.REQUEST.BAD_REQUEST.code
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
@@ -278,7 +278,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
         message: err.message,
       }));
       return c.json(createErrorResponse({
-        message: "Validation failed " + errors,
+        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
         code: ERROR.REQUEST.BAD_REQUEST.code
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
@@ -344,7 +344,7 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
         message: err.message,
       }));
       return c.json(createErrorResponse({
-        message: "Validation failed " + errors[0].message,
+        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
         code: ERROR.REQUEST.BAD_REQUEST.code
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }

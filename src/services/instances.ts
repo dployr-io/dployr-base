@@ -18,7 +18,7 @@ export class InstanceService {
     tag: string;
     session: Session;
     c: Context;
-  }) {
+  }): Promise<{ instance: Instance; token: string }> {
     const d1 = new D1Store(this.env.BASE_DB);
     const kv = new KVStore(this.env.BASE_KV);
 
@@ -41,11 +41,11 @@ export class InstanceService {
     });
     
     const jwtService = new JWTService(kv);
-    const bootstrapToken = await jwtService.createBootstrapToken(instance.id);
-    const decoded = await jwtService.verifyToken(bootstrapToken);
+    const token = await jwtService.createBootstrapToken(instance.id);
+    const decoded = await jwtService.verifyToken(token);
     await d1.bootstrapTokens.create(instance.id, decoded.nonce as string);
 
-    return instance;
+    return { instance, token };
   }
 
   async pingInstance({ 

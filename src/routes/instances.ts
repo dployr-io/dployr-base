@@ -67,21 +67,21 @@ instances.post("/", requireClusterOwner, async (c) => {
         message: err.message,
       }));
       return c.json(createErrorResponse({ 
-        message: "Validation failed " + errors, 
+        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "), 
         code: ERROR.REQUEST.BAD_REQUEST.code 
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
     const { clusterId, tag } = validation.data;
 
-    const instance = await service.createInstance({
+    const { instance, token } = await service.createInstance({
       clusterId,
       tag,
       session,
       c,
     });
 
-    const provisioningStatus = await service.pingInstance({
+    const status = await service.pingInstance({
       instanceId: instance.id,
       session,
       c,
@@ -89,7 +89,7 @@ instances.post("/", requireClusterOwner, async (c) => {
 
     return c.json(
       createSuccessResponse(
-        { instance, provisioningStatus },
+        { instance, status, token },
         "Instance provisioning started",
       ),
       { status: 202 }

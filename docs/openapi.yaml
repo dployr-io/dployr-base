@@ -799,9 +799,11 @@ paths:
                         properties:
                           instance:
                             $ref: '#/components/schemas/Instance'
-                          provisioningStatus:
+                          status:
                             type: object
                             additionalProperties: true
+                          token:
+                            type: string
   /v1/instances/{instanceId}/logs:
     get:
       operationId: getInstanceLogs
