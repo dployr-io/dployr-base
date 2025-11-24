@@ -144,6 +144,22 @@ components:
         tag:
           type: string
 
+    ClientCertUpdate:
+      type: object
+      required: [pem, spki_sha256, subject, not_after]
+      properties:
+        pem:
+          type: string
+          format: pem
+        spki_sha256:
+          type: string
+          description: Base64-encoded SHA-256 hash of the certificate's SPKI
+        subject:
+          type: string
+        not_after:
+          type: string
+          format: date-time
+
 paths:
   /v1/health:
     get:
