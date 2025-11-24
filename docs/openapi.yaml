@@ -1324,65 +1324,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/agent/instances/{instanceId}/tasks:
+  /v1/agent/instances/{instanceId}/ws:
     get:
-      operationId: agentListPendingTasks
+      operationId: agentTasksWebSocket
       tags:
         - Agents
-      summary: Poll pending tasks for an instance
+      summary: Open WebSocket for instance tasks
       x-requiredRole: public
       description: |
-        Called by the dployr instance daemon to poll for pending tasks
-        (such as deploy, restart, etc.) assigned to the instance. Returns tasks
-        in the order they were created and marks them as acknowledged so they
-        are not re-delivered immediately.
+        Upgrades to a WebSocket used by the dployr instance daemon to
+        sync tasks between base and instance in real time.
+
+        The daemon must include a Bearer agent access token in the
+        `Authorization` header. On successful authentication and
+        instance lookup, the connection is upgraded and pinned to the
+        instance's Durable Object.
+
+        The WebSocket payloads are small JSON messages with a `kind`
+        field:
+
+        - `{"kind":"pull"}`: Daemon requests pending tasks.
+        - `{"kind":"task","items":[...]}`: Base delivers tasks.
+        - `{"kind":"ack","ids":["..."]}`: Daemon acknowledges
+          completed task IDs.
+
+        Each task item uses a canonical task address of the form
+        `<path>:<method>`, for example `system/status?showCompleted=true:put`.
       parameters:
         - in: path
           name: instanceId
           required: true
           schema:
             type: string
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 50
-            default: 20
       responses:
-        '200':
-          description: Pending tasks for the instance
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        properties:
-                          tasks:
-                            type: array
-                            items:
-                              type: object
-                              properties:
-                                id:
-                                  type: string
-                                type:
-                                  type: string
-                                payload:
-                                  type: object
-                                  additionalProperties: true
-                                status:
-                                  type: string
-                                  enum: [pending, ack, done]
-                                createdAt:
-                                  type: integer
-                                  description: Unix timestamp (seconds)
-                                updatedAt:
-                                  type: integer
-                                  description: Unix timestamp (seconds)
+        '101':
+          description: WebSocket protocol upgrade
         '400':
           description: Invalid or missing token
           content:
@@ -1395,4 +1371,3 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-                
