@@ -51,6 +51,10 @@ components:
       type: apiKey
       in: cookie
       name: session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
 
   schemas:
     ErrorResponse:
@@ -829,8 +833,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  
-                /v1/instances/{instanceId}/logs:
+
+  /v1/instances/{instanceId}/logs:
     get:
       operationId: getInstanceLogs
       tags:
@@ -895,22 +899,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
-                additionalProperties: 
-                  $ref: "#/components/schemas/Cluster"
-                  additionalProperties: 
-                    $ref: "#/components/schemas/Cluster"
-                    additionalProperties: 
-                      $ref: "#/components/schemas/Cluster"
-                      additionalProperties: 
-                        $ref: "#/components/schemas/Cluster"
-                        additionalProperties: 
-                          $ref: "#/components/schemas/Cluster"
-                          additionalProperties: 
-                            $ref: "#/components/schemas/Cluster"
-                            additionalProperties: 
-                              $ref: 
-                                "#/components/schemas/Cluster"
 
   /v1/instances/{instanceId}/tokens/rotate:
     post:
