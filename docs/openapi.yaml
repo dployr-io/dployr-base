@@ -912,17 +912,24 @@ paths:
                               $ref: 
                                 "#/components/schemas/Cluster"
 
-  /v1/instance/{instanceId}/tokens/rotate:
+  /v1/instances/{instanceId}/tokens/rotate:
     post:
       operationId: agentRotateBootstrapToken
       tags:
         - Agents
-      summary: Rotate bootstrap token 
+      summary: Rotate bootstrap token
       x-requiredRole: owner
       description: |
-        This is used to rotate an existing bootstrap token for an instance.
-
-        The existing token (expired or previously used is fine) must be provided.
+        Rotates the bootstrap token for an instance. The request must
+        supply the existing bootstrap token (which may be expired or previously used for bootstrap).
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
