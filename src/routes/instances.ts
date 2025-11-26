@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse, SystemStatus } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";
 import { D1Store } from "@/lib/db/store";
 import { InstanceService } from "@/services/instances";
@@ -8,7 +8,7 @@ import z from "zod";
 import { requireClusterAdmin, requireClusterOwner, requireClusterViewer } from "@/middleware/auth";
 import { ERROR, EVENTS } from "@/lib/constants";
 import { authMiddleware } from "@/middleware/auth";
-import { SystemStatus } from "@dployr-io/dployr-sdk/dist/client/models";
+import { JWTService } from "@/services/jwt";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 instances.use("*", authMiddleware);
@@ -20,6 +20,10 @@ const createInstanceSchema = z.object({
     "Address must be a valid IPv4 address"
   ),
   tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(15, "Tag must be a maximum of 15 characters"),
+});
+
+const rotateSchema = z.object({
+  token: z.string().min(1, "Token is required")
 });
 
 // List all instances by cluster
@@ -50,8 +54,6 @@ instances.get("/", requireClusterViewer, async (c) => {
 
   const instances = await Promise.all(
     _instances.map(async (instance) => {
-      const status: SystemStatus | undefined = await kv.getInstanceStatus(instance.id);
-
       c.executionCtx.waitUntil(
         service.pingInstance({
           instanceId: instance.id,
@@ -60,7 +62,7 @@ instances.get("/", requireClusterViewer, async (c) => {
         }),
       );
       
-      return { ...instance, status };
+      return { ...instance };
     })
   );
 
@@ -278,7 +280,96 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
   }
 });
 
-// Get instance status
+instances.post("/:instanceId/tokens/rotate", async (c) => {
+  const instanceId = c.req.param("instanceId");
+  const body = await c.req.json();
+  const validation = rotateSchema.safeParse(body);
+  if (!validation.success) {
+    const errors = validation.error.issues.map((err) => ({
+      field: err.path.join("."),
+      message: err.message,
+    }));
+    return c.json(
+      createErrorResponse({
+        message: "Validation failed " + JSON.stringify(errors),
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
+  }
+
+  const { token } = validation.data;
+
+  const kv = new KVStore(c.env.BASE_KV);
+  const d1 = new D1Store(c.env.BASE_DB);
+  const jwtService = new JWTService(kv);
+
+  let payload: any;
+  try {
+    payload = await jwtService.verifyTokenIgnoringExpiry(token);
+  } catch {
+    return c.json(
+      createErrorResponse({
+        message: "Invalid token signature",
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
+    );
+  }
+
+  if (payload.token_type !== "bootstrap" || payload.instance_id !== instanceId) {
+    return c.json(
+      createErrorResponse({
+        message: "Invalid bootstrap token for instance",
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
+    );
+  }
+
+  const nonce = payload.nonce as string | undefined;
+  if (!nonce) {
+    return c.json(
+      createErrorResponse({
+        message: "Invalid bootstrap token payload",
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
+    );
+  }
+
+  const rotated = await jwtService.rotateBootstrapToken(instanceId, nonce, "5m");
+
+  return c.json(createSuccessResponse({ token: rotated }), 200);
+});
+
+// Client WebSocket subscription for instance status/updates
+instances.get("/:instanceId/stream", requireClusterViewer, async (c) => {
+  const instanceId = c.req.param("instanceId");
+  const clusterId = c.req.query("clusterId");
+
+  if (!clusterId) {
+    return c.json(createErrorResponse({
+      message: "Cluster ID is required",
+      code: ERROR.REQUEST.BAD_REQUEST.code,
+    }), ERROR.REQUEST.BAD_REQUEST.status);
+  }
+
+  const d1 = new D1Store(c.env.BASE_DB);
+  const instance = await d1.instances.get(instanceId);
+  if (!instance || instance.clusterId !== clusterId) {
+    return c.json(createErrorResponse({
+      message: "Instance not found",
+      code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+    }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  }
+
+  const id = c.env.INSTANCE_OBJECT.idFromName(instanceId);
+  const stub = c.env.INSTANCE_OBJECT.get(id);
+  const upgradeReq = new Request(c.req.raw);
+
+  return stub.fetch(upgradeReq);
+});
 
 // Run instance doctor
 

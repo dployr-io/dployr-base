@@ -77,6 +77,17 @@ export class InstanceStore extends BaseStore {
         };
     }
 
+    async updateMetadata(id: string, metadata: Record<string, any>): Promise<void> {
+        const now = this.now();
+        const stmt = this.db.prepare(`
+            UPDATE instances
+            SET metadata = ?, updated_at = ?
+            WHERE id = ?
+        `);
+
+        await stmt.bind(JSON.stringify(metadata || {}), now, id).run();
+    }
+
     async delete(id: string): Promise<void> {
         await this.db.prepare(`DELETE FROM instances WHERE id = ?`).bind(id).run();
     }

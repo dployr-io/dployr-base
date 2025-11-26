@@ -11,6 +11,7 @@ import users from "@/routes/users";
 import runtime from "@/routes/runtime";
 import jwks from "@/routes/jwks";
 import domains from "@/routes/domains";
+import agent from "@/routes/agent";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -50,6 +51,7 @@ app.route("/v1/github", gitHub);
 app.route("/v1/runtime", runtime);
 app.route("/v1/jwks", jwks);
 app.route("/v1/domains", domains);
+app.route("/v1/agent", agent);
 app.get("/v1/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
 });

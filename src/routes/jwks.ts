@@ -12,6 +12,7 @@ jwks.get("/.well-known/jwks.json", async (c) => {
     keys: [
       {
         kty: publicKey.kty,
+        kid: (publicKey as any).kid,
         use: "sig",
         alg: "RS256",
         n: publicKey.n,

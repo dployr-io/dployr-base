@@ -70,24 +70,19 @@ export type Variables = {
 
 export type ActorType = 'user' | 'headless'
 
-export type EventStatus = 'started' | 'completed' | 'unknown';
-
-export type InstanceStatus = 'running' | 'stopped' | 'unknown';
-
-export interface Event {
-  id: string;
-  timestamp: number;
-  type: string;
-  actor: {
-    id: string;
-    type: ActorType;
+export type SystemStatus = {
+  status: "healthy" | "degraded" | "unhealthy";
+  uptime: string;
+  services: {
+    total: number;
+    running: number;
+    stopped: number;
   };
-  targets?: {
-    id: string;
-  }[],
-  status: EventStatus;
-}
-
+  proxy: {
+    status: "running" | "stopped";
+    routes: number;
+  };
+};
 
 export interface Instance {
   id: string;
@@ -159,3 +154,6 @@ export interface Integrations {
 
 // Export response types
 export * from "./responses";
+
+// Export agent types
+export * from "./agent";
