@@ -106,6 +106,75 @@ components:
           type: integer
           minimum: 0
 
+    StatusUpdateMessage:
+      type: object
+      description: WebSocket message sent to clients with the latest system status.
+      properties:
+        kind:
+          type: string
+          enum: [status_update]
+        timestamp:
+          type: integer
+          format: int64
+          description: Milliseconds since Unix epoch.
+        system:
+          $ref: '#/components/schemas/SystemStatus'
+      required:
+        - kind
+        - timestamp
+        - system
+      example:
+        kind: status_update
+        timestamp: 1732627200000
+        system:
+          status: healthy
+          uptime: "1d2h3m"
+          services:
+            total: 5
+            running: 5
+            stopped: 0
+          proxy:
+            status: running
+            routes: 12
+
+    SystemStatus:
+      type: object
+      description: Snapshot of an instance's system health as reported by the daemon.
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        uptime:
+          type: string
+          description: Human-readable uptime string (for example, "1d2h3m").
+        services:
+          type: object
+          properties:
+            total:
+              type: integer
+            running:
+              type: integer
+            stopped:
+              type: integer
+        proxy:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [running, stopped]
+            routes:
+              type: integer
+      example:
+        status: healthy
+        uptime: "1d2h3m"
+        services:
+          total: 5
+          running: 5
+          stopped: 0
+        proxy:
+          status: running
+          routes: 12
+
     User:
       type: object
       properties:
@@ -995,7 +1064,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-
   /v1/deployments:
     get:
       operationId: listDeployments
@@ -1253,77 +1321,67 @@ paths:
                         e:
                           type: string
 
-  /v1/agent/instances/{instanceId}/status:
-    post:
-      operationId: agentReportInstanceStatus
+  /v1/instances/{instanceId}/stream:
+    get:
+      operationId: instanceStatusStream
       tags:
-        - Agents
-      summary: Report instance status / heartbeat
-      x-requiredRole: public
+        - Instances
+      summary: Open WebSocket for instance status streaming (client)
+      x-requiredRole: viewer
+      security:
+        - sessionCookie: []
       description: |
-        Called by the dployr instance daemon to report the current status
-        and heartbeat for an instance. Uses a JWT bearer token issued by base.
-        
-        The payload must include version, compatibility_date, system status,
-        and optionally completed task IDs with results.
+        Upgrades to a WebSocket used by the web client to subscribe to
+        real-time status updates for a specific instance.
+
+        Updates are **ephemeral** – once connected, real-time agent
+        status updates are pushed from the instance's Durable Object.
+
+        The `system` payload in messages conforms to the
+        `SystemStatus` schema (see `components.schemas.SystemStatus`).
+
+        WebSocket messages:
+
+        - Client sends: `{"kind":"client_subscribe"}` once after
+          connecting.
+        - Server sends status updates whenever the agent reports new
+          status for the instance, for example:
+
+          ```json
+          {
+            "kind": "status_update",
+            "timestamp": 1732627200000,
+            "system": {
+              "status": "healthy",
+              "uptime": "1d2h3m",
+              "services": {
+                "total": 5,
+                "running": 5,
+                "stopped": 0
+              },
+              "proxy": {
+                "status": "running",
+                "routes": 12
+              }
+            }
+          }
+          ```
       parameters:
         - in: path
           name: instanceId
           required: true
           schema:
             type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - version
-                - compatibility_date
-                - system
-              properties:
-                version:
-                  type: string
-                  description: Instance daemon version (e.g., "0.3.1-beta.24")
-                  example: "0.3.1-beta.24"
-                compatibility_date:
-                  type: string
-                  format: date
-                  description: Compatibility date in YYYY-MM-DD format
-                  example: "2025-11-23"
-                system:
-                  type: object
-                  description: System status from daemon
-                  additionalProperties: true
-                completed_tasks:
-                  type: array
-                  description: Tasks that have been completed since last report
-                  items:
-                    type: object
-                    required:
-                      - id
-                      - status
-                    properties:
-                      id:
-                        type: string
-                      status:
-                        type: string
-                        enum: [done, failed]
-                      result:
-                        type: object
-                        additionalProperties: true
-                      error:
-                        type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
-          description: Status accepted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
+        '101':
+          description: WebSocket protocol upgrade
         '400':
-          description: Invalid or missing token / payload
+          description: Missing clusterId, unauthorized cluster access, or invalid request
           content:
             application/json:
               schema:
