@@ -118,7 +118,7 @@ components:
           format: int64
           description: Milliseconds since Unix epoch.
         system:
-          $ref: '#/components/schemas/SystemStatus'
+          $ref: '#/components/schemas/AgentUpdateMessage'
       required:
         - kind
         - timestamp
@@ -137,43 +137,82 @@ components:
             status: running
             routes: 12
 
-    SystemStatus:
+    AgentUpdateMessage:
       type: object
-      description: Snapshot of an instance's system health as reported by the daemon.
+      description: Message sent by an agent to update its status and metadata.
       properties:
-        status:
+        schema:
           type: string
-          enum: [healthy, degraded, unhealthy]
-        uptime:
+          example: agent.update.v1
+        seq:
+          type: integer
+          description: Monotonically increasing sequence number for updates.
+          example: 42
+        epoch:
           type: string
-          description: Human-readable uptime string (for example, "1d2h3m").
-        services:
+          description: Unique epoch identifier for this agent session.
+          example: instance-abc123-1732620000
+        full:
+          type: boolean
+          description: True if this message is a full status snapshot.
+          example: false
+        instance_id:
+          type: string
+          description: Unique identifier of the instance.
+          example: instance-abc123
+        agent_version:
+          type: string
+          description: Version of the agent software.
+          example: v0.4.2
+        platform:
           type: object
+          description: Platform information.
           properties:
-            total:
-              type: integer
-            running:
-              type: integer
-            stopped:
-              type: integer
-        proxy:
-          type: object
-          properties:
-            status:
+            os:
               type: string
-              enum: [running, stopped]
-            routes:
+              example: linux
+            arch:
+              type: string
+              example: amd64
+            go:
+              type: string
+              description: Go runtime version.
+              example: go1.23.1
+        status:
+          type: object
+          description: Current status and metrics.
+          properties:
+            mode:
+              type: string
+              description: Agent mode.
+              example: ready
+            uptime_s:
               type: integer
+              description: Uptime in seconds.
+              example: 3605
+      required:
+        - schema
+        - seq
+        - epoch
+        - full
+        - instance_id
+        - agent_version
+        - platform
+        - status
       example:
-        status: healthy
-        uptime: "1d2h3m"
-        services:
-          total: 5
-          running: 5
-          stopped: 0
-        proxy:
-          status: running
-          routes: 12
+        schema: agent.update.v1
+        seq: 42
+        epoch: instance-abc123-1732620000
+        full: false
+        instance_id: instance-abc123
+        agent_version: v0.4.2
+        platform:
+          os: linux
+          arch: amd64
+          go: go1.23.1
+        status:
+          mode: ready
+          uptime_s: 3605
 
     User:
       type: object
@@ -1349,20 +1388,20 @@ paths:
 
           ```json
           {
-            "kind": "status_update",
-            "timestamp": 1732627200000,
-            "system": {
-              "status": "healthy",
-              "uptime": "1d2h3m",
-              "services": {
-                "total": 5,
-                "running": 5,
-                "stopped": 0
-              },
-              "proxy": {
-                "status": "running",
-                "routes": 12
-              }
+            "schema": "agent.update.v1",
+            "seq": 42,
+            "epoch": "instance-abc123-1732620000",
+            "full": false,
+            "instance_id": "instance-abc123",
+            "agent_version": "v0.4.2",
+            "platform": {
+              "os": "linux",
+              "arch": "amd64",
+              "go": "go1.23.1"
+            },
+            "status": {
+              "mode": "ready",
+              "uptime_s": 3605
             }
           }
           ```
