@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@dployr-io/dployr-sdk':
-        specifier: ^1.5.0
-        version: 1.5.0
       '@octokit/auth-app':
         specifier: ^8.1.2
         version: 8.1.2
@@ -91,9 +88,6 @@ packages:
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
-
-  '@dployr-io/dployr-sdk@1.5.0':
-    resolution: {integrity: sha512-/iSPRPAWaiZrbsZZXouvv+w6UYy4hdxJQiJq66yUleQjnOOEPnbBtmUMSCf6W7puwQUJug2UQD0rYUEsSyo1Kw==}
 
   '@emnapi/runtime@1.7.0':
     resolution: {integrity: sha512-oAYoQnCYaQZKVS53Fq23ceWMRxq5EhQsE0x0RdQ55jT7wagMu5k+fS39v1fiSLrtrLQlXwVINenqhLMtTrV/1Q==}
@@ -363,27 +357,6 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@microsoft/kiota-abstractions@1.0.0-preview.99':
-    resolution: {integrity: sha512-6qrlwGCO3DbvpA7tszqk7JNQPFPDg8gv5NGMTziwdtHqaQrUALKusm3vdJGPVGrbNiZL6/lBaY5NSUvLtlhRCg==}
-
-  '@microsoft/kiota-bundle@1.0.0-preview.99':
-    resolution: {integrity: sha512-AxvO+z6UgWMAT2NfXN36CMhAUm/39tUQt8o32axeEJDS/EvZINDAPstbQV+zK7bJRC8kCqUHhCE/fuHX2dXA+g==}
-
-  '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.99':
-    resolution: {integrity: sha512-lIruiYf8L7DPG0Fm92QN5YK4zx4sh76EtTONUAqBCxt5AtEJ7KQceBajaXQsjfcndUAp9LmDVdqR44o8sc9/mA==}
-
-  '@microsoft/kiota-serialization-form@1.0.0-preview.99':
-    resolution: {integrity: sha512-BdXxqNfy+5yWTyxpBguqJYy6E9RRotrDClRcUO89okFcR5N6s6xenjsvGw++q9KWNi7qcHrqaG8xlRz1TLk81Q==}
-
-  '@microsoft/kiota-serialization-json@1.0.0-preview.99':
-    resolution: {integrity: sha512-kDmMYmB7XkRprlLviEynRPDkE45JDxqiuUopfBRMvNK4qhzFiJTXGLihZ2FG6fdVu9LbV3/W0QxbeGP35kDK6A==}
-
-  '@microsoft/kiota-serialization-multipart@1.0.0-preview.99':
-    resolution: {integrity: sha512-cfviCAVTlZPD+MUgdTIgsX/IfHND+gKQhem3vJeo7l5Qqz2rvvVFXOHwECI19umO9Un1QFKe1V5wg+M+aj90+g==}
-
-  '@microsoft/kiota-serialization-text@1.0.0-preview.99':
-    resolution: {integrity: sha512-gcBffQRI1soHVAiS4YjfMr3SQ9fC8xVUGMfarTTszU4PjpxyFOknaWoFdt/0rvMeavI9jOtbyvDKAf77cZyYIQ==}
-
   '@octokit/auth-app@8.1.2':
     resolution: {integrity: sha512-db8VO0PqXxfzI6GdjtgEFHY9tzqUql5xMFXYA12juq8TeTgPAuiiP3zid4h50lwlIP457p5+56PnJOgd2GGBuw==}
     engines: {node: '>= 20'}
@@ -460,10 +433,6 @@ packages:
   '@octokit/types@16.0.0':
     resolution: {integrity: sha512-sKq+9r1Mm4efXW1FCk7hFSeJo4QKreL/tTbR0rz/qx/r1Oa2VV83LTA/H/MuCOX7uCIJmQVRKBcbmWoySjAnSg==}
 
-  '@opentelemetry/api@1.9.0':
-    resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
-    engines: {node: '>=8.0.0'}
-
   '@poppinss/colors@4.1.5':
     resolution: {integrity: sha512-FvdDqtcRCtz6hThExcFOgW0cWX+xwSMWcRuQe5ZEb2m7cVQOAVZOIMt+/v9RxGiD9/OY16qJBXK4CVKWAPalBw==}
 
@@ -479,9 +448,6 @@ packages:
 
   '@speed-highlight/core@1.2.12':
     resolution: {integrity: sha512-uilwrK0Ygyri5dToHYdZSjcvpS2ZwX0w5aSt3GCEN9hrjxWCoeV4Z2DTXuxjwbntaLQIEEAlCeNQss5SoHvAEA==}
-
-  '@std-uritemplate/std-uritemplate@2.0.8':
-    resolution: {integrity: sha512-8oj7jKksoTRxjdPkWKX9FyOKDS8ORBm+ZfTSHm0f3eYha8cI0O1d57gyduOIAX7Y2uUukNDNlxlvGb+FFkE7yQ==}
 
   acorn-walk@8.3.2:
     resolution: {integrity: sha512-cjkyv4OtNCIeqhHrfS81QWXoCBPExR/J62oyEqepVw8WaQeSqpW2uhuLPh1m9eWhDuOo/jUXVTlifvesOWp/4A==}
@@ -602,9 +568,6 @@ packages:
     resolution: {integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==}
     engines: {node: '>=18'}
 
-  tinyduration@3.4.1:
-    resolution: {integrity: sha512-NemFoamVYn7TmtwZKZ3OiliM9fZkr6EWiTM+wKknco6POSy2gS689xx/pXip0JYp40HXpUw6k65CUYHWYUXdaA==}
-
   toad-cache@3.7.0:
     resolution: {integrity: sha512-/m8M+2BJUpoJdgAHoG+baCwBT+tf2VraSfkBgl0Y00qIWt41DJ8R5B8nsEw0I58YwF5IZH6z24/2TobDKnqSWw==}
     engines: {node: '>=12'}
@@ -700,10 +663,6 @@ snapshots:
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
-
-  '@dployr-io/dployr-sdk@1.5.0':
-    dependencies:
-      '@microsoft/kiota-bundle': 1.0.0-preview.99
 
   '@emnapi/runtime@1.7.0':
     dependencies:
@@ -869,48 +828,6 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@microsoft/kiota-abstractions@1.0.0-preview.99':
-    dependencies:
-      '@opentelemetry/api': 1.9.0
-      '@std-uritemplate/std-uritemplate': 2.0.8
-      tinyduration: 3.4.1
-      tslib: 2.8.1
-
-  '@microsoft/kiota-bundle@1.0.0-preview.99':
-    dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
-      '@microsoft/kiota-http-fetchlibrary': 1.0.0-preview.99
-      '@microsoft/kiota-serialization-form': 1.0.0-preview.99
-      '@microsoft/kiota-serialization-json': 1.0.0-preview.99
-      '@microsoft/kiota-serialization-multipart': 1.0.0-preview.99
-      '@microsoft/kiota-serialization-text': 1.0.0-preview.99
-
-  '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.99':
-    dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
-      '@opentelemetry/api': 1.9.0
-      tslib: 2.8.1
-
-  '@microsoft/kiota-serialization-form@1.0.0-preview.99':
-    dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
-      tslib: 2.8.1
-
-  '@microsoft/kiota-serialization-json@1.0.0-preview.99':
-    dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
-      tslib: 2.8.1
-
-  '@microsoft/kiota-serialization-multipart@1.0.0-preview.99':
-    dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
-      tslib: 2.8.1
-
-  '@microsoft/kiota-serialization-text@1.0.0-preview.99':
-    dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
-      tslib: 2.8.1
-
   '@octokit/auth-app@8.1.2':
     dependencies:
       '@octokit/auth-oauth-app': 9.0.3
@@ -1016,8 +933,6 @@ snapshots:
     dependencies:
       '@octokit/openapi-types': 27.0.0
 
-  '@opentelemetry/api@1.9.0': {}
-
   '@poppinss/colors@4.1.5':
     dependencies:
       kleur: 4.1.5
@@ -1033,8 +948,6 @@ snapshots:
   '@sindresorhus/is@7.1.1': {}
 
   '@speed-highlight/core@1.2.12': {}
-
-  '@std-uritemplate/std-uritemplate@2.0.8': {}
 
   acorn-walk@8.3.2: {}
 
@@ -1180,11 +1093,10 @@ snapshots:
 
   supports-color@10.2.2: {}
 
-  tinyduration@3.4.1: {}
-
   toad-cache@3.7.0: {}
 
-  tslib@2.8.1: {}
+  tslib@2.8.1:
+    optional: true
 
   ulid@3.0.1: {}
 
