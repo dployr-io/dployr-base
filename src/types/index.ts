@@ -84,6 +84,12 @@ export type SystemStatus = {
   };
 };
 
+export type StatusUpdateMessage = {
+  kind: "status_update";
+  timestamp: number;
+  system: SystemStatus;
+};
+
 export interface Instance {
   id: string;
   address: string;

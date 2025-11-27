@@ -127,15 +127,19 @@ components:
         kind: status_update
         timestamp: 1732627200000
         system:
-          status: healthy
-          uptime: "1d2h3m"
-          services:
-            total: 5
-            running: 5
-            stopped: 0
-          proxy:
-            status: running
-            routes: 12
+          schema: v1
+          seq: 42
+          epoch: instance-abc123-1732620000
+          full: false
+          instance_id: instance-abc123
+          version: v0.4.2
+          platform:
+            os: linux
+            arch: amd64
+            go: go1.23.1
+          status:
+            mode: ready
+            uptime_s: 3605
 
     AgentUpdateMessage:
       type: object
@@ -143,7 +147,7 @@ components:
       properties:
         schema:
           type: string
-          example: agent.update.v1
+          example: v1
         seq:
           type: integer
           description: Monotonically increasing sequence number for updates.
@@ -196,16 +200,16 @@ components:
         - epoch
         - full
         - instance_id
-        - agent_version
+        - version
         - platform
         - status
       example:
-        schema: agent.update.v1
+        schema: v1
         seq: 42
         epoch: instance-abc123-1732620000
         full: false
         instance_id: instance-abc123
-        agent_version: v0.4.2
+        version: v0.4.2
         platform:
           os: linux
           arch: amd64
@@ -1376,32 +1380,136 @@ paths:
         Updates are **ephemeral** – once connected, real-time agent
         status updates are pushed from the instance's Durable Object.
 
-        The `system` payload in messages conforms to the
-        `SystemStatus` schema (see `components.schemas.SystemStatus`).
-
         WebSocket messages:
 
         - Client sends: `{"kind":"client_subscribe"}` once after
           connecting.
         - Server sends status updates whenever the agent reports new
-          status for the instance, for example:
+          status for the instance. Messages conform to the
+          `StatusUpdateMessage` schema, for example:
 
           ```json
           {
-            "schema": "agent.update.v1",
-            "seq": 42,
-            "epoch": "instance-abc123-1732620000",
-            "full": false,
-            "instance_id": "instance-abc123",
-            "agent_version": "v0.4.2",
-            "platform": {
-              "os": "linux",
-              "arch": "amd64",
-              "go": "go1.23.1"
-            },
-            "status": {
-              "mode": "ready",
-              "uptime_s": 3605
+            "kind": "status_update",
+            "timestamp": 1764276549826,
+            "update": {
+              "schema": "v1",
+              "seq": 195,
+              "epoch": "01KAZT8S6BSZFEDP08D0CZB781-1764270684",
+              "full": false,
+              "instance_id": "01KAZT8S6BSZFEDP08D0CZB781",
+              "build_info": {
+                "version": "0.4.6-beta.3",
+                "commit": "ef9476e62733e29a7915475ae3ac983c376a203d",
+                "date": "2025-11-27T19:09:13Z",
+                "go_version": "go1.24.10"
+              },
+              "platform": {
+                "os": "linux",
+                "arch": "amd64"
+              },
+              "status": {
+                "status": "healthy",
+                "mode": "ready",
+                "uptime": "5864",
+                "services": {
+                  "total": 0,
+                  "running": 0,
+                  "stopped": 0
+                },
+                "proxy": {
+                  "status": "running",
+                  "routes": 0
+                },
+                "health": {
+                  "overall": "down",
+                  "ws": "ok",
+                  "tasks": "ok",
+                  "auth": "down"
+                },
+                "debug": {
+                  "ws": {
+                    "connected": true,
+                    "last_connect_at": "2025-11-27T19:11:25Z",
+                    "reconnects_since_start": 0
+                  },
+                  "tasks": {
+                    "inflight": 0,
+                    "done_unsent": 0,
+                    "last_task_id": "01KB3H0NXHNDXT10XPTTSNBKPR",
+                    "last_task_status": "done",
+                    "last_task_dur_ms": 195,
+                    "last_task_at": "2025-11-27T20:45:40Z"
+                  },
+                  "auth": {
+                    "agent_token_age_s": 5864,
+                    "agent_token_expires_in_s": 0,
+                    "bootstrap_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImJhc2Uta2V5In0.eyJpbnN0YW5jZV9pZCI6IjAxS0"
+                  },
+                  "system": {
+                    "cpu_count": 1,
+                    "mem_total_bytes": 889192448,
+                    "mem_used_bytes": 274726912,
+                    "mem_free_bytes": 459276288,
+                    "disks": [
+                      {
+                        "filesystem": "/dev/root",
+                        "mountpoint": "/",
+                        "size_bytes": 31138512896,
+                        "used_bytes": 2362232012,
+                        "available_bytes": 28991029248
+                      },
+                      {
+                        "filesystem": "tmpfs",
+                        "mountpoint": "/dev/shm",
+                        "size_bytes": 445644800,
+                        "available_bytes": 445644800
+                      },
+                      {
+                        "filesystem": "tmpfs",
+                        "mountpoint": "/run",
+                        "size_bytes": 178257920,
+                        "used_bytes": 1011712,
+                        "available_bytes": 177209344
+                      },
+                      {
+                        "filesystem": "tmpfs",
+                        "mountpoint": "/run/lock",
+                        "size_bytes": 5242880,
+                        "available_bytes": 5242880
+                      },
+                      {
+                        "filesystem": "efivarfs",
+                        "mountpoint": "/sys/firmware/efi/efivars",
+                        "size_bytes": 131072,
+                        "used_bytes": 39936,
+                        "available_bytes": 87040
+                      },
+                      {
+                        "filesystem": "/dev/sda15",
+                        "mountpoint": "/boot/efi",
+                        "size_bytes": 110100480,
+                        "used_bytes": 6396313,
+                        "available_bytes": 103809024
+                      },
+                      {
+                        "filesystem": "/dev/sdb1",
+                        "mountpoint": "/mnt",
+                        "size_bytes": 4187593113,
+                        "used_bytes": 28672,
+                        "available_bytes": 3972844748
+                      },
+                      {
+                        "filesystem": "tmpfs",
+                        "mountpoint": "/run/user/1000",
+                        "size_bytes": 89128960,
+                        "used_bytes": 4096,
+                        "available_bytes": 89128960
+                      }
+                    ]
+                  }
+                }
+              }
             }
           }
           ```

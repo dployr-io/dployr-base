@@ -12,6 +12,19 @@ export class InstanceObject {
 
   constructor(private state: DurableObjectState, private env: Bindings) {}
 
+  private broadcastToClients(message: unknown): void {
+    const payload = JSON.stringify(message);
+    for (const socket of this.sockets) {
+      if (this.roles.get(socket) === "client") {
+        try {
+          socket.send(payload);
+        } catch (err) {
+          console.error("Failed to send message to client.", err);
+        }
+      }
+    }
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
@@ -67,8 +80,20 @@ export class InstanceObject {
     const kind = payload?.kind as string | undefined;
     if (!kind) return;
 
-    if (kind === "agent_update") {
+    if (kind === "update") {
       this.roles.set(ws, "agent");
+
+      // Cache payload, broadcast to clients
+      if (payload && typeof payload === "object" && payload.update) {
+        await this.state.storage.put("latestUpdate", payload.update);
+
+        this.broadcastToClients({
+          kind: "status_update",
+          timestamp: Date.now(),
+          update: payload.update,
+        });
+      }
+
       await this.handleAgentUpdate(ws, payload);
       return;
     }
@@ -80,6 +105,19 @@ export class InstanceObject {
 
     if (kind === "client_subscribe") {
       this.roles.set(ws, "client");
+
+      // Try to load latest update from storage (persisted across evictions)
+      const latestUpdate = await this.state.storage.get("latestUpdate");
+      if (latestUpdate) {
+        ws.send(JSON.stringify({
+          kind: "status_update",
+          timestamp: Date.now(),
+          update: latestUpdate,
+        }));
+        return;
+      }
+
+      // Fallback to the older SystemStatus window if populated
       const latest = this.statusWindow[this.statusWindow.length - 1];
       if (latest) {
         ws.send(JSON.stringify({
@@ -170,7 +208,6 @@ export class InstanceObject {
     }
 
     const update = validation.data;
-    const instanceId = (await this.state.storage.get<string>("instanceId")) || "";
 
     const alreadyHandshaken = this.handshakeComplete.get(ws) === true;
 
@@ -211,13 +248,6 @@ export class InstanceObject {
       };
       ws.send(JSON.stringify(response));
     }
-
-    await kv.saveAgentUpdate(instanceId, {
-      version: update.version,
-      compatibility_date: update.compatibility_date,
-      platform: update.platform,
-      runtime: update.runtime,
-    });
   }
 
   /**

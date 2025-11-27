@@ -1,8 +1,7 @@
 import { Hono } from "hono";
-import { Bindings, Variables, OAuthProvider, User, createSuccessResponse, createErrorResponse } from "@/types";
-import { OAuthService } from "@/services/oauth";
+import { Bindings, Variables, User, createSuccessResponse, createErrorResponse } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";
-import { setCookie, getCookie } from "hono/cookie";
+import { getCookie } from "hono/cookie";
 import { D1Store } from "@/lib/db/store";
 import z from "zod";
 import { authMiddleware } from "@/middleware/auth";
@@ -12,14 +11,14 @@ const users = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 users.use("*", authMiddleware);
 
 const createUserSchema = z.object({
-    name: z.string().min(3).max(30).regex(/^[a-zA-Z]+$/, "Name must contain only alphabets"),
+    name: z.string().min(3).max(30).regex(/^[a-zA-Z ]+$/, "Name must contain only letters and spaces"),
     picture: z.string().min(3).max(100),
     provider: z.enum(["google", "github", "microsoft", "email"]),
     metadata: z.object(),
 });
 
 const updateUserSchema = z.object({
-    name: z.string().min(3).max(30).regex(/^[a-zA-Z]+$/, "Name must contain only alphabets").optional(),
+    name: z.string().min(3).max(30).regex(/^[a-zA-Z ]+$/, "Name must contain only letters and spaces").optional(),
     picture: z.string().min(3).max(100).optional(),
     provider: z.enum(["google", "github", "microsoft", "email"]).optional(),
     metadata: z.object().optional(),
@@ -103,13 +102,18 @@ users.patch("/me", async (c) => {
             field: err.path.join("."),
             message: err.message,
         }));
+
+        const errorMessage = errors
+            .map((e) => `${e.field}: ${e.message}`)
+            .join(", ");
+
         return c.json(createErrorResponse({ 
-            message: "Invalid email format " + errors, 
+            message: "Invalid request body: " + errorMessage, 
             code: ERROR.REQUEST.BAD_REQUEST.code 
         }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const updates: Partial<Omit<User, "id" | "createdAt">> = await c.req.json();
+    const updates: Partial<Omit<User, "id" | "createdAt">> = validation.data;
     const user = await d1.users.update(session.email, updates);
 
     if (!user) {
