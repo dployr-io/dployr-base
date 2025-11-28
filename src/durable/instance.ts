@@ -2,6 +2,7 @@ import { Bindings, SystemStatus } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";
 import { AgentUpdateV1Schema, AgentStatusReportSchema, LATEST_COMPATIBILITY_DATE, type WSHandshakeResponse } from "@/types/agent";
 import { isCompatible, getUpgradeLevel } from "@/lib/version";
+import { ulid } from "ulid";
 
 export class InstanceObject {
   private sockets: Set<WebSocket> = new Set();
@@ -9,6 +10,7 @@ export class InstanceObject {
   private roles: Map<WebSocket, "agent" | "client"> = new Map();
   private statusWindow: { timestamp: number; system: SystemStatus }[] = [];
   private readonly maxWindowSize = 100;
+  private logStreamSubscriptions: Map<WebSocket, { streamId: string; logType: string }> = new Map();
 
   constructor(private state: DurableObjectState, private env: Bindings) {}
 
@@ -129,6 +131,55 @@ export class InstanceObject {
       return;
     }
 
+    if (kind === "log_subscribe") {
+      this.roles.set(ws, "client");
+      const streamId = payload?.streamId as string | undefined;
+      const logType = payload?.logType as string | undefined;
+      
+      if (!streamId || !logType) {
+        ws.send(JSON.stringify({ kind: "error", message: "streamId and logType required" }));
+        return;
+      }
+
+      this.logStreamSubscriptions.set(ws, { streamId, logType });
+      ws.send(JSON.stringify({ kind: "log_subscribed", streamId, logType }));
+      return;
+    }
+
+    if (kind === "log_chunk") {
+      const streamId = payload?.streamId as string | undefined;
+      const logType = payload?.logType as string | undefined;
+      const entries = payload?.entries as any[] | undefined;
+      const eof = payload?.eof as boolean | undefined;
+      const hasMore = payload?.hasMore as boolean | undefined;
+      const offset = payload?.offset as number | undefined;
+
+      if (!streamId || !logType || !entries) return;
+
+      const message = JSON.stringify({
+        kind: "log_chunk",
+        streamId,
+        logType,
+        entries,
+        eof: eof || false,
+        hasMore: hasMore || false,
+        offset: offset || 0,
+        timestamp: Date.now(),
+      });
+
+      for (const socket of this.sockets) {
+        const sub = this.logStreamSubscriptions.get(socket);
+        if (sub && sub.streamId === streamId && sub.logType === logType) {
+          try {
+            socket.send(message);
+          } catch (err) {
+            console.error("Failed to send log chunk to client", err);
+          }
+        }
+      }
+      return;
+    }
+
     // Only agents need handshake for pull/ack
     if (this.roles.get(ws) === "agent" && !this.handshakeComplete.get(ws)) {
       ws.send(JSON.stringify({ kind: "error", message: "Handshake required" }));
@@ -157,6 +208,7 @@ export class InstanceObject {
     this.sockets.delete(ws);
     this.handshakeComplete.delete(ws);
     this.roles.delete(ws);
+    this.logStreamSubscriptions.delete(ws);
     if (this.sockets.size === 0) {
       const inflight = await this.state.storage.get<string[]>("inflight");
       if (Array.isArray(inflight) && inflight.length > 0) {
@@ -284,6 +336,7 @@ export class InstanceObject {
 
     const items = tasks.map((t: any) => ({
       id: t.id,
+      requestId: t.id,
       type: t.type,
       payload: (t.payload || {}) as Record<string, unknown>,
       status: t.status,
@@ -295,6 +348,7 @@ export class InstanceObject {
     ws.send(
       JSON.stringify({
         kind: "task",
+        requestId: ulid(),
         items,
       }),
     );

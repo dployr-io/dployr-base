@@ -10,6 +10,7 @@ import { ERROR, EVENTS } from "@/lib/constants";
 import { authMiddleware } from "@/middleware/auth";
 import { JWTService } from "@/services/jwt";
 import { NotificationService } from "@/services/notifications";
+import { ulid } from "ulid";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 instances.use("*", authMiddleware);
@@ -394,6 +395,100 @@ instances.get("/:instanceId/stream", requireClusterViewer, async (c) => {
   return stub.fetch(upgradeReq);
 });
 
-// Run instance doctor
+// Stream logs from instance
+instances.post("/:instanceId/logs/stream", requireClusterViewer, async (c) => {
+  try {
+    const instanceId = c.req.param("instanceId");
+    const clusterId = c.req.query("clusterId");
+    const session = c.get("session")!;
+
+    if (!clusterId) {
+      return c.json(createErrorResponse({
+        message: "Cluster ID is required",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }), ERROR.REQUEST.BAD_REQUEST.status);
+    }
+
+    const body = await c.req.json();
+    const logType = body?.logType as string | undefined;
+    const streamId = body?.streamId as string | undefined;
+    const mode = body?.mode as string | undefined || "tail";
+    const startFrom = typeof body?.startFrom === "number" ? body.startFrom : -1;
+    const limit = typeof body?.limit === "number" ? body.limit : 100;
+
+    if (!logType || !streamId) {
+      return c.json(createErrorResponse({
+        message: "logType and streamId are required",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }), ERROR.REQUEST.BAD_REQUEST.status);
+    }
+
+    // Validate logType
+    const validLogTypes = ["app", "install"];
+    if (!validLogTypes.includes(logType)) {
+      return c.json(createErrorResponse({
+        message: `Invalid logType. Must be one of: ${validLogTypes.join(", ")}`,
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }), ERROR.REQUEST.BAD_REQUEST.status);
+    }
+
+    // Validate mode
+    const validModes = ["tail", "historical"];
+    if (!validModes.includes(mode)) {
+      return c.json(createErrorResponse({
+        message: `Invalid mode. Must be one of: ${validModes.join(", ")}`,
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }), ERROR.REQUEST.BAD_REQUEST.status);
+    }
+
+    const d1 = new D1Store(c.env.BASE_DB);
+    const instance = await d1.instances.get(instanceId);
+    if (!instance || instance.clusterId !== clusterId) {
+      return c.json(createErrorResponse({
+        message: "Instance not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+    }
+
+    const service = new InstanceService(c.env);
+    const kv = new KVStore(c.env.BASE_KV);
+    const token = await service.getOrCreateInstanceUserToken(kv, session, instanceId);
+
+    // Create task to stream logs
+    const id = c.env.INSTANCE_OBJECT.idFromName(instanceId);
+    const stub = c.env.INSTANCE_OBJECT.get(id);
+    await stub.fetch(`https://do/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: ulid(),
+        type: "logs/stream:post",
+        payload: { 
+          token, 
+          logType, 
+          streamId,
+          mode,
+          startFrom,
+          limit
+        },
+        createdAt: Date.now(),
+      }),
+    });
+
+    return c.json(createSuccessResponse({ 
+      streamId, 
+      logType, 
+      mode, 
+      startFrom, 
+      limit 
+    }, "Log stream initiated"));
+  } catch (error) {
+    console.error("Failed to initiate log stream", error);
+    return c.json(createErrorResponse({
+      message: "Failed to initiate log stream",
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
+});
 
 export default instances;

@@ -52,7 +52,7 @@ export class InstanceService {
     return { instance, token };
   }
 
-  private async getOrCreateInstanceUserToken(
+  async getOrCreateInstanceUserToken(
     kv: KVStore,
     session: Session,
     instanceId: string,

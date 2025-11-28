@@ -319,6 +319,91 @@ components:
         - instance.deleted
         - cluster.invite_accepted
 
+    LogEntry:
+      type: object
+      description: Structured log entry parsed from daemon JSON logs.
+      properties:
+        time:
+          type: string
+          description: RFC3339 timestamp of the log entry.
+          example: "2025-11-28T16:52:03.436565635Z"
+        level:
+          type: string
+          description: Log level.
+          enum: [DEBUG, INFO, WARN, ERROR]
+          example: DEBUG
+        msg:
+          type: string
+          description: Log message.
+          example: "syncer: received message"
+      additionalProperties: true
+
+    LogChunk:
+      type: object
+      description: Chunk of structured log entries streamed over WebSocket.
+      properties:
+        streamId:
+          type: string
+          description: Unique stream identifier (ULID).
+        logType:
+          type: string
+          description: Log file type.
+          enum: [app, install]
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogEntry'
+        eof:
+          type: boolean
+          description: True if the stream has ended.
+        hasMore:
+          type: boolean
+          description: True if more historical logs are available after this chunk.
+        offset:
+          type: integer
+          format: int64
+          description: Byte offset in the log file after this chunk.
+        timestamp:
+          type: integer
+          format: int64
+          description: Milliseconds since Unix epoch when this chunk was sent by Base.
+
+    LogStreamRequest:
+      type: object
+      description: Request body for starting a log stream from an instance.
+      required: [streamId, logType]
+      properties:
+        streamId:
+          type: string
+          description: Unique stream identifier (ULID).
+          example: "01KB5NWMWTFFA8CQDW63NCGWG5"
+        logType:
+          type: string
+          enum: [app, install]
+          description: Log file type to stream.
+        mode:
+          type: string
+          enum: [tail, historical]
+          default: tail
+          description: |
+            Streaming mode.
+            - `tail`: follow new log entries from the end (or from `startFrom`).
+            - `historical`: read a fixed number of entries starting at `startFrom`.
+        startFrom:
+          type: integer
+          format: int64
+          default: -1
+          description: |
+            Byte offset to start reading from.
+            - `0` = beginning of file
+            - `-1` = end of file (tail)
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+          description: Maximum number of log entries to read in historical mode.
+
 paths:
   /v1/health:
     get:
@@ -1409,6 +1494,80 @@ paths:
                             description: One-time registration token for the instance
         '409':
           description: Instance address or tag already in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/instances/{instanceId}/logs/stream:
+    post:
+      operationId: streamInstanceLogs
+      tags:
+        - Instances
+      summary: Start streaming logs from an instance (tail or historical)
+      description: |
+        Enqueue a log streaming task for the specified instance. The daemon reads
+        logs from the target server and streams structured log entries back to
+        clients over WebSocket.
+
+        This endpoint only initiates the stream. Log data itself is delivered
+        over the instance WebSocket at `/v1/instances/{instanceId}/stream` using
+        `log_chunk` messages.
+      x-requiredRole: viewer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogStreamRequest'
+      responses:
+        '200':
+          description: Log stream initiated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          streamId:
+                            type: string
+                            description: Stream identifier used with WebSocket subscription.
+                          logType:
+                            type: string
+                            enum: [app, install]
+                          mode:
+                            type: string
+                            enum: [tail, historical]
+                          startFrom:
+                            type: integer
+                            format: int64
+                          limit:
+                            type: integer
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Instance not found
           content:
             application/json:
               schema:
