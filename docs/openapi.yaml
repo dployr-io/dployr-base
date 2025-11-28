@@ -1664,6 +1664,39 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - in: query
+          name: type
+          schema:
+            type: string
+          description: Optional event type filter.
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: |
+            Optional free-text search across event payloads.
+
+            The search string may match against:
+              - event type identifiers
+              - instance IDs or names
+              - cluster IDs or names
+              - log or message text (where applicable)
+              - other indexed metadata fields
+
+            Search behavior, matching fields, and operators are
+            implementation-dependent and may evolve over time.
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [newest, oldest]
+          description: Sort order for events. Defaults to newest.
+        - in: query
+          name: window
+          schema:
+            type: string
+            enum: [all, 24h, 7d, 30d]
+          description: Time window to filter events by timestamp. Defaults to all.
       responses:
         '200':
           description: Paginated list of runtime events

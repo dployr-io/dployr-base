@@ -4,6 +4,13 @@ import { authMiddleware } from "@/middleware/auth";
 import { KVStore } from "@/lib/db/store/kv";
 import { ERROR } from "@/lib/constants";
 
+type EventsFilters = {
+  type?: string;
+  search?: string;
+  sort?: "newest" | "oldest";
+  window?: "all" | "24h" | "7d" | "30d";
+};
+
 const runtime = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 runtime.use("*", authMiddleware);
 
@@ -31,13 +38,50 @@ runtime.get("/events", async (c) => {
   try {
     const events = await kv.getClusterEvents(clusterId);
 
+    const filters: EventsFilters = {
+      type: c.req.query("type") || undefined,
+      search: c.req.query("search") || undefined,
+      sort: (c.req.query("sort") as EventsFilters["sort"]) || "newest",
+      window: (c.req.query("window") as EventsFilters["window"]) || "all",
+    };
+
+    const now = Date.now();
+    const windowMs =
+      filters.window === "24h" ? 24 * 60 * 60 * 1000 :
+      filters.window === "7d" ? 7 * 24 * 60 * 60 * 1000 :
+      filters.window === "30d" ? 30 * 24 * 60 * 60 * 1000 :
+      null;
+
+    let filteredEvents = events;
+
+    if (filters.type) {
+      filteredEvents = filteredEvents.filter((event: any) => event.type === filters.type);
+    }
+
+    if (filters.search) {
+      const term = filters.search.toLowerCase();
+      filteredEvents = filteredEvents.filter((event: any) =>
+        JSON.stringify(event).toLowerCase().includes(term),
+      );
+    }
+
+    if (windowMs !== null) {
+      filteredEvents = filteredEvents.filter((event: any) =>
+        typeof event.timestamp === "number" && event.timestamp >= now - windowMs,
+      );
+    }
+
+    if (filters.sort === "oldest") {
+      filteredEvents = [...filteredEvents].sort((a: any, b: any) => a.timestamp - b.timestamp);
+    }
+
     const { page, pageSize, offset } = parsePaginationParams(
       c.req.query("page"),
       c.req.query("pageSize"),
     );
 
-    const paginatedEvents = events.slice(offset, offset + pageSize);
-    const paginatedData = createPaginatedResponse(paginatedEvents, page, pageSize, events.length);
+    const paginatedEvents = filteredEvents.slice(offset, offset + pageSize);
+    const paginatedData = createPaginatedResponse(paginatedEvents, page, pageSize, filteredEvents.length);
 
     return c.json(createSuccessResponse(paginatedData));
   } catch (error) {
