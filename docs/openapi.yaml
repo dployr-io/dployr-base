@@ -37,7 +37,9 @@ tags:
   - name: Instances
     description: Base instances and logs.
   - name: Deployments
-    description: Application deployments.
+    description: Deployment history and status.
+  - name: Notifications
+    description: Notification integrations and event subscriptions.
   - name: GitHub
     description: GitHub App webhooks.
   - name: Runtime
@@ -275,6 +277,37 @@ components:
         not_after:
           type: string
           format: date-time
+
+    NotificationEvent:
+      type: string
+      description: Canonical code for a notification event.
+      enum:
+        - instance.created
+        - instance.modified
+        - instance.deleted
+        - cluster.modified
+        - cluster.user_invited
+        - cluster.invite_revoked
+        - cluster.invite_accepted
+        - cluster.invite_declined
+        - cluster.removed_user
+        - cluster.user_role_changed
+        - cluster.ownership_transferred
+        - auth.session_created
+
+    NotificationEventArray:
+      type: array
+      description: |
+        Array of notification event codes that are enabled for a given integration.
+        
+        Each item MUST be a valid `NotificationEvent` value.
+      items:
+        $ref: '#/components/schemas/NotificationEvent'
+      example:
+        - instance.created
+        - instance.modified
+        - instance.deleted
+        - cluster.invite_accepted
 
 paths:
   /v1/health:
@@ -855,7 +888,432 @@ paths:
           content:
             application/json:
               schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          remote:
+                            type: object
+                            properties:
+                              gitHub:
+                                type: object
+                                nullable: true
+                              gitLab:
+                                type: object
+                                nullable: true
+                              bitBucket:
+                                type: object
+                                nullable: true
+                          notification:
+                            type: object
+                            properties:
+                              discord:
+                                type: object
+                                nullable: true
+                                properties:
+                                  webhookUrl:
+                                    type: string
+                                  enabled:
+                                    type: boolean
+                                  events:
+                                    $ref: '#/components/schemas/NotificationEventArray'
+                              slack:
+                                type: object
+                                nullable: true
+                                properties:
+                                  webhookUrl:
+                                    type: string
+                                  enabled:
+                                    type: boolean
+                                  events:
+                                    $ref: '#/components/schemas/NotificationEventArray'
+                              customWebhook:
+                                type: object
+                                nullable: true
+                                properties:
+                                  webhookUrl:
+                                    type: string
+                                  enabled:
+                                    type: boolean
+                                  events:
+                                    $ref: '#/components/schemas/NotificationEventArray'
+                              email:
+                                type: object
+                                nullable: true
+                                properties:
+                                  enabled:
+                                    type: boolean
+                                  events:
+                                    $ref: '#/components/schemas/NotificationEventArray'
+
+  /v1/integrations/list:
+    get:
+      operationId: listIntegrations
+      tags:
+        - Clusters
+      summary: List all integrations for the current user's cluster
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: All integrations for the cluster
+          content:
+            application/json:
+              schema:
                 $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/integrations/github/webhook:
+    post:
+      operationId: handleGitHubWebhook
+      tags:
+        - GitHub
+      summary: Handle GitHub App webhook events
+      x-requiredRole: public
+      description: Receives and processes GitHub App webhook events for installation, workflow runs, and push events.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Missing or invalid signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/notifications/discord/setup:
+    post:
+      operationId: setupDiscordIntegration
+      tags:
+        - Notifications
+      summary: Configure Discord webhook integration
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          description: Target cluster ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [webhookUrl, enabled]
+              properties:
+                webhookUrl:
+                  type: string
+                  format: uri
+                  description: Discord webhook URL
+                enabled:
+                  type: boolean
+                  description: Enable or disable Discord notifications
+                events:
+                  $ref: '#/components/schemas/NotificationEventArray'
+      responses:
+        '200':
+          description: Discord integration configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/notifications/slack/setup:
+    post:
+      operationId: setupSlackIntegration
+      tags:
+        - Notifications
+      summary: Configure Slack webhook integration
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          description: Target cluster ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [webhookUrl, enabled]
+              properties:
+                webhookUrl:
+                  type: string
+                  format: uri
+                  description: Slack webhook URL
+                enabled:
+                  type: boolean
+                  description: Enable or disable Slack notifications
+                events:
+                  $ref: '#/components/schemas/NotificationEventArray'
+      responses:
+        '200':
+          description: Slack integration configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/notifications/webhook/setup:
+    post:
+      operationId: setupCustomWebhookIntegration
+      tags:
+        - Notifications
+      summary: Configure custom webhook integration
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          description: Target cluster ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [webhookUrl, enabled]
+              properties:
+                webhookUrl:
+                  type: string
+                  format: uri
+                  description: Custom webhook URL
+                enabled:
+                  type: boolean
+                  description: Enable or disable custom webhook notifications
+                events:
+                  $ref: '#/components/schemas/NotificationEventArray'
+      responses:
+        '200':
+          description: Custom webhook integration configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/integrations/gitlab/setup:
+    post:
+      operationId: setupGitLabIntegration
+      tags:
+        - Clusters
+      summary: Configure GitLab integration
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accessToken, enabled]
+              properties:
+                accessToken:
+                  type: string
+                  description: GitLab personal access token
+                enabled:
+                  type: boolean
+                  description: Enable or disable GitLab integration
+      responses:
+        '200':
+          description: GitLab integration configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/integrations/bitbucket/setup:
+    post:
+      operationId: setupBitBucketIntegration
+      tags:
+        - Clusters
+      summary: Configure BitBucket integration
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accessToken, enabled]
+              properties:
+                accessToken:
+                  type: string
+                  description: BitBucket app password
+                enabled:
+                  type: boolean
+                  description: Enable or disable BitBucket integration
+      responses:
+        '200':
+          description: BitBucket integration configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/notifications/email/setup:
+    post:
+      operationId: setupEmailNotificationIntegration
+      tags:
+        - Notifications
+      summary: Configure email notification integration
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          description: Target cluster ID
+          schema:
+            type: string
+      description: |
+        Configure email notifications for cluster events. By default, notifications are sent to the cluster owner's email.
+        
+        Available event codes:
+        - `instance.created` - Instance created
+        - `instance.modified` - Instance modified
+        - `instance.deleted` - Instance deleted
+        - `cluster.modified` - Cluster modified
+        - `cluster.invite_accepted` - User joined cluster
+        - `cluster.removed_user` - User removed from cluster
+        - `cluster.user_role_changed` - User role changed
+        - `cluster.ownership_transferred` - Ownership transferred
+        - `auth.session_created` - User signed in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+                  description: Enable or disable email notifications
+                events:
+                  $ref: '#/components/schemas/NotificationEventArray'
+      responses:
+        '200':
+          description: Email notification integration configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/notifications/events/setup:
+    post:
+      operationId: setupNotificationEvents
+      tags:
+        - Notifications
+      summary: Update subscribed notification events for an integration
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          description: Target cluster ID
+          schema:
+            type: string
+      description: |
+        Update which notification events are enabled for a specific integration
+        (Discord, Slack, custom webhook, or email) in the current cluster.
+
+        This endpoint only modifies the `events` map; it does not change
+        webhook URLs or `enabled` flags.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [integration, events]
+              properties:
+                integration:
+                  type: string
+                  enum: [discord, slack, customWebhook, email]
+                  description: Integration to update
+                events:
+                  $ref: '#/components/schemas/NotificationEventArray'
+      responses:
+        '200':
+          description: Notification events updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /v1/instances:
     get:

@@ -9,6 +9,7 @@ import { requireClusterAdmin, requireClusterOwner, requireClusterViewer } from "
 import { ERROR, EVENTS } from "@/lib/constants";
 import { authMiddleware } from "@/middleware/auth";
 import { JWTService } from "@/services/jwt";
+import { NotificationService } from "@/services/notifications";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 instances.use("*", authMiddleware);
@@ -114,6 +115,16 @@ instances.post("/", requireClusterOwner, async (c) => {
       type: EVENTS.RESOURCE.RESOURCE_CREATED.code,
       request: c.req.raw,
     });
+
+    // Trigger notifications
+    const notificationService = new NotificationService(c.env);
+    c.executionCtx.waitUntil(
+      notificationService.triggerEvent(EVENTS.INSTANCE.CREATED.code, {
+        clusterId,
+        instanceId: instance.id,
+        userEmail: session.email,
+      })
+    );
 
     c.executionCtx.waitUntil(
       service.pingInstance({
@@ -265,6 +276,16 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
       request: c.req.raw,
     });
 
+    // Trigger notifications
+    const notificationService = new NotificationService(c.env);
+    c.executionCtx.waitUntil(
+      notificationService.triggerEvent(EVENTS.INSTANCE.DELETED.code, {
+        clusterId,
+        instanceId,
+        userEmail: session.email,
+      })
+    );
+
     return c.json(
       createSuccessResponse({}, "Instance deleted successfully"),
     );
@@ -339,6 +360,8 @@ instances.post("/:instanceId/tokens/rotate", async (c) => {
   }
 
   const rotated = await jwtService.rotateBootstrapToken(instanceId, nonce, "5m");
+
+  // update token in instance
 
   return c.json(createSuccessResponse({ token: rotated }), 200);
 });

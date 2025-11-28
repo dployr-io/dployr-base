@@ -6,6 +6,7 @@ import z from "zod";
 import { KVStore } from "@/lib/db/store/kv";
 import { GitHubService } from "@/services/github";
 import { ERROR, EVENTS } from "@/lib/constants";
+import { NotificationService } from "@/services/notifications";
 
 const clusters = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 clusters.use("*", authMiddleware);
@@ -80,6 +81,15 @@ clusters.get("/:id/users/invites/accept", async (c) => {
     }
 
     await d1.clusters.acceptInvite(session.userId, clusterId);
+
+    // Trigger notifications
+    const notificationService = new NotificationService(c.env);
+    c.executionCtx.waitUntil(
+      notificationService.triggerEvent(EVENTS.CLUSTER.INVITE_ACCEPTED.code, {
+        clusterId,
+        userEmail: session.email,
+      })
+    );
 
     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
   } catch (error) {

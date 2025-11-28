@@ -1,5 +1,6 @@
 import { Cluster, OAuthProvider, Role as UserRole, User, Integrations, GitHubIntegration } from "@/types";
 import { BaseStore } from "./base";
+import { EVENTS } from "@/lib/constants";
 
 export class ClusterStore extends BaseStore {
   private readonly ROLE_HIERARCHY = {
@@ -633,6 +634,26 @@ export class ClusterStore extends BaseStore {
     `);
     const result = await stmt.bind(clusterId).first();
     const metadata = result?.metadata ? JSON.parse(result.metadata as string) : {};
+    
+    // Default event subscriptions for all notification integrations
+    const defaultNotificationEvents = [
+      EVENTS.INSTANCE.CREATED.code,
+      EVENTS.INSTANCE.MODIFIED.code,
+      EVENTS.INSTANCE.DELETED.code,
+      EVENTS.CLUSTER.INVITE_ACCEPTED.code,
+      EVENTS.CLUSTER.USER_INVITED.code,
+      EVENTS.CLUSTER.REMOVED_USER.code,
+      EVENTS.CLUSTER.USER_ROLE_CHANGED.code,
+    ];
+
+    const ensureEvents = (integration: any) => {
+      if (!integration) return integration;
+      return {
+        ...integration,
+        events: integration.events || defaultNotificationEvents,
+      };
+    };
+
     const integrations: Integrations = {
       remote: {
         gitHub: metadata?.gitHub,
@@ -645,9 +666,11 @@ export class ClusterStore extends BaseStore {
         mailerSend: metadata?.mailerSend,
         mailChimp: metadata?.mailChimp,
       },
-      domain: {
-        discord: metadata?.discord,
-        slack: metadata?.slack,
+      notification: {
+        discord: ensureEvents(metadata?.discord),
+        slack: ensureEvents(metadata?.slack),
+        customWebhook: ensureEvents(metadata?.customWebhook),
+        email: ensureEvents(metadata?.emailNotification),
       }
     };
     return integrations;

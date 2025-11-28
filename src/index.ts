@@ -3,7 +3,7 @@ import { cors } from "hono/cors";
 import { Bindings, Variables } from "@/types";
 import auth from "@/routes/auth";
 import instances from "@/routes/instances";
-import gitHub from "@/routes/github";
+import integrations from "@/routes/integrations";
 import { initializeDatabase } from "@/lib/db/migrate";
 import clusters from "@/routes/clusters";
 import deployments from "@/routes/deployments";
@@ -12,6 +12,7 @@ import runtime from "@/routes/runtime";
 import jwks from "@/routes/jwks";
 import domains from "@/routes/domains";
 import agent from "@/routes/agent";
+import notifications from "./routes/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -47,7 +48,8 @@ app.route("/v1/users", users);
 app.route("/v1/instances", instances);
 app.route("/v1/clusters", clusters);
 app.route("/v1/deployments", deployments);
-app.route("/v1/github", gitHub);
+app.route("/v1/integrations", integrations);
+app.route("/v1/notifications", notifications);
 app.route("/v1/runtime", runtime);
 app.route("/v1/jwks", jwks);
 app.route("/v1/domains", domains);

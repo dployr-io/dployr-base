@@ -53,11 +53,19 @@ export const EVENTS = {
         SESSION_CREATED: { code: "auth.session_created", message: "Sign-in successful" },
     },
     CLUSTER: {
+        MODIFIED: { code: "cluster.modified", message: "Cluster modified successfully" },
         USER_INVITED: { code: "cluster.user_invited", message: "Successfully sent invite" },
         INVITE_REVOKED: { code: "cluster.invite_revoked", message: "Revoked invite to join cluster successfully" },
         INVITE_ACCEPTED: { code: "cluster.invite_accepted", message: "Accepted invite to join cluster" },
         INVITE_DECLINED: { code: "cluster.invite_declined", message: "Declined invite to join cluster" },
         REMOVED_USER: { code: "cluster.removed_user", message: "Removed user from cluster" },
+        USER_ROLE_CHANGED: { code: "cluster.user_role_changed", message: "User role changed" },
+        OWNERSHIP_TRANSFERRED: { code: "cluster.ownership_transferred", message: "Cluster ownership transferred" },
+    },
+    INSTANCE: {
+        CREATED: { code: "instance.created", message: "Instance created successfully" },
+        MODIFIED: { code: "instance.modified", message: "Instance modified successfully" },
+        DELETED: { code: "instance.deleted", message: "Instance deleted successfully" },
     },
     PERMISSION: {
         OWNER_ACCESS_GRANTED: { code: "permission.owner_access_granted", message: "Owner access granted" },
@@ -86,3 +94,13 @@ export const EVENTS = {
         BOOTSTRAP_LOGS: { code: "read.bootstrap_logs", message: "Bootstrap logs read" }   
     }
 } as const;
+
+export const DEFAULT_EVENTS = [
+    EVENTS.INSTANCE.CREATED.code,
+    EVENTS.INSTANCE.MODIFIED.code,
+    EVENTS.INSTANCE.DELETED.code,
+    EVENTS.CLUSTER.INVITE_ACCEPTED.code,
+    EVENTS.CLUSTER.USER_INVITED.code,
+    EVENTS.CLUSTER.REMOVED_USER.code,
+    EVENTS.CLUSTER.USER_ROLE_CHANGED.code,
+];

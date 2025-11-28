@@ -118,14 +118,16 @@ export interface GitHubIntegration {
 
 export interface GitLabIntegration {
   loginId: string;
-  installationId: number;
+  accessToken: string;
   remotesCount: number;
+  enabled: boolean;
 }
 
 export interface BitBucketIntegration {
   loginId: string;
-  installationId: number;
+  accessToken: string;
   remotesCount: number;
+  enabled: boolean;
 }
 
 export interface ResendMailIntegration { }
@@ -136,9 +138,28 @@ export interface MailerSendIntegration { }
 
 export interface MailChimpIntegration { }
 
-export interface DiscordIntegration { }
+export interface DiscordIntegration {
+  webhookUrl: string;
+  enabled: boolean;
+  events?: NotificationEvent[];
+}
 
-export interface SlackIntegration { }
+export interface SlackIntegration {
+  webhookUrl: string;
+  enabled: boolean;
+  events?: NotificationEvent[];
+}
+
+export interface CustomWebhookIntegration {
+  webhookUrl: string;
+  enabled: boolean;
+  events?: NotificationEvent[];
+}
+
+export interface EmailNotificationIntegration {
+  enabled: boolean;
+  events?: NotificationEvent[];
+}
 
 export interface Integrations {
   email: {
@@ -152,9 +173,11 @@ export interface Integrations {
     gitLab: GitLabIntegration,
     bitBucket: BitBucketIntegration,
   },
-  domain: {
+  notification: {
     discord: DiscordIntegration,
     slack: SlackIntegration,
+    customWebhook: CustomWebhookIntegration,
+    email: EmailNotificationIntegration,
   }
 }
 
@@ -163,3 +186,5 @@ export * from "./responses";
 
 // Export agent types
 export * from "./agent";
+
+import type { NotificationEvent } from "@/services/notifier";

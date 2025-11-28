@@ -4,11 +4,16 @@ import { KVStore } from "@/lib/db/store/kv";
 import { D1Store } from "@/lib/db/store";
 import { verifyGitHubWebhook } from "@/services/utils";
 import { ERROR, WORKFLOW_NAME } from "@/lib/constants";
+import { requireClusterDeveloper } from "@/middleware/auth";
+import { GitLabService } from "@/services/gitlab";
+import { BitBucketService } from "@/services/bitbucket";
 
-const gitHub = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const integrations = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Webhook to subscribe to events
-gitHub.post("/webhook", async (c) => {
+integrations.use("*", requireClusterDeveloper);
+
+// GitHub webhook 
+integrations.post("/github/webhook", async (c) => {
   try {
     const signature = c.req.header("x-hub-signature-256");
     const event = c.req.header("x-github-event");
@@ -60,7 +65,6 @@ gitHub.post("/webhook", async (c) => {
     if (event === "meta" && body.action === "deleted") {
       const hookId = body.hook_id;
       console.log(`GitHub App hook deleted: ${hookId}`);
-      // Cleanup if needed
     }
 
     // Handle workflow_run events (completed)
@@ -68,7 +72,7 @@ gitHub.post("/webhook", async (c) => {
       const { workflow_run, repository } = body;
 
       if (workflow_run.name === WORKFLOW_NAME) {
-        const status = workflow_run.conclusion; // success, failure, cancelled, etc.
+        const status = workflow_run.conclusion;
         const runId = workflow_run.id;
 
         console.log(
@@ -85,15 +89,13 @@ gitHub.post("/webhook", async (c) => {
           updatedAt: workflow_run.updated_at,
         });
 
-        // notification on failure
         if (status === "failure") {
           console.error(`Deployment failed for ${repository.full_name}`);
-          // email notification here
         }
       }
     }
 
-    // Handle push events (auto-deploy on code changes)
+    // Handle push events
     if (event === "push") {
       const { repository, ref, pusher, commits } = body;
 
@@ -114,8 +116,95 @@ gitHub.post("/webhook", async (c) => {
   }
 });
 
-gitHub.get("/connection/manage", async (c) => {
-  return c.redirect(`https://github.com/settings/connections/applications/${c.env.GITHUB_CLIENT_ID}`);
+// GitLab integration setup
+integrations.post("/gitlab/setup", async (c) => {
+  try {
+    const { accessToken, enabled } = await c.req.json();
+    const session = c.get("session");
+    
+    if (!session?.clusters?.[0]?.id) {
+      return c.json(createErrorResponse({ 
+        message: "No cluster found", 
+        code: ERROR.AUTH.BAD_SESSION.code 
+      }), ERROR.AUTH.BAD_SESSION.status);
+    }
+
+    const gitlabService = new GitLabService(c.env);
+   
+    // Test access
+    await gitlabService.remoteCount({ accessToken });
+
+    const d1 = new D1Store(c.env.BASE_DB);
+    await d1.clusters.update(session.clusters[0].id, {
+      metadata: { gitLab: { accessToken, enabled } }
+    });
+
+    return c.json(createSuccessResponse({ enabled }, "GitLab integration configured"));
+  } catch (error) {
+    console.error("GitLab setup error:", error);
+    return c.json(createErrorResponse({ 
+      message: "Internal server error", 
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
 });
 
-export default gitHub;
+// BitBucket integration setup
+integrations.post("/bitbucket/setup", async (c) => {
+  try {
+    const { accessToken, enabled } = await c.req.json();
+    const session = c.get("session");
+    
+    if (!session?.clusters?.[0]?.id) {
+      return c.json(createErrorResponse({ 
+        message: "No cluster found", 
+        code: ERROR.AUTH.BAD_SESSION.code 
+      }), ERROR.AUTH.BAD_SESSION.status);
+    }
+
+    const bitbucketService = new BitBucketService(c.env);
+
+    // Test access
+    await bitbucketService.remoteCount({ accessToken });
+
+    const d1 = new D1Store(c.env.BASE_DB);
+    await d1.clusters.update(session.clusters[0].id, {
+      metadata: { bitBucket: { accessToken, enabled } }
+    });
+
+    return c.json(createSuccessResponse({ enabled }, "BitBucket integration configured"));
+  } catch (error) {
+    console.error("BitBucket setup error:", error);
+    return c.json(createErrorResponse({ 
+      message: "Internal server error", 
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
+});
+
+// List all integrations for a cluster
+integrations.get("/list", async (c) => {
+  try {
+    const session = c.get("session");
+    
+    if (!session?.clusters?.[0]?.id) {
+      return c.json(createErrorResponse({ 
+        message: "No cluster found", 
+        code: ERROR.AUTH.BAD_SESSION.code 
+      }), ERROR.AUTH.BAD_SESSION.status);
+    }
+
+    const d1 = new D1Store(c.env.BASE_DB);
+    const integrations = await d1.clusters.listClusterIntegrations(session.clusters[0].id);
+
+    return c.json(createSuccessResponse(integrations, "Integrations retrieved"));
+  } catch (error) {
+    console.error("List integrations error:", error);
+    return c.json(createErrorResponse({ 
+      message: "Internal server error", 
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
+});
+
+export default integrations;
