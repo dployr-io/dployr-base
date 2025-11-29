@@ -172,64 +172,6 @@ instances.post("/", requireClusterOwner, async (c) => {
   }
 });
 
-// Get instance logs
-instances.get("/:instanceId/logs", requireClusterAdmin, async (c) => {
-  try {
-    const instanceId = c.req.param("instanceId");
-    const clusterId = c.req.query("clusterId")!;
-
-    if (!clusterId) {
-      return c.json(createErrorResponse({ 
-        message: "Cluster ID is required", 
-        code: ERROR.REQUEST.BAD_REQUEST.code 
-      }), ERROR.REQUEST.BAD_REQUEST.status);
-    }
-
-    const object = await c.env.INSTANCE_LOGS.get(`${clusterId}/${instanceId}.log`);
-
-    if (!object) {
-      return c.json(
-        createErrorResponse({
-          message: "Logs not found",
-          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-        }),
-        ERROR.RESOURCE.MISSING_RESOURCE.status,
-      );
-    }
-
-    const session = c.get("session");
-    const userId = session?.userId!;
-
-    const kv = new KVStore(c.env.BASE_KV);
-
-    await kv.logEvent({
-      actor: {
-        id: userId,
-        type: "user",
-      },
-      targets: [{ id: clusterId }],
-      type: EVENTS.READ.BOOTSTRAP_LOGS.code,
-      request: c.req.raw,
-    });
-
-    const logs = await object.text();
-    const data = JSON.parse(logs);
-
-    return c.json(
-      createSuccessResponse(data, "Instance logs fetched successfully"),
-    );
-  } catch (error) {
-    console.error("Get instance logs error:", error);
-    return c.json(
-      createErrorResponse({
-        message: "Failed to fetch instance logs",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
-  }
-});
-
 // Delete an instance
 instances.delete("/:instanceId", requireClusterOwner, async (c) => {
   try {

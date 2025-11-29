@@ -1504,7 +1504,7 @@ paths:
       operationId: streamInstanceLogs
       tags:
         - Instances
-      summary: Start streaming logs from an instance (tail or historical)
+      summary: Start streaming logs from an instance (live or historical)
       description: |
         Enqueue a log streaming task for the specified instance. The daemon reads
         logs from the target server and streams structured log entries back to
@@ -1568,38 +1568,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Instance not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /v1/instances/{instanceId}/logs:
-    get:
-      operationId: getInstanceLogs
-      tags:
-        - Instances
-      summary: Get instance logs
-      x-requiredRole: admin
-      parameters:
-        - in: path
-          name: instanceId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: clusterId
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Instance logs
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-        '404':
-          description: Logs not found
           content:
             application/json:
               schema:
