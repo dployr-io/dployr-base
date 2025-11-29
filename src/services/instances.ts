@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { Bindings, Instance, Session } from "@/types";
 import { D1Store } from "@/lib/db/store";
 import { EVENTS } from "@/lib/constants";

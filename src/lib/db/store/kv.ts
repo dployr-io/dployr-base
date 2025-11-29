@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { ActorType, Cluster, Session, User } from "@/types";
 import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, AGENT_UPDATE_TTL, RELEASE_CACHE_TTL, DEDUP_TTL } from "@/lib/constants";
 import { ulid } from "ulid";

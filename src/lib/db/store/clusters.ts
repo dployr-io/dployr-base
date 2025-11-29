@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { Cluster, OAuthProvider, Role as UserRole, User, Integrations, GitHubIntegration } from "@/types";
 import { BaseStore } from "./base";
 import { EVENTS } from "@/lib/constants";

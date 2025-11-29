@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Generates an RSA key pair.
  * @returns {Promise<{publicKeyJwk: JsonWebKey, privateKey: string}>} The generated key pair.

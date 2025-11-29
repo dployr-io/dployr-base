@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { Hono } from "hono";
 import { Bindings, Variables, User, createSuccessResponse, createErrorResponse } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";

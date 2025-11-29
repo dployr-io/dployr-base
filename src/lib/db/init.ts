@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { initializeDatabase } from "@/lib/db/migrate";
 
 export async function initializeApp(env: {

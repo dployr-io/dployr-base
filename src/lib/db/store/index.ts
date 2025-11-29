@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { UserStore } from "./users";
 import { ClusterStore } from "./clusters";
 import { InstanceStore } from "./instances";

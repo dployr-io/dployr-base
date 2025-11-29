@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 export function generateSecretKey({
   length = 32,
   encoding = 'hex',

@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 // Import and re-export event codes from constants for notification system
 import { EVENTS } from "@/lib/constants";
 export { EVENTS };

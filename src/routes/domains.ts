@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { Hono } from "hono";
 import { Bindings, createErrorResponse, createSuccessResponse } from "@/types";
 import { ERROR, EVENTS } from "@/lib/constants";

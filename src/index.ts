@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { Bindings, Variables } from "@/types";

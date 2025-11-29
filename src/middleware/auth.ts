@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 // middleware/auth.ts
 import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";

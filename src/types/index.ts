@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Helper type to make specific properties required while keeping others optional
  */

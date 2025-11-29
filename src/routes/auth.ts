@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { Hono } from "hono";
 import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorResponse } from "@/types";
 import { OAuthService } from "@/services/oauth";

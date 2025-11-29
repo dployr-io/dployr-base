@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { Bindings, SystemStatus } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";
 import { AgentUpdateV1Schema, AgentStatusReportSchema, LATEST_COMPATIBILITY_DATE, type WSHandshakeResponse } from "@/types/agent";

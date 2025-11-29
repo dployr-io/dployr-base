@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 // Auto-import all migrations
 import * as migrations from '@/lib/db/migrations/index';
 

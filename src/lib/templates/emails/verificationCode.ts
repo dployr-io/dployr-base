@@ -1,3 +1,6 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 export const loginCodeTemplate = (name: string, code: string) => `
 <!DOCTYPE html>
 <html>
