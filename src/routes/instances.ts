@@ -356,14 +356,13 @@ instances.post("/:instanceId/logs/stream", requireClusterViewer, async (c) => {
 
     const body = await c.req.json();
     const logType = body?.logType as string | undefined;
-    const streamId = body?.streamId as string | undefined;
     const mode = body?.mode as string | undefined || "tail";
     const startFrom = typeof body?.startFrom === "number" ? body.startFrom : -1;
     const limit = typeof body?.limit === "number" ? body.limit : 100;
 
-    if (!logType || !streamId) {
+    if (!logType) {
       return c.json(createErrorResponse({
-        message: "logType and streamId are required",
+        message: "logType is required",
         code: ERROR.REQUEST.BAD_REQUEST.code,
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
@@ -398,6 +397,7 @@ instances.post("/:instanceId/logs/stream", requireClusterViewer, async (c) => {
     const service = new InstanceService(c.env);
     const kv = new KVStore(c.env.BASE_KV);
     const token = await service.getOrCreateInstanceUserToken(kv, session, instanceId);
+    const streamId = ulid();
 
     // Create task to stream logs
     const id = c.env.INSTANCE_OBJECT.idFromName(instanceId);
@@ -410,7 +410,7 @@ instances.post("/:instanceId/logs/stream", requireClusterViewer, async (c) => {
         type: "logs/stream:post",
         payload: { 
           token, 
-          logType, 
+          logType,
           streamId,
           mode,
           startFrom,
@@ -420,12 +420,12 @@ instances.post("/:instanceId/logs/stream", requireClusterViewer, async (c) => {
       }),
     });
 
-    return c.json(createSuccessResponse({ 
-      streamId, 
-      logType, 
-      mode, 
-      startFrom, 
-      limit 
+    return c.json(createSuccessResponse({
+      streamId,
+      logType,
+      mode,
+      startFrom,
+      limit,
     }, "Log stream initiated"));
   } catch (error) {
     console.error("Failed to initiate log stream", error);

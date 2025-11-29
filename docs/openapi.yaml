@@ -374,16 +374,13 @@ components:
     LogStreamRequest:
       type: object
       description: Request body for starting a log stream from an instance.
-      required: [streamId, logType]
+      required: [logType]
       properties:
-        streamId:
-          type: string
-          description: Unique stream identifier (ULID).
-          example: "01KB5NWMWTFFA8CQDW63NCGWG5"
         logType:
           type: string
           enum: [app, install]
           description: Log file type to stream.
+
         mode:
           type: string
           enum: [tail, historical]
