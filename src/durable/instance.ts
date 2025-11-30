@@ -13,7 +13,8 @@ export class InstanceObject {
   private roles: Map<WebSocket, "agent" | "client"> = new Map();
   private statusWindow: { timestamp: number; system: SystemStatus }[] = [];
   private readonly maxWindowSize = 100;
-  private logStreamSubscriptions: Map<WebSocket, { streamId: string; logType: string }> = new Map();
+  private logStreamSubscriptions: Map<WebSocket, { logType: string; lastOffset: number }> = new Map();
+  private activeLogStreams: Map<string, string> = new Map(); // logType -> current streamId
 
   constructor(private state: DurableObjectState, private env: Bindings) {}
 
@@ -136,28 +137,44 @@ export class InstanceObject {
 
     if (kind === "log_subscribe") {
       this.roles.set(ws, "client");
-      const streamId = payload?.streamId as string | undefined;
       const logType = payload?.logType as string | undefined;
+      const startOffset = (payload?.startOffset as number | undefined) || 0;
       
-      if (!streamId || !logType) {
-        ws.send(JSON.stringify({ kind: "error", message: "streamId and logType required" }));
+      if (!logType) {
+        ws.send(JSON.stringify({ kind: "error", message: "logType required" }));
         return;
       }
 
-      this.logStreamSubscriptions.set(ws, { streamId, logType });
-      ws.send(JSON.stringify({ kind: "log_subscribed", streamId, logType }));
+      console.log(`log_subscribe: client subscribing to logType=${logType}, startOffset=${startOffset}`);
+      
+      this.logStreamSubscriptions.set(ws, { logType, lastOffset: startOffset });
+      
+      const activeStreamId = this.activeLogStreams.get(logType);
+      ws.send(JSON.stringify({ 
+        kind: "log_subscribed", 
+        logType,
+        streamId: activeStreamId || null,
+        startOffset 
+      }));
       return;
     }
 
     if (kind === "log_chunk") {
       const streamId = payload?.streamId as string | undefined;
       const logType = payload?.logType as string | undefined;
-      const entries = payload?.entries as any[] | undefined;
+      const entries = (payload?.entries as { time: string; level: "DEBUG" | "INFO" | "WARN" | "ERROR"; msg: string }[] | undefined);
       const eof = payload?.eof as boolean | undefined;
       const hasMore = payload?.hasMore as boolean | undefined;
       const offset = payload?.offset as number | undefined;
 
       if (!streamId || !logType || !entries) return;
+
+      // Track this as the active stream for this logType
+      const currentActiveStreamId = this.activeLogStreams.get(logType);
+      if (!currentActiveStreamId || currentActiveStreamId !== streamId) {
+        this.activeLogStreams.set(logType, streamId);
+        console.log(`Updated active stream for ${logType}: ${streamId}`);
+      }
 
       const message = JSON.stringify({
         kind: "log_chunk",
@@ -170,15 +187,25 @@ export class InstanceObject {
         timestamp: Date.now(),
       });
 
+      let forwardedCount = 0;
+      
       for (const socket of this.sockets) {
         const sub = this.logStreamSubscriptions.get(socket);
-        if (sub && sub.streamId === streamId && sub.logType === logType) {
+        if (sub && sub.logType === logType && offset && offset >= sub.lastOffset) {
           try {
             socket.send(message);
+            sub.lastOffset = offset + (entries?.length || 0);
+            forwardedCount++;
           } catch (err) {
             console.error("Failed to send log chunk to client", err);
           }
         }
+      }
+      
+      if (forwardedCount === 0) {
+        console.log(`log_chunk not forwarded: streamId=${streamId}, logType=${logType}, subscribers=${this.logStreamSubscriptions.size}`);
+      } else {
+        console.log(`log_chunk forwarded to ${forwardedCount} client(s)`);
       }
       return;
     }
@@ -208,14 +235,28 @@ export class InstanceObject {
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
+    const sub = this.logStreamSubscriptions.get(ws);
+    
     this.sockets.delete(ws);
     this.handshakeComplete.delete(ws);
     this.roles.delete(ws);
     this.logStreamSubscriptions.delete(ws);
+    
+    // Check if there are other clients subscribed to this logType
+    if (sub) {
+      const hasOtherClients = Array.from(this.logStreamSubscriptions.values())
+        .some(s => s.logType === sub.logType);
+      
+      if (!hasOtherClients) {
+        console.log(`No more clients for logType=${sub.logType}, cleaning up active stream`);
+        this.activeLogStreams.delete(sub.logType);
+        // TODO: Send cancel signal to daemon when supported
+      }
+    }
+    
     if (this.sockets.size === 0) {
       const inflight = await this.state.storage.get<string[]>("inflight");
       if (Array.isArray(inflight) && inflight.length > 0) {
-        // Tasks remain in DO storage for retry on reconnect
         await this.state.storage.delete("inflight");
       }
     }

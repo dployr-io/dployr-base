@@ -31,6 +31,13 @@ const rotateSchema = z.object({
   token: z.string().min(1, "Token is required")
 });
 
+const logStreamRequestSchema = z.object({
+  logType: z.enum(["app", "install"]),
+  mode: z.enum(["tail", "historical"]).default("tail"),
+  startFrom: z.number().int().optional(),
+  limit: z.number().int().min(1).max(1000).optional(),
+});
+
 // List all instances by cluster
 instances.get("/", requireClusterViewer, async (c) => {
   const clusterId = c.req.query("clusterId");
@@ -355,35 +362,21 @@ instances.post("/:instanceId/logs/stream", requireClusterViewer, async (c) => {
     }
 
     const body = await c.req.json();
-    const logType = body?.logType as string | undefined;
-    const mode = body?.mode as string | undefined || "tail";
-    const startFrom = typeof body?.startFrom === "number" ? body.startFrom : -1;
-    const limit = typeof body?.limit === "number" ? body.limit : 100;
-
-    if (!logType) {
+    const validation = logStreamRequestSchema.safeParse(body);
+    if (!validation.success) {
+      const errors = validation.error.issues.map((err) => ({
+        field: err.path.join("."),
+        message: err.message,
+      }));
       return c.json(createErrorResponse({
-        message: "logType is required",
+        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
         code: ERROR.REQUEST.BAD_REQUEST.code,
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    // Validate logType
-    const validLogTypes = ["app", "install"];
-    if (!validLogTypes.includes(logType)) {
-      return c.json(createErrorResponse({
-        message: `Invalid logType. Must be one of: ${validLogTypes.join(", ")}`,
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }), ERROR.REQUEST.BAD_REQUEST.status);
-    }
-
-    // Validate mode
-    const validModes = ["tail", "historical"];
-    if (!validModes.includes(mode)) {
-      return c.json(createErrorResponse({
-        message: `Invalid mode. Must be one of: ${validModes.join(", ")}`,
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }), ERROR.REQUEST.BAD_REQUEST.status);
-    }
+    const { logType, mode, startFrom: rawStartFrom, limit: rawLimit } = validation.data;
+    const startFrom = typeof rawStartFrom === "number" ? rawStartFrom : -1;
+    const limit = typeof rawLimit === "number" ? rawLimit : 100;
 
     const d1 = new D1Store(c.env.BASE_DB);
     const instance = await d1.instances.get(instanceId);
@@ -402,14 +395,15 @@ instances.post("/:instanceId/logs/stream", requireClusterViewer, async (c) => {
     // Create task to stream logs
     const id = c.env.INSTANCE_OBJECT.idFromName(instanceId);
     const stub = c.env.INSTANCE_OBJECT.get(id);
+    
     await stub.fetch(`https://do/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: ulid(),
         type: "logs/stream:post",
-        payload: { 
-          token, 
+        payload: {
+          token,
           logType,
           streamId,
           mode,
