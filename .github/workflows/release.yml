@@ -92,7 +92,7 @@ jobs:
             "content": "Dployr Base ${{ github.ref_name }} has been released!",
             "embeds": [
               {
-                "title": "Dployr Base ${{ github.ref_name }} is Live!",
+                "title": "Release ${{ github.ref_name }} is Live!",
                 "description": "A new version of dployr base is ready.\\n\\nView the full changelog and assets below.\\n\\n[Release details](https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }})",
                 "url": "https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}",
                 "color": 16753920,
