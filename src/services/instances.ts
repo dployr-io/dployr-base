@@ -26,7 +26,7 @@ export class InstanceService {
     c: Context;
   }): Promise<{ instance: Instance; token: string }> {
     const d1 = new D1Store(this.env.BASE_DB);
-    const kv = new KVStore(this.env.BASE_KV);
+    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
 
     const instance = await d1.instances.create(clusterId, {
       tag,
@@ -109,7 +109,7 @@ export class InstanceService {
     c: Context 
   }): Promise<"enqueued"> {
     const d1 = new D1Store(this.env.BASE_DB);
-    const kv = new KVStore(this.env.BASE_KV);
+    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
     const instance = await d1.instances.get(instanceId);
 
     if (!instance) {
@@ -157,7 +157,7 @@ export class InstanceService {
     | { ok: true; instanceId: string; jwksUrl: string }
     | { ok: false; reason: "invalid_token" | "invalid_type" | "already_used" }
   > {
-    const kv = new KVStore(this.env.BASE_KV);
+    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
     const d1 = new D1Store(this.env.BASE_DB);
     const jwtService = new JWTService(kv);
 
@@ -190,7 +190,7 @@ export class InstanceService {
     instanceId: string;
   }) {
     const d1 = new D1Store(this.env.BASE_DB);
-    const kv = new KVStore(this.env.BASE_KV);
+    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
     const instance = await d1.instances.get(instanceId);
 
     if (!instance) {

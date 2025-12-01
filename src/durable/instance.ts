@@ -337,7 +337,8 @@ export class InstanceObject {
 
     const alreadyHandshaken = this.handshakeComplete.get(ws) === true;
 
-    const kv = new KVStore(this.env.BASE_KV);
+    // ALLOWED: One-time handshake only, not per-message
+    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
 
     if (!alreadyHandshaken) {
       if (!isCompatible(update.compatibility_date, LATEST_COMPATIBILITY_DATE)) {

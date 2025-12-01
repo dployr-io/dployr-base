@@ -7,14 +7,15 @@ import { KVStore } from "@/lib/db/store/kv";
 import { D1Store } from "@/lib/db/store";
 import { authMiddleware } from "@/middleware/auth";
 import { ERROR } from "@/lib/constants";
+import { getKV, getDB, type AppVariables } from "@/lib/context";
 
-const deployments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const deployments = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 deployments.use("*", authMiddleware);
 
 // List all deployments
 deployments.get("/", async (c) => {
-  const kv = new KVStore(c.env.BASE_KV);
-  const d1 = new D1Store(c.env.BASE_DB);
+  const kv = new KVStore(getKV(c));
+  const d1 = new D1Store(getDB(c) as D1Database);
   const session = c.get("session")!;
 
   if (!session) {

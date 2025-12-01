@@ -50,7 +50,7 @@ instances.get("/", requireClusterViewer, async (c) => {
   }
 
   const d1 = new D1Store(c.env.BASE_DB);
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
   const service = new InstanceService(c.env);
   const session = c.get("session")!;
 
@@ -89,7 +89,7 @@ instances.post("/", requireClusterOwner, async (c) => {
   try {
     const session = c.get("session")!;
     const service = new InstanceService(c.env);
-    const kv = new KVStore(c.env.BASE_KV);
+    const kv = KVStore.fromCloudflare(c.env.BASE_KV);
     const data = await c.req.json();
 
     const validation = createInstanceSchema.safeParse(data);
@@ -201,7 +201,7 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
     }
 
     const d1 = new D1Store(c.env.BASE_DB);
-    const kv = new KVStore(c.env.BASE_KV);
+    const kv = KVStore.fromCloudflare(c.env.BASE_KV);
     const instance = await d1.instances.get(instanceId);
 
     if (!instance || instance.clusterId !== clusterId) {
@@ -275,7 +275,7 @@ instances.post("/:instanceId/tokens/rotate", async (c) => {
 
   const { token } = validation.data;
 
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
   const d1 = new D1Store(c.env.BASE_DB);
   const jwtService = new JWTService(kv);
 
@@ -389,7 +389,7 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
     }
 
     const service = new InstanceService(c.env);
-    const kv = new KVStore(c.env.BASE_KV);
+    const kv = KVStore.fromCloudflare(c.env.BASE_KV);
     const token = await service.getOrCreateInstanceUserToken(kv, session, instanceId);
     const streamId = ulid();
 

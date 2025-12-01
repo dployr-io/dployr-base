@@ -9,8 +9,9 @@ import { D1Store } from "@/lib/db/store";
 import z from "zod";
 import { authMiddleware } from "@/middleware/auth";
 import { ERROR } from "@/lib/constants";
+import { getKV, getDB, type AppVariables } from "@/lib/context";
 
-const users = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const users = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 users.use("*", authMiddleware);
 
 const createUserSchema = z.object({
@@ -38,8 +39,8 @@ users.get("/me", async (c) => {
         }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const kv = new KVStore(c.env.BASE_KV);
-    const d1 = new D1Store(c.env.BASE_DB);
+    const kv = new KVStore(getKV(c));
+    const d1 = new D1Store(getDB(c) as D1Database);
 
     const session = await kv.getSession(sessionId);
 
@@ -86,7 +87,7 @@ users.patch("/me", async (c) => {
         }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const kv = new KVStore(c.env.BASE_KV);
+    const kv = KVStore.fromCloudflare(c.env.BASE_KV);
     const d1 = new D1Store(c.env.BASE_DB);
 
     const session = await kv.getSession(sessionId);

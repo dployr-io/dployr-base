@@ -19,7 +19,7 @@ export async function authMiddleware(
     return c.json({ error: "Not authenticated" }, 401);
   }
 
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
   const session = await kv.getSession(sessionId);
 
   if (!session) {

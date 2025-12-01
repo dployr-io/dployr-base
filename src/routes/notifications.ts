@@ -6,8 +6,9 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse } from 
 import { D1Store } from "@/lib/db/store";
 import { ERROR, DEFAULT_EVENTS } from "@/lib/constants";
 import { authMiddleware, requireClusterDeveloper } from "@/middleware/auth";
+import { getDB, type AppVariables } from "@/lib/context";
 
-const notifications = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const notifications = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
 notifications.use("*", authMiddleware);
 
@@ -32,7 +33,7 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
     }
 
     const clusterId = session.clusters[0].id;
-    const d1 = new D1Store(c.env.BASE_DB);
+    const d1 = new D1Store(getDB(c) as D1Database);
     const cluster = await d1.clusters.get(clusterId);
 
     const metadata = (cluster?.metadata as Record<string, any>) || {};

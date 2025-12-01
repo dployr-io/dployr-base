@@ -10,8 +10,9 @@ import { ERROR, WORKFLOW_NAME } from "@/lib/constants";
 import { requireClusterDeveloper } from "@/middleware/auth";
 import { GitLabService } from "@/services/gitlab";
 import { BitBucketService } from "@/services/bitbucket";
+import { getKV, getDB, type AppVariables } from "@/lib/context";
 
-const integrations = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const integrations = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
 integrations.use("*", requireClusterDeveloper);
 
@@ -43,8 +44,8 @@ integrations.post("/github/webhook", async (c) => {
       }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
     }
 
-    const d1 = new D1Store(c.env.BASE_DB);
-    const kv = new KVStore(c.env.BASE_KV);
+    const d1 = new D1Store(getDB(c) as D1Database);
+    const kv = new KVStore(getKV(c));
 
     // Handle installation events
     if (event === "installation" && body.action === "created") {

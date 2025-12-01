@@ -3,12 +3,14 @@
 
 import { Hono } from "hono";
 import { KVStore } from "@/lib/db/store/kv";
-import { Bindings } from "@/types";
+import { Bindings, Variables } from "@/types";
+import { getKV, type AppVariables } from "@/lib/context";
 
-const jwks = new Hono<{ Bindings: Bindings }>();
+const jwks = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
 jwks.get("/.well-known/jwks.json", async (c) => {
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = new KVStore(getKV(c));
+
   const publicKey = await kv.getPublicKey();
 
   return c.json({

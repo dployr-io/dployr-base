@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, createErrorResponse, createSuccessResponse } from "@/types";
+import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types";
 import { ERROR, EVENTS } from "@/lib/constants";
 import { KVStore } from "@/lib/db/store/kv";
 import z from "zod";
 import { InstanceService } from "@/services/instances";
+import { getKV, type AppVariables } from "@/lib/context";
   
-const domains = new Hono<{ Bindings: Bindings }>();
+const domains = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
 const registerInstanceSchema = z.object({
   token: z.string().min(1, "Token is required"),
@@ -59,7 +60,7 @@ domains.post("/", async (c) => {
 
   const domain = await service.saveDomain({ instanceId: result.instanceId });
 
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = new KVStore(getKV(c));
   await kv.logEvent({
     actor: {
       id: result.instanceId,

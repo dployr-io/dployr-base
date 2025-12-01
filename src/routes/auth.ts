@@ -13,8 +13,9 @@ import { EmailService } from "@/services/email";
 import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode";
 import { ERROR, EVENTS } from "@/lib/constants";
 import { NotificationService } from "@/services/notifications";
+import { getKV, getDB, type AppVariables } from "@/lib/context";
 
-const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const auth = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
 const loginSchema = z.object({
   email: z.email(),
@@ -37,7 +38,7 @@ auth.get("/login/:provider", async (c) => {
   }
 
   const oauth = new OAuthService(c.env);
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = new KVStore(getKV(c));
   const state = crypto.randomUUID();
   const returnTo = c.req.query("redirect_to") || "/dashboard";
   const redirectUrl = sanitizeReturnTo(returnTo);
@@ -67,8 +68,8 @@ auth.get("/callback/:provider", async (c) => {
     );
   }
 
-  const kv = new KVStore(c.env.BASE_KV);
-  const d1 = new D1Store(c.env.BASE_DB);
+  const kv = new KVStore(getKV(c));
+  const d1 = new D1Store(getDB(c) as D1Database);
 
   const redirectUrl = await kv.validateState(state);
 
@@ -178,8 +179,8 @@ auth.post("/login/email", async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const kv = new KVStore(c.env.BASE_KV);
-    const d1 = new D1Store(c.env.BASE_DB);
+    const kv = new KVStore(getKV(c));
+    const d1 = new D1Store(getDB(c) as D1Database);
 
     let user = await d1.users.get(email);
     if (!user) {
@@ -224,8 +225,8 @@ auth.post("/login/email/verify", async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const kv = new KVStore(c.env.BASE_KV);
-    const d1 = new D1Store(c.env.BASE_DB);
+    const kv = new KVStore(getKV(c));
+    const d1 = new D1Store(getDB(c) as D1Database);
     const isValid = await kv.validateOTP(email, code.toUpperCase());
 
     if (!isValid) {
@@ -289,7 +290,7 @@ auth.get("/logout", async (c) => {
   const sessionId = getCookie(c, "session");
 
   if (sessionId) {
-    const kv = new KVStore(c.env.BASE_KV);
+    const kv = new KVStore(getKV(c));
     await kv.deleteSession(sessionId);
   }
 

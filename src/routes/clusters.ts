@@ -10,8 +10,9 @@ import { KVStore } from "@/lib/db/store/kv";
 import { GitHubService } from "@/services/github";
 import { ERROR, EVENTS } from "@/lib/constants";
 import { NotificationService } from "@/services/notifications";
+import { getKV, getDB, type AppVariables } from "@/lib/context";
 
-const clusters = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const clusters = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 clusters.use("*", authMiddleware);
 
 const addUsersSchema = z.object({
@@ -40,7 +41,7 @@ const updateRolesSchema = z.object({
  */
 clusters.get("/", async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
 
   const _clusters = await d1.clusters.listUserClusters(session.userId);
 
@@ -52,7 +53,7 @@ clusters.get("/", async (c) => {
  */
 clusters.get("/users/invites", async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
 
   try {
     const clusterIds = await d1.clusters.listPendingInvites(session.userId);
@@ -72,7 +73,7 @@ clusters.get("/users/invites", async (c) => {
  */
 clusters.get("/:id/users/invites/accept", async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
   const clusterId = c.req.param("id");
 
   try {
@@ -109,7 +110,7 @@ clusters.get("/:id/users/invites/accept", async (c) => {
  */
 clusters.get("/:id/users/invites/decline", async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
   const clusterId = c.req.param("id");
 
   try {
@@ -137,7 +138,7 @@ clusters.get("/:id/users/invites/decline", async (c) => {
  * List all users in a cluster 
  */
 clusters.get("/:id/users", async (c) => {
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
 
   const clusterId = c.req.param("id");
 
@@ -162,8 +163,8 @@ clusters.get("/:id/users", async (c) => {
  */
 clusters.post("/:id/users", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(c.env.BASE_DB);
-  const kv = new KVStore(c.env.BASE_KV);
+  const d1 = new D1Store(getDB(c) as D1Database);
+  const kv = new KVStore(getKV(c));
   const id = c.req.param("id");
 
   try {
@@ -220,8 +221,8 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
  */
 clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(c.env.BASE_DB);
-  const kv = new KVStore(c.env.BASE_KV);
+  const d1 = new D1Store(getDB(c) as D1Database);
+  const kv = new KVStore(getKV(c));
 
   try {
     const data = await c.req.json();
@@ -277,8 +278,8 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
  */
 clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(c.env.BASE_DB);
-  const kv = new KVStore(c.env.BASE_KV);
+  const d1 = new D1Store(getDB(c) as D1Database);
+  const kv = new KVStore(getKV(c));
 
   try {
     const data = await c.req.json();
@@ -344,7 +345,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
  * Transfer ownership of cluster to a new user
  */
 clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
 
   try {
     const data = await c.req.json();
@@ -382,7 +383,7 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
  * List available connected integrations 
  */
 clusters.get("/:id/integrations", async (c) => {
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
   const clusterId = c.req.param("id");
 
   try {
@@ -418,7 +419,7 @@ clusters.get("/:id/integrations", async (c) => {
  */
 clusters.get("/:id/remotes", async (c) => {
   const clusterId = c.req.param("id");
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
 
   try {
     const gitHub = new GitHubService(c.env);

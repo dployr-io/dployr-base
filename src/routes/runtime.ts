@@ -6,6 +6,7 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse, parseP
 import { authMiddleware } from "@/middleware/auth";
 import { KVStore } from "@/lib/db/store/kv";
 import { ERROR } from "@/lib/constants";
+import { getKV, type AppVariables } from "@/lib/context";
 
 type EventsFilters = {
   type?: string;
@@ -14,11 +15,11 @@ type EventsFilters = {
   window?: "all" | "24h" | "7d" | "30d";
 };
 
-const runtime = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const runtime = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 runtime.use("*", authMiddleware);
 
 runtime.get("/events", async (c) => {
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = new KVStore(getKV(c));
   const session = c.get("session")!;
   const clusterId = c.req.query("clusterId");
 

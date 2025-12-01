@@ -17,16 +17,50 @@ import domains from "@/routes/domains";
 import agent from "@/routes/agent";
 import notifications from "./routes/notifications";
 import { globalRateLimit } from "@/middleware/ratelimit";
+import type { AppVariables } from "@/lib/context";
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const app = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
-// Initialize database on first request
+// Initialize database and inject adapters on first request
 let dbInitialized = false;
 app.use("*", async (c, next) => {
   if (!dbInitialized) {
     await initializeDatabase(c.env.BASE_DB);
     dbInitialized = true;
   }
+  
+  // Inject Cloudflare adapters into context
+  // These wrap the native bindings in a consistent interface
+  c.set('kvAdapter', {
+    get: (key: string) => c.env.BASE_KV.get(key),
+    put: (key: string, value: string, options?: { expirationTtl?: number }) => 
+      c.env.BASE_KV.put(key, value, options),
+    delete: (key: string) => c.env.BASE_KV.delete(key),
+    list: async (options: { prefix: string; limit?: number }) => {
+      const result = await c.env.BASE_KV.list(options);
+      return result.keys;
+    },
+  });
+  
+  c.set('dbAdapter', c.env.BASE_DB);
+  
+  c.set('storageAdapter', {
+    put: async (key: string, value: ReadableStream | ArrayBuffer | string) => {
+      await c.env.INSTANCE_LOGS.put(key, value);
+    },
+    get: async (key: string) => {
+      const obj = await c.env.INSTANCE_LOGS.get(key);
+      return obj?.body || null;
+    },
+    delete: async (key: string) => {
+      await c.env.INSTANCE_LOGS.delete(key);
+    },
+    list: async (options?: { prefix?: string }) => {
+      const result = await c.env.INSTANCE_LOGS.list(options);
+      return result.objects.map((obj: any) => ({ key: obj.key }));
+    },
+  });
+  
   await next();
 });
 

@@ -14,7 +14,7 @@ const agent = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Instance exchanges a valid agent token for a fresh short-lived token
 agent.post("/token", async (c) => {
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
   const jwtService = new JWTService(kv);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
@@ -93,7 +93,7 @@ agent.post("/instances/:instanceId/cert", async (c) => {
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
   const jwtService = new JWTService(kv);
 
   let token: any;
@@ -198,7 +198,7 @@ agent.put("/instances/:instanceId/cert", async (c) => {
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
   const jwtService = new JWTService(kv);
 
   let token: any;
@@ -295,7 +295,7 @@ agent.get("/instances/:instanceId/ws", async (c) => {
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = new KVStore(c.env.BASE_KV);
+  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
   const jwtService = new JWTService(kv);
 
   let token: any;

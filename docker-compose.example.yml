@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  dployr-base:
+    image: dployr/base:latest
+    container_name: dployr-base
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Platform
+      PLATFORM: "self-hosted"
+      
+      # Server
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      BASE_URL: "https://base.yourdomain.com"  # CHANGE THIS
+      APP_URL: "https://app.yourdomain.com"    # CHANGE THIS
+      
+      # Database (SQLite - file-based)
+      DB_TYPE: "sqlite"
+      DB_PATH: "/data/dployr.db"
+      
+      # KV Store (Redis)
+      KV_TYPE: "redis"
+      KV_URL: "redis://redis:6379"
+      
+      # Storage (Filesystem)
+      STORAGE_TYPE: "filesystem"
+      STORAGE_PATH: "/data/storage"
+      
+      # Auth - OAuth Providers (OPTIONAL)
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+      GITHUB_CLIENT_ID: ""
+      GITHUB_CLIENT_SECRET: ""
+      
+      # Email (OPTIONAL)
+      EMAIL_PROVIDER: "zepto"
+      ZEPTO_API_KEY: ""
+    volumes:
+      - dployr-data:/data
+    depends_on:
+      - redis
+    networks:
+      - dployr-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: dployr-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - dployr-network
+
+  # Optional: Caddy reverse proxy with automatic HTTPS
+  caddy:
+    image: caddy:2-alpine
+    container_name: dployr-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - dployr-network
+
+volumes:
+  dployr-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  dployr-network:
+    driver: bridge
+
+# ============================================================
+# ALTERNATIVE CONFIGURATIONS (uncomment to use)
+# ============================================================
+
+# --- Option 1: Use Upstash Redis (serverless) ---
+# Replace redis service and update dployr-base env:
+#   KV_TYPE: "upstash"
+#   KV_REST_URL: "https://your-upstash-url.upstash.io"
+#   KV_REST_TOKEN: "your-upstash-token"
+# Then remove the redis service entirely
+
+# --- Option 2: Use S3-compatible storage ---
+# Update dployr-base env:
+#   STORAGE_TYPE: "s3"
+#   STORAGE_BUCKET: "your-bucket"
+#   STORAGE_REGION: "us-east-1"
+#   STORAGE_ACCESS_KEY: "your-access-key"
+#   STORAGE_SECRET_KEY: "your-secret-key"
+
+# --- Option 3: Use Azure Blob Storage ---
+# Update dployr-base env:
+#   STORAGE_TYPE: "azure"
+#   STORAGE_ACCOUNT: "your-account"
+#   STORAGE_KEY: "your-key"
+#   STORAGE_CONTAINER: "dployr-logs"

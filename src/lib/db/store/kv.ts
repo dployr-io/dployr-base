@@ -6,9 +6,17 @@ import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, 
 import { ulid } from "ulid";
 import { importPKCS8 } from "jose";
 import { generateKeyPair } from "@/lib/crypto/keystore";
+import { IKVAdapter, CloudflareKV } from "@/lib/storage/kv.interface";
 
 export class KVStore {
-  constructor(public kv: KVNamespace) { }
+  constructor(public kv: IKVAdapter) { }
+
+  /**
+   * Factory for Cloudflare Workers (backward compatible)
+   */
+  static fromCloudflare(namespace: KVNamespace): KVStore {
+    return new KVStore(new CloudflareKV(namespace));
+  }
 
   // Session management
   async createSession(sessionId: string, user: Omit<User, "createdAt" | "updatedAt">, clusters: { id: string, name: string, owner: string }[]): Promise<Session> {
@@ -51,9 +59,11 @@ export class KVStore {
     publicKeyJwk: JsonWebKey;
     privateKey: string;
   }> {
-    let existing = await this.kv.get("jwt_keys", "json") as
-      | { publicKeyJwk: JsonWebKey; privateKey: string }
-      | null;
+    const data = await this.kv.get("jwt_keys");
+    let existing: { publicKeyJwk: JsonWebKey; privateKey: string } | null = null;
+    if (data) {
+      existing = JSON.parse(data);
+    }
 
     if (!existing) {
       const generated = await generateKeyPair();
@@ -159,7 +169,10 @@ export class KVStore {
   async getEvents(userId: string): Promise<any[]> {
     const result = await this.kv.list({ prefix: `actor:${userId}:event:` });
     const events = await Promise.all(
-      result.keys.map(key => this.kv.get(key.name, "json"))
+      result.map(async (key) => {
+        const data = await this.kv.get(key.name);
+        return data ? JSON.parse(data) : null;
+      })
     );
     return events.filter(e => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
   }
@@ -167,7 +180,10 @@ export class KVStore {
   async getClusterEvents(clusterId: string): Promise<any[]> {
     const result = await this.kv.list({ prefix: `target:${clusterId}:event:` });
     const events = await Promise.all(
-      result.keys.map(key => this.kv.get(key.name, "json"))
+      result.map(async (key) => {
+        const data = await this.kv.get(key.name);
+        return data ? JSON.parse(data) : null;
+      })
     );
     return events.filter(e => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
   }
@@ -291,9 +307,9 @@ export class KVStore {
   // Version cache for latest GitHub release
   private async getCachedLatestVersion(): Promise<string | null> {
     try {
-      const data = await this.kv.get("version:latest", "json") as
-        | { tag?: string }
-        | null;
+      const raw = await this.kv.get("version:latest");
+      if (!raw) return null;
+      const data = JSON.parse(raw) as { tag?: string } | null;
       if (data && typeof data.tag === "string" && data.tag.length > 0) {
         return data.tag;
       }
