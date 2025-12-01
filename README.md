@@ -28,7 +28,7 @@ nano docker-compose.yml
 docker compose up -d
 ```
 
-Base will be available on `http://localhost:3000` by default.  
+Base will be available on `http://localhost:7878` by default.  
 See [DOCKER.md](./DOCKER.md) for more examples.
 
 ### Option 2: Shell installer (no Docker)

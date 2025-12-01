@@ -1,21 +1,19 @@
-version: '3.8'
-
 services:
   dployr-base:
-    image: dployr/base:latest
+    image: ghcr.io/dployr-io/dployr-base:latest
     container_name: dployr-base
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "7878:7878"
     environment:
       # Platform
       PLATFORM: "self-hosted"
       
       # Server
-      PORT: "3000"
+      PORT: "7878"
       HOST: "0.0.0.0"
-      BASE_URL: "https://base.yourdomain.com"  # CHANGE THIS
-      APP_URL: "https://app.yourdomain.com"    # CHANGE THIS
+      BASE_URL: "http://localhost:7878"  
+      APP_URL: "http://localhost:7877"    
       
       # Database (SQLite - file-based)
       DB_TYPE: "sqlite"
@@ -54,26 +52,22 @@ services:
     networks:
       - dployr-network
 
-  # Optional: Caddy reverse proxy with automatic HTTPS
-  caddy:
-    image: caddy:2-alpine
-    container_name: dployr-caddy
+  dployr-web:
+    image: ghcr.io/dployr-io/dployr-web:latest
+    container_name: dployr-web
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy-data:/data
-      - caddy-config:/config
+      - "7877:80"
+    environment:
+      VITE_BASE_URL: "http://localhost:7878"
+    depends_on:
+      - dployr-base
     networks:
       - dployr-network
 
 volumes:
   dployr-data:
   redis-data:
-  caddy-data:
-  caddy-config:
 
 networks:
   dployr-network:

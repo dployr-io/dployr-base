@@ -13,7 +13,7 @@ const ConfigSchema = z.object({
     platform: z.enum(['cloudflare', 'self-hosted', 'fly', 'railway']),
   }),
   server: z.object({
-    port: z.number().default(3000),
+    port: z.number().default(7878),
     host: z.string().default('0.0.0.0'),
     base_url: z.string().url(),
     app_url: z.string().url(),
@@ -104,9 +104,9 @@ function loadConfigFromEnv(): Config {
       platform: process.env.PLATFORM || 'self-hosted',
     },
     server: {
-      port: parseInt(process.env.PORT || '3000'),
+      port: parseInt(process.env.PORT || '7878'),
       host: process.env.HOST || '0.0.0.0',
-      base_url: process.env.BASE_URL || 'http://localhost:3000',
+      base_url: process.env.BASE_URL || 'http://localhost:7878',
       app_url: process.env.APP_URL || 'http://localhost:5173',
     },
     database: {
