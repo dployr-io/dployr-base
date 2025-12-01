@@ -1,134 +1,103 @@
-// src/index.ts
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { success, z } from "zod";
+import { Bindings, Variables } from "@/types";
+import auth from "@/routes/auth";
+import instances from "@/routes/instances";
+import integrations from "@/routes/integrations";
+import { initializeDatabase } from "@/lib/db/migrate";
+import clusters from "@/routes/clusters";
+import deployments from "@/routes/deployments";
+import users from "@/routes/users";
+import runtime from "@/routes/runtime";
+import jwks from "@/routes/jwks";
+import domains from "@/routes/domains";
+import agent from "@/routes/agent";
+import notifications from "./routes/notifications";
+import { globalRateLimit } from "@/middleware/ratelimit";
+import type { AppVariables } from "@/lib/context";
 
-type Bindings = {
-  ZEPTO_API_KEY: string;
-  CLOUDFLARE_API_TOKEN: string;
-  CLOUDFLARE_ZONE_ID: string;
-};
+const app = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
-const app = new Hono<{ Bindings: Bindings }>();
-
-const baseDomain = "dployr.dev";
-
-// DNS format validation
-const dnsSchema = z.object({
-  subdomain: z.string().min(1),
-  host: z
-    .string()
-    .refine(
-      (ip) =>
-        /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) &&
-        ip.split(".").every((n) => Number(n) <= 255),
-      {
-        message: "Invalid IPv4 address",
-      }
-    ),
-});
-
-app.use("/api/*", cors());
-
-// Send email
-app.post("/api/send-email", async (c) => {
-  try {
-    const { to, subject, body, name } = await c.req.json();
-
-    if (!to || !subject || !body) {
-      return c.json({ error: "Missing required fields" }, 400);
-    }
-
-    const emailPayload = {
-      to: [
-        {
-          email_address: {
-            address: to,
-            name: name || to,
-          },
-        },
-      ],
-      from: {
-        address: "noreply@zeipo.ai",
-      },
-      subject,
-      htmlbody: body,
-    };
-
-    const response = await fetch("https://api.zeptomail.com/v1.1/email", {
-      method: "POST",
-      headers: {
-        Authorization: `Zoho-enczapikey ${c.env.ZEPTO_API_KEY}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(emailPayload),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("Zepto API error:", error);
-      return c.json({ error: "Failed to send email" }, 500);
-    }
-
-    return c.json({ message: "Email sent successfully", success: true });
-  } catch (error) {
-    console.error("Email error:", error);
-    return c.json({ error: "Internal server error" }, 500);
+// Initialize database and inject adapters on first request
+let dbInitialized = false;
+app.use("*", async (c, next) => {
+  if (!dbInitialized) {
+    await initializeDatabase(c.env.BASE_DB);
+    dbInitialized = true;
   }
+  
+  // Inject Cloudflare adapters into context
+  // These wrap the native bindings in a consistent interface
+  c.set('kvAdapter', {
+    get: (key: string) => c.env.BASE_KV.get(key),
+    put: (key: string, value: string, options?: { expirationTtl?: number }) => 
+      c.env.BASE_KV.put(key, value, options),
+    delete: (key: string) => c.env.BASE_KV.delete(key),
+    list: async (options: { prefix: string; limit?: number }) => {
+      const result = await c.env.BASE_KV.list(options);
+      return result.keys;
+    },
+  });
+  
+  c.set('dbAdapter', c.env.BASE_DB);
+  
+  c.set('storageAdapter', {
+    put: async (key: string, value: ReadableStream | ArrayBuffer | string) => {
+      await c.env.INSTANCE_LOGS.put(key, value);
+    },
+    get: async (key: string) => {
+      const obj = await c.env.INSTANCE_LOGS.get(key);
+      return obj?.body || null;
+    },
+    delete: async (key: string) => {
+      await c.env.INSTANCE_LOGS.delete(key);
+    },
+    list: async (options?: { prefix?: string }) => {
+      const result = await c.env.INSTANCE_LOGS.list(options);
+      return result.objects.map((obj: any) => ({ key: obj.key }));
+    },
+  });
+  
+  await next();
 });
 
-// Create DNS record
-app.post("/api/dns/create", async (c) => {
-  try {
-    const body = await c.req.json();
+// Global rate limiting (100 req/min per user)
+app.use("/v1/*", globalRateLimit);
 
-    // Validate input
-    const result = dnsSchema.safeParse(body);
-    if (!result.success) {
-      return c.json({ error: result.error.issues[0].message }, 400);
-    }
+// CORS
+app.use(
+  "/v1/*",
+  cors({
+    origin: (origin) => {
+      const allowedOrigins = [
+        "https://app.dployr.dev",
+        "https://api-docs.dployr.dev"
+      ];
+      return allowedOrigins.includes(origin) ? origin : null;
+    },
+    credentials: true,
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  })
+);
 
-    const { subdomain, host } = result.data;
-    const fullDomain = `${subdomain}.${baseDomain}`;
-
-    const response = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${c.env.CLOUDFLARE_ZONE_ID}/dns_records`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${c.env.CLOUDFLARE_API_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          type: "A",
-          name: fullDomain,
-          content: host,
-          ttl: 1,
-          proxied: false,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error(
-        "Cloudflare encountered an error while setting up DNS record",
-        error
-      );
-      return c.json({ error: "Failed to update DNS record" }, 500);
-    }
-
-    return c.json({ message: "DNS record updated successfully", success: true }, 201);
-  } catch (error) {
-    console.error("Something went wrong:", error);
-    return c.json({ error: "Internal server error" }, 500);
-  }
-});
-
-// Health check
-app.get("/api/health", (c) => {
+app.route("/v1/auth", auth);
+app.route("/v1/users", users);
+app.route("/v1/instances", instances);
+app.route("/v1/clusters", clusters);
+app.route("/v1/deployments", deployments);
+app.route("/v1/integrations", integrations);
+app.route("/v1/notifications", notifications);
+app.route("/v1/runtime", runtime);
+app.route("/v1/jwks", jwks);
+app.route("/v1/domains", domains);
+app.route("/v1/agent", agent);
+app.get("/v1/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 export default app;
+export { InstanceObject } from "@/durable/instance";
