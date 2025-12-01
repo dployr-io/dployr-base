@@ -81,11 +81,7 @@ app.use(
   "/v1/*",
   cors({
     origin: (origin) => {
-      const allowedOrigins = [
-        "https://app.dployr.dev",
-        "https://api-docs.dployr.dev",
-        "http://localhost:5173", // Dev
-      ];
+      const allowedOrigins = [ "http://localhost:7877" ];
       return allowedOrigins.includes(origin) ? origin : null;
     },
     credentials: true,

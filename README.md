@@ -1,13 +1,15 @@
 # Dployr Base
 
-Control plane for Dployr.
+This is the control plane for [dployr](https://github.com/dployr-io/dployr).
 
-Most people don’t need to run this themselves. You can use the hosted control plane for free:
+Most users do not need to self-host. The free hosted control plane is globally available and delivered at low latency via Cloudflare’s edge network:
 
 - Base: https://base.dployr.dev
-- API docs: https://api-docs.dployr.dev
+- Dashboard: https://app.dployr.dev
+- Documentation: https://docs.dployr.dev
+- API Reference: https://api-docs.dployr.dev
 
-Only keep reading if you want to self‑host your own Base server.
+Continue below only if you are in a restricted network or have very special requirements that require deploying and managing your own control plane & web dashboard.
 
 ---
 
@@ -99,8 +101,6 @@ npm run dev:cloudflare
 
 ## Links
 
-- Self‑hosting guide: `docs/SELF_HOSTING.md`
-- Config reference: `docs/CONFIG.md`
-- API docs: https://api-docs.dployr.dev
+- Self‑hosting guide: https://docs.dployr.dev/installation/self-hosting
 
 License: Apache 2.0
