@@ -14,7 +14,7 @@ SERVICE_USER="dployr"
 
 # Default config values (can be overridden by flags or config file)
 PLATFORM="self-hosted"
-PORT="3000"
+PORT="7878"
 HOST="0.0.0.0"
 BASE_URL=""
 APP_URL=""
@@ -172,7 +172,7 @@ fi
 
 # Set defaults for URLs if not provided
 if [ -z "$BASE_URL" ]; then
-  BASE_URL="http://localhost:3000"
+  BASE_URL="http://localhost:7878"
 fi
 if [ -z "$APP_URL" ]; then
   APP_URL="http://localhost:5173"

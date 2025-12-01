@@ -6,7 +6,7 @@
 platform = "self-hosted"
 
 [server]
-port = 3000
+port = 7878
 host = "0.0.0.0"
 base_url = "https://base.dployr.dev"
 app_url = "https://app.dployr.dev"
