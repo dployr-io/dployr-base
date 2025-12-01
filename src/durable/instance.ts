@@ -6,7 +6,6 @@ import { KVStore } from "@/lib/db/store/kv";
 import { AgentUpdateV1Schema, AgentStatusReportSchema, LATEST_COMPATIBILITY_DATE, type WSHandshakeResponse } from "@/types/agent";
 import { isCompatible, getUpgradeLevel } from "@/lib/version";
 import { ulid } from "ulid";
-import { checkWebSocketMessageRateLimit } from "@/middleware/ratelimit";
 
 export class InstanceObject {
   private sockets: Set<WebSocket> = new Set();
@@ -16,6 +15,7 @@ export class InstanceObject {
   private readonly maxWindowSize = 100;
   private logStreamSubscriptions: Map<WebSocket, { logType: string; lastOffset: number }> = new Map();
   private activeLogStreams: Map<string, string> = new Map(); // logType -> current streamId
+  private rateLimits: Map<string, number[]> = new Map(); // In-memory rate limiting
 
   constructor(private state: DurableObjectState, private env: Bindings) {}
 
@@ -172,14 +172,9 @@ export class InstanceObject {
 
       // Rate limit log chunks: max 50 chunks per second per logType
       const rateLimitKey = `${streamId}:${logType}`;
-      const rateCheck = await checkWebSocketMessageRateLimit(
-        this.env.BASE_KV,
-        rateLimitKey,
-        1000, // 1 second window
-        50 // max 50 chunks per second
-      );
       
-      if (!rateCheck.allowed) {
+      // Use in-memory rate limiting instead of KV to avoid high costs/limits
+      if (!this.checkRateLimit(rateLimitKey, 1000, 50)) {
         console.log(`Rate limit hit for log stream ${streamId}, dropping chunk`);
         return;
       }
@@ -247,6 +242,26 @@ export class InstanceObject {
       await this.state.storage.delete("inflight");
       return;
     }
+  }
+
+  private checkRateLimit(key: string, windowMs: number, maxLimit: number): boolean {
+    const now = Date.now();
+    const windowStart = now - windowMs;
+    
+    let timestamps = this.rateLimits.get(key) || [];
+    
+    // Cleanup old timestamps
+    timestamps = timestamps.filter(ts => ts > windowStart);
+    
+    if (timestamps.length >= maxLimit) {
+      // Update with filtered list even if blocked
+      this.rateLimits.set(key, timestamps);
+      return false;
+    }
+    
+    timestamps.push(now);
+    this.rateLimits.set(key, timestamps);
+    return true;
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
