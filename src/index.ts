@@ -16,6 +16,7 @@ import jwks from "@/routes/jwks";
 import domains from "@/routes/domains";
 import agent from "@/routes/agent";
 import notifications from "./routes/notifications";
+import { globalRateLimit } from "@/middleware/ratelimit";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -28,6 +29,9 @@ app.use("*", async (c, next) => {
   }
   await next();
 });
+
+// Global rate limiting (100 req/min per user)
+app.use("/v1/*", globalRateLimit);
 
 // CORS
 app.use(

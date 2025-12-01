@@ -6,6 +6,7 @@ import { KVStore } from "@/lib/db/store/kv";
 import { AgentUpdateV1Schema, AgentStatusReportSchema, LATEST_COMPATIBILITY_DATE, type WSHandshakeResponse } from "@/types/agent";
 import { isCompatible, getUpgradeLevel } from "@/lib/version";
 import { ulid } from "ulid";
+import { checkWebSocketMessageRateLimit } from "@/middleware/ratelimit";
 
 export class InstanceObject {
   private sockets: Set<WebSocket> = new Set();
@@ -168,6 +169,20 @@ export class InstanceObject {
       const offset = payload?.offset as number | undefined;
 
       if (!streamId || !logType || !entries) return;
+
+      // Rate limit log chunks: max 50 chunks per second per logType
+      const rateLimitKey = `${streamId}:${logType}`;
+      const rateCheck = await checkWebSocketMessageRateLimit(
+        this.env.BASE_KV,
+        rateLimitKey,
+        1000, // 1 second window
+        50 // max 50 chunks per second
+      );
+      
+      if (!rateCheck.allowed) {
+        console.log(`Rate limit hit for log stream ${streamId}, dropping chunk`);
+        return;
+      }
 
       // Track this as the active stream for this logType
       const currentActiveStreamId = this.activeLogStreams.get(logType);

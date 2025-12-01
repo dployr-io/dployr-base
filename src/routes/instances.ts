@@ -14,6 +14,7 @@ import { authMiddleware } from "@/middleware/auth";
 import { JWTService } from "@/services/jwt";
 import { NotificationService } from "@/services/notifications";
 import { ulid } from "ulid";
+import { strictRateLimit } from "@/middleware/ratelimit";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 instances.use("*", authMiddleware);
@@ -348,7 +349,7 @@ instances.get("/:instanceId/stream", requireClusterViewer, async (c) => {
 });
 
 // Stream logs from instance
-instances.post("/:instanceId/logs/stream", requireClusterViewer, async (c) => {
+instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer, async (c) => {
   try {
     const instanceId = c.req.param("instanceId");
     const clusterId = c.req.query("clusterId");

@@ -24,6 +24,24 @@ info:
 
     See https://docs.dployr.dev/auth for more details.
 
+    ## Rate limiting
+    To protect the service, Dployr Base applies per-user rate limits:
+
+    - **Global API limit**: By default, each authenticated user (or IP for
+      unauthenticated traffic) can make up to **100 requests per minute** to
+      `/v1/*` endpoints.
+    - **Log streaming initiation**: `POST /v1/instances/{instanceId}/logs/stream`
+      is more strictly limited to **10 requests per minute** per user, since each
+      request can start a daemon log streaming task.
+    - **WebSocket log chunks**: Log data itself is delivered over the
+      `/v1/instances/{instanceId}/stream` WebSocket as `log_chunk` events. The
+      server enforces internal limits on how many chunks per second are processed
+      per stream to avoid abuse.
+
+    When a client exceeds a limit, the API returns **HTTP 429 Too Many Requests**
+    with an `ErrorResponse` payload and may include `Retry-After` and
+    `X-RateLimit-*` headers indicating when it is safe to retry.
+
 servers:
   - url: https://base.dployr.dev
     description: Production
@@ -1562,6 +1580,12 @@ paths:
                             type: integer
         '400':
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many log stream requests (rate limited)
           content:
             application/json:
               schema:
