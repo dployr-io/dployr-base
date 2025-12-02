@@ -121,13 +121,17 @@ auth.get("/callback/:provider", async (c) => {
     const clusters = await d1.clusters.listUserClusters(savedUser.id);
     await kv.createSession(sessionId, savedUser, clusters);
 
+    const url = new URL(c.req.url);
+    const hostname = url.hostname;
+    const isDployrHost = hostname === "dployr.dev" || hostname.endsWith(".dployr.dev");
+
     setCookie(c, "session", sessionId, {
       httpOnly: true,
-      secure: true,
+      secure: url.protocol === "https:",
       sameSite: "Lax",
       maxAge: 60 * 60 * 24 * 7,
       path: "/",
-      domain: ".dployr.dev",
+      ...(isDployrHost ? { domain: ".dployr.dev" } : {}),
     });
 
     await kv.logEvent({
@@ -184,10 +188,12 @@ auth.post("/login/email", async (c) => {
 
     let user = await d1.users.get(email);
     if (!user) {
+      const derivedName = email.split("@")[0] || email;
       await d1.users.save({
         email,
+        name: derivedName,
         provider: "email" as OAuthProvider,
-        metadata: {}
+        metadata: {},
       });
     }
 
@@ -198,7 +204,15 @@ auth.post("/login/email", async (c) => {
       to: email,
     });
 
-    await emailService.sendEmail("Verify your account", loginCodeTemplate(name, code))
+    try {
+      await emailService.sendEmail("Verify your account", loginCodeTemplate(name, code))
+    } catch (error) {
+      console.error("Send OTP error:", error);
+      return c.json(createErrorResponse({
+        message: "Failed to send code. Wait a few moments and try again.",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code
+      }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    }
 
     return c.json(createSuccessResponse({ email }, "OTP sent to your email"));
   } catch (error) {
@@ -258,13 +272,17 @@ auth.post("/login/email/verify", async (c) => {
       request: c.req.raw,
     });
 
+    const url = new URL(c.req.url);
+    const hostname = url.hostname;
+    const isDployrHost = hostname === "dployr.dev" || hostname.endsWith(".dployr.dev");
+
     setCookie(c, "session", sessionId, {
       httpOnly: true,
-      secure: true,
+      secure: url.protocol === "https:",
       sameSite: "Lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
-      domain: ".dployr.dev",
+      ...(isDployrHost ? { domain: ".dployr.dev" } : {}),
     });
 
     // Trigger notifications
@@ -294,9 +312,14 @@ auth.get("/logout", async (c) => {
     await kv.deleteSession(sessionId);
   }
 
+  const url = new URL(c.req.url);
+  const hostname = url.hostname;
+  const isDployrHost = hostname === "dployr.dev" || hostname.endsWith(".dployr.dev");
+
   setCookie(c, "session", "", {
     maxAge: 0,
     path: "/",
+    ...(isDployrHost ? { domain: ".dployr.dev" } : {}),
   });
 
   return c.json(createSuccessResponse({}, "Logged out successfully"));

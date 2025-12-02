@@ -7,7 +7,7 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY pnpm-lock.yaml ./
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9
 RUN pnpm install --frozen-lockfile
 
 COPY . .
@@ -34,7 +34,7 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY pnpm-lock.yaml ./
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9
 RUN pnpm install --frozen-lockfile --prod && \
     pnpm add --prod \
       @hono/node-server \
@@ -42,8 +42,7 @@ RUN pnpm install --frozen-lockfile --prod && \
       redis \
       @upstash/redis \
       @aws-sdk/client-s3 \
-      better-sqlite3 && \
-    pnpm rebuild better-sqlite3
+      better-sqlite3
 
 COPY --from=builder /app/dist ./dist
 

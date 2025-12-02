@@ -1,5 +1,5 @@
 services:
-  dployr-base:
+  base:
     image: ghcr.io/dployr-io/dployr-base:latest
     container_name: dployr-base
     restart: unless-stopped
@@ -35,6 +35,7 @@ services:
       
       # Email (OPTIONAL)
       EMAIL_PROVIDER: "zepto"
+      EMAIL_FROM: "noreply@zeipo.ai"
       ZEPTO_API_KEY: ""
     volumes:
       - dployr-data:/data
@@ -47,12 +48,14 @@ services:
     image: redis:7-alpine
     container_name: dployr-redis
     restart: unless-stopped
+    ports:
+      - "6379:6379" 
     volumes:
       - redis-data:/data
     networks:
       - dployr-network
 
-  dployr-web:
+  app:
     image: ghcr.io/dployr-io/dployr-web:latest
     container_name: dployr-web
     restart: unless-stopped
@@ -61,7 +64,27 @@ services:
     environment:
       VITE_BASE_URL: "http://localhost:7878"
     depends_on:
-      - dployr-base
+      - base
+    networks:
+      - dployr-network
+
+  docs:
+    image: caddy:alpine
+    container_name: dployr-api-docs
+    restart: unless-stopped
+    ports:
+      - "9099:80"
+    environment:
+      DPLOYR_BASE_URL: "http://localhost:7878"
+    volumes:
+      - ./docs:/src/docs:ro
+    command:
+      - sh
+      - -c
+      - |
+          cp -r /src/docs/* /usr/share/caddy/ &&
+          sed -i "s#https://base.dployr.dev#${DPLOYR_BASE_URL:-http://localhost:7878}#" /usr/share/caddy/openapi.yaml &&
+          caddy file-server --root /usr/share/caddy --listen :80
     networks:
       - dployr-network
 

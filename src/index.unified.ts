@@ -81,7 +81,10 @@ app.use(
   "/v1/*",
   cors({
     origin: (origin) => {
-      const allowedOrigins = [ "http://localhost:7877" ];
+      const allowedOrigins = [ 
+        "http://localhost:7877",
+        "http://localhost:9099"
+      ];
       return allowedOrigins.includes(origin) ? origin : null;
     },
     credentials: true,
@@ -106,7 +109,6 @@ app.route("/v1/agent", agent);
 app.get("/v1/health", (c) => {
   return c.json({ 
     status: "ok", 
-    platform: isCloudflare ? 'cloudflare' : 'self-hosted',
     timestamp: new Date().toISOString() 
   });
 });

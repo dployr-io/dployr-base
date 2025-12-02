@@ -5,6 +5,7 @@ import type { Context, Next } from "hono";
 import type { Bindings, Variables } from "@/types";
 import { createErrorResponse } from "@/types";
 import { ERROR } from "@/lib/constants";
+import { getKV } from "@/lib/context";
 
 interface RateLimitConfig {
   windowMs: number;
@@ -28,7 +29,7 @@ export function rateLimit(config: RateLimitConfig) {
     const key = `${config.keyPrefix}:${identifier}`;
     
     try {
-      const kv = c.env.BASE_KV;
+      const kv = getKV(c);
       const now = Date.now();
       const windowStart = now - config.windowMs;
       

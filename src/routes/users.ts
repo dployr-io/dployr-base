@@ -14,13 +14,6 @@ import { getKV, getDB, type AppVariables } from "@/lib/context";
 const users = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 users.use("*", authMiddleware);
 
-const createUserSchema = z.object({
-    name: z.string().min(3).max(30).regex(/^[a-zA-Z ]+$/, "Name must contain only letters and spaces"),
-    picture: z.string().min(3).max(100),
-    provider: z.enum(["google", "github", "microsoft", "email"]),
-    metadata: z.object(),
-});
-
 const updateUserSchema = z.object({
     name: z.string().min(3).max(30).regex(/^[a-zA-Z ]+$/, "Name must contain only letters and spaces").optional(),
     picture: z.string().min(3).max(100).optional(),

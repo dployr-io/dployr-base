@@ -51,7 +51,7 @@ export class RedisKV implements IKVAdapter {
 
   async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
     if (options?.expirationTtl) {
-      await this.client.setex(key, options.expirationTtl, value);
+      await this.client.set(key, value, { EX: options.expirationTtl });
     } else {
       await this.client.set(key, value);
     }

@@ -34,6 +34,7 @@ export type Bindings = {
   // App config
   APP_URL: string;
   BASE_URL: string;
+  EMAIL_FROM?: string;
 };
 
 export type OAuthProvider = "google" | "github" | "microsoft" | "email";

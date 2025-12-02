@@ -8,6 +8,7 @@ import { Bindings, Variables } from "@/types";
 import { KVStore } from "@/lib/db/store/kv";
 import { D1Store } from "@/lib/db/store";
 import { ERROR } from "@/lib/constants";
+import { getKV, getDB } from "@/lib/context";
 
 export async function authMiddleware(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
@@ -19,7 +20,7 @@ export async function authMiddleware(
     return c.json({ error: "Not authenticated" }, 401);
   }
 
-  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
+  const kv = new KVStore(getKV(c));
   const session = await kv.getSession(sessionId);
 
   if (!session) {
@@ -57,7 +58,7 @@ export async function requireClusterViewer(
     return c.json({ error: "clusterId is required" }, 400);
   }
 
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
   const canRead = await d1.clusters.canRead(session.userId, clusterId);
 
   if (!canRead) {
@@ -97,7 +98,7 @@ export async function requireClusterDeveloper(
     return c.json({ error: "clusterId is required" }, 400);
   }
 
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
   const canWrite = await d1.clusters.canWrite(session.userId, clusterId);
 
   if (!canWrite) {
@@ -134,7 +135,7 @@ export async function requireClusterAdmin(
     return c.json({ error: "clusterId is required" }, 400);
   }
 
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
   const isAdmin = await d1.clusters.isAdmin(session.userId, clusterId);
 
   if (!isAdmin) {
@@ -171,7 +172,7 @@ export async function requireClusterOwner(
     return c.json({ error: "clusterId is required" }, 400);
   }
 
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
   const isOwner = await d1.clusters.isOwner(session.userId, clusterId);
 
   if (!isOwner) {

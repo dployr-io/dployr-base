@@ -59,7 +59,7 @@ export class ClusterStore extends BaseStore {
     const name = (user.email as string).split('@')[0];
 
     await this.db.batch([
-      this.db.prepare(`INSERT INTO clusters (id, name, metadata) VALUES (?, ?)`).bind(id, name),
+      this.db.prepare(`INSERT INTO clusters (id, name) VALUES (?, ?)`).bind(id, name),
       this.db.prepare(`INSERT INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, 'owner')`).bind(adminUserId, id),
     ]);
 
