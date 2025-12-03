@@ -57,6 +57,8 @@ tags:
     description: Cluster membership, roles, and integrations.
   - name: Instances
     description: Base instances and logs.
+  - name: Domains
+    description: Instance domains and bootstrap registration.
   - name: Deployments
     description: Deployment history and status.
   - name: Notifications
@@ -1939,7 +1941,7 @@ paths:
     post:
       operationId: registerInstanceDomain
       tags:
-        - Instances
+        - Domains
       summary: Register instance domain
       x-requiredRole: public
       description: Registers an instance using a one-time token issued by the base service, during instance creation.
