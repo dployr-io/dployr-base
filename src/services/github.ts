@@ -4,23 +4,34 @@
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import { Buffer } from "buffer";
-import type { Bindings } from "@/types";
+import type { Bindings } from "@/types/index.js";
 
 export class GitHubService {
-  private appAuth: ReturnType<typeof createAppAuth>;
+
+  private appAuth?: ReturnType<typeof createAppAuth>;
 
   constructor(private env: Bindings) {
-    this.appAuth = createAppAuth({
-      appId: env.GITHUB_APP_ID,
-      privateKey: env.GITHUB_PRIVATE_KEY,
-    });
+
+    if (env.GITHUB_APP_ID && env.GITHUB_PRIVATE_KEY) {
+      this.appAuth = createAppAuth({
+        appId: env.GITHUB_APP_ID,
+
+        privateKey: env.GITHUB_PRIVATE_KEY,
+      });
+    }
   }
 
   private async getOctokit(installationId: number): Promise<Octokit> {
+    if (!this.appAuth || !installationId) {
+      throw new Error("GITHUB_APP_NOT_CONFIGURED");
+    }
+
     const auth = await this.appAuth({
       type: "installation",
+
       installationId,
     });
+
     return new Octokit({ auth: auth.token });
   }
 
@@ -85,7 +96,12 @@ export class GitHubService {
     return { triggered: true };
   }
 
-    async listRemotes({ installationId }: { installationId: number }) {
+  async listRemotes({ installationId }: { installationId?: number }) {
+    // If GitHub App or installation is missing, return an empty list (for self-hosted setups without GitHub)
+    if (!this.appAuth || !installationId) {
+      return [];
+    }
+
     const octokit = await this.getOctokit(installationId);
 
     const res = await octokit.apps.listReposAccessibleToInstallation();
@@ -100,7 +116,11 @@ export class GitHubService {
     }));
   }
 
-  async remoteCount({ installationId }: { installationId: number }) {
+  async remoteCount({ installationId }: { installationId?: number }) {
+    if (!this.appAuth || !installationId) {
+      return 0;
+    }
+
     const octokit = await this.getOctokit(installationId);
 
     const repos = await octokit.paginate(

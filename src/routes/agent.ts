@@ -2,19 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types";
-import { D1Store } from "@/lib/db/store";
-import { KVStore } from "@/lib/db/store/kv";
-import { ERROR } from "@/lib/constants";
-import { JWTService } from "@/services/jwt";
-import { AgentStatusReportSchema, LATEST_COMPATIBILITY_DATE } from "@/types/agent";
-import { isCompatible } from "@/lib/version";
+import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
+import { D1Store } from "@/lib/db/store/index.js";
+import { KVStore } from "@/lib/db/store/kv.js";
+import { ERROR } from "@/lib/constants/index.js";
+import { JWTService } from "@/services/jwt.js";
+import { getDB, getKV, getDO, type AppVariables } from "@/lib/context.js";
 
-const agent = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const agent = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
 // Instance exchanges a valid agent token for a fresh short-lived token
 agent.post("/token", async (c) => {
-  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
+  const kv = new KVStore(getKV(c));
   const jwtService = new JWTService(kv);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
@@ -33,8 +32,8 @@ agent.post("/token", async (c) => {
   let payload: any;
   try {
     payload = await jwtService.verifyTokenIgnoringExpiry(rawToken);
-  } catch (err) {
-    console.error("Invalid agent token on /v1/agent/token", err);
+  } catch (error) {
+    console.error("Invalid agent token on /v1/agent/token", error);
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -79,7 +78,7 @@ agent.post("/token", async (c) => {
 
 agent.post("/instances/:instanceId/cert", async (c) => {
   const instanceId = c.req.param("instanceId");
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -93,7 +92,7 @@ agent.post("/instances/:instanceId/cert", async (c) => {
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
+  const kv = new KVStore(getKV(c));
   const jwtService = new JWTService(kv);
 
   let token: any;
@@ -184,7 +183,7 @@ agent.post("/instances/:instanceId/cert", async (c) => {
 
 agent.put("/instances/:instanceId/cert", async (c) => {
   const instanceId = c.req.param("instanceId");
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -198,7 +197,7 @@ agent.put("/instances/:instanceId/cert", async (c) => {
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
+  const kv = new KVStore(getKV(c));
   const jwtService = new JWTService(kv);
 
   let token: any;
@@ -281,7 +280,7 @@ agent.put("/instances/:instanceId/cert", async (c) => {
 // Instance WebSocket endpoint for tasks
 agent.get("/instances/:instanceId/ws", async (c) => {
   const instanceId = c.req.param("instanceId");
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -295,7 +294,7 @@ agent.get("/instances/:instanceId/ws", async (c) => {
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
+  const kv = new KVStore(getKV(c));
   const jwtService = new JWTService(kv);
 
   let token: any;
@@ -332,9 +331,10 @@ agent.get("/instances/:instanceId/ws", async (c) => {
       ERROR.RESOURCE.MISSING_RESOURCE.status,
     );
   }
-
-  const id = c.env.INSTANCE_OBJECT.idFromName(instanceId);
-  const stub = c.env.INSTANCE_OBJECT.get(id);
+  
+  const doAdapter = getDO(c);
+  const id = doAdapter.idFromName(instanceId);
+  const stub = doAdapter.get(id);
 
   const upgradeReq = new Request(c.req.raw);
 

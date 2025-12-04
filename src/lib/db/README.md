@@ -38,9 +38,9 @@ The store layer provides type-safe database operations through dedicated classes
 ### Usage
 
 ```typescript
-import { D1Store, KVStore } from '@/lib/db/store';
+import { DatabaseStore, KVStore } from '@/lib/db/store';
 
-const d1Store = new D1Store(env.BASE_DB);
+const d1Store = new DatabaseStore(env.BASE_DB);
 const kvStore = new KVStore(env.BASE_KV);
 
 // Create a user

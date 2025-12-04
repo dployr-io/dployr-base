@@ -1,11 +1,11 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Notifier, NotificationPayload, NotificationEvent } from "./notifier";
-import { EmailService } from "./email";
-import { notificationTemplate } from "@/lib/templates/emails/notification";
-import { EVENT_METADATA } from "./event-metadata";
-import type { Bindings } from "@/types";
+import { Notifier, NotificationPayload, NotificationEvent } from "./notifier.js";
+import { EmailService } from "./email.js";
+import { notificationTemplate } from "@/lib/templates/emails/notification.js";
+import { EVENT_METADATA } from "./event-metadata.js";
+import type { Bindings } from "@/types/index.js";
 
 export class EmailNotificationService implements Notifier {
   constructor(private env: Bindings) {}

@@ -2,6 +2,7 @@ services:
   base:
     image: ghcr.io/dployr-io/dployr-base:latest
     container_name: dployr-base
+    user: "0:0"  # Run as root to fix Windows bind mount permissions (not recommended in prod)
     restart: unless-stopped
     ports:
       - "7878:7878"
@@ -12,8 +13,8 @@ services:
       # Server
       PORT: "7878"
       HOST: "0.0.0.0"
-      BASE_URL: "http://localhost:7878"  
-      APP_URL: "http://localhost:7877"    
+      BASE_URL: "http://192.168.100.35:7878"  
+      APP_URL: "http://192.168.100.35:5173"    
       
       # Database (SQLite - file-based)
       DB_TYPE: "sqlite"
@@ -37,8 +38,10 @@ services:
       EMAIL_PROVIDER: "zepto"
       EMAIL_FROM: "noreply@zeipo.ai"
       ZEPTO_API_KEY: ""
+
+      CORS_ALLOWED_ORIGINS: "http://192.168.100.35:9099,http://192.168.100.20:7879,http://192.168.100.35:7877,http://192.168.100.35:5173"
     volumes:
-      - dployr-data:/data
+      - ./data:/data
     depends_on:
       - redis
     networks:
@@ -62,7 +65,7 @@ services:
     ports:
       - "7877:80"
     environment:
-      VITE_BASE_URL: "http://localhost:7878"
+      DPLOYR_BASE_URL: "http://192.168.100.35:7878"
     depends_on:
       - base
     networks:
@@ -75,7 +78,7 @@ services:
     ports:
       - "9099:80"
     environment:
-      DPLOYR_BASE_URL: "http://localhost:7878"
+      DPLOYR_BASE_URL: "http://192.168.100.35:7878"
     volumes:
       - ./docs:/src/docs:ro
     command:
@@ -83,13 +86,12 @@ services:
       - -c
       - |
           cp -r /src/docs/* /usr/share/caddy/ &&
-          sed -i "s#https://base.dployr.dev#${DPLOYR_BASE_URL:-http://localhost:7878}#" /usr/share/caddy/openapi.yaml &&
+          sed -i "s#https://base.dployr.dev#${DPLOYR_BASE_URL:-http://192.168.100.35:7878}#" /usr/share/caddy/openapi.yaml &&
           caddy file-server --root /usr/share/caddy --listen :80
     networks:
       - dployr-network
 
 volumes:
-  dployr-data:
   redis-data:
 
 networks:

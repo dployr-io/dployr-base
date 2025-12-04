@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, User, createSuccessResponse, createErrorResponse } from "@/types";
-import { KVStore } from "@/lib/db/store/kv";
+import { Bindings, Variables, User, createSuccessResponse, createErrorResponse } from "@/types/index.js";
+import { KVStore } from "@/lib/db/store/kv.js";
 import { getCookie } from "hono/cookie";
-import { D1Store } from "@/lib/db/store";
+import { D1Store } from "@/lib/db/store/index.js";
 import z from "zod";
-import { authMiddleware } from "@/middleware/auth";
-import { ERROR } from "@/lib/constants";
-import { getKV, getDB, type AppVariables } from "@/lib/context";
+import { authMiddleware } from "@/middleware/auth.js";
+import { ERROR } from "@/lib/constants/index.js";
+import { getKV, getDB, type AppVariables } from "@/lib/context.js";
 
 const users = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 users.use("*", authMiddleware);
@@ -80,8 +80,8 @@ users.patch("/me", async (c) => {
         }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const kv = KVStore.fromCloudflare(c.env.BASE_KV);
-    const d1 = new D1Store(c.env.BASE_DB);
+    const kv = new KVStore(getKV(c));
+    const d1 = new D1Store(getDB(c) as D1Database);
 
     const session = await kv.getSession(sessionId);
 

@@ -8,24 +8,28 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { Bindings, Variables } from "@/types";
-import { KVStore } from "@/lib/db/store/kv";
-import { D1Store } from "@/lib/db/store";
-import { initializeDatabase } from "@/lib/db/migrate";
+import { Bindings, Variables } from "@/types/index.js";
+import { initializeDatabase } from "@/lib/db/migrate.js";
+import type { IncomingMessage } from "http";
+import type { Socket } from "net";
+import { Buffer } from "buffer";
+import type { WebSocket } from "ws";
 
 // Routes
-import auth from "@/routes/auth";
-import instances from "@/routes/instances";
-import integrations from "@/routes/integrations";
-import clusters from "@/routes/clusters";
-import deployments from "@/routes/deployments";
-import users from "@/routes/users";
-import runtime from "@/routes/runtime";
-import jwks from "@/routes/jwks";
-import domains from "@/routes/domains";
-import agent from "@/routes/agent";
-import notifications from "./routes/notifications";
-import { globalRateLimit } from "@/middleware/ratelimit";
+import auth from "@/routes/auth.js";
+import instances from "@/routes/instances.js";
+import integrations from "@/routes/integrations.js";
+import clusters from "@/routes/clusters.js";
+import deployments from "@/routes/deployments.js";
+import users from "@/routes/users.js";
+import runtime from "@/routes/runtime.js";
+import jwks from "@/routes/jwks.js";
+import domains from "@/routes/domains.js";
+import agent from "@/routes/agent.js";
+import notifications from "./routes/notifications.js";
+import { globalRateLimit } from "@/middleware/ratelimit.js";
+import { CloudflareDurableObjectAdapter } from "@/lib/durable/cloudflare-adapter.js";
+import { NodeDurableObjectAdapter } from "@/lib/durable/node-adapter.js";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -46,14 +50,20 @@ app.use("*", async (c, next) => {
       await initializeDatabase(c.env.BASE_DB);
       dbInitialized = true;
     }
+
+    if (c.env.INSTANCE_OBJECT) {
+      const doAdapter = new CloudflareDurableObjectAdapter(c.env.INSTANCE_OBJECT);
+      c.set('doAdapter', doAdapter);
+    }
+    
     await next();
     return;
   }
 
   // Self-hosted - load from config.toml
   if (!adapters) {
-    const { loadConfig } = await import('@/lib/config/loader');
-    const { initializeFromConfig } = await import('@/lib/config/adapters');
+    const { loadConfig } = await import('@/lib/config/loader.js');
+    const { initializeFromConfig } = await import('@/lib/config/adapters.js');
     
     const config = loadConfig();
     adapters = await initializeFromConfig(config);
@@ -69,6 +79,19 @@ app.use("*", async (c, next) => {
   c.set('kvAdapter', adapters.kv);
   c.set('dbAdapter', adapters.db);
   c.set('storageAdapter', adapters.storage);
+  c.set('doAdapter', adapters.do);
+  
+  // from process.env
+  if (isNode) {
+    c.env = {
+      BASE_URL: process.env.BASE_URL || '',
+      GITHUB_APP_ID: process.env.GITHUB_APP_ID || '',
+      GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY || '',
+      GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID || '',
+      GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || '',
+      CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS || '',
+    } as any;
+  }
   
   await next();
 });
@@ -80,12 +103,33 @@ app.use("/v1/*", globalRateLimit);
 app.use(
   "/v1/*",
   cors({
-    origin: (origin) => {
-      const allowedOrigins = [ 
-        "http://localhost:7877",
-        "http://localhost:9099"
-      ];
-      return allowedOrigins.includes(origin) ? origin : null;
+    origin: (origin, c) => {
+      // Read allowed origins (comma-separated) from environment
+      const raw = isNode
+        ? process.env.CORS_ALLOWED_ORIGINS
+        : c.env.CORS_ALLOWED_ORIGINS;
+      if (!raw) {
+        console.error("CORS_ALLOWED_ORIGINS is not configured; refusing cross-origin requests.");
+        return null;
+      }
+
+      if (!origin) {
+        console.warn("CORS check received request with no Origin header; skipping CORS.");
+        return null;
+      }
+
+      const allowedOrigins = raw
+        .split(",")
+        .map((o: string) => o.trim())
+        .filter((o: string) => o.length > 0);
+
+      const isAllowed = allowedOrigins.includes(origin);
+      if (!isAllowed) {
+        console.warn(`CORS origin not allowed: ${origin}`);
+        return null;
+      }
+
+      return origin;
     },
     credentials: true,
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -117,20 +161,110 @@ app.get("/v1/health", (c) => {
 export default app;
 
 // Export Durable Object (Cloudflare only)
-export { InstanceObject } from "@/durable/instance";
+export { InstanceObject } from "@/durable/instance.js";
 
 // Node.js server (self-hosted)
 if (isNode && import.meta.url === `file://${process.argv[1]}`) {
-  const { serve } = await import('@hono/node-server');
-  const { loadConfig } = await import('@/lib/config/loader');
+  const { createServer } = await import('http');
+  const { loadConfig } = await import('@/lib/config/loader.js');
+  const { WebSocketServer } = await import('ws');
   
   const config = loadConfig();
   
-  serve({
-    fetch: app.fetch,
-    port: config.server.port,
-    hostname: config.server.host,
-  }, (info) => {
-    console.log(`Dployr Base running on http://${info.address}:${info.port}`);
+  // Create HTTP server to handle WebSocket upgrades
+  const server = createServer(async (req, res) => {
+    const upgradeHeader = req.headers['upgrade'];
+    if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
+      console.log('WebSocket upgrade request detected, deferring to upgrade handler');
+      return;
+    }
+
+    // Collect request body for non-GET/HEAD requests
+    let body: Uint8Array | undefined;
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      body = Buffer.concat(chunks);
+    }
+
+    const response = await app.fetch(
+      new Request(`http://${req.headers.host}${req.url}`, {
+        method: req.method,
+        headers: req.headers as HeadersInit,
+        body: body,
+      })
+    );
+
+    res.statusCode = response.status;
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value);
+    });
+
+    if (response.body) {
+      const reader = response.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+      }
+    }
+    res.end();
+  });
+
+  // WebSocket server for instance streaming
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on('upgrade', async (message: IncomingMessage, socket: Socket, head: Buffer) => {
+    console.log('Upgrade event fired for:', message.url);
+    const url = new URL(message.url || '', `http://${message.headers.host}`);
+    
+    // Handle instance WebSocket streams
+    // Matches: /v1/instances/{id}/stream OR /v1/agent/instances/{id}/ws
+    if (url.pathname.match(/\/v1\/(instances\/[^\/]+\/stream|agent\/instances\/[^\/]+\/ws)$/)) {
+      console.log('WebSocket path matched, processing upgrade for:', url.pathname);
+      // Extract instance ID from URL
+      const pathParts = url.pathname.split('/');
+      const instanceIdIndex = pathParts.indexOf('instances') + 1;
+      const instanceId = pathParts[instanceIdIndex];
+      
+      if (!instanceId || !adapters?.do) {
+        socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      // Validate auth token for /ws endpoint (agent daemon)
+      if (url.pathname.includes('/ws')) {
+        const authHeader = message.headers['authorization'] || message.headers['Authorization'];
+        const auth = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+        if (!auth || !auth.startsWith('Bearer ')) {
+          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+
+        // Token validation would go here, but for now we'll accept it
+      }
+
+      wss.handleUpgrade(message, socket, head, (ws: WebSocket) => {
+        // Get the DO adapter and register WebSocket
+        const doAdapter = adapters.do as NodeDurableObjectAdapter;
+        const stub = doAdapter.get(instanceId) as any;
+        
+        if (stub && typeof stub.acceptWebSocket === 'function') {
+          stub.acceptWebSocket(ws);
+        } else {
+          ws.close(1011, 'Instance not found');
+        }
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
+  server.listen(config.server.port, config.server.host, () => {
+    console.log(`Dployr Base running on http://${config.server.host}:${config.server.port}`);
   });
 }

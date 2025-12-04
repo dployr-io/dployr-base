@@ -4,7 +4,7 @@
 import { ulid } from "ulid";
 
 /**
- * Base class for D1 database stores providing common utilities and patterns.
+ * Base class for database stores providing common utilities and patterns.
  * 
  * This abstract class provides shared functionality for all entity stores including:
  * - JSON field merging with existing data preservation
@@ -30,7 +30,7 @@ import { ulid } from "ulid";
 export abstract class BaseStore {
     /**
      * Creates a new BaseStore instance.
-     * @param db - The D1Database instance to use for all operations
+     * @param db - The Database instance to use for all operations
      */
     constructor(protected db: D1Database) { }
 

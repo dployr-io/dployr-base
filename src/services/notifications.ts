@@ -1,13 +1,13 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { Bindings } from "@/types";
-import { D1Store } from "@/lib/db/store";
-import { DiscordService } from "./discord";
-import { SlackService } from "./slack";
-import { WebhookService } from "./webhook";
-import { EmailNotificationService } from "./email-notification";
-import { EVENTS, type NotificationEvent } from "./notifier";
+import type { Bindings } from "@/types/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
+import { DiscordService } from "./discord.js";
+import { SlackService } from "./slack.js";
+import { WebhookService } from "./webhook.js";
+import { EmailNotificationService } from "./email-notification.js";
+import { type NotificationEvent } from "./notifier.js";
 
 export interface NotificationData {
   clusterId: string;
@@ -38,9 +38,8 @@ export class NotificationService {
     return integration.events.includes(event);
   }
 
-  async triggerEvent(event: NotificationEvent, data: NotificationData): Promise<void> {
+  async triggerEvent(event: NotificationEvent, data: NotificationData, d1: DatabaseStore): Promise<void> {
     try {
-      const d1 = new D1Store(this.env.BASE_DB);
       const integrations = await d1.clusters.listClusterIntegrations(data.clusterId);
       const cluster = await d1.clusters.get(data.clusterId);
 

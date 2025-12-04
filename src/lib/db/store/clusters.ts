@@ -1,18 +1,18 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Cluster, OAuthProvider, Role as UserRole, User, Integrations, GitHubIntegration } from "@/types";
-import { BaseStore } from "./base";
-import { EVENTS } from "@/lib/constants";
+import { Cluster, OAuthProvider, Role as UserRole, User, Integrations, GitHubIntegration } from "@/types/index.js";
+import { BaseStore } from "./base.js";
+import { EVENTS } from "@/lib/constants/index.js";
 
 export class ClusterStore extends BaseStore {
-  private readonly ROLE_HIERARCHY = {
+  private readonly ROLE_HIERARCHY: Record<UserRole, number> = {
     invited: 0,
     viewer: 1,
     developer: 2,
     admin: 3,
     owner: 4,
-  } as const;
+  };
 
   async save(adminUserId: string): Promise<Cluster> {
     // Check if user already owns a cluster
@@ -704,7 +704,7 @@ export class ClusterStore extends BaseStore {
     const userRole = await this.getUserRole(userId, clusterId);
     if (!userRole) return false;
 
-    const userLevel = this.ROLE_HIERARCHY[userRole] || 0;
+    const userLevel = this.ROLE_HIERARCHY[userRole as UserRole] ?? 0;
     const requiredLevel = this.ROLE_HIERARCHY[minRole];
 
     return userLevel >= requiredLevel;
@@ -728,7 +728,7 @@ export class ClusterStore extends BaseStore {
     // Calculate highest role per user
     const userRoleMap = new Map<string, UserRole>();
     for (const [role, userIds] of Object.entries(members)) {
-      const roleLevel = this.ROLE_HIERARCHY[role as UserRole];
+      const roleLevel = this.ROLE_HIERARCHY[role as UserRole] ?? 0;
       for (const userId of userIds) {
         const currentRole = userRoleMap.get(userId);
         const currentLevel = currentRole ? this.ROLE_HIERARCHY[currentRole] : 0;

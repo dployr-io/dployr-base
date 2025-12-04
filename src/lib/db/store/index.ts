@@ -1,12 +1,12 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { UserStore } from "./users";
-import { ClusterStore } from "./clusters";
-import { InstanceStore } from "./instances";
-import { BootstrapTokenStore } from "./bootstrap_tokens";
+import { UserStore } from "./users.js";
+import { ClusterStore } from "./clusters.js";
+import { InstanceStore } from "./instances.js";
+import { BootstrapTokenStore } from "./bootstrap_tokens.js";
 
-export class D1Store {
+export class DatabaseStore {
     public users: UserStore;
     public clusters: ClusterStore;
     public instances: InstanceStore;
@@ -20,5 +20,6 @@ export class D1Store {
     }
 }
 
+export const D1Store = DatabaseStore;
 export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore };
-export * from "./base";
+export * from "./base.js";

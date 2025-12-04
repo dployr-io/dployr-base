@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { KVStore } from "@/lib/db/store/kv";
-import { Bindings, Variables } from "@/types";
-import { getKV, type AppVariables } from "@/lib/context";
+import { KVStore } from "@/lib/db/store/kv.js";
+import { Bindings, Variables } from "@/types/index.js";
+import { getKV, type AppVariables } from "@/lib/context.js";
 
 const jwks = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 

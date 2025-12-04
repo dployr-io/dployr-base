@@ -2,21 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse, SystemStatus } from "@/types";
-import { KVStore } from "@/lib/db/store/kv";
-import { D1Store } from "@/lib/db/store";
-import { InstanceService } from "@/services/instances";
-import { InstanceConflictError } from "@/lib/db/store/instances";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse, SystemStatus } from "@/types/index.js";
+import { KVStore } from "@/lib/db/store/kv.js";
+import { D1Store } from "@/lib/db/store/index.js";
+import { InstanceService } from "@/services/instances.js";
+import { InstanceConflictError } from "@/lib/db/store/instances.js";
 import z from "zod";
-import { requireClusterAdmin, requireClusterOwner, requireClusterViewer } from "@/middleware/auth";
-import { ERROR, EVENTS } from "@/lib/constants";
-import { authMiddleware } from "@/middleware/auth";
-import { JWTService } from "@/services/jwt";
-import { NotificationService } from "@/services/notifications";
+import { requireClusterOwner, requireClusterViewer } from "@/middleware/auth.js";
+import { ERROR, EVENTS } from "@/lib/constants/index.js";
+import { authMiddleware } from "@/middleware/auth.js";
+import { JWTService } from "@/services/jwt.js";
+import { NotificationService } from "@/services/notifications.js";
 import { ulid } from "ulid";
-import { strictRateLimit } from "@/middleware/ratelimit";
+import { strictRateLimit } from "@/middleware/ratelimit.js";
+import { getKV, getDB, runBackground, getDO, type AppVariables } from "@/lib/context.js";
 
-const instances = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const instances = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 instances.use("*", authMiddleware);
 
 const createInstanceSchema = z.object({
@@ -49,8 +50,8 @@ instances.get("/", requireClusterViewer, async (c) => {
     }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const d1 = new D1Store(c.env.BASE_DB);
-  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
+  const d1 = new D1Store(getDB(c) as D1Database);
+  const kv = new KVStore(getKV(c));
   const service = new InstanceService(c.env);
   const session = c.get("session")!;
 
@@ -66,13 +67,13 @@ instances.get("/", requireClusterViewer, async (c) => {
   );
 
   const instances = await Promise.all(
-    _instances.map(async (instance) => {
-      c.executionCtx.waitUntil(
+    _instances.map(async (instance: any) => {
+      runBackground(c,
         service.pingInstance({
           instanceId: instance.id,
           session,
           c,
-        }),
+        })
       );
       
       return { ...instance };
@@ -89,7 +90,7 @@ instances.post("/", requireClusterOwner, async (c) => {
   try {
     const session = c.get("session")!;
     const service = new InstanceService(c.env);
-    const kv = KVStore.fromCloudflare(c.env.BASE_KV);
+    const kv = new KVStore(getKV(c));
     const data = await c.req.json();
 
     const validation = createInstanceSchema.safeParse(data);
@@ -130,20 +131,21 @@ instances.post("/", requireClusterOwner, async (c) => {
 
     // Trigger notifications
     const notificationService = new NotificationService(c.env);
-    c.executionCtx.waitUntil(
+    const d1 = new D1Store(getDB(c) as D1Database);
+    runBackground(c,
       notificationService.triggerEvent(EVENTS.INSTANCE.CREATED.code, {
         clusterId,
         instanceId: instance.id,
         userEmail: session.email,
-      })
+      }, d1)
     );
 
-    c.executionCtx.waitUntil(
+    runBackground(c,
       service.pingInstance({
         instanceId: instance.id,
         session,
         c,
-      }),
+      })
     );
 
     return c.json(
@@ -200,8 +202,8 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
       );
     }
 
-    const d1 = new D1Store(c.env.BASE_DB);
-    const kv = KVStore.fromCloudflare(c.env.BASE_KV);
+    const d1 = new D1Store(getDB(c) as D1Database);
+    const kv = new KVStore(getKV(c));
     const instance = await d1.instances.get(instanceId);
 
     if (!instance || instance.clusterId !== clusterId) {
@@ -232,12 +234,12 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
 
     // Trigger notifications
     const notificationService = new NotificationService(c.env);
-    c.executionCtx.waitUntil(
+    runBackground(c,
       notificationService.triggerEvent(EVENTS.INSTANCE.DELETED.code, {
         clusterId,
         instanceId,
         userEmail: session.email,
-      })
+      }, d1)
     );
 
     return c.json(
@@ -275,8 +277,8 @@ instances.post("/:instanceId/tokens/rotate", async (c) => {
 
   const { token } = validation.data;
 
-  const kv = KVStore.fromCloudflare(c.env.BASE_KV);
-  const d1 = new D1Store(c.env.BASE_DB);
+  const kv = new KVStore(getKV(c));
+  const d1 = new D1Store(getDB(c) as D1Database);
   const jwtService = new JWTService(kv);
 
   let payload: any;
@@ -332,7 +334,7 @@ instances.get("/:instanceId/stream", requireClusterViewer, async (c) => {
     }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const d1 = new D1Store(c.env.BASE_DB);
+  const d1 = new D1Store(getDB(c) as D1Database);
   const instance = await d1.instances.get(instanceId);
   if (!instance || instance.clusterId !== clusterId) {
     return c.json(createErrorResponse({
@@ -341,8 +343,10 @@ instances.get("/:instanceId/stream", requireClusterViewer, async (c) => {
     }), ERROR.RESOURCE.MISSING_RESOURCE.status);
   }
 
-  const id = c.env.INSTANCE_OBJECT.idFromName(instanceId);
-  const stub = c.env.INSTANCE_OBJECT.get(id);
+  // Use DO adapter for cross-platform WebSocket streaming
+  const doAdapter = getDO(c);
+  const id = doAdapter.idFromName(instanceId);
+  const stub = doAdapter.get(id);
   const upgradeReq = new Request(c.req.raw);
 
   return stub.fetch(upgradeReq);
@@ -379,7 +383,7 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
     const startFrom = typeof rawStartFrom === "number" ? rawStartFrom : -1;
     const limit = typeof rawLimit === "number" ? rawLimit : 100;
 
-    const d1 = new D1Store(c.env.BASE_DB);
+    const d1 = new D1Store(getDB(c) as D1Database);
     const instance = await d1.instances.get(instanceId);
     if (!instance || instance.clusterId !== clusterId) {
       return c.json(createErrorResponse({
@@ -389,15 +393,16 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
     }
 
     const service = new InstanceService(c.env);
-    const kv = KVStore.fromCloudflare(c.env.BASE_KV);
+    const kv = new KVStore(getKV(c));
     const token = await service.getOrCreateInstanceUserToken(kv, session, instanceId);
     const streamId = ulid();
 
-    // Create task to stream logs
-    const id = c.env.INSTANCE_OBJECT.idFromName(instanceId);
-    const stub = c.env.INSTANCE_OBJECT.get(id);
+    // Use DO adapter for cross-platform log streaming
+    const doAdapter = getDO(c);
+    const id = doAdapter.idFromName(instanceId);
+    const stub = doAdapter.get(id);
     
-    await stub.fetch(`https://do/tasks`, {
+    await stub.fetch(new Request(`https://do/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -413,7 +418,7 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
         },
         createdAt: Date.now(),
       }),
-    });
+    }));
 
     return c.json(createSuccessResponse({
       streamId,

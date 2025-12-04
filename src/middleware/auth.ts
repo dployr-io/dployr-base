@@ -4,11 +4,11 @@
 // middleware/auth.ts
 import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
-import { Bindings, Variables } from "@/types";
-import { KVStore } from "@/lib/db/store/kv";
-import { D1Store } from "@/lib/db/store";
-import { ERROR } from "@/lib/constants";
-import { getKV, getDB } from "@/lib/context";
+import { Bindings, Variables } from "@/types/index.js";
+import { KVStore } from "@/lib/db/store/kv.js";
+import { D1Store } from "@/lib/db/store/index.js";
+import { ERROR } from "@/lib/constants/index.js";
+import { getKV, getDB } from "@/lib/context.js";
 
 export async function authMiddleware(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,

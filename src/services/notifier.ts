@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Import and re-export event codes from constants for notification system
-import { EVENTS } from "@/lib/constants";
+import { EVENTS } from "@/lib/constants/index.js";
 export { EVENTS };
 
 // Derive notification event codes from EVENTS groups we care about

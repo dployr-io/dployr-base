@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Context, Next } from "hono";
-import type { Bindings, Variables } from "@/types";
-import { createErrorResponse } from "@/types";
-import { ERROR } from "@/lib/constants";
-import { getKV } from "@/lib/context";
+import type { Bindings, Variables } from "@/types/index.js";
+import { createErrorResponse } from "@/types/index.js";
+import { ERROR } from "@/lib/constants/index.js";
+import { getKV } from "@/lib/context.js";
 
 interface RateLimitConfig {
   windowMs: number;

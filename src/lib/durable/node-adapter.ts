@@ -1,23 +1,62 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Bindings, SystemStatus } from "@/types/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
-import { AgentUpdateV1Schema, AgentStatusReportSchema, LATEST_COMPATIBILITY_DATE, type WSHandshakeResponse } from "@/types/agent.js";
-import { isCompatible, getUpgradeLevel } from "@/lib/version.js";
-import { ulid } from "ulid";
+import type { IDurableObjectAdapter, IDurableObjectStub } from '@/lib/context.js';
+import type { Bindings, SystemStatus } from '@/types/index.js';
+import { KVStore } from '@/lib/db/store/kv.js';
+import { AgentUpdateV1Schema, AgentStatusReportSchema, LATEST_COMPATIBILITY_DATE, type WSHandshakeResponse } from '@/types/agent.js';
+import { isCompatible, getUpgradeLevel } from '@/lib/version.js';
+import { ulid } from 'ulid';
+import type { IKVAdapter } from '@/lib/storage/kv.interface.js';
 
-export class InstanceObject {
+/**
+ * Self-hosted implementation of Durable Object functionality
+ * Manages WebSocket connections and state in-memory per instance
+ */
+export class NodeDurableObjectAdapter implements IDurableObjectAdapter {
+  private instances: Map<string, NodeInstanceObject> = new Map();
+
+  constructor(private env: Bindings, private kvAdapter: IKVAdapter) {}
+
+  idFromName(name: string): string {
+    return name; // In Node, the ID is just the name
+  }
+
+  get(id: string): NodeInstanceObject {
+    let instance = this.instances.get(id);
+    if (!instance) {
+      instance = new NodeInstanceObject(id, this.env, this.kvAdapter);
+      this.instances.set(id, instance);
+    }
+    return instance;
+  }
+}
+
+/**
+ * Self-hosted implementation of a single Durable Object instance
+ * Mimics the behavior of Cloudflare's InstanceObject
+ */
+class NodeInstanceObject implements IDurableObjectStub {
   private sockets: Set<WebSocket> = new Set();
   private handshakeComplete: Map<WebSocket, boolean> = new Map();
   private roles: Map<WebSocket, "agent" | "client"> = new Map();
   private statusWindow: { timestamp: number; system: SystemStatus }[] = [];
   private readonly maxWindowSize = 100;
   private logStreamSubscriptions: Map<WebSocket, { logType: string; lastOffset: number }> = new Map();
-  private activeLogStreams: Map<string, string> = new Map(); // logType -> current streamId
-  private rateLimits: Map<string, number[]> = new Map(); // In-memory rate limiting
+  private activeLogStreams: Map<string, string> = new Map();
+  private rateLimits: Map<string, number[]> = new Map();
+  
+  // In-memory storage (mimics DurableObjectState.storage)
+  private storage: Map<string, any> = new Map();
+  private tasks: any[] = [];
 
-  constructor(private state: DurableObjectState, private env: Bindings) {}
+  constructor(
+    private instanceId: string,
+    private env: Bindings,
+    private kvAdapter: IKVAdapter
+  ) {
+    this.storage.set('instanceId', instanceId);
+  }
 
   private broadcastToClients(message: unknown): void {
     const payload = JSON.stringify(message);
@@ -37,19 +76,7 @@ export class InstanceObject {
 
     const upgradeHeader = request.headers.get("Upgrade");
     if (upgradeHeader && upgradeHeader.toLowerCase() === "websocket") {
-      const parts = url.pathname.split("/");
-      const instanceId = parts.length >= 3 ? parts[parts.length - 2] : undefined;
-      if (instanceId) {
-        await this.state.storage.put("instanceId", instanceId);
-      }
-
-      const pair = new WebSocketPair();
-      const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
-
-      this.state.acceptWebSocket(server);
-      this.sockets.add(server);
-
-      return new Response(null, { status: 101, webSocket: client });
+      return this.handleWebSocketUpgrade(request);
     }
 
     // Handle HTTP POST for adding tasks
@@ -72,6 +99,57 @@ export class InstanceObject {
     return new Response("Not found", { status: 404 });
   }
 
+  private handleWebSocketUpgrade(request: Request): Response {
+    // Node.js WebSocket upgrade using the 'ws' library pattern
+    // This requires the server to handle the upgrade
+    const url = new URL(request.url);
+    const parts = url.pathname.split("/");
+    const instanceId = parts.length >= 3 ? parts[parts.length - 2] : undefined;
+    
+    if (instanceId) {
+      this.storage.set("instanceId", instanceId);
+    }
+
+    // For Node.js, we need to return a special response that signals
+    // the server to upgrade the connection
+    // The actual WebSocket handling will be done by the server middleware
+    return new Response(null, {
+      status: 101,
+      statusText: 'Switching Protocols',
+      headers: {
+        'Upgrade': 'websocket',
+        'Connection': 'Upgrade',
+        'X-Instance-Id': this.instanceId,
+      }
+    });
+  }
+
+  /**
+   * Register a WebSocket connection (called by server after upgrade)
+   */
+  acceptWebSocket(ws: WebSocket): void {
+    this.sockets.add(ws);
+
+    ws.addEventListener('message', (event) => {
+      this.webSocketMessage(ws, event.data).catch(err => {
+        console.error('WebSocket message error:', err);
+      });
+    });
+
+    ws.addEventListener('close', () => {
+      this.webSocketClose(ws).catch(err => {
+        console.error('WebSocket close error:', err);
+      });
+    });
+
+    ws.addEventListener('error', (err) => {
+      console.error('WebSocket error:', err);
+      this.webSocketClose(ws).catch(e => {
+        console.error('Error during WebSocket cleanup:', e);
+      });
+    });
+  }
+
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== "string") {
       return;
@@ -92,7 +170,7 @@ export class InstanceObject {
 
       // Cache payload, broadcast to clients
       if (payload && typeof payload === "object" && payload.update) {
-        await this.state.storage.put("latestUpdate", payload.update);
+        this.storage.set("latestUpdate", payload.update);
 
         this.broadcastToClients({
           kind: "status_update",
@@ -113,8 +191,8 @@ export class InstanceObject {
     if (kind === "client_subscribe") {
       this.roles.set(ws, "client");
 
-      // Try to load latest update from storage (persisted across evictions)
-      const latestUpdate = await this.state.storage.get("latestUpdate");
+      // Try to load latest update from storage
+      const latestUpdate = this.storage.get("latestUpdate");
       if (latestUpdate) {
         ws.send(JSON.stringify({
           kind: "status_update",
@@ -173,7 +251,6 @@ export class InstanceObject {
       // Rate limit log chunks: max 50 chunks per second per logType
       const rateLimitKey = `${streamId}:${logType}`;
       
-      // Use in-memory rate limiting instead of KV to avoid high costs/limits
       if (!this.checkRateLimit(rateLimitKey, 1000, 50)) {
         console.log(`Rate limit hit for log stream ${streamId}, dropping chunk`);
         return;
@@ -235,11 +312,9 @@ export class InstanceObject {
       const ids = Array.isArray(payload?.ids) ? (payload.ids as string[]) : [];
       if (!ids.length) return;
       
-      // Delete completed tasks from DO storage
-      const tasks = (await this.state.storage.get<any[]>("tasks")) || [];
-      const remaining = tasks.filter(t => !ids.includes(t.id));
-      await this.state.storage.put("tasks", remaining);
-      await this.state.storage.delete("inflight");
+      // Delete completed tasks from storage
+      this.tasks = this.tasks.filter(t => !ids.includes(t.id));
+      this.storage.delete("inflight");
       return;
     }
   }
@@ -254,7 +329,6 @@ export class InstanceObject {
     timestamps = timestamps.filter(ts => ts > windowStart);
     
     if (timestamps.length >= maxLimit) {
-      // Update with filtered list even if blocked
       this.rateLimits.set(key, timestamps);
       return false;
     }
@@ -280,14 +354,13 @@ export class InstanceObject {
       if (!hasOtherClients) {
         console.log(`No more clients for logType=${sub.logType}, cleaning up active stream`);
         this.activeLogStreams.delete(sub.logType);
-        // TODO: Send cancel signal to daemon when supported
       }
     }
     
     if (this.sockets.size === 0) {
-      const inflight = await this.state.storage.get<string[]>("inflight");
+      const inflight = this.storage.get("inflight");
       if (Array.isArray(inflight) && inflight.length > 0) {
-        await this.state.storage.delete("inflight");
+        this.storage.delete("inflight");
       }
     }
   }
@@ -323,9 +396,6 @@ export class InstanceObject {
     }
   }
 
-  /**
-   * Handles incoming messages from the agent.
-   */
   private async handleAgentUpdate(ws: WebSocket, payload: any): Promise<void> {
     const validation = AgentUpdateV1Schema.safeParse(payload);
     if (!validation.success) {
@@ -334,11 +404,9 @@ export class InstanceObject {
     }
 
     const update = validation.data;
-
     const alreadyHandshaken = this.handshakeComplete.get(ws) === true;
 
-    // ALLOWED: One-time handshake only, not per-message
-    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
+    const kv = new KVStore(this.kvAdapter);
 
     if (!alreadyHandshaken) {
       if (!isCompatible(update.compatibility_date, LATEST_COMPATIBILITY_DATE)) {
@@ -377,36 +445,30 @@ export class InstanceObject {
     }
   }
 
-  /**
-   * Handles outgoing messages to the agent.
-   */
   private async handlePull(ws: WebSocket): Promise<void> {
-    const instanceId = (await this.state.storage.get<string>("instanceId")) || "";
+    const instanceId = this.storage.get("instanceId") || "";
     if (!instanceId) return;
 
-    // Get tasks from DO storage instead of KV
-    const allTasks = (await this.state.storage.get<any[]>("tasks")) || [];
     const now = Date.now();
     
     // Filter for pending or expired leased tasks
-    const tasks = allTasks.filter(
+    const tasks = this.tasks.filter(
       t => t.status === "pending" || (t.status === "leased" && t.leaseUntil <= now)
     ).slice(0, 50);
 
     if (tasks.length > 0) {
       const ids = tasks.map((t: any) => t.id);
       
-      // Lease tasks in DO storage
+      // Lease tasks
       const leaseUntil = now + 300000; // 5 min lease
-      const updatedTasks = allTasks.map(t => {
+      this.tasks = this.tasks.map(t => {
         if (ids.includes(t.id)) {
           return { ...t, status: "leased", leaseUntil, updatedAt: now };
         }
         return t;
       });
       
-      await this.state.storage.put("tasks", updatedTasks);
-      await this.state.storage.put("inflight", ids);
+      this.storage.set("inflight", ids);
     }
 
     const items = tasks.map((t: any) => ({
@@ -429,16 +491,11 @@ export class InstanceObject {
     );
   }
 
-  /**
-   * Add a task to this instance's queue (called from Worker)
-   */
   async addTask(task: { id: string; type: string; payload: Record<string, unknown>; createdAt: number }): Promise<void> {
-    const tasks = (await this.state.storage.get<any[]>("tasks")) || [];
-    tasks.push({
+    this.tasks.push({
       ...task,
       status: "pending",
       updatedAt: task.createdAt,
     });
-    await this.state.storage.put("tasks", tasks);
   }
 }

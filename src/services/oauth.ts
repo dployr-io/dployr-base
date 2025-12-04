@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // services/oauth.ts
-import { OAuthProvider, User, Bindings } from "@/types";
+import { OAuthProvider, User, Bindings } from "@/types/index.js";
 
 interface OAuthConfig {
   authUrl: string;

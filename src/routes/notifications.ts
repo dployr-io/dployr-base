@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types";
-import { D1Store } from "@/lib/db/store";
-import { ERROR, DEFAULT_EVENTS } from "@/lib/constants";
-import { authMiddleware, requireClusterDeveloper } from "@/middleware/auth";
-import { getDB, type AppVariables } from "@/lib/context";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
+import { D1Store } from "@/lib/db/store/index.js";
+import { ERROR, DEFAULT_EVENTS } from "@/lib/constants/index.js";
+import { authMiddleware, requireClusterDeveloper } from "@/middleware/auth.js";
+import { getDB, type AppVariables } from "@/lib/context.js";
 
 const notifications = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
@@ -87,7 +87,7 @@ notifications.post("/discord/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(c.env.BASE_DB);
+    const d1 = new D1Store(getDB(c) as D1Database);
     await d1.clusters.update(session.clusters[0].id, {
       metadata: { discord: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
@@ -115,7 +115,7 @@ notifications.post("/slack/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(c.env.BASE_DB);
+    const d1 = new D1Store(getDB(c) as D1Database);
     await d1.clusters.update(session.clusters[0].id, {
       metadata: { slack: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
@@ -143,7 +143,7 @@ notifications.post("/webhook/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(c.env.BASE_DB);
+    const d1 = new D1Store(getDB(c) as D1Database);
     await d1.clusters.update(session.clusters[0].id, {
       metadata: { customWebhook: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
@@ -171,7 +171,7 @@ notifications.post("/email/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(c.env.BASE_DB);
+    const d1 = new D1Store(getDB(c) as D1Database);
     await d1.clusters.update(session.clusters[0].id, {
       metadata: { emailNotification: { enabled, events } }
     });

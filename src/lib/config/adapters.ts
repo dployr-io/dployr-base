@@ -3,6 +3,8 @@
 
 import { Config } from './loader';
 import { IKVAdapter, CloudflareKV, RedisKV, MemoryKV } from '@/lib/storage/kv.interface';
+import { NodeDurableObjectAdapter } from '@/lib/durable/node-adapter';
+import { Bindings } from '@/types';
 
 /**
  * Create KV adapter from config (type-safe, zero manual wiring)
@@ -181,6 +183,14 @@ export async function initializeFromConfig(config: Config, env?: any) {
   const kv = await createKVFromConfig(config, env);
   const db = await createDatabaseFromConfig(config, env);
   const storage = await createStorageFromConfig(config, env);
+  
+  // Initialize Durable Object adapter for Node.js
+  // Pass minimal env bindings needed by the DO adapter
+  const doEnv: Partial<Bindings> = {
+    BASE_KV: env?.BASE_KV,
+    ...env,
+  };
+  const doAdapter = new NodeDurableObjectAdapter(doEnv as Bindings, kv);
 
-  return { kv, db, storage, config };
+  return { kv, db, storage, do: doAdapter, config };
 }

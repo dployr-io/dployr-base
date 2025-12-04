@@ -1,8 +1,8 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { type OAuthProvider, User, type RequiredOnly } from "@/types";
-import { BaseStore } from "./base";
+import { type OAuthProvider, User, type RequiredOnly } from "@/types/index.js";
+import { BaseStore } from "./base.js";
 
 export class UserStore extends BaseStore {
     async save(user: RequiredOnly<Omit<User, "id" | "createdAt" | "updatedAt">,

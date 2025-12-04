@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types";
-import { D1Store } from "@/lib/db/store";
-import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
+import { D1Store } from "@/lib/db/store/index.js";
+import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth.js";
 import z from "zod";
-import { KVStore } from "@/lib/db/store/kv";
-import { GitHubService } from "@/services/github";
-import { ERROR, EVENTS } from "@/lib/constants";
-import { NotificationService } from "@/services/notifications";
-import { getKV, getDB, type AppVariables } from "@/lib/context";
+import { KVStore } from "@/lib/db/store/kv.js";
+import { GitHubService } from "@/services/github.js";
+import { ERROR, EVENTS } from "@/lib/constants/index.js";
+import { NotificationService } from "@/services/notifications.js";
+import { getKV, getDB, runBackground, type AppVariables } from "@/lib/context.js";
 
 const clusters = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 clusters.use("*", authMiddleware);
@@ -88,11 +88,11 @@ clusters.get("/:id/users/invites/accept", async (c) => {
 
     // Trigger notifications
     const notificationService = new NotificationService(c.env);
-    c.executionCtx.waitUntil(
+    runBackground(c,
       notificationService.triggerEvent(EVENTS.CLUSTER.INVITE_ACCEPTED.code, {
         clusterId,
         userEmail: session.email,
-      })
+      }, d1)
     );
 
     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));

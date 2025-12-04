@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types";
-import { KVStore } from "@/lib/db/store/kv";
-import { D1Store } from "@/lib/db/store";
-import { verifyGitHubWebhook } from "@/services/utils";
-import { ERROR, WORKFLOW_NAME } from "@/lib/constants";
-import { requireClusterDeveloper } from "@/middleware/auth";
-import { GitLabService } from "@/services/gitlab";
-import { BitBucketService } from "@/services/bitbucket";
-import { getKV, getDB, type AppVariables } from "@/lib/context";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
+import { KVStore } from "@/lib/db/store/kv.js";
+import { D1Store } from "@/lib/db/store/index.js";
+import { verifyGitHubWebhook } from "@/services/utils.js";
+import { ERROR, WORKFLOW_NAME } from "@/lib/constants/index.js";
+import { requireClusterDeveloper } from "@/middleware/auth.js";
+import { GitLabService } from "@/services/gitlab.js";
+import { BitBucketService } from "@/services/bitbucket.js";
+import { getKV, getDB, type AppVariables } from "@/lib/context.js";
 
 const integrations = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
@@ -138,7 +138,7 @@ integrations.post("/gitlab/setup", async (c) => {
     // Test access
     await gitlabService.remoteCount({ accessToken });
 
-    const d1 = new D1Store(c.env.BASE_DB);
+    const d1 = new D1Store(getDB(c) as D1Database);
     await d1.clusters.update(session.clusters[0].id, {
       metadata: { gitLab: { accessToken, enabled } }
     });
@@ -171,7 +171,7 @@ integrations.post("/bitbucket/setup", async (c) => {
     // Test access
     await bitbucketService.remoteCount({ accessToken });
 
-    const d1 = new D1Store(c.env.BASE_DB);
+    const d1 = new D1Store(getDB(c) as D1Database);
     await d1.clusters.update(session.clusters[0].id, {
       metadata: { bitBucket: { accessToken, enabled } }
     });
@@ -198,7 +198,7 @@ integrations.get("/list", async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(c.env.BASE_DB);
+    const d1 = new D1Store(getDB(c) as D1Database);
     const integrations = await d1.clusters.listClusterIntegrations(session.clusters[0].id);
 
     return c.json(createSuccessResponse(integrations, "Integrations retrieved"));

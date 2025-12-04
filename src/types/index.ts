@@ -35,6 +35,7 @@ export type Bindings = {
   APP_URL: string;
   BASE_URL: string;
   EMAIL_FROM?: string;
+  CORS_ALLOWED_ORIGINS?: string;
 };
 
 export type OAuthProvider = "google" | "github" | "microsoft" | "email";
@@ -70,6 +71,10 @@ export interface Session {
 export type Variables = {
   user?: User | undefined;
   session?: Session | undefined;
+  kvAdapter?: any;
+  dbAdapter?: any;
+  storageAdapter?: any;
+  doAdapter?: any;
 };
 
 export type ActorType = 'user' | 'headless'
@@ -186,9 +191,9 @@ export interface Integrations {
 }
 
 // Export response types
-export * from "./responses";
+export * from "./responses.js";
 
 // Export agent types
-export * from "./agent";
+export * from "./agent.js";
 
-import type { NotificationEvent } from "@/services/notifier";
+import type { NotificationEvent } from "@/services/notifier.js";

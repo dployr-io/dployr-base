@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { BaseStore } from "./base";
+import { BaseStore } from "./base.js";
 
 export class BootstrapTokenStore extends BaseStore {
   async create(instanceId: string, nonce: string): Promise<void> {

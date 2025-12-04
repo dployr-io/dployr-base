@@ -2,18 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorResponse } from "@/types";
-import { OAuthService } from "@/services/oauth";
-import { KVStore } from "@/lib/db/store/kv";
+import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorResponse, Cluster } from "@/types/index.js";
+import { OAuthService } from "@/services/oauth.js";
+import { KVStore } from "@/lib/db/store/kv.js";
 import { setCookie, getCookie } from "hono/cookie";
-import { D1Store } from "@/lib/db/store";
+import { D1Store } from "@/lib/db/store/index.js";
 import z from "zod";
-import { sanitizeReturnTo } from "@/services/utils";
-import { EmailService } from "@/services/email";
-import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode";
-import { ERROR, EVENTS } from "@/lib/constants";
-import { NotificationService } from "@/services/notifications";
-import { getKV, getDB, type AppVariables } from "@/lib/context";
+import { sanitizeReturnTo } from "@/services/utils.js";
+import { EmailService } from "@/services/email.js";
+import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode.js";
+import { ERROR, EVENTS } from "@/lib/constants/index.js";
+import { NotificationService } from "@/services/notifications.js";
+import { getKV, getDB, runBackground, type AppVariables } from "@/lib/context.js";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
@@ -139,7 +139,7 @@ auth.get("/callback/:provider", async (c) => {
         id: savedUser.id,
         type: "user",
       },
-      targets: clusters.map((cluster) => ({ id: cluster.id })),
+      targets: clusters.map((cluster: any) => ({ id: cluster.id })),
       type: EVENTS.AUTH.SESSION_CREATED.code,
       request: c.req.raw,
     });
@@ -147,11 +147,11 @@ auth.get("/callback/:provider", async (c) => {
     // Trigger notifications
     if (clusters.length > 0) {
       const notificationService = new NotificationService(c.env);
-      c.executionCtx.waitUntil(
+      runBackground(c,
         notificationService.triggerEvent(EVENTS.AUTH.SESSION_CREATED.code, {
           clusterId: clusters[0].id,
           userEmail: savedUser.email,
-        }),
+        }, d1)
       );
     }
 
@@ -267,7 +267,7 @@ auth.post("/login/email/verify", async (c) => {
         id: user.id,
         type: "user",
       },
-      targets: clusters.map((cluster) => ({ id: cluster.id })),
+      targets: clusters.map((cluster: any) => ({ id: cluster.id })),
       type: EVENTS.AUTH.SESSION_CREATED.code,
       request: c.req.raw,
     });
@@ -288,11 +288,11 @@ auth.post("/login/email/verify", async (c) => {
     // Trigger notifications
     if (clusters.length > 0) {
       const notificationService = new NotificationService(c.env);
-      c.executionCtx.waitUntil(
+      runBackground(c,
         notificationService.triggerEvent(EVENTS.AUTH.SESSION_CREATED.code, {
           clusterId: clusters[0].id,
           userEmail: user.email,
-        }),
+        }, d1)
       );
     }
 

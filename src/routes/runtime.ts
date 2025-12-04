@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types";
-import { authMiddleware } from "@/middleware/auth";
-import { KVStore } from "@/lib/db/store/kv";
-import { ERROR } from "@/lib/constants";
-import { getKV, type AppVariables } from "@/lib/context";
+import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
+import { authMiddleware } from "@/middleware/auth.js";
+import { KVStore } from "@/lib/db/store/kv.js";
+import { ERROR } from "@/lib/constants/index.js";
+import { getKV, type AppVariables } from "@/lib/context.js";
 
 type EventsFilters = {
   type?: string;

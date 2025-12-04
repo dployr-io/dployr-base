@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Auto-import all migrations
-import * as migrations from '@/lib/db/migrations/index';
+import * as migrations from '@/lib/db/migrations/index.js';
 
 const MIGRATION_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS _migrations (

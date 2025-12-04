@@ -1,8 +1,8 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Instance } from "@/types";
-import { BaseStore } from "./base";
+import { Instance } from "@/types/index.js";
+import { BaseStore } from "./base.js";
 
 export class InstanceConflictError extends Error {
     constructor(public field: "address" | "tag" | "instance") {

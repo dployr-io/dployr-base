@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { Bindings } from "@/types";
+import type { Bindings } from "@/types/index.js";
 
 export class BitBucketService {
   constructor(private env: Bindings) {}

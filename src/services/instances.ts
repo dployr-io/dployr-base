@@ -1,13 +1,14 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Bindings, Instance, Session } from "@/types";
-import { D1Store } from "@/lib/db/store";
-import { EVENTS } from "@/lib/constants";
-import { KVStore } from "@/lib/db/store/kv";
+import { Bindings, Instance, Session } from "@/types/index.js";
+import { D1Store } from "@/lib/db/store/index.js";
+import { EVENTS } from "@/lib/constants/index.js";
+import { KVStore } from "@/lib/db/store/kv.js";
 import { Context } from "hono";
-import { JWTService } from "@/services/jwt";
+import { JWTService } from "@/services/jwt.js";
 import { ulid } from "ulid";
+import { getKV, getDB, getDO } from "@/lib/context.js";
 
 export class InstanceService {
   constructor(private env: Bindings) {}
@@ -25,8 +26,8 @@ export class InstanceService {
     session: Session;
     c: Context;
   }): Promise<{ instance: Instance; token: string }> {
-    const d1 = new D1Store(this.env.BASE_DB);
-    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
+    const d1 = new D1Store(getDB(c) as D1Database);
+    const kv = new KVStore(getKV(c));
 
     const instance = await d1.instances.create(clusterId, {
       tag,
@@ -64,8 +65,9 @@ export class InstanceService {
     const key = `inst:${instanceId}:user:${session.userId}:role:${role}:token`;
 
     try {
-      const cached = (await kv.kv.get(key, "json")) as { token?: string } | null;
-      const tok = cached?.token;
+      const raw = await kv.kv.get(key);
+      const cached = typeof raw === "string" ? (JSON.parse(raw) as { token?: string } | null) : null;
+      const tok = cached && typeof cached.token === "string" ? cached.token : undefined;
       if (typeof tok === "string" && tok.trim().length > 0) {
         return tok;
       }
@@ -108,8 +110,8 @@ export class InstanceService {
     session: Session; 
     c: Context 
   }): Promise<"enqueued"> {
-    const d1 = new D1Store(this.env.BASE_DB);
-    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
+    const d1 = new D1Store(getDB(c) as D1Database);
+    const kv = new KVStore(getKV(c));
     const instance = await d1.instances.get(instanceId);
 
     if (!instance) {
@@ -132,10 +134,11 @@ export class InstanceService {
 
     const token = await this.getOrCreateInstanceUserToken(kv, session, instance.id);
     
-    // Add task directly to Durable Object via HTTP
-    const id = this.env.INSTANCE_OBJECT.idFromName(instanceId);
-    const stub = this.env.INSTANCE_OBJECT.get(id);
-    await stub.fetch(`https://do/tasks`, {
+    // Add task directly to Durable Object via HTTP (cross-platform)
+    const doAdapter = getDO(c);
+    const id = doAdapter.idFromName(instanceId);
+    const stub = doAdapter.get(id);
+    await stub.fetch(new Request(`https://do/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -144,21 +147,23 @@ export class InstanceService {
         payload: { token },
         createdAt: Date.now(),
       }),
-    });
+    }));
 
     return "enqueued";
   }
 
   async registerInstance({
     token,
+    c,
   }: {
     token: string;
+    c: Context;
   }): Promise<
     | { ok: true; instanceId: string; jwksUrl: string }
     | { ok: false; reason: "invalid_token" | "invalid_type" | "already_used" }
   > {
-    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
-    const d1 = new D1Store(this.env.BASE_DB);
+    const kv = new KVStore(getKV(c));
+    const d1 = new D1Store(getDB(c) as D1Database);
     const jwtService = new JWTService(kv);
 
     let payload: any;
@@ -186,11 +191,13 @@ export class InstanceService {
 
   async saveDomain({
     instanceId,
+    c,
   }: {
     instanceId: string;
+    c: Context;
   }) {
-    const d1 = new D1Store(this.env.BASE_DB);
-    const kv = KVStore.fromCloudflare(this.env.BASE_KV);
+    const d1 = new D1Store(getDB(c) as D1Database);
+    const kv = new KVStore(getKV(c));
     const instance = await d1.instances.get(instanceId);
 
     if (!instance) {

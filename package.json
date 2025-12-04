@@ -5,7 +5,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "build": "pnpm dlx esbuild src/index.unified.ts --bundle --platform=node --format=esm --tsconfig=tsconfig.json --outdir=dist --external:@hono/node-server --external:smol-toml --external:redis --external:@upstash/redis --external:@aws-sdk/client-s3 --external:better-sqlite3"
+    "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@octokit/auth-app": "^8.1.2",
@@ -13,11 +13,16 @@
     "buffer": "^6.0.3",
     "hono": "^4.8.4",
     "jose": "^6.1.2",
+    "tsx": "^4.19.2",
     "ulid": "^3.0.1",
+    "ws": "^8.18.0", 
     "zod": "^4.0.5"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250712.0",
+    "typescript": "^5.6.3",
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
     "wrangler": "^4.4.0"
   }
 }
