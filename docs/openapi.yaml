@@ -368,10 +368,9 @@ components:
         streamId:
           type: string
           description: Unique stream identifier (ULID).
-        logType:
+        path:
           type: string
-          description: Log file type.
-          enum: [app, install]
+          description: Log file path.
         entries:
           type: array
           items:
@@ -394,12 +393,11 @@ components:
     LogStreamRequest:
       type: object
       description: Request body for starting a log stream from an instance.
-      required: [logType]
+      required: [path]
       properties:
-        logType:
+        path:
           type: string
-          enum: [app, install]
-          description: Log file type to stream.
+          description: Log file path to stream.
 
         mode:
           type: string
@@ -1569,9 +1567,9 @@ paths:
                           streamId:
                             type: string
                             description: Stream identifier used with WebSocket subscription.
-                          logType:
+                          path:
                             type: string
-                            enum: [app, install]
+                            description: Log file path.
                           mode:
                             type: string
                             enum: [tail, historical]

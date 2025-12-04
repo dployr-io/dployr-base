@@ -6,6 +6,7 @@ import type { Bindings, SystemStatus } from '@/types/index.js';
 import { KVStore } from '@/lib/db/store/kv.js';
 import { AgentUpdateV1Schema, AgentStatusReportSchema, LATEST_COMPATIBILITY_DATE, type WSHandshakeResponse } from '@/types/agent.js';
 import { isCompatible, getUpgradeLevel } from '@/lib/version.js';
+import { LazyMap } from '@/lib/lazy-map.js';
 import { ulid } from 'ulid';
 import type { IKVAdapter } from '@/lib/storage/kv.interface.js';
 
@@ -42,9 +43,10 @@ class NodeInstanceObject implements IDurableObjectStub {
   private roles: Map<WebSocket, "agent" | "client"> = new Map();
   private statusWindow: { timestamp: number; system: SystemStatus }[] = [];
   private readonly maxWindowSize = 100;
-  private logStreamSubscriptions: Map<WebSocket, { logType: string; lastOffset: number }> = new Map();
-  private activeLogStreams: Map<string, string> = new Map();
-  private rateLimits: Map<string, number[]> = new Map();
+  private logStreamSubscriptions: Map<WebSocket, { path: string; lastOffset: number }> = new Map();
+  private activeLogStreams: LazyMap<string, string>;
+  private rateLimits: LazyMap<string, number[]>;
+  private logHistory: LazyMap<string, any[]>;
   
   // In-memory storage (mimics DurableObjectState.storage)
   private storage: Map<string, any> = new Map();
@@ -55,6 +57,10 @@ class NodeInstanceObject implements IDurableObjectStub {
     private env: Bindings,
     private kvAdapter: IKVAdapter
   ) {
+    // Initialize LazyMaps for automatic memory management
+    this.activeLogStreams = new LazyMap(1000 * 60 * 10); // 10 min TTL
+    this.rateLimits = new LazyMap(1000 * 5); // 5 sec TTL
+    this.logHistory = new LazyMap(1000 * 60 * 5); // 5 min TTL
     this.storage.set('instanceId', instanceId);
   }
 
@@ -215,82 +221,118 @@ class NodeInstanceObject implements IDurableObjectStub {
     }
 
     if (kind === "log_subscribe") {
-      this.roles.set(ws, "client");
-      const logType = payload?.logType as string | undefined;
-      const startOffset = (payload?.startOffset as number | undefined) || 0;
-      
-      if (!logType) {
-        ws.send(JSON.stringify({ kind: "error", message: "logType required" }));
-        return;
+      const path = payload?.path as string | undefined;
+      const startFrom = (payload?.startFrom as number | undefined) ?? -1;
+
+      if (!path) return;
+
+      this.logStreamSubscriptions.set(ws, { path, lastOffset: startFrom });
+      console.log(`Client subscribed to logs: path=${path}, startFrom=${startFrom}`);
+
+      // Send recent history if available
+      const history = this.logHistory.get(path);
+      if (history && history.length > 0) {
+        for (const chunk of history) {
+          if (chunk.offset === undefined || chunk.offset >= startFrom) {
+            try {
+              ws.send(JSON.stringify({ kind: "log_chunk", payload: chunk }));
+            } catch (err) {
+              console.error("Failed to send historical chunk", err);
+            }
+          }
+        }
       }
 
-      console.log(`log_subscribe: client subscribing to logType=${logType}, startOffset=${startOffset}`);
-      
-      this.logStreamSubscriptions.set(ws, { logType, lastOffset: startOffset });
-      
-      const activeStreamId = this.activeLogStreams.get(logType);
-      ws.send(JSON.stringify({ 
-        kind: "log_subscribed", 
-        logType,
-        streamId: activeStreamId || null,
-        startOffset 
-      }));
+      // Notify daemon to start streaming if this is the first subscriber for this path
+      const activeStreamId = this.activeLogStreams.get(path);
+      if (!activeStreamId) {
+        // Send task to daemon to start streaming
+        const streamId = `${this.instanceId}:${path}`;
+        console.log(`Starting new log stream for path=${path}, streamId=${streamId}`);
+        
+        // Send task via agent WebSocket
+        for (const socket of this.sockets) {
+          if (this.roles.get(socket) === "agent") {
+            try {
+              socket.send(JSON.stringify({
+                kind: "task",
+                payload: {
+                  id: ulid(),
+                  type: "logs/stream:post",
+                  payload: {
+                    streamId,
+                    path,
+                    mode: "tail",
+                    startFrom,
+                  },
+                },
+              }));
+              console.log(`Sent logs/stream:post task to daemon for path=${path}`);
+            } catch (err) {
+              console.error("Failed to send task to daemon", err);
+            }
+          }
+        }
+      }
       return;
     }
 
     if (kind === "log_chunk") {
       const streamId = payload?.streamId as string | undefined;
-      const logType = payload?.logType as string | undefined;
+      const path = payload?.path as string | undefined;
       const entries = (payload?.entries as { time: string; level: "DEBUG" | "INFO" | "WARN" | "ERROR"; msg: string }[] | undefined);
       const eof = payload?.eof as boolean | undefined;
       const hasMore = payload?.hasMore as boolean | undefined;
       const offset = payload?.offset as number | undefined;
 
-      if (!streamId || !logType || !entries) return;
+      if (!streamId || !path || !entries) return;
 
-      // Rate limit log chunks: max 50 chunks per second per logType
-      const rateLimitKey = `${streamId}:${logType}`;
+      this.activeLogStreams.set(path, streamId);
+
+      // Rate limit log chunks: max 500 chunks per second per path
+      const rateLimitKey = `${streamId}:${path}`;
       
-      if (!this.checkRateLimit(rateLimitKey, 1000, 50)) {
+      if (!this.checkRateLimit(rateLimitKey, 1000, 5000)) {
         console.log(`Rate limit hit for log stream ${streamId}, dropping chunk`);
         return;
       }
-
-      // Track this as the active stream for this logType
-      const currentActiveStreamId = this.activeLogStreams.get(logType);
-      if (!currentActiveStreamId || currentActiveStreamId !== streamId) {
-        this.activeLogStreams.set(logType, streamId);
-        console.log(`Updated active stream for ${logType}: ${streamId}`);
+      
+      // Store in history (limit to 50 chunks per path)
+      const history = this.logHistory.get(path) || [];
+      history.push({ streamId, entries, offset, timestamp: Date.now() });
+      if (history.length > 50) {
+        history.shift();
       }
+      this.logHistory.set(path, history);
 
-      const message = JSON.stringify({
-        kind: "log_chunk",
-        streamId,
-        logType,
-        entries,
-        eof: eof || false,
-        hasMore: hasMore || false,
-        offset: offset || 0,
-        timestamp: Date.now(),
-      });
-
+      // Forward to subscribers
+      const message = JSON.stringify({ kind: "log_chunk", payload });
       let forwardedCount = 0;
       
       for (const socket of this.sockets) {
         const sub = this.logStreamSubscriptions.get(socket);
-        if (sub && sub.logType === logType && offset && offset >= sub.lastOffset) {
-          try {
-            socket.send(message);
-            sub.lastOffset = offset + (entries?.length || 0);
-            forwardedCount++;
-          } catch (err) {
-            console.error("Failed to send log chunk to client", err);
+        if (sub && sub.path === path) {
+          // Forward if offset is valid and >= lastOffset
+          if (offset !== undefined && offset >= sub.lastOffset) {
+            try {
+              socket.send(message);
+              sub.lastOffset = offset + (entries?.length || 0);
+              forwardedCount++;
+            } catch (err) {
+              console.error("Failed to send log chunk to client", err);
+            }
           }
         }
       }
       
+      // Clean up active stream on EOF
+      if (eof) {
+        console.log(`Stream ended (EOF) for ${path}: ${streamId}`);
+        this.activeLogStreams.delete(path);
+      }
+      
       if (forwardedCount === 0) {
-        console.log(`log_chunk not forwarded: streamId=${streamId}, logType=${logType}, subscribers=${this.logStreamSubscriptions.size}`);
+        console.log(`log_chunk not forwarded: streamId=${streamId}, path=${path}, subscribers=${this.logStreamSubscriptions.size}`);
       } else {
         console.log(`log_chunk forwarded to ${forwardedCount} client(s)`);
       }
@@ -326,7 +368,7 @@ class NodeInstanceObject implements IDurableObjectStub {
     let timestamps = this.rateLimits.get(key) || [];
     
     // Cleanup old timestamps
-    timestamps = timestamps.filter(ts => ts > windowStart);
+    timestamps = timestamps.filter((ts: number) => ts > windowStart);
     
     if (timestamps.length >= maxLimit) {
       this.rateLimits.set(key, timestamps);
@@ -335,6 +377,7 @@ class NodeInstanceObject implements IDurableObjectStub {
     
     timestamps.push(now);
     this.rateLimits.set(key, timestamps);
+    
     return true;
   }
 
@@ -346,15 +389,23 @@ class NodeInstanceObject implements IDurableObjectStub {
     this.roles.delete(ws);
     this.logStreamSubscriptions.delete(ws);
     
-    // Check if there are other clients subscribed to this logType
-    if (sub) {
-      const hasOtherClients = Array.from(this.logStreamSubscriptions.values())
-        .some(s => s.logType === sub.logType);
-      
-      if (!hasOtherClients) {
-        console.log(`No more clients for logType=${sub.logType}, cleaning up active stream`);
-        this.activeLogStreams.delete(sub.logType);
+    // Check if there are other clients still subscribed to this path
+    let hasOtherClients = false;
+    for (const otherSocket of this.sockets) {
+      if (otherSocket !== ws) {
+        const otherSub = this.logStreamSubscriptions.get(otherSocket);
+        if (otherSub && otherSub.path === sub?.path) {
+          hasOtherClients = true;
+          break;
+        }
       }
+    }
+
+    if (!hasOtherClients && sub) {
+      console.log(`No more clients for path=${sub.path}, cleaning up`);
+      this.activeLogStreams.delete(sub.path);
+      this.logHistory.delete(sub.path);
+      // Note: Daemon streams will naturally stop when context is cancelled on WS disconnect
     }
     
     if (this.sockets.size === 0) {

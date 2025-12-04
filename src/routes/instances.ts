@@ -34,7 +34,7 @@ const rotateSchema = z.object({
 });
 
 const logStreamRequestSchema = z.object({
-  logType: z.enum(["app", "install"]),
+  path: z.string().min(2, "Path is required"),
   mode: z.enum(["tail", "historical"]).default("tail"),
   startFrom: z.number().int().optional(),
   limit: z.number().int().min(1).max(1000).optional(),
@@ -379,7 +379,7 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const { logType, mode, startFrom: rawStartFrom, limit: rawLimit } = validation.data;
+    const { path, mode, startFrom: rawStartFrom, limit: rawLimit } = validation.data;
     const startFrom = typeof rawStartFrom === "number" ? rawStartFrom : -1;
     const limit = typeof rawLimit === "number" ? rawLimit : 100;
 
@@ -395,7 +395,8 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
     const service = new InstanceService(c.env);
     const kv = new KVStore(getKV(c));
     const token = await service.getOrCreateInstanceUserToken(kv, session, instanceId);
-    const streamId = ulid();
+    // streamId: instanceId:path - stable across reconnects
+    const streamId = `${instanceId}:${path}`;
 
     // Use DO adapter for cross-platform log streaming
     const doAdapter = getDO(c);
@@ -410,7 +411,7 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
         type: "logs/stream:post",
         payload: {
           token,
-          logType,
+          path,
           streamId,
           mode,
           startFrom,
@@ -422,7 +423,7 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
 
     return c.json(createSuccessResponse({
       streamId,
-      logType,
+      path,
       mode,
       startFrom,
       limit,
