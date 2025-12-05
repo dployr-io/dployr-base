@@ -17,7 +17,7 @@ export class UserStore extends BaseStore {
         // Insert or update user
         const userStatement = this.db.prepare(`
             INSERT INTO users (id, email, name, picture, provider, metadata, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
             ON CONFLICT(email) DO UPDATE SET
                 name = COALESCE(excluded.name, users.name),
                 picture = COALESCE(excluded.picture, users.picture),
@@ -41,13 +41,13 @@ export class UserStore extends BaseStore {
             statements.push(
                 this.db.prepare(`
                     UPDATE clusters
-                    SET metadata = json_patch(COALESCE(metadata, '{}'), ?),
-                        updated_at = ?
+                    SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
+                        updated_at = $2
                     WHERE id IN (
                         SELECT uc.cluster_id 
                         FROM user_clusters uc
                         JOIN users u ON uc.user_id = u.id
-                        WHERE u.email = ? AND uc.role IN ('owner', 'admin')
+                        WHERE u.email = $3 AND uc.role IN ('owner', 'admin')
                     )
                 `).bind(metadataJson, now, user.email)
             );
@@ -85,7 +85,7 @@ export class UserStore extends BaseStore {
     async get(email: string): Promise<User | null> {
         const stmt = this.db.prepare(`
             SELECT id, email, name, picture, provider, metadata, created_at, updated_at 
-            FROM users WHERE email = ?
+            FROM users WHERE email = $1
         `);
 
         const result = await stmt.bind(email).first();
@@ -111,31 +111,32 @@ export class UserStore extends BaseStore {
         const now = this.now();
         const setClauses: string[] = [];
         const values: any[] = [];
+        let paramIndex = 1;
 
         if (updates.name !== undefined) {
-            setClauses.push("name = ?");
+            setClauses.push(`name = $${paramIndex++}`);
             values.push(updates.name);
         }
         if (updates.picture !== undefined) {
-            setClauses.push("picture = ?");
+            setClauses.push(`picture = $${paramIndex++}`);
             values.push(updates.picture);
         }
         if (updates.provider !== undefined) {
-            setClauses.push("provider = ?");
+            setClauses.push(`provider = $${paramIndex++}`);
             values.push(updates.provider);
         }
         if (updates.metadata !== undefined) {
-            setClauses.push("metadata = json_patch(COALESCE(metadata, '{}'), ?)");
+            setClauses.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${paramIndex++}::jsonb`);
             values.push(JSON.stringify(updates.metadata));
         }
 
-        setClauses.push("updated_at = ?");
+        setClauses.push(`updated_at = $${paramIndex++}`);
         values.push(now, email);
 
         const query = `
             UPDATE users 
             SET ${setClauses.join(", ")} 
-            WHERE email = ?
+            WHERE email = $${paramIndex}
             RETURNING id, email, name, picture, provider, metadata, created_at, updated_at
         `;
 

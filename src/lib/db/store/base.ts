@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ulid } from "ulid";
+import type { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 
 /**
  * Base class for database stores providing common utilities and patterns.
@@ -32,7 +33,7 @@ export abstract class BaseStore {
      * Creates a new BaseStore instance.
      * @param db - The Database instance to use for all operations
      */
-    constructor(protected db: D1Database) { }
+    constructor(protected db: PostgresAdapter) { }
 
     /**
      * Merges existing JSON data with updates, preserving existing fields.
@@ -81,20 +82,21 @@ export abstract class BaseStore {
     ): Promise<void> {
         const fields: string[] = [];
         const values: any[] = [];
+        let paramIndex = 1;
 
         for (const [field, value] of Object.entries(updates)) {
             if (value !== null && value !== undefined) {
-                fields.push(`${field} = ?`);
+                fields.push(`${field} = $${paramIndex++}`);
                 values.push(value);
             }
         }
 
         if (fields.length === 0) return;
 
-        fields.push("updated_at = ?");
+        fields.push(`updated_at = $${paramIndex++}`);
         values.push(Date.now(), id);
 
-        const query = `UPDATE ${table} SET ${fields.join(", ")} WHERE ${idColumn} = ?`;
+        const query = `UPDATE ${table} SET ${fields.join(", ")} WHERE ${idColumn} = $${paramIndex}`;
         await this.db.prepare(query).bind(...values).run();
     }
 
@@ -129,12 +131,12 @@ export abstract class BaseStore {
     ): Promise<void> {
         const updatesJson = JSON.stringify(updates);
 
-        // Use json_patch to atomically merge the updates
+        // Use PostgreSQL jsonb || operator to merge JSON objects
         const stmt = this.db.prepare(`
             UPDATE ${table} 
-            SET ${field} = json_patch(COALESCE(${field}, '{}'), ?),
-                updated_at = ?
-            WHERE ${idColumn} = ?
+            SET ${field} = COALESCE(${field}, '{}'::jsonb) || $1::jsonb,
+                updated_at = $2
+            WHERE ${idColumn} = $3
         `);
 
         const result = await stmt.bind(updatesJson, this.now(), id).run();

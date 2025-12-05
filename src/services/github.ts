@@ -97,7 +97,7 @@ export class GitHubService {
   }
 
   async listRemotes({ installationId }: { installationId?: number }) {
-    // If GitHub App or installation is missing, return an empty list (for self-hosted setups without GitHub)
+    // If GitHub App or installation is missing, return an empty list 
     if (!this.appAuth || !installationId) {
       return [];
     }

@@ -8,12 +8,11 @@ export type RequiredOnly<T, K extends keyof T> =
   Required<Pick<T, K>> &
   Partial<Omit<T, K>>;
 
+import type { PostgresAdapter } from "@/lib/db/pg-adapter.js";
+
 export type Bindings = {
   ZEPTO_API_KEY: string;
-  CLOUDFLARE_API_TOKEN: string;
-  CLOUDFLARE_ZONE_ID: string;
 
-  // OAuth
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   GITHUB_CLIENT_ID: string;
@@ -25,13 +24,6 @@ export type Bindings = {
   GITHUB_PRIVATE_KEY: string;
   GITHUB_WEBHOOK_SECRET: string;
 
-  // Storage
-  BASE_KV: KVNamespace;
-  BASE_DB: D1Database;
-  INSTANCE_LOGS: R2Bucket;
-  INSTANCE_OBJECT: DurableObjectNamespace;
-
-  // App config
   APP_URL: string;
   BASE_URL: string;
   EMAIL_FROM?: string;

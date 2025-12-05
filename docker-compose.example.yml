@@ -6,10 +6,7 @@ services:
     restart: unless-stopped
     ports:
       - "7878:7878"
-    environment:
-      # Platform
-      PLATFORM: "self-hosted"
-      
+    environment:      
       # Server
       PORT: "7878"
       HOST: "0.0.0.0"

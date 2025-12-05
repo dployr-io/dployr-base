@@ -35,7 +35,7 @@ export interface IStorageAdapter {
 // Durable Object stub interface
 export interface IDurableObjectStub {
   fetch(request: Request): Promise<Response>;
-  acceptWebSocket?(ws: any): void; // self-hosted 
+  acceptWebSocket?(ws: any): void;
 }
 
 // Durable Object adapter interface

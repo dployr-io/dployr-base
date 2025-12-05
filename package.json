@@ -2,9 +2,7 @@
   "name": "dployr-base",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "dev": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
@@ -13,16 +11,17 @@
     "buffer": "^6.0.3",
     "hono": "^4.8.4",
     "jose": "^6.1.2",
+    "pg": "^8.13.1",
+    "smol-toml": "^1.5.2",
     "tsx": "^4.19.2",
     "ulid": "^3.0.1",
-    "ws": "^8.18.0", 
+    "ws": "^8.18.0",
     "zod": "^4.0.5"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250712.0",
-    "typescript": "^5.6.3",
     "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
     "@types/ws": "^8.5.13",
-    "wrangler": "^4.4.0"
+    "typescript": "^5.6.3"
   }
 }

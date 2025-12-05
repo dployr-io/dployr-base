@@ -1,10 +1,6 @@
 # Dployr Base Configuration
 # Copy this to config.toml and customize for your deployment
 
-[deployment]
-# Target platform: "cloudflare" | "self-hosted" | "fly" | "railway"
-platform = "self-hosted"
-
 [server]
 port = 7878
 host = "0.0.0.0"
@@ -12,26 +8,21 @@ base_url = "https://base.dployr.dev"
 app_url = "https://app.dployr.dev"
 
 [database]
-# Type: "d1" | "sqlite"
-type = "sqlite"
-# For Cloudflare D1, this is auto-detected from wrangler.toml
-# For SQLite, provide file path
-path = "/var/lib/dployr-base/dployr.db"
+
+# PostgreSQL connection string
+url = "postgresql://user:password@localhost:5432/postgres"
+
 # Auto-run migrations on startup
 auto_migrate = true
 
 [kv]
-# Type: "cloudflare" | "redis" | "upstash" | "memory"
 type = "redis"
-# For Cloudflare KV, auto-detected from wrangler.toml
-# For Redis/Upstash, provide connection details
 url = "redis://localhost:6379"
 # Optional: Upstash REST API (serverless-friendly)
 # rest_url = "https://..."
 # rest_token = "..."
 
 [storage]
-# Type: "r2" | "s3" | "filesystem" | "azure" | "digitalocean"
 type = "filesystem"
 # For filesystem
 path = "./data/storage"
@@ -41,13 +32,6 @@ path = "./data/storage"
 # access_key = ""
 # secret_key = ""
 
-[durable_objects]
-# Only for Cloudflare Workers
-# For self-hosted, we use in-memory state + periodic snapshots to DB
-enabled = false
-# Snapshot interval (seconds) - only for self-hosted
-snapshot_interval = 60
-
 [auth]
 # OAuth providers
 google_client_id = ""
@@ -56,14 +40,10 @@ github_client_id = ""
 github_client_secret = ""
 
 [email]
-# Email provider: "zepto" | "resend" | "smtp"
+# Email provider: "zepto" 
 provider = "zepto"
 zepto_api_key = ""
-# For SMTP
-# smtp_host = ""
-# smtp_port = 587
-# smtp_user = ""
-# smtp_pass = ""
+
 
 [security]
 # Session TTL (seconds)

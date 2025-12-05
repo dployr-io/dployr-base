@@ -1,22 +1,16 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { ActorType, Cluster, Session, User } from "@/types";
-import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, AGENT_UPDATE_TTL, RELEASE_CACHE_TTL, DEDUP_TTL } from "@/lib/constants";
+import { ActorType, Session, User } from "@/types/index.js";
 import { ulid } from "ulid";
-import { importPKCS8 } from "jose";
-import { generateKeyPair } from "@/lib/crypto/keystore";
-import { IKVAdapter, CloudflareKV } from "@/lib/storage/kv.interface";
+import { CryptoKey, importPKCS8 } from "jose";
+import { generateKeyPair } from "@/lib/crypto/keystore.js";
+import { IKVAdapter } from "@/lib/storage/kv.interface.js";
+import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, AGENT_UPDATE_TTL, RELEASE_CACHE_TTL, DEDUP_TTL } from "@/lib/constants/index.js";
+import { JsonWebKey } from "crypto";
 
 export class KVStore {
   constructor(public kv: IKVAdapter) { }
-
-  /**
-   * Factory for Cloudflare Workers (backward compatible)
-   */
-  static fromCloudflare(namespace: KVNamespace): KVStore {
-    return new KVStore(new CloudflareKV(namespace));
-  }
 
   // Session management
   async createSession(sessionId: string, user: Omit<User, "createdAt" | "updatedAt">, clusters: { id: string, name: string, owner: string }[]): Promise<Session> {
@@ -104,8 +98,11 @@ export class KVStore {
     targets?: { id: string }[];
     request: Request;
   }): Promise<void> {
-    const cf = request.cf;
-    const timezone = (cf?.timezone as string) || 'UTC'; // e.g., "America/New_York"
+    const headers = request.headers;
+
+    const timezone =
+      headers.get('x-timezone') ||
+      'UTC';
 
     const baseEvent = {
       type,
@@ -114,11 +111,14 @@ export class KVStore {
       timezone,
       timezoneOffset: new Date().toLocaleString('en-US', {
         timeZone: timezone,
-        timeZoneName: 'shortOffset'
+        timeZoneName: 'shortOffset',
       })
     };
 
-    const ray = request.headers.get("CF-Ray") || request.headers.get("cf-ray") || request.headers.get("x-request-id") || "";
+    const ray =
+      headers.get('x-ray-id') ||
+      headers.get('x-request-id') ||
+      '';
     const targetScope = Array.isArray(targets) ? targets.map(t => t.id).sort().join(",") : "";
     const idemKey = `event:idem:${type}:${actor.id}:${ray}:${targetScope}`;
     if (ray) {

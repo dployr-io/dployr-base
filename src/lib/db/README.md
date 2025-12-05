@@ -1,6 +1,6 @@
 # Data Layer
 
-This directory contains the data layer for dployr base, built on Cloudflare D1 (SQLite).
+This directory contains the data layer for dployr base, built on PostgreSQL.
 
 ## Migrations
 
@@ -39,12 +39,14 @@ The store layer provides type-safe database operations through dedicated classes
 
 ```typescript
 import { DatabaseStore, KVStore } from '@/lib/db/store';
+import { PostgresAdapter } from '@/lib/db/pg-adapter';
 
-const d1Store = new DatabaseStore(env.BASE_DB);
+const db = new PostgresAdapter(process.env.DATABASE_URL);
+const dbStore = new DatabaseStore(db);
 const kvStore = new KVStore(env.BASE_KV);
 
 // Create a user
-const user = await d1Store.users.create({
+const user = await dbStore.users.create({
   email: 'user@example.com',
   name: 'John Doe',
   provider: 'google'
@@ -96,15 +98,18 @@ The KV store handles temporary and session data using Cloudflare KV storage.
 
 ### Local Development
 
-Use Wrangler for local D1 development:
+Use PostgreSQL for local development:
 
 ```bash
 # Create local database
-wrangler d1 create dployr-local
+createdb dployr-local
 
-# Apply migrations
-wrangler d1 migrations apply dployr-local --local
+# Set connection string
+export DATABASE_URL="postgresql://localhost/dployr-local"
+
+# Run migrations (migrations run automatically on app startup)
+# Or manually connect and run SQL from migrations/000_init.ts
 
 # Query database
-wrangler d1 execute dployr-local --local --command "SELECT * FROM users"
+psql $DATABASE_URL -c "SELECT * FROM users"
 ```

@@ -12,30 +12,6 @@ export interface IKVAdapter {
 }
 
 /**
- * Cloudflare KV adapter 
- */
-export class CloudflareKV implements IKVAdapter {
-  constructor(private kv: KVNamespace) {}
-
-  async get(key: string): Promise<string | null> {
-    return this.kv.get(key);
-  }
-
-  async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
-    await this.kv.put(key, value, options);
-  }
-
-  async delete(key: string): Promise<void> {
-    await this.kv.delete(key);
-  }
-
-  async list(options: { prefix: string; limit?: number }): Promise<Array<{ name: string }>> {
-    const result = await this.kv.list(options);
-    return result.keys;
-  }
-}
-
-/**
  * Redis adapter (self-hosted redis / Upstash)
  */
 export class RedisKV implements IKVAdapter {

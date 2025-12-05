@@ -3,15 +3,16 @@
 
 // Auto-import all migrations
 import * as migrations from '@/lib/db/migrations/index.js';
+import type { PostgresAdapter } from './pg-adapter.js';
 
 const MIGRATION_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS _migrations (
   filename TEXT PRIMARY KEY,
-  applied_at INTEGER NOT NULL DEFAULT (unixepoch())
+  applied_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
 );
 `;
 
-async function getAppliedMigrations(db: D1Database): Promise<Set<string>> {
+async function getAppliedMigrations(db: PostgresAdapter): Promise<Set<string>> {
   try {
     const result = await db.prepare("SELECT filename FROM _migrations").all();
     return new Set(result.results.map((row: any) => row.filename));
@@ -35,13 +36,12 @@ function getMigrations(): Record<string, string> {
   return migrationMap;
 }
 
-
-async function applyMigration(db: D1Database, filename: string, sql: string): Promise<void> {
+async function applyMigration(db: PostgresAdapter, filename: string, sql: string): Promise<void> {
   console.log(`Applying migration: ${filename}`);
 
   // Check if already applied
   try {
-    const existing = await db.prepare("SELECT filename FROM _migrations WHERE filename = ?")
+    const existing = await db.prepare("SELECT filename FROM _migrations WHERE filename = $1")
       .bind(filename)
       .first();
 
@@ -53,16 +53,14 @@ async function applyMigration(db: D1Database, filename: string, sql: string): Pr
     // Continue
   }
 
-  // filter and split trigger functions
-  const statements = sql.match(
-    /CREATE\s+TRIGGER[\s\S]*?BEGIN[\s\S]*?END;(?:\s*END;)?|CREATE\s+(?:TABLE|INDEX)[\s\S]*?;/gi
-  ) || [];
+  // Split SQL statements by semicolon (PostgreSQL handles triggers differently)
+  const statements = sql.split(';').filter(s => s.trim());
 
   for (const statement of statements) {
       const trimmed = statement.trim();
       if (trimmed) {
         try {
-          await db.prepare(trimmed).run();
+          await db.prepare(trimmed + ';').run();
         } catch (error) {
           console.error(`Failed statement: ${trimmed}`);
           throw error;
@@ -70,14 +68,14 @@ async function applyMigration(db: D1Database, filename: string, sql: string): Pr
       }
     }
 
-  await db.prepare("INSERT OR IGNORE INTO _migrations (filename) VALUES (?)")
+  await db.prepare("INSERT INTO _migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING")
     .bind(filename)
     .run();
 
   console.log(`Migration ${filename} applied successfully`);
 }
 
-export async function runMigrations(db: D1Database): Promise<void> {
+export async function runMigrations(db: PostgresAdapter): Promise<void> {
   console.log("Starting database migrations...");
 
   await db.prepare(MIGRATION_TABLE_DDL).run();

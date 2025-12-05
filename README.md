@@ -2,14 +2,7 @@
 
 This is the control plane for [dployr](https://github.com/dployr-io/dployr).
 
-Most users do not need to self-host. The free hosted control plane is globally available and delivered at low latency via Cloudflare’s edge network:
-
-- Base: https://base.dployr.dev
-- Dashboard: https://app.dployr.dev
-- Documentation: https://docs.dployr.dev
-- API Reference: https://api-docs.dployr.dev
-
-Continue below only if you are in a restricted network or have very special requirements that require deploying and managing your own control plane & web dashboard.
+Self-host your control plane for restricted networks or custom requirements.
 
 ---
 
@@ -35,29 +28,22 @@ See [DOCKER.md](./DOCKER.md) for more examples.
 
 ```bash
 # Basic install
-curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh \
+  | sudo bash -s --
 
 # Example with Upstash Redis
-curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh \
   | sudo bash -s -- \
   --kv-type upstash \
   --kv-rest-url "https://your-db.upstash.io" \
   --kv-rest-token "your-token"
 
-# Or from a config file
-sudo bash install.sh --config /path/to/config.toml
+# Or from a config file (remote script)
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh \
+  | sudo bash -s -- --config /path/to/config.toml
 
 # Start the service
 sudo systemctl start dployr-base
-```
-
-### Option 3: Cloudflare Workers (same as production)
-
-```bash
-npm install
-cp wrangler.example.toml wrangler.toml
-# Edit wrangler.toml with your account ID
-npm run deploy
 ```
 
 ---
@@ -67,19 +53,15 @@ npm run deploy
 Self‑hosted setups share the same `config.toml` layout:
 
 ```toml
-[deployment]
-platform = "self-hosted"  # or "cloudflare"
-
 [database]
-type = "sqlite"          # or "d1" for Cloudflare
-path = "/var/lib/dployr-base/dployr.db"
+url = "postgresql://user:password@localhost:5432/dployr"
 
 [kv]
-type = "redis"           # or "cloudflare", "upstash", "memory"
+type = "redis"
 url = "redis://localhost:6379"
 
 [storage]
-type = "filesystem"      # or "r2", "s3", "azure"
+type = "filesystem"
 path = "/var/lib/dployr-base/storage"
 ```
 
@@ -90,11 +72,7 @@ See `config.example.toml` for all fields.
 ## Development
 
 ```bash
-# Local dev (uses config.toml)
 npm run dev
-
-# Cloudflare dev
-npm run dev:cloudflare
 ```
 
 ---

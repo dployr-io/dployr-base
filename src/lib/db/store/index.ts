@@ -1,6 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
+import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { UserStore } from "./users.js";
 import { ClusterStore } from "./clusters.js";
 import { InstanceStore } from "./instances.js";
@@ -12,7 +13,7 @@ export class DatabaseStore {
     public instances: InstanceStore;
     public bootstrapTokens: BootstrapTokenStore;
 
-    constructor(db: D1Database) {
+    constructor(db: PostgresAdapter) {
         this.users = new UserStore(db);
         this.clusters = new ClusterStore(db);
         this.instances = new InstanceStore(db);
@@ -20,6 +21,6 @@ export class DatabaseStore {
     }
 }
 
-export const D1Store = DatabaseStore;
+export const PostgresStore = DatabaseStore;
 export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore };
 export * from "./base.js";

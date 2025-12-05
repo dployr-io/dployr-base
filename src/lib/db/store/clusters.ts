@@ -4,6 +4,7 @@
 import { Cluster, OAuthProvider, Role as UserRole, User, Integrations, GitHubIntegration } from "@/types/index.js";
 import { BaseStore } from "./base.js";
 import { EVENTS } from "@/lib/constants/index.js";
+import type { PreparedStatement } from "@/lib/db/pg-adapter.js";
 
 export class ClusterStore extends BaseStore {
   private readonly ROLE_HIERARCHY: Record<UserRole, number> = {
@@ -21,7 +22,7 @@ export class ClusterStore extends BaseStore {
         SELECT c.id, c.name, c.metadata, c.created_at, c.updated_at
         FROM clusters c
         JOIN user_clusters uc ON uc.cluster_id = c.id
-        WHERE uc.user_id = ? AND uc.role = 'owner'
+        WHERE uc.user_id = $1 AND uc.role = 'owner'
       `)
       .bind(adminUserId)
       .first();
@@ -48,7 +49,7 @@ export class ClusterStore extends BaseStore {
     const id = this.generateId();
 
     const user = await this.db
-      .prepare(`SELECT email, metadata FROM users WHERE id = ?`)
+      .prepare(`SELECT email, metadata FROM users WHERE id = $1`)
       .bind(adminUserId)
       .first();
 
@@ -59,12 +60,12 @@ export class ClusterStore extends BaseStore {
     const name = (user.email as string).split('@')[0];
 
     await this.db.batch([
-      this.db.prepare(`INSERT INTO clusters (id, name) VALUES (?, ?)`).bind(id, name),
-      this.db.prepare(`INSERT INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, 'owner')`).bind(adminUserId, id),
+      this.db.prepare(`INSERT INTO clusters (id, name) VALUES ($1, $2)`).bind(id, name),
+      this.db.prepare(`INSERT INTO user_clusters (user_id, cluster_id, role) VALUES ($1, $2, 'owner')`).bind(adminUserId, id),
     ]);
 
     const clusterRow = await this.db
-      .prepare(`SELECT id, name, metadata, created_at, updated_at FROM clusters WHERE id = ?`)
+      .prepare(`SELECT id, name, metadata, created_at, updated_at FROM clusters WHERE id = $1`)
       .bind(id)
       .first();
 
@@ -92,14 +93,14 @@ export class ClusterStore extends BaseStore {
   async get(id: string): Promise<Cluster | null> {
     const clusterStmt = this.db.prepare(`
       SELECT id, name, metadata, created_at, updated_at 
-      FROM clusters WHERE id = ?
+      FROM clusters WHERE id = $1
     `);
 
     const cluster = await clusterStmt.bind(id).first();
     if (!cluster) return null;
 
     const usersStmt = this.db.prepare(`
-      SELECT user_id, role FROM user_clusters WHERE cluster_id = ?
+      SELECT user_id, role FROM user_clusters WHERE cluster_id = $1
     `);
 
     const userRoles = await usersStmt.bind(id).all();
@@ -162,9 +163,9 @@ export class ClusterStore extends BaseStore {
       statements.push(
         this.db.prepare(`
           UPDATE clusters 
-          SET metadata = json_patch(COALESCE(metadata, '{}'), ?),
-              updated_at = ?
-          WHERE id = ?
+          SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
+              updated_at = $2
+          WHERE id = $3
         `).bind(updatesJson, this.now(), id)
       );
     }
@@ -173,16 +174,17 @@ export class ClusterStore extends BaseStore {
     if (Object.keys(clusterUpdates).length > 0) {
       const fields: string[] = [];
       const values: any[] = [];
+      let paramIndex = 1;
 
       for (const [field, value] of Object.entries(clusterUpdates)) {
-        fields.push(`${field} = ?`);
+        fields.push(`${field} = $${paramIndex++}`);
         values.push(value);
       }
 
-      fields.push("updated_at = ?");
+      fields.push(`updated_at = $${paramIndex++}`);
       values.push(this.now(), id);
 
-      const query = `UPDATE clusters SET ${fields.join(", ")} WHERE id = ?`;
+      const query = `UPDATE clusters SET ${fields.join(", ")} WHERE id = $${paramIndex}`;
       statements.push(this.db.prepare(query).bind(...values));
     }
 
@@ -201,7 +203,7 @@ export class ClusterStore extends BaseStore {
   }
 
   async delete(id: string): Promise<void> {
-    await this.db.prepare(`DELETE FROM clusters WHERE id = ?`).bind(id).run();
+    await this.db.prepare(`DELETE FROM clusters WHERE id = $1`).bind(id).run();
   }
 
   async installGitHubIntegration(
@@ -209,7 +211,7 @@ export class ClusterStore extends BaseStore {
   ): Promise<Cluster | null> {
     const cluster = await this.db.prepare(`
       SELECT id, metadata FROM clusters 
-      WHERE json_extract(metadata, '$.gitHub.loginId') = ?
+      WHERE metadata->'gitHub'->>'loginId' = $1
     `).bind(integration.loginId).first();
 
     if (!cluster) {
@@ -222,8 +224,8 @@ export class ClusterStore extends BaseStore {
     const updatesJson = JSON.stringify(integration);
     await this.db.prepare(`
       UPDATE clusters 
-      SET metadata = json_patch(COALESCE(metadata, '{}'), json_object('gitHub', json(?)))
-          WHERE id = ?
+      SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{gitHub}', $1::jsonb)
+          WHERE id = $2
     `).bind(updatesJson, clusterId).run();
 
     return this.get(clusterId);
@@ -240,7 +242,7 @@ export class ClusterStore extends BaseStore {
     if (userEmails.length === 0) return;
 
     const now = this.now();
-    const statements: D1PreparedStatement[] = [];
+    const statements: PreparedStatement[] = [];
 
     for (const email of userEmails) {
       const userId = this.generateId();
@@ -251,7 +253,7 @@ export class ClusterStore extends BaseStore {
       statements.push(
         this.db.prepare(`
           INSERT INTO users (id, name, email, provider, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?)
+          VALUES ($1, $2, $3, $4, $5, $6)
           ON CONFLICT(email) DO NOTHING
         `).bind(userId, name, email, provider, now, now)
       );
@@ -259,8 +261,9 @@ export class ClusterStore extends BaseStore {
       // Link user to cluster with 'invited' role
       statements.push(
         this.db.prepare(`
-          INSERT OR IGNORE INTO user_clusters (user_id, cluster_id, role)
-          SELECT id, ?, 'invited' FROM users WHERE email = ?
+          INSERT INTO user_clusters (user_id, cluster_id, role)
+          SELECT id, $1, 'invited' FROM users WHERE email = $2
+          ON CONFLICT (user_id, cluster_id) DO NOTHING
         `).bind(clusterId, email)
       );
     }
@@ -286,11 +289,11 @@ export class ClusterStore extends BaseStore {
       }
     }
 
-    const statements: D1PreparedStatement[] = [];
+    const statements: PreparedStatement[] = [];
 
     for (const userId of userIds) {
       statements.push(
-        this.db.prepare(`DELETE FROM user_clusters WHERE cluster_id = ? AND user_id = ?`)
+        this.db.prepare(`DELETE FROM user_clusters WHERE cluster_id = $1 AND user_id = $2`)
           .bind(clusterId, userId)
       );
 
@@ -300,10 +303,10 @@ export class ClusterStore extends BaseStore {
       statements.push(
         this.db.prepare(`
           DELETE FROM users 
-          WHERE id = ? 
+          WHERE id = $1 
           AND provider = 'email'
           AND NOT EXISTS (
-            SELECT 1 FROM user_clusters WHERE user_id = ?
+            SELECT 1 FROM user_clusters WHERE user_id = $2
           )
         `).bind(userId, userId)
       );
@@ -324,8 +327,8 @@ export class ClusterStore extends BaseStore {
   ): Promise<void> {
     const stmt = this.db.prepare(`
       UPDATE user_clusters 
-      SET role = 'viewer', updated_at = ?
-      WHERE user_id = ? AND cluster_id = ? AND role = 'invited'
+      SET role = 'viewer', updated_at = $1
+      WHERE user_id = $2 AND cluster_id = $3 AND role = 'invited'
     `);
 
     const result = await stmt.bind(this.now(), userId, clusterId).run();
@@ -344,7 +347,7 @@ export class ClusterStore extends BaseStore {
   async declineInvite(userId: string, clusterId: string): Promise<void> {
     const stmt = this.db.prepare(`
       DELETE FROM user_clusters 
-      WHERE user_id = ? AND cluster_id = ? AND role = 'invited'
+      WHERE user_id = $1 AND cluster_id = $2 AND role = 'invited'
     `);
 
     const result = await stmt.bind(userId, clusterId).run();
@@ -370,7 +373,7 @@ export class ClusterStore extends BaseStore {
       JOIN clusters c ON uc.cluster_id = c.id
       JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'
       JOIN users u ON owner_uc.user_id = u.id
-      WHERE uc.user_id = ? AND uc.role = 'invited'
+      WHERE uc.user_id = $1 AND uc.role = 'invited'
     `);
     const results = await stmt.bind(userId).all();
     return results.results.map((r) => ({
@@ -408,7 +411,7 @@ export class ClusterStore extends BaseStore {
     // Demote the previous owner
     await this.db
       .prepare(
-        `UPDATE user_clusters SET role = ? WHERE cluster_id = ? AND user_id != ? AND role = 'owner'`
+        `UPDATE user_clusters SET role = $1 WHERE cluster_id = $2 AND user_id != $3 AND role = 'owner'`
       )
       .bind(previousOwnerRole, clusterId, newOwnerId)
       .run();
@@ -416,7 +419,8 @@ export class ClusterStore extends BaseStore {
     // Promote the new owner
     await this.db
       .prepare(
-        `INSERT OR REPLACE INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, 'owner')`
+        `INSERT INTO user_clusters (user_id, cluster_id, role) VALUES ($1, $2, 'owner')
+         ON CONFLICT (user_id, cluster_id) DO UPDATE SET role = 'owner'`
       )
       .bind(newOwnerId, clusterId)
       .run();
@@ -439,7 +443,7 @@ export class ClusterStore extends BaseStore {
       JOIN clusters c ON uc.cluster_id = c.id
       JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'
       JOIN users owner_u ON owner_uc.user_id = owner_u.id
-      WHERE uc.user_id = ? AND uc.role != 'invited'
+      WHERE uc.user_id = $1 AND uc.role != 'invited'
     `);
     const result = await stmt.bind(userId).first();
 
@@ -466,7 +470,7 @@ export class ClusterStore extends BaseStore {
       JOIN clusters c ON uc.cluster_id = c.id
       JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'
       JOIN users owner_u ON owner_uc.user_id = owner_u.id
-      WHERE uc.user_id = ? AND uc.role != 'invited'
+      WHERE uc.user_id = $1 AND uc.role != 'invited'
     `);
     const results = await stmt.bind(userId).all();
     return results.results.map((r) => ({
@@ -494,7 +498,7 @@ export class ClusterStore extends BaseStore {
       SELECT COUNT(*) as count
       FROM users u
       JOIN user_clusters uc ON u.id = uc.user_id
-      WHERE uc.cluster_id = ? AND uc.role != 'invited'
+      WHERE uc.cluster_id = $1 AND uc.role != 'invited'
     `);
     const countResult = await countStmt.bind(clusterId).first();
     const total = (countResult?.count as number) || 0;
@@ -505,7 +509,7 @@ export class ClusterStore extends BaseStore {
       SELECT u.id, u.name, u.email, u.picture, u.provider, u.created_at, u.updated_at, uc.role
       FROM users u
       JOIN user_clusters uc ON u.id = uc.user_id
-      WHERE uc.cluster_id = ? AND uc.role != 'invited'
+      WHERE uc.cluster_id = $1 AND uc.role != 'invited'
       ORDER BY uc.role DESC, u.email ASC
       ${limitClause} ${offsetClause}
     `);
@@ -542,7 +546,7 @@ export class ClusterStore extends BaseStore {
       SELECT COUNT(*) as count
       FROM users u
       JOIN user_clusters uc ON u.id = uc.user_id
-      WHERE uc.cluster_id = ? AND uc.role = 'invited'
+      WHERE uc.cluster_id = $1 AND uc.role = 'invited'
     `);
     const countResult = await countStmt.bind(clusterId).first();
     const total = (countResult?.count as number) || 0;
@@ -553,7 +557,7 @@ export class ClusterStore extends BaseStore {
       SELECT u.id, u.name, u.email, u.picture, u.provider, u.created_at, u.updated_at, uc.role
       FROM users u
       JOIN user_clusters uc ON u.id = uc.user_id
-      WHERE uc.cluster_id = ? AND uc.role = 'invited'
+      WHERE uc.cluster_id = $1 AND uc.role = 'invited'
       ORDER BY uc.role DESC, u.email ASC
       ${limitClause} ${offsetClause}
     `);
@@ -581,7 +585,7 @@ export class ClusterStore extends BaseStore {
    */
   async getUserRole(userId: string, clusterId: string): Promise<UserRole | null> {
     const stmt = this.db.prepare(
-      `SELECT role FROM user_clusters WHERE user_id = ? AND cluster_id = ?`
+      `SELECT role FROM user_clusters WHERE user_id = $1 AND cluster_id = $2`
     );
     const result = await stmt.bind(userId, clusterId).first();
     return result ? (result.role as UserRole) : null;
@@ -595,7 +599,7 @@ export class ClusterStore extends BaseStore {
    */
   async getOwner(clusterId: string): Promise<string | null> {
     const stmt = this.db.prepare(
-      `SELECT user_id FROM user_clusters WHERE cluster_id = ? AND role = 'owner'`
+      `SELECT user_id FROM user_clusters WHERE cluster_id = $1 AND role = 'owner'`
     );
     const result = await stmt.bind(clusterId).first();
     return result ? (result.user_id as string) : null;
@@ -617,7 +621,7 @@ export class ClusterStore extends BaseStore {
    */
   async getUsersByRole(clusterId: string, role: Exclude<UserRole, 'owner'>): Promise<string[]> {
     const stmt = this.db.prepare(
-      `SELECT user_id FROM user_clusters WHERE cluster_id = ? AND role = ?`
+      `SELECT user_id FROM user_clusters WHERE cluster_id = $1 AND role = $2`
     );
     const results = await stmt.bind(clusterId, role).all();
     return results.results.map((r) => r.user_id as string);
@@ -633,7 +637,7 @@ export class ClusterStore extends BaseStore {
     clusterId: string,
   ): Promise<Integrations> {
     const stmt = this.db.prepare(`
-      SELECT metadata FROM clusters WHERE id = ?
+      SELECT metadata FROM clusters WHERE id = $1
     `);
     const result = await stmt.bind(clusterId).first();
     const metadata = result?.metadata ? JSON.parse(result.metadata as string) : {};
@@ -722,7 +726,7 @@ export class ClusterStore extends BaseStore {
   private async prepareRoleUpdateStatements(
     clusterId: string,
     roles: Record<Exclude<UserRole, 'owner'>, string[]>
-  ): Promise<D1PreparedStatement[]> {
+  ): Promise<PreparedStatement[]> {
     const { ...members } = roles;
 
     // Calculate highest role per user
@@ -740,7 +744,7 @@ export class ClusterStore extends BaseStore {
 
     // Get current users
     const currentUsers = await this.db
-      .prepare(`SELECT DISTINCT user_id FROM user_clusters WHERE cluster_id = ? AND role != 'owner'`)
+      .prepare(`SELECT DISTINCT user_id FROM user_clusters WHERE cluster_id = $1 AND role != 'owner'`)
       .bind(clusterId)
       .all();
 
@@ -752,7 +756,7 @@ export class ClusterStore extends BaseStore {
       if (!userRoleMap.has(userId)) {
         statements.push(
           this.db
-            .prepare(`DELETE FROM user_clusters WHERE cluster_id = ? AND user_id = ? AND role != 'owner'`)
+            .prepare(`DELETE FROM user_clusters WHERE cluster_id = $1 AND user_id = $2 AND role != 'owner'`)
             .bind(clusterId, userId)
         );
       }
@@ -762,7 +766,8 @@ export class ClusterStore extends BaseStore {
     for (const [userId, role] of userRoleMap) {
       statements.push(
         this.db
-          .prepare(`INSERT OR REPLACE INTO user_clusters (user_id, cluster_id, role) VALUES (?, ?, ?)`)
+          .prepare(`INSERT INTO user_clusters (user_id, cluster_id, role) VALUES ($1, $2, $3)
+                    ON CONFLICT (user_id, cluster_id) DO UPDATE SET role = $3`)
           .bind(userId, clusterId, role)
       );
     }

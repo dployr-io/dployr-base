@@ -13,13 +13,12 @@ CONFIG_DIR="/etc/dployr-base"
 SERVICE_USER="dployr"
 
 # Default config values (can be overridden by flags or config file)
-PLATFORM="self-hosted"
 PORT="7878"
 HOST="0.0.0.0"
 BASE_URL=""
 APP_URL=""
-DB_TYPE="sqlite"
-DB_PATH="/var/lib/dployr-base/dployr.db"
+DB_TYPE="postgres"
+DB_URL=""
 KV_TYPE="redis"
 KV_URL="redis://localhost:6379"
 KV_REST_URL=""
@@ -220,26 +219,30 @@ if ! id "$SERVICE_USER" &>/dev/null; then
   useradd --system --no-create-home --shell /bin/false "$SERVICE_USER"
 fi
 
-# Install Node.js (if not present)
-if ! command -v node &>/dev/null; then
-  echo "[INFO] Installing Node.js..."
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  apt-get install -y nodejs
-fi
-
 # Create directories
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$CONFIG_DIR"
 mkdir -p /var/log/dployr-base
 mkdir -p /var/lib/dployr-base/storage
 
+# Resolve latest tag if requested
+if [ "$VERSION" = "latest" ]; then
+  echo "[INFO] Resolving latest release tag from GitHub..."
+  VERSION="$(curl -fsSL https://api.github.com/repos/dployr-io/dployr-base/releases/latest \
+    | grep -m1 '"tag_name"' \
+    | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+
+  if [ -z "$VERSION" ]; then
+    echo "[ERROR] Failed to resolve latest release tag from GitHub."
+    exit 1
+  fi
+
+  echo "[INFO] Latest release tag: $VERSION"
+fi
+
 # Download and extract
 echo "[INFO] Downloading Dployr Base ($VERSION)..."
-DOWNLOAD_URL="https://github.com/dployr-io/dployr-base/releases/download/${VERSION}/dployr-base-${PLATFORM}-${ARCH}.tar.gz"
-
-if [ "$VERSION" = "latest" ]; then
-  DOWNLOAD_URL="https://github.com/dployr-io/dployr-base/releases/latest/download/dployr-base-${PLATFORM}-${ARCH}.tar.gz"
-fi
+DOWNLOAD_URL="https://github.com/dployr-io/dployr-base/releases/download/${VERSION}/dployr-base-${VERSION}.tar.gz"
 
 curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
 
@@ -247,9 +250,6 @@ curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
 if [ ! -f "$CONFIG_DIR/config.toml" ]; then
   echo "[INFO] Creating default configuration..."
   cat > "$CONFIG_DIR/config.toml" <<EOF
-[deployment]
-platform = "$PLATFORM"
-
 [server]
 port = $PORT
 host = "$HOST"
@@ -257,8 +257,7 @@ base_url = "$BASE_URL"
 app_url = "$APP_URL"
 
 [database]
-type = "$DB_TYPE"
-path = "$DB_PATH"
+url = "$DB_URL"
 auto_migrate = true
 
 [kv]
@@ -274,10 +273,6 @@ bucket = "$STORAGE_BUCKET"
 region = "$STORAGE_REGION"
 access_key = "$STORAGE_ACCESS_KEY"
 secret_key = "$STORAGE_SECRET_KEY"
-
-[durable_objects]
-enabled = false
-snapshot_interval = 60
 
 [auth]
 google_client_id = "$GOOGLE_CLIENT_ID"
@@ -313,15 +308,13 @@ fi
 # Install dependencies
 echo "[INFO] Installing dependencies..."
 cd "$INSTALL_DIR"
-npm ci --production
+npm install --omit=dev
 
 # Create systemd service
 echo "[INFO] Creating systemd service..."
 cat > /etc/systemd/system/dployr-base.service <<EOF
 [Unit]
 Description=Dployr Base Server
-After=network.target redis.service
-Wants=redis.service
 
 [Service]
 Type=simple
@@ -329,11 +322,11 @@ User=$SERVICE_USER
 WorkingDirectory=$INSTALL_DIR
 Environment="NODE_ENV=production"
 Environment="CONFIG_PATH=$CONFIG_DIR/config.toml"
-ExecStart=/usr/bin/node $INSTALL_DIR/dist/index.unified.js
+ExecStart=/usr/bin/node $INSTALL_DIR/dist/index.js
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/dployr-base/output.log
-StandardError=append:/var/log/dployr-base/error.log
+StandardError=append:/var/log/dployr-base/output.log
 
 [Install]
 WantedBy=multi-user.target
@@ -350,22 +343,4 @@ systemctl daemon-reload
 
 echo ""
 echo "Installation completed successfully!"
-echo ""
-echo "Next steps:"
-echo "1. Install Redis (if not already installed):"
-echo "   apt-get install redis-server"
-echo ""
-echo "2. Edit configuration (optional):"
-echo "   nano $CONFIG_DIR/config.toml"
-echo ""
-echo "3. Start the service:"
-echo "   systemctl start dployr-base"
-echo "   systemctl enable dployr-base"
-echo ""
-echo "4. Check status:"
-echo "   systemctl status dployr-base"
-echo "   tail -f /var/log/dployr-base/output.log"
-echo ""
-echo "Database: SQLite at /var/lib/dployr-base/dployr.db"
-echo "Storage: Filesystem at /var/lib/dployr-base/storage"
 echo ""

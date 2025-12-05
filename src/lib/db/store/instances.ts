@@ -21,7 +21,7 @@ export class InstanceStore extends BaseStore {
 
         const stmt = this.db.prepare(`
             INSERT INTO instances (id, cluster_id, address, tag, metadata, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
         `);
 
         try {
@@ -37,11 +37,11 @@ export class InstanceStore extends BaseStore {
                 )
                 .run();
         } catch (error) {
-            if (error instanceof Error && error.message.includes("UNIQUE constraint failed:")) {
-                if (error.message.includes("instances.address")) {
+            if (error instanceof Error && error.message.includes("duplicate key value")) {
+                if (error.message.includes("instances_address")) {
                     throw new InstanceConflictError("address");
                 }
-                if (error.message.includes("instances.tag")) {
+                if (error.message.includes("instances_tag")) {
                     throw new InstanceConflictError("tag");
                 }
                 throw new InstanceConflictError("instance");
@@ -63,7 +63,7 @@ export class InstanceStore extends BaseStore {
             FROM instances
             JOIN user_clusters ON user_clusters.cluster_id = instances.cluster_id
             JOIN clusters ON clusters.id = user_clusters.cluster_id
-            WHERE instances.id = ?
+            WHERE instances.id = $1
         `);
 
         const result = await stmt.bind(id).first();
@@ -84,15 +84,15 @@ export class InstanceStore extends BaseStore {
         const now = this.now();
         const stmt = this.db.prepare(`
             UPDATE instances
-            SET metadata = ?, updated_at = ?
-            WHERE id = ?
+            SET metadata = $1::jsonb, updated_at = $2
+            WHERE id = $3
         `);
 
         await stmt.bind(JSON.stringify(metadata || {}), now, id).run();
     }
 
     async delete(id: string): Promise<void> {
-        await this.db.prepare(`DELETE FROM instances WHERE id = ?`).bind(id).run();
+        await this.db.prepare(`DELETE FROM instances WHERE id = $1`).bind(id).run();
     }
 
     async getByCluster(
@@ -105,7 +105,7 @@ export class InstanceStore extends BaseStore {
         // Get total count
         const countStmt = this.db.prepare(`
             SELECT COUNT(*) as count
-            FROM instances WHERE cluster_id = ?
+            FROM instances WHERE cluster_id = $1
         `);
         const countResult = await countStmt.bind(clusterId).first();
         const total = (countResult?.count as number) || 0;
@@ -114,7 +114,7 @@ export class InstanceStore extends BaseStore {
 
         const stmt = this.db.prepare(`
             SELECT id, address, tag, metadata, created_at, updated_at
-            FROM instances WHERE cluster_id = ?
+            FROM instances WHERE cluster_id = $1
             ORDER BY created_at DESC
             ${limitClause} ${offsetClause}
         `);

@@ -9,37 +9,30 @@ import { z } from 'zod';
  * Type-safe configuration schema
  */
 const ConfigSchema = z.object({
-  deployment: z.object({
-    platform: z.enum(['cloudflare', 'self-hosted', 'fly', 'railway']),
-  }),
   server: z.object({
     port: z.number().default(7878),
     host: z.string().default('0.0.0.0'),
-    base_url: z.string().url(),
-    app_url: z.string().url(),
+    base_url: z.url(),
+    app_url: z.url(),
   }),
   database: z.object({
-    type: z.enum(['d1', 'sqlite']),
     path: z.string().optional(),
+    url: z.string().optional(),
     auto_migrate: z.boolean().default(true),
   }),
   kv: z.object({
-    type: z.enum(['cloudflare', 'redis', 'upstash', 'memory']),
+    type: z.enum(['redis', 'upstash', 'memory']),
     url: z.string().optional(),
     rest_url: z.string().optional(),
     rest_token: z.string().optional(),
   }),
   storage: z.object({
-    type: z.enum(['r2', 's3', 'filesystem', 'azure', 'digitalocean']),
+    type: z.enum(['s3', 'filesystem', 'azure', 'digitalocean']),
     path: z.string().optional(),
     bucket: z.string().optional(),
     region: z.string().optional(),
     access_key: z.string().optional(),
     secret_key: z.string().optional(),
-  }),
-  durable_objects: z.object({
-    enabled: z.boolean().default(false),
-    snapshot_interval: z.number().default(60),
   }),
   auth: z.object({
     google_client_id: z.string().optional(),
@@ -88,7 +81,7 @@ export function loadConfig(path?: string): Config {
     return ConfigSchema.parse(raw);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      const errors = err.errors.map((e: any) => `  - ${e.path.join('.')}: ${e.message}`).join('\n');
+      const errors = err.issues.map((e: any) => `  - ${e.path.join('.')}: ${e.message}`).join('\n');
       throw new Error(`Invalid configuration:\n${errors}`);
     }
     throw err;
@@ -100,9 +93,6 @@ export function loadConfig(path?: string): Config {
  */
 function loadConfigFromEnv(): Config {
   return ConfigSchema.parse({
-    deployment: {
-      platform: process.env.PLATFORM || 'self-hosted',
-    },
     server: {
       port: parseInt(process.env.PORT || '7878'),
       host: process.env.HOST || '0.0.0.0',
@@ -110,8 +100,7 @@ function loadConfigFromEnv(): Config {
       app_url: process.env.APP_URL || 'http://localhost:5173',
     },
     database: {
-      type: process.env.DB_TYPE || 'sqlite',
-      path: process.env.DB_PATH || '/data/dployr.db',
+      url: process.env.DB_URL || process.env.DATABASE_URL,
       auto_migrate: true,
     },
     kv: {
@@ -127,10 +116,6 @@ function loadConfigFromEnv(): Config {
       region: process.env.STORAGE_REGION,
       access_key: process.env.STORAGE_ACCESS_KEY,
       secret_key: process.env.STORAGE_SECRET_KEY,
-    },
-    durable_objects: {
-      enabled: false,
-      snapshot_interval: 60,
     },
     auth: {
       google_client_id: process.env.GOOGLE_CLIENT_ID,
@@ -153,39 +138,4 @@ function loadConfigFromEnv(): Config {
       strict_rate_limit: 10,
     },
   });
-}
-
-/**
- * Auto-detect configuration from environment (for Cloudflare Workers)
- */
-export function detectCloudflareConfig(env: any): Partial<Config> {
-  return {
-    deployment: { platform: 'cloudflare' },
-    database: { type: 'd1', path: undefined, auto_migrate: true },
-    kv: { type: 'cloudflare' },
-    storage: { type: 'r2' },
-    durable_objects: { enabled: true, snapshot_interval: 0 },
-    server: {
-      port: 8787,
-      host: '0.0.0.0',
-      base_url: env.BASE_URL || 'http://localhost:8787',
-      app_url: env.APP_URL || 'http://localhost:5173',
-    },
-    auth: {
-      google_client_id: env.GOOGLE_CLIENT_ID,
-      google_client_secret: env.GOOGLE_CLIENT_SECRET,
-      github_client_id: env.GITHUB_CLIENT_ID,
-      github_client_secret: env.GITHUB_CLIENT_SECRET,
-    },
-    email: {
-      provider: 'zepto',
-      zepto_api_key: env.ZEPTO_API_KEY,
-    },
-    security: {
-      session_ttl: 86400,
-      jwt_algorithm: 'RS256',
-      global_rate_limit: 100,
-      strict_rate_limit: 10,
-    },
-  };
 }
