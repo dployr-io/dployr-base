@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { SignJWT, jwtVerify } from 'jose';
-import { KVStore } from '@/lib/db/store/kv';
-import { Session } from '@/types';
+import { KVStore } from "@/lib/db/store/kv.js";
+import { Session } from "@/types/index.js";
 
 /**
  * Service for creating and verifying JWT tokens.

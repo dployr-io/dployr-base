@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { EVENT_METADATA } from "@/services/event-metadata";
+import { EVENT_METADATA } from "@/services/event-metadata.js";
 
 export const notificationTemplate = (event: string, data: Record<string, any>) => {
   const metadata = EVENT_METADATA[event as keyof typeof EVENT_METADATA];

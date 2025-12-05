@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Notifier, NotificationPayload } from "./notifier";
+import { Notifier, NotificationPayload } from "./notifier.js";
 
 export class WebhookService implements Notifier {
   async sendNotification({

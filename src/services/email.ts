@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Bindings } from "@/types"
+import { Bindings } from "@/types/index.js";
 
 export class EmailService {
     private env: Bindings;

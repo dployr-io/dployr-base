@@ -23,7 +23,8 @@ deployments.get("/", async (c) => {
     }), ERROR.AUTH.BAD_SESSION.status);
   }
 
-  const instances = await db.instances.getByClusters(session.clusters);
+  // TODO: Implement proper deployment listing with multiple clusters
+  const instances: any[] = [];
 
   // TODO: Implement deployment listing logic
   return c.json(createSuccessResponse({ deployments: [], instances }));

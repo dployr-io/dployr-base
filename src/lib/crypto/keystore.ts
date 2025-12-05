@@ -3,10 +3,10 @@
 
 /**
  * Generates an RSA key pair.
- * @returns {Promise<{publicKeyJwk: JsonWebKey, privateKey: string}>} The generated key pair.
+ * @returns {Promise<{publicKeyJwk: any, privateKey: string}>} The generated key pair.
  */
 export async function generateKeyPair(): Promise<{
-  publicKeyJwk: JsonWebKey;
+  publicKeyJwk: any;
   privateKey: string;
 }> {
   const keyPair = await crypto.subtle.generateKey(
@@ -18,9 +18,9 @@ export async function generateKeyPair(): Promise<{
     },
     true,
     ['sign', 'verify']
-  ) as CryptoKeyPair;
+  ) as any;
 
-  const publicKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey) as JsonWebKey;
+  const publicKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey) as any;
   const privateKeyPkcs8 = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
 
   return {
