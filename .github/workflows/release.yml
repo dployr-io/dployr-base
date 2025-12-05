@@ -39,7 +39,11 @@ jobs:
           TAG="${{ github.ref_name }}"
           TARBALL="dployr-base-${TAG}.tar.gz"
           mkdir -p artifacts
-          tar -czf "artifacts/${TARBALL}" -C dist .
+          tar -czf "artifacts/${TARBALL}" \
+            package.json \
+            pnpm-lock.yaml \
+            tsconfig.json \
+            src
           echo "TARBALL=artifacts/${TARBALL}" >> "$GITHUB_ENV"
 
       - name: Generate changelog
