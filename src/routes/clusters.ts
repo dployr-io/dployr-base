@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth.js";
 import z from "zod";
 import { KVStore } from "@/lib/db/store/kv.js";
@@ -41,9 +41,9 @@ const updateRolesSchema = z.object({
  */
 clusters.get("/", async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
 
-  const _clusters = await d1.clusters.listUserClusters(session.userId);
+  const _clusters = await db.clusters.listUserClusters(session.userId);
 
   return c.json(createSuccessResponse({ clusters: _clusters }));
 });
@@ -53,10 +53,10 @@ clusters.get("/", async (c) => {
  */
 clusters.get("/users/invites", async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
 
   try {
-    const clusterIds = await d1.clusters.listPendingInvites(session.userId);
+    const clusterIds = await db.clusters.listPendingInvites(session.userId);
 
     return c.json(createSuccessResponse({ invites: clusterIds }));
   } catch (error) {
@@ -73,7 +73,7 @@ clusters.get("/users/invites", async (c) => {
  */
 clusters.get("/:id/users/invites/accept", async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
   const clusterId = c.req.param("id");
 
   try {
@@ -84,15 +84,15 @@ clusters.get("/:id/users/invites/accept", async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    await d1.clusters.acceptInvite(session.userId, clusterId);
+    await db.clusters.acceptInvite(session.userId, clusterId);
 
     // Trigger notifications
     const notificationService = new NotificationService(c.env);
-    runBackground(c,
+    runBackground(
       notificationService.triggerEvent(EVENTS.CLUSTER.INVITE_ACCEPTED.code, {
         clusterId,
         userEmail: session.email,
-      }, d1)
+      }, db)
     );
 
     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
@@ -110,7 +110,7 @@ clusters.get("/:id/users/invites/accept", async (c) => {
  */
 clusters.get("/:id/users/invites/decline", async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
   const clusterId = c.req.param("id");
 
   try {
@@ -122,7 +122,7 @@ clusters.get("/:id/users/invites/decline", async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    await d1.clusters.declineInvite(session.userId, clusterId);
+    await db.clusters.declineInvite(session.userId, clusterId);
 
     return c.json(createSuccessResponse({ clusterId }, "Invite declined"));
   } catch (error) {
@@ -138,7 +138,7 @@ clusters.get("/:id/users/invites/decline", async (c) => {
  * List all users in a cluster 
  */
 clusters.get("/:id/users", async (c) => {
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
 
   const clusterId = c.req.param("id");
 
@@ -150,8 +150,8 @@ clusters.get("/:id/users", async (c) => {
   const showInvites = c.req.queries("showInvites");
 
   const { users, total } = showInvites ?
-    await d1.clusters.listClusterInvites(clusterId, pageSize, offset) :
-    await d1.clusters.listClusterUsers(clusterId, pageSize, offset);
+    await db.clusters.listClusterInvites(clusterId, pageSize, offset) :
+    await db.clusters.listClusterUsers(clusterId, pageSize, offset);
 
   const paginatedData = createPaginatedResponse(users, page, pageSize, total);
 
@@ -163,7 +163,7 @@ clusters.get("/:id/users", async (c) => {
  */
 clusters.post("/:id/users", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
   const kv = new KVStore(getKV(c));
   const id = c.req.param("id");
 
@@ -183,7 +183,7 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    await d1.clusters.addUsers(id, users);
+    await db.clusters.addUsers(id, users);
 
     await kv.logEvent({
       actor: {
@@ -221,7 +221,7 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
  */
 clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
   const kv = new KVStore(getKV(c));
 
   try {
@@ -242,7 +242,7 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
 
     const { users } = validation.data;
 
-    await d1.clusters.removeUsers(id, users);
+    await db.clusters.removeUsers(id, users);
 
     await kv.logEvent({
       actor: {
@@ -278,7 +278,7 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
  */
 clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
   const kv = new KVStore(getKV(c));
 
   try {
@@ -306,7 +306,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
       viewer: roles.viewer || [],
       invited: [], // leave empty
     };
-    const cluster = await d1.clusters.update(id, { roles: updates });
+    const cluster = await db.clusters.update(id, { roles: updates });
 
     if (!cluster) {
       return c.json(createErrorResponse({
@@ -345,7 +345,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
  * Transfer ownership of cluster to a new user
  */
 clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
 
   try {
     const data = await c.req.json();
@@ -365,7 +365,7 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
 
     const { newOwnerId, previousOwnerRole } = validation.data;
 
-    await d1.clusters.transferOwnership(id, newOwnerId, previousOwnerRole);
+    await db.clusters.transferOwnership(id, newOwnerId, previousOwnerRole);
 
     return c.json(createSuccessResponse({ newOwnerId, previousOwnerRole }, "Ownership transferred successfully"));
   } catch (error) {
@@ -383,11 +383,11 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
  * List available connected integrations 
  */
 clusters.get("/:id/integrations", async (c) => {
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
   const clusterId = c.req.param("id");
 
   try {
-    let integrations = await d1.clusters.listClusterIntegrations(clusterId);
+    let integrations = await db.clusters.listClusterIntegrations(clusterId);
     const gitHub = new GitHubService(c.env)
     const installationId = integrations.remote.gitHub?.installationId
     let remoteCount = 0
@@ -419,11 +419,11 @@ clusters.get("/:id/integrations", async (c) => {
  */
 clusters.get("/:id/remotes", async (c) => {
   const clusterId = c.req.param("id");
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
 
   try {
     const gitHub = new GitHubService(c.env);
-    const integrations = await d1.clusters.listClusterIntegrations(clusterId);
+    const integrations = await db.clusters.listClusterIntegrations(clusterId);
     const remotes = await gitHub.listRemotes({ installationId: integrations.remote.gitHub?.installationId });
     const { page, pageSize, offset } = parsePaginationParams(
       c.req.query("page"),

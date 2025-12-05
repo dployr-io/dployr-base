@@ -3,11 +3,11 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { JWTService } from "@/services/jwt.js";
-import { getDB, getKV, getDO, type AppVariables } from "@/lib/context.js";
+import { getDB, getKV, getWS, type AppVariables } from "@/lib/context.js";
 
 const agent = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
@@ -78,7 +78,7 @@ agent.post("/token", async (c) => {
 
 agent.post("/instances/:instanceId/cert", async (c) => {
   const instanceId = c.req.param("instanceId");
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -119,7 +119,7 @@ agent.post("/instances/:instanceId/cert", async (c) => {
     );
   }
 
-  const instance = await d1.instances.get(instanceId);
+  const instance = await db.instances.get(instanceId);
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -176,14 +176,14 @@ agent.post("/instances/:instanceId/cert", async (c) => {
     not_after: notAfter,
   };
 
-  await d1.instances.updateMetadata(instanceId, metadata);
+  await db.instances.updateMetadata(instanceId, metadata);
 
   return new Response(null, { status: 204 });
 });
 
 agent.put("/instances/:instanceId/cert", async (c) => {
   const instanceId = c.req.param("instanceId");
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -224,7 +224,7 @@ agent.put("/instances/:instanceId/cert", async (c) => {
     );
   }
 
-  const instance = await d1.instances.get(instanceId);
+  const instance = await db.instances.get(instanceId);
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -272,7 +272,7 @@ agent.put("/instances/:instanceId/cert", async (c) => {
     not_after: notAfter,
   };
 
-  await d1.instances.updateMetadata(instanceId, metadata);
+  await db.instances.updateMetadata(instanceId, metadata);
 
   return new Response(null, { status: 204 });
 });
@@ -280,7 +280,7 @@ agent.put("/instances/:instanceId/cert", async (c) => {
 // Instance WebSocket endpoint for tasks
 agent.get("/instances/:instanceId/ws", async (c) => {
   const instanceId = c.req.param("instanceId");
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -321,7 +321,7 @@ agent.get("/instances/:instanceId/ws", async (c) => {
     );
   }
 
-  const instance = await d1.instances.get(instanceId);
+  const instance = await db.instances.get(instanceId);
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -332,13 +332,8 @@ agent.get("/instances/:instanceId/ws", async (c) => {
     );
   }
   
-  const doAdapter = getDO(c);
-  const id = doAdapter.idFromName(instanceId);
-  const stub = doAdapter.get(id);
-
-  const upgradeReq = new Request(c.req.raw);
-
-  return stub.fetch(upgradeReq);
+  // WebSocket upgrade is handled by the server-level upgrade handler
+  return c.text("WebSocket upgrade required", 426);
 });
 
 export default agent;

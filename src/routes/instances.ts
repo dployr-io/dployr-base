@@ -4,7 +4,7 @@
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse, SystemStatus } from "@/types/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import { InstanceService } from "@/services/instances.js";
 import { InstanceConflictError } from "@/lib/db/store/instances.js";
 import z from "zod";
@@ -15,7 +15,7 @@ import { JWTService } from "@/services/jwt.js";
 import { NotificationService } from "@/services/notifications.js";
 import { ulid } from "ulid";
 import { strictRateLimit } from "@/middleware/ratelimit.js";
-import { getKV, getDB, runBackground, getDO, type AppVariables } from "@/lib/context.js";
+import { getKV, getDB, runBackground, getWS, type AppVariables } from "@/lib/context.js";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 instances.use("*", authMiddleware);
@@ -50,7 +50,7 @@ instances.get("/", requireClusterViewer, async (c) => {
     }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
   const kv = new KVStore(getKV(c));
   const service = new InstanceService(c.env);
   const session = c.get("session")!;
@@ -60,7 +60,7 @@ instances.get("/", requireClusterViewer, async (c) => {
     c.req.query("pageSize")
   );
 
-  const { instances: _instances, total } = await d1.instances.getByCluster(
+  const { instances: _instances, total } = await db.instances.getByCluster(
     clusterId,
     pageSize,
     offset
@@ -68,7 +68,7 @@ instances.get("/", requireClusterViewer, async (c) => {
 
   const instances = await Promise.all(
     _instances.map(async (instance: any) => {
-      runBackground(c,
+      runBackground(
         service.pingInstance({
           instanceId: instance.id,
           session,
@@ -131,16 +131,16 @@ instances.post("/", requireClusterOwner, async (c) => {
 
     // Trigger notifications
     const notificationService = new NotificationService(c.env);
-    const d1 = new D1Store(getDB(c) as D1Database);
-    runBackground(c,
+    const db = new DatabaseStore(getDB(c) as any);
+    runBackground(
       notificationService.triggerEvent(EVENTS.INSTANCE.CREATED.code, {
         clusterId,
         instanceId: instance.id,
         userEmail: session.email,
-      }, d1)
+      }, db)
     );
 
-    runBackground(c,
+    runBackground(
       service.pingInstance({
         instanceId: instance.id,
         session,
@@ -202,9 +202,9 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
       );
     }
 
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
     const kv = new KVStore(getKV(c));
-    const instance = await d1.instances.get(instanceId);
+    const instance = await db.instances.get(instanceId);
 
     if (!instance || instance.clusterId !== clusterId) {
       return c.json(
@@ -216,7 +216,7 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
       );
     }
 
-    await d1.instances.delete(instanceId);
+    await db.instances.delete(instanceId);
 
     await kv.logEvent({
       actor: {
@@ -234,12 +234,12 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
 
     // Trigger notifications
     const notificationService = new NotificationService(c.env);
-    runBackground(c,
+    runBackground(
       notificationService.triggerEvent(EVENTS.INSTANCE.DELETED.code, {
         clusterId,
         instanceId,
         userEmail: session.email,
-      }, d1)
+      }, db)
     );
 
     return c.json(
@@ -278,7 +278,7 @@ instances.post("/:instanceId/tokens/rotate", async (c) => {
   const { token } = validation.data;
 
   const kv = new KVStore(getKV(c));
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
   const jwtService = new JWTService(kv);
 
   let payload: any;
@@ -334,8 +334,8 @@ instances.get("/:instanceId/stream", requireClusterViewer, async (c) => {
     }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const d1 = new D1Store(getDB(c) as D1Database);
-  const instance = await d1.instances.get(instanceId);
+  const db = new DatabaseStore(getDB(c) as any);
+  const instance = await db.instances.get(instanceId);
   if (!instance || instance.clusterId !== clusterId) {
     return c.json(createErrorResponse({
       message: "Instance not found",
@@ -343,13 +343,9 @@ instances.get("/:instanceId/stream", requireClusterViewer, async (c) => {
     }), ERROR.RESOURCE.MISSING_RESOURCE.status);
   }
 
-  // Use DO adapter for cross-platform WebSocket streaming
-  const doAdapter = getDO(c);
-  const id = doAdapter.idFromName(instanceId);
-  const stub = doAdapter.get(id);
-  const upgradeReq = new Request(c.req.raw);
-
-  return stub.fetch(upgradeReq);
+  // WebSocket upgrade is handled by the server-level upgrade handler
+  // This endpoint just validates the instance exists
+  return c.text("WebSocket upgrade required", 426);
 });
 
 // Stream logs from instance
@@ -383,8 +379,8 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
     const startFrom = typeof rawStartFrom === "number" ? rawStartFrom : -1;
     const limit = typeof rawLimit === "number" ? rawLimit : 100;
 
-    const d1 = new D1Store(getDB(c) as D1Database);
-    const instance = await d1.instances.get(instanceId);
+    const db = new DatabaseStore(getDB(c) as any);
+    const instance = await db.instances.get(instanceId);
     if (!instance || instance.clusterId !== clusterId) {
       return c.json(createErrorResponse({
         message: "Instance not found",
@@ -398,36 +394,10 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
     // streamId: instanceId:path - stable across reconnects
     const streamId = `${instanceId}:${path}`;
 
-    // Use DO adapter for cross-platform log streaming
-    const doAdapter = getDO(c);
-    const id = doAdapter.idFromName(instanceId);
-    const stub = doAdapter.get(id);
-    
-    await stub.fetch(new Request(`https://do/tasks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: ulid(),
-        type: "logs/stream:post",
-        payload: {
-          token,
-          path,
-          streamId,
-          mode,
-          startFrom,
-          limit
-        },
-        createdAt: Date.now(),
-      }),
-    }));
-
-    return c.json(createSuccessResponse({
-      streamId,
-      path,
-      mode,
-      startFrom,
-      limit,
-    }, "Log stream initiated"));
+    // WebSocket log streaming is handled by the WS handler
+    // This HTTP endpoint is for historical log fetching only
+    // TODO: Implement HTTP-based log history endpoint if needed
+    return c.json({ error: "Use WebSocket /stream endpoint for log streaming" }, 501);
   } catch (error) {
     console.error("Failed to initiate log stream", error);
     return c.json(createErrorResponse({

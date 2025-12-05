@@ -6,7 +6,7 @@ import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
 import { Bindings, Variables } from "@/types/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKV, getDB } from "@/lib/context.js";
 
@@ -58,8 +58,8 @@ export async function requireClusterViewer(
     return c.json({ error: "clusterId is required" }, 400);
   }
 
-  const d1 = new D1Store(getDB(c) as D1Database);
-  const canRead = await d1.clusters.canRead(session.userId, clusterId);
+  const db = new DatabaseStore(getDB(c) as any);
+  const canRead = await db.clusters.canRead(session.userId, clusterId);
 
   if (!canRead) {
     return c.json({ 
@@ -98,8 +98,8 @@ export async function requireClusterDeveloper(
     return c.json({ error: "clusterId is required" }, 400);
   }
 
-  const d1 = new D1Store(getDB(c) as D1Database);
-  const canWrite = await d1.clusters.canWrite(session.userId, clusterId);
+  const db = new DatabaseStore(getDB(c) as any);
+  const canWrite = await db.clusters.canWrite(session.userId, clusterId);
 
   if (!canWrite) {
     return c.json({ 
@@ -135,8 +135,8 @@ export async function requireClusterAdmin(
     return c.json({ error: "clusterId is required" }, 400);
   }
 
-  const d1 = new D1Store(getDB(c) as D1Database);
-  const isAdmin = await d1.clusters.isAdmin(session.userId, clusterId);
+  const db = new DatabaseStore(getDB(c) as any);
+  const isAdmin = await db.clusters.isAdmin(session.userId, clusterId);
 
   if (!isAdmin) {
     return c.json({ 
@@ -172,8 +172,8 @@ export async function requireClusterOwner(
     return c.json({ error: "clusterId is required" }, 400);
   }
 
-  const d1 = new D1Store(getDB(c) as D1Database);
-  const isOwner = await d1.clusters.isOwner(session.userId, clusterId);
+  const db = new DatabaseStore(getDB(c) as any);
+  const isOwner = await db.clusters.isOwner(session.userId, clusterId);
 
   if (!isOwner) {
     return c.json({ 

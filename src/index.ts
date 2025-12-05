@@ -23,7 +23,6 @@ import domains from "@/routes/domains.js";
 import agent from "@/routes/agent.js";
 import notifications from "./routes/notifications.js";
 import { globalRateLimit } from "@/middleware/ratelimit.js";
-import { NodeDurableObjectAdapter } from "@/lib/durable/node-adapter.js";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -43,14 +42,14 @@ app.use("*", async (c, next) => {
       await initializeDatabase(adapters.db);
     }
     
-    console.log(`Dployr Base initialized (${config.deployment.platform})`);
+    console.log("Dployr Base initialized");
   }
 
   // Inject adapters into context
   c.set('kvAdapter', adapters.kv);
   c.set('dbAdapter', adapters.db);
   c.set('storageAdapter', adapters.storage);
-  c.set('doAdapter', adapters.do);
+  c.set('wsHandler', adapters.ws);
   
   c.env = {
     BASE_URL: process.env.BASE_URL || '',
@@ -153,7 +152,7 @@ if (isNode && import.meta.url === `file://${process.argv[1]}`) {
     const response = await app.fetch(
       new Request(`http://${req.headers.host}${req.url}`, {
         method: req.method,
-        headers: req.headers as HeadersInit,
+        headers: req.headers as any,
         body: body,
       })
     );
@@ -178,26 +177,26 @@ if (isNode && import.meta.url === `file://${process.argv[1]}`) {
   const wss = new WebSocketServer({ noServer: true });
 
   server.on('upgrade', async (message: IncomingMessage, socket: Socket, head: Buffer) => {
-    console.log('Upgrade event fired for:', message.url);
     const url = new URL(message.url || '', `http://${message.headers.host}`);
     
     // Handle instance WebSocket streams
     // Matches: /v1/instances/{id}/stream OR /v1/agent/instances/{id}/ws
     if (url.pathname.match(/\/v1\/(instances\/[^\/]+\/stream|agent\/instances\/[^\/]+\/ws)$/)) {
-      console.log('WebSocket path matched, processing upgrade for:', url.pathname);
-      // Extract instance ID from URL
       const pathParts = url.pathname.split('/');
       const instanceIdIndex = pathParts.indexOf('instances') + 1;
       const instanceId = pathParts[instanceIdIndex];
       
-      if (!instanceId || !adapters?.do) {
+      if (!instanceId || !adapters?.ws) {
         socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
         socket.destroy();
         return;
       }
 
-      // Validate auth token for /ws endpoint (agent daemon)
-      if (url.pathname.includes('/ws')) {
+      // Determine role: agent daemon uses /ws, clients use /stream
+      const role = url.pathname.includes('/ws') ? 'agent' : 'client';
+
+      // Validate auth token for agent endpoint
+      if (role === 'agent') {
         const authHeader = message.headers['authorization'] || message.headers['Authorization'];
         const auth = Array.isArray(authHeader) ? authHeader[0] : authHeader;
         if (!auth || !auth.startsWith('Bearer ')) {
@@ -205,20 +204,10 @@ if (isNode && import.meta.url === `file://${process.argv[1]}`) {
           socket.destroy();
           return;
         }
-
-        // Token validation would go here, but for now we'll accept it
       }
 
       wss.handleUpgrade(message, socket, head, (ws: WebSocket) => {
-        // Get the DO adapter and register WebSocket
-        const doAdapter = adapters.do as NodeDurableObjectAdapter;
-        const stub = doAdapter.get(instanceId) as any;
-        
-        if (stub && typeof stub.acceptWebSocket === 'function') {
-          stub.acceptWebSocket(ws);
-        } else {
-          ws.close(1011, 'Instance not found');
-        }
+        adapters.ws.acceptWebSocket(instanceId, ws, role);
       });
     } else {
       socket.destroy();

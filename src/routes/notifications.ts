@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import { ERROR, DEFAULT_EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware, requireClusterDeveloper } from "@/middleware/auth.js";
 import { getDB, type AppVariables } from "@/lib/context.js";
@@ -33,14 +33,14 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
     }
 
     const clusterId = session.clusters[0].id;
-    const d1 = new D1Store(getDB(c) as D1Database);
-    const cluster = await d1.clusters.get(clusterId);
+    const db = new DatabaseStore(getDB(c) as any);
+    const cluster = await db.clusters.get(clusterId);
 
     const metadata = (cluster?.metadata as Record<string, any>) || {};
 
     if (integration === "email") {
       const current = (metadata.emailNotification as Record<string, any>) || {};
-      await d1.clusters.update(clusterId, {
+      await db.clusters.update(clusterId, {
         metadata: {
           emailNotification: {
             ...current,
@@ -51,7 +51,7 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
     } else {
       const key = integration as "discord" | "slack" | "customWebhook";
       const current = (metadata[key] as Record<string, any>) || {};
-      await d1.clusters.update(clusterId, {
+      await db.clusters.update(clusterId, {
         metadata: {
           [key]: {
             ...current,
@@ -87,8 +87,8 @@ notifications.post("/discord/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(getDB(c) as D1Database);
-    await d1.clusters.update(session.clusters[0].id, {
+    const db = new DatabaseStore(getDB(c) as any);
+    await db.clusters.update(session.clusters[0].id, {
       metadata: { discord: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
 
@@ -115,8 +115,8 @@ notifications.post("/slack/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(getDB(c) as D1Database);
-    await d1.clusters.update(session.clusters[0].id, {
+    const db = new DatabaseStore(getDB(c) as any);
+    await db.clusters.update(session.clusters[0].id, {
       metadata: { slack: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
 
@@ -143,8 +143,8 @@ notifications.post("/webhook/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(getDB(c) as D1Database);
-    await d1.clusters.update(session.clusters[0].id, {
+    const db = new DatabaseStore(getDB(c) as any);
+    await db.clusters.update(session.clusters[0].id, {
       metadata: { customWebhook: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
 
@@ -171,8 +171,8 @@ notifications.post("/email/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(getDB(c) as D1Database);
-    await d1.clusters.update(session.clusters[0].id, {
+    const db = new DatabaseStore(getDB(c) as any);
+    await db.clusters.update(session.clusters[0].id, {
       metadata: { emailNotification: { enabled, events } }
     });
 

@@ -4,7 +4,7 @@
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import { verifyGitHubWebhook } from "@/services/utils.js";
 import { ERROR, WORKFLOW_NAME } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
@@ -44,7 +44,7 @@ integrations.post("/github/webhook", async (c) => {
       }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
     }
 
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
     const kv = new KVStore(getKV(c));
 
     // Handle installation events
@@ -55,7 +55,7 @@ integrations.post("/github/webhook", async (c) => {
       if (!installation.id || !account?.login) {
         console.warn(`GitHub installation webhook has a bad payload. Missing installation id or account login:`, installation);
       } else {
-        await d1.clusters.installGitHubIntegration({
+        await db.clusters.installGitHubIntegration({
           loginId: account.login,
           installUrl: installation.html_url || `https://github.com/settings/installations/${installation.id}`,
           installationId: installation.id,
@@ -138,8 +138,8 @@ integrations.post("/gitlab/setup", async (c) => {
     // Test access
     await gitlabService.remoteCount({ accessToken });
 
-    const d1 = new D1Store(getDB(c) as D1Database);
-    await d1.clusters.update(session.clusters[0].id, {
+    const db = new DatabaseStore(getDB(c) as any);
+    await db.clusters.update(session.clusters[0].id, {
       metadata: { gitLab: { accessToken, enabled } }
     });
 
@@ -171,8 +171,8 @@ integrations.post("/bitbucket/setup", async (c) => {
     // Test access
     await bitbucketService.remoteCount({ accessToken });
 
-    const d1 = new D1Store(getDB(c) as D1Database);
-    await d1.clusters.update(session.clusters[0].id, {
+    const db = new DatabaseStore(getDB(c) as any);
+    await db.clusters.update(session.clusters[0].id, {
       metadata: { bitBucket: { accessToken, enabled } }
     });
 
@@ -198,8 +198,8 @@ integrations.get("/list", async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const d1 = new D1Store(getDB(c) as D1Database);
-    const integrations = await d1.clusters.listClusterIntegrations(session.clusters[0].id);
+    const db = new DatabaseStore(getDB(c) as any);
+    const integrations = await db.clusters.listClusterIntegrations(session.clusters[0].id);
 
     return c.json(createSuccessResponse(integrations, "Integrations retrieved"));
   } catch (error) {

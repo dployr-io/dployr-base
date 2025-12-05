@@ -6,7 +6,7 @@ import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorR
 import { OAuthService } from "@/services/oauth.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { setCookie, getCookie } from "hono/cookie";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import z from "zod";
 import { sanitizeReturnTo } from "@/services/utils.js";
 import { EmailService } from "@/services/email.js";
@@ -69,7 +69,7 @@ auth.get("/callback/:provider", async (c) => {
   }
 
   const kv = new KVStore(getKV(c));
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
 
   const redirectUrl = await kv.validateState(state);
 
@@ -88,7 +88,7 @@ auth.get("/callback/:provider", async (c) => {
     const accessToken = await oauth.exchangeCode({ provider, code });
     const oAuthUser = await oauth.getUserInfo({ provider, accessToken });
 
-    let existingUser = await d1.users.get(oAuthUser.email);
+    let existingUser = await db.users.get(oAuthUser.email);
 
     const userToSave = existingUser
       ? {
@@ -105,7 +105,7 @@ auth.get("/callback/:provider", async (c) => {
           metadata: oAuthUser.metadata || {},
         };
 
-    const savedUser = await d1.users.save(userToSave);
+    const savedUser = await db.users.save(userToSave);
 
     if (!savedUser) {
       return c.json(
@@ -118,7 +118,7 @@ auth.get("/callback/:provider", async (c) => {
     }
 
     const sessionId = crypto.randomUUID();
-    const clusters = await d1.clusters.listUserClusters(savedUser.id);
+    const clusters = await db.clusters.listUserClusters(savedUser.id);
     await kv.createSession(sessionId, savedUser, clusters);
 
     const url = new URL(c.req.url);
@@ -147,11 +147,11 @@ auth.get("/callback/:provider", async (c) => {
     // Trigger notifications
     if (clusters.length > 0) {
       const notificationService = new NotificationService(c.env);
-      runBackground(c,
+      runBackground(
         notificationService.triggerEvent(EVENTS.AUTH.SESSION_CREATED.code, {
           clusterId: clusters[0].id,
           userEmail: savedUser.email,
-        }, d1)
+        }, db)
       );
     }
 
@@ -184,12 +184,12 @@ auth.post("/login/email", async (c) => {
     }
 
     const kv = new KVStore(getKV(c));
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
 
-    let user = await d1.users.get(email);
+    let user = await db.users.get(email);
     if (!user) {
       const derivedName = email.split("@")[0] || email;
-      await d1.users.save({
+      await db.users.save({
         email,
         name: derivedName,
         provider: "email" as OAuthProvider,
@@ -240,7 +240,7 @@ auth.post("/login/email/verify", async (c) => {
     }
 
     const kv = new KVStore(getKV(c));
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
     const isValid = await kv.validateOTP(email, code.toUpperCase());
 
     if (!isValid) {
@@ -250,7 +250,7 @@ auth.post("/login/email/verify", async (c) => {
       }), ERROR.REQUEST.INVALID_OTP.status);
     }
 
-    let user = await d1.users.get(email);
+    let user = await db.users.get(email);
     if (!user) {
       return c.json(createErrorResponse({
         message: "User not found",
@@ -259,7 +259,7 @@ auth.post("/login/email/verify", async (c) => {
     }
 
     const sessionId = crypto.randomUUID();
-    const clusters = await d1.clusters.listUserClusters(user.id);
+    const clusters = await db.clusters.listUserClusters(user.id);
     await kv.createSession(sessionId, user, clusters);
 
     await kv.logEvent({
@@ -288,11 +288,11 @@ auth.post("/login/email/verify", async (c) => {
     // Trigger notifications
     if (clusters.length > 0) {
       const notificationService = new NotificationService(c.env);
-      runBackground(c,
+      runBackground(
         notificationService.triggerEvent(EVENTS.AUTH.SESSION_CREATED.code, {
           clusterId: clusters[0].id,
           userEmail: user.email,
-        }, d1)
+        }, db)
       );
     }
 

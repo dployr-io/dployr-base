@@ -66,7 +66,7 @@ export type Variables = {
   kvAdapter?: any;
   dbAdapter?: any;
   storageAdapter?: any;
-  doAdapter?: any;
+  wsHandler?: any;
 };
 
 export type ActorType = 'user' | 'headless'

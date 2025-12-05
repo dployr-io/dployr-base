@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Bindings, Instance, Session } from "@/types/index.js";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import { EVENTS } from "@/lib/constants/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { Context } from "hono";
 import { JWTService } from "@/services/jwt.js";
 import { ulid } from "ulid";
-import { getKV, getDB, getDO } from "@/lib/context.js";
+import { getKV, getDB, getWS } from "@/lib/context.js";
 
 export class InstanceService {
   constructor(private env: Bindings) {}
@@ -26,10 +26,10 @@ export class InstanceService {
     session: Session;
     c: Context;
   }): Promise<{ instance: Instance; token: string }> {
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
     const kv = new KVStore(getKV(c));
 
-    const instance = await d1.instances.create(clusterId, {
+    const instance = await db.instances.create(clusterId, {
       tag,
       address,
     } as any);
@@ -51,7 +51,7 @@ export class InstanceService {
     const jwtService = new JWTService(kv);
     const token = await jwtService.createBootstrapToken(instance.id);
     const decoded = await jwtService.verifyToken(token);
-    await d1.bootstrapTokens.create(instance.id, decoded.nonce as string);
+    await db.bootstrapTokens.create(instance.id, decoded.nonce as string);
 
     return { instance, token };
   }
@@ -110,9 +110,9 @@ export class InstanceService {
     session: Session; 
     c: Context 
   }): Promise<"enqueued"> {
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
     const kv = new KVStore(getKV(c));
-    const instance = await d1.instances.get(instanceId);
+    const instance = await db.instances.get(instanceId);
 
     if (!instance) {
       throw new Error("Instance not found");
@@ -134,21 +134,9 @@ export class InstanceService {
 
     const token = await this.getOrCreateInstanceUserToken(kv, session, instance.id);
     
-    // Add task directly to Durable Object via HTTP (cross-platform)
-    const doAdapter = getDO(c);
-    const id = doAdapter.idFromName(instanceId);
-    const stub = doAdapter.get(id);
-    await stub.fetch(new Request(`https://do/tasks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: ulid(),
-        type: "system/status:get",
-        payload: { token },
-        createdAt: Date.now(),
-      }),
-    }));
-
+    // Task queuing removed - agents connect via WebSocket and receive tasks directly
+    // TODO: Implement task queue if async task delivery is needed
+    // For now, tasks are sent when agent is connected via WS
     return "enqueued";
   }
 
@@ -163,7 +151,7 @@ export class InstanceService {
     | { ok: false; reason: "invalid_token" | "invalid_type" | "already_used" }
   > {
     const kv = new KVStore(getKV(c));
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
     const jwtService = new JWTService(kv);
 
     let payload: any;
@@ -177,7 +165,7 @@ export class InstanceService {
       return { ok: false, reason: "invalid_type" };
     }
 
-    const wasUnused = await d1.bootstrapTokens.markUsed(payload.nonce as string);
+    const wasUnused = await db.bootstrapTokens.markUsed(payload.nonce as string);
     if (!wasUnused) {
       return { ok: false, reason: "already_used" };
     }
@@ -196,9 +184,9 @@ export class InstanceService {
     instanceId: string;
     c: Context;
   }) {
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
     const kv = new KVStore(getKV(c));
-    const instance = await d1.instances.get(instanceId);
+    const instance = await db.instances.get(instanceId);
 
     if (!instance) {
       throw new Error("Instance not found");

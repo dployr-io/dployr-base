@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { Bindings, Variables, User, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { getCookie } from "hono/cookie";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import z from "zod";
 import { authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
@@ -33,7 +33,7 @@ users.get("/me", async (c) => {
     }
 
     const kv = new KVStore(getKV(c));
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
 
     const session = await kv.getSession(sessionId);
 
@@ -44,7 +44,7 @@ users.get("/me", async (c) => {
         }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const user = await d1.users.get(session.email);
+    const user = await db.users.get(session.email);
 
     if (!user) {
         return c.json(createErrorResponse({ 
@@ -54,9 +54,9 @@ users.get("/me", async (c) => {
     }
 
     try {
-        await d1.clusters.save(user.id);
+        await db.clusters.save(user.id);
 
-        const clusters = await d1.clusters.listUserClusters(user.id);
+        const clusters = await db.clusters.listUserClusters(user.id);
 
         return c.json(createSuccessResponse({ user, clusters }));
     } catch (error) {
@@ -81,7 +81,7 @@ users.patch("/me", async (c) => {
     }
 
     const kv = new KVStore(getKV(c));
-    const d1 = new D1Store(getDB(c) as D1Database);
+    const db = new DatabaseStore(getDB(c) as any);
 
     const session = await kv.getSession(sessionId);
 
@@ -111,7 +111,7 @@ users.patch("/me", async (c) => {
     }
 
     const updates: Partial<Omit<User, "id" | "createdAt">> = validation.data;
-    const user = await d1.users.update(session.email, updates);
+    const user = await db.users.update(session.email, updates);
 
     if (!user) {
         return c.json(createErrorResponse({ 

@@ -2,11 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Context } from 'hono';
-import type { IKVAdapter } from '@/lib/storage/kv.interface';
-
-/**
- * Adapter interfaces for runtime-agnostic access to platform services
- */
+import type { IKVAdapter } from '@/lib/storage/kv.interface.js';
+import type { WebSocketHandler } from '@/lib/websocket/instance-handler.js';
 
 // Database adapter interface
 export interface IDBAdapter {
@@ -32,17 +29,6 @@ export interface IStorageAdapter {
   list(options?: { prefix?: string }): Promise<Array<{ key: string }>>;
 }
 
-// Durable Object stub interface
-export interface IDurableObjectStub {
-  fetch(request: Request): Promise<Response>;
-  acceptWebSocket?(ws: any): void;
-}
-
-// Durable Object adapter interface
-export interface IDurableObjectAdapter {
-  idFromName(name: string): string;
-  get(id: string): IDurableObjectStub;
-}
 
 /**
  * Extended Hono context variables
@@ -51,7 +37,7 @@ export type AppVariables = {
   kvAdapter: IKVAdapter;
   dbAdapter: IDBAdapter;
   storageAdapter: IStorageAdapter;
-  doAdapter: IDurableObjectAdapter;
+  wsHandler: WebSocketHandler;
   session?: {
     id: string;
     userId: string;
@@ -92,30 +78,17 @@ export function getSession(c: Context) {
   return c.get('session');
 }
 
-export function getDO(c: Context): IDurableObjectAdapter {
-  const doAdapter = c.get('doAdapter');
-  if (!doAdapter) {
-    throw new Error('Durable Object adapter not initialized');
+export function getWS(c: Context): WebSocketHandler {
+  const ws = c.get('wsHandler');
+  if (!ws) {
+    throw new Error('WebSocket handler not initialized');
   }
-  return doAdapter;
+  return ws;
 }
 
 /**
- * Execute a background task with platform-specific handling
- * - Cloudflare: uses executionCtx.waitUntil
- * - Self-hosted: runs async without blocking
+ * Execute a background task without blocking the response
  */
-export function runBackground(c: Context, task: Promise<any>): void {
-  try {
-    // Try to use Cloudflare's executionCtx if available
-    if (c.executionCtx && typeof c.executionCtx.waitUntil === 'function') {
-      c.executionCtx.waitUntil(task);
-    } else {
-      // Self-hosted: just run async and catch errors
-      task.catch(err => console.error('Background task error:', err));
-    }
-  } catch (err) {
-    // Fallback: run async
-    task.catch(err => console.error('Background task error:', err));
-  }
+export function runBackground(task: Promise<any>): void {
+  task.catch(err => console.error('Background task error:', err));
 }

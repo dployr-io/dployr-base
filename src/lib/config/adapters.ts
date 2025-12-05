@@ -3,8 +3,8 @@
 
 import { Config } from "./loader.js";
 import { IKVAdapter, RedisKV, MemoryKV } from "@/lib/storage/kv.interface.js";
-import { NodeDurableObjectAdapter } from "@/lib/durable/node-adapter.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
+import { WebSocketHandler } from "@/lib/websocket/instance-handler.js";
 
 /**
  * Create KV adapter from config
@@ -105,8 +105,7 @@ export async function initializeFromConfig(config: Config) {
   const kv = await createKVFromConfig(config);
   const db = await createDatabaseFromConfig(config);
   const storage = await createStorageFromConfig(config);
+  const wsHandler = new WebSocketHandler(kv);
 
-  const doAdapter = new NodeDurableObjectAdapter(kv);
-
-  return { kv, db, storage, do: doAdapter, config };
+  return { kv, db, storage, ws: wsHandler, config };
 }

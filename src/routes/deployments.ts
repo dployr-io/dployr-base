@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { D1Store } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import { authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKV, getDB, type AppVariables } from "@/lib/context.js";
@@ -13,7 +13,7 @@ deployments.use("*", authMiddleware);
 
 // List all deployments
 deployments.get("/", async (c) => {
-  const d1 = new D1Store(getDB(c) as D1Database);
+  const db = new DatabaseStore(getDB(c) as any);
   const session = c.get("session")!;
 
   if (!session) {
@@ -23,7 +23,7 @@ deployments.get("/", async (c) => {
     }), ERROR.AUTH.BAD_SESSION.status);
   }
 
-  const instances = await d1.instances.getByClusters(session.clusters);
+  const instances = await db.instances.getByClusters(session.clusters);
 
   // TODO: Implement deployment listing logic
   return c.json(createSuccessResponse({ deployments: [], instances }));
