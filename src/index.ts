@@ -71,9 +71,9 @@ app.use(
   "/v1/*",
   cors({
     origin: (origin, c) => {
-      const raw = process.env.CORS_ALLOWED_ORIGINS;
+      const raw = adapters?.config?.cors?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS;
       if (!raw) {
-        console.error("CORS_ALLOWED_ORIGINS is not configured; refusing cross-origin requests.");
+        console.error("CORS allowed origins are not configured; refusing cross-origin requests.");
         return null;
       }
 
@@ -82,12 +82,27 @@ app.use(
         return null;
       }
 
-      const allowedOrigins = raw
+      const patterns = raw
         .split(",")
         .map((o: string) => o.trim())
         .filter((o: string) => o.length > 0);
 
-      const isAllowed = allowedOrigins.includes(origin);
+      const host = origin
+        .replace(/^https?:\/\//, "")
+        .replace(/\/.*$/, "");
+
+      const isAllowed = patterns.some((pattern: string) => {
+        if (pattern.startsWith("*.") && pattern.length > 2) {
+          const domain = pattern.slice(2);
+          return host === domain || host.endsWith(`.${domain}`);
+        }
+
+        const normalizedPatternHost = pattern
+          .replace(/^https?:\/\//, "")
+          .replace(/\/.*$/, "");
+        return host === normalizedPatternHost;
+      });
+
       if (!isAllowed) {
         console.warn(`CORS origin not allowed: ${origin}`);
         return null;
