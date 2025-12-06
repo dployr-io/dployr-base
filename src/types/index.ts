@@ -8,8 +8,6 @@ export type RequiredOnly<T, K extends keyof T> =
   Required<Pick<T, K>> &
   Partial<Omit<T, K>>;
 
-import type { PostgresAdapter } from "@/lib/db/pg-adapter.js";
-
 export type Bindings = {
   ZEPTO_API_KEY: string;
 

@@ -58,7 +58,7 @@ app.use("*", async (c, next) => {
     GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID || '',
     GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || '',
     CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS || '',
-  } as any;
+  } as unknown as Bindings;
   
   await next();
 });

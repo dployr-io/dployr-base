@@ -58,6 +58,9 @@ const ConfigSchema = z.object({
     global_rate_limit: z.number().default(100),
     strict_rate_limit: z.number().default(10),
   }),
+  cors: z.object({
+    allowed_origins: z.string().optional(),
+  }).optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -140,6 +143,9 @@ function loadConfigFromEnv(): Config {
       jwt_algorithm: 'RS256',
       global_rate_limit: 100,
       strict_rate_limit: 10,
+    },
+    cors: {
+      allowed_origins: process.env.CORS_ALLOWED_ORIGINS,
     },
   });
 }
