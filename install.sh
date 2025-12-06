@@ -20,7 +20,10 @@ APP_URL=""
 DB_TYPE="postgres"
 DB_URL=""
 KV_TYPE="redis"
-KV_URL="redis://localhost:6379"
+KV_HOST="localhost"
+KV_PORT="6379"
+KV_USERNAME=""
+KV_PASSWORD=""
 KV_REST_URL=""
 KV_REST_TOKEN=""
 STORAGE_TYPE="filesystem"
@@ -262,7 +265,10 @@ auto_migrate = true
 
 [kv]
 type = "$KV_TYPE"
-url = "$KV_URL"
+host = "$KV_HOST"
+port = $KV_PORT
+username = "$KV_USERNAME"
+password = "$KV_PASSWORD"
 rest_url = "$KV_REST_URL"
 rest_token = "$KV_REST_TOKEN"
 

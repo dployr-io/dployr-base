@@ -53,20 +53,13 @@ async function applyMigration(db: PostgresAdapter, filename: string, sql: string
     // Continue
   }
 
-  // Split SQL statements by semicolon (PostgreSQL handles triggers differently)
-  const statements = sql.split(';').filter(s => s.trim());
-
-  for (const statement of statements) {
-      const trimmed = statement.trim();
-      if (trimmed) {
-        try {
-          await db.prepare(trimmed + ';').run();
-        } catch (error) {
-          console.error(`Failed statement: ${trimmed}`);
-          throw error;
-        }
-      }
-    }
+  // Execute the entire migration as-is - PostgreSQL handles multiple statements correctly
+  try {
+    await db.prepare(sql).run();
+  } catch (error) {
+    console.error(`Failed to apply migration: ${filename}`);
+    throw error;
+  }
 
   await db.prepare("INSERT INTO _migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING")
     .bind(filename)
