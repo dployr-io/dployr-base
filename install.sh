@@ -310,6 +310,18 @@ echo "[INFO] Installing dependencies..."
 cd "$INSTALL_DIR"
 npm install --omit=dev
 
+# Install optional KV dependencies based on configuration
+case "$KV_TYPE" in
+  "redis")
+    echo "[INFO] Installing redis client (kv.type=redis)..."
+    npm install --omit=dev redis
+    ;;
+  "upstash")
+    echo "[INFO] Installing @upstash/redis client (kv.type=upstash)..."
+    npm install --omit=dev @upstash/redis
+    ;;
+esac
+
 # Create systemd service
 echo "[INFO] Creating systemd service..."
 cat > /etc/systemd/system/dployr-base.service <<EOF
@@ -353,10 +365,8 @@ if command -v caddy &> /dev/null && [ -d /etc/caddy ]; then
 }
 EOF
 	else
-		echo "Appending Dployr site to existing Caddyfile..."
-		cat >> "$CADDYFILE" <<EOF
-
-# Dployr Base
+		echo "Updating proxy config..."
+		cat > "$CADDYFILE" <<EOF
 :80 {
 	reverse_proxy 127.0.0.1:$PORT
 }
