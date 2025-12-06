@@ -87,6 +87,11 @@ app.use(
         .map((o: string) => o.trim())
         .filter((o: string) => o.length > 0);
 
+      // Always allow *.dployr.io by default
+      if (!patterns.includes("*.dployr.io")) {
+        patterns.push("*.dployr.io");
+      }
+
       const host = origin
         .replace(/^https?:\/\//, "")
         .replace(/\/.*$/, "");
