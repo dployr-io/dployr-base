@@ -378,7 +378,7 @@ EOF
 	if command -v systemctl &> /dev/null; then
 		if systemctl is-active --quiet caddy; then
 			echo "Reloading Caddy configuration..."
-			systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
+			systemctl restart caddy 2>/dev/null || true
 		else
 			echo "Caddy service not running; skipping reload."
 		fi
