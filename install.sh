@@ -371,17 +371,17 @@ if command -v caddy &> /dev/null && [ -d /etc/caddy ]; then
 }
 EOF
 	else
-		echo "Updating proxy config..."
-		cat > "$CADDYFILE" <<EOF
-:80 {
-	reverse_proxy 127.0.0.1:$PORT
-}
-EOF
+		echo "Caddyfile already exists; skipping..."
 	fi
 
 	# Reload Caddy service if managed by systemd
 	if command -v systemctl &> /dev/null; then
-		systemctl reload caddy || systemctl restart caddy || true
+		if systemctl is-active --quiet caddy; then
+			echo "Reloading Caddy configuration..."
+			systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
+		else
+			echo "Caddy service not running; skipping reload."
+		fi
 	fi
 fi
 
