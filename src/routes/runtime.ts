@@ -90,7 +90,7 @@ runtime.get("/events", async (c) => {
     return c.json(createSuccessResponse(paginatedData));
   } catch (error) {
     console.error("Failed to retrieve events", error);
-    const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.io";
     return c.json(createErrorResponse({
       message: "Failed to retrieve events",
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,

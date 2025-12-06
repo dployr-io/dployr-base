@@ -123,7 +123,7 @@ auth.get("/callback/:provider", async (c) => {
 
     const url = new URL(c.req.url);
     const hostname = url.hostname;
-    const isDployrHost = hostname === "dployr.dev" || hostname.endsWith(".dployr.dev");
+    const isDployrHost = hostname === "dployr.io" || hostname.endsWith(".dployr.io");
 
     setCookie(c, "session", sessionId, {
       httpOnly: true,
@@ -131,7 +131,7 @@ auth.get("/callback/:provider", async (c) => {
       sameSite: "Lax",
       maxAge: 60 * 60 * 24 * 7,
       path: "/",
-      ...(isDployrHost ? { domain: ".dployr.dev" } : {}),
+      ...(isDployrHost ? { domain: ".dployr.io" } : {}),
     });
 
     await kv.logEvent({
@@ -274,7 +274,7 @@ auth.post("/login/email/verify", async (c) => {
 
     const url = new URL(c.req.url);
     const hostname = url.hostname;
-    const isDployrHost = hostname === "dployr.dev" || hostname.endsWith(".dployr.dev");
+    const isDployrHost = hostname === "dployr.io" || hostname.endsWith(".dployr.io");
 
     setCookie(c, "session", sessionId, {
       httpOnly: true,
@@ -282,7 +282,7 @@ auth.post("/login/email/verify", async (c) => {
       sameSite: "Lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
-      ...(isDployrHost ? { domain: ".dployr.dev" } : {}),
+      ...(isDployrHost ? { domain: ".dployr.io" } : {}),
     });
 
     // Trigger notifications
@@ -314,12 +314,12 @@ auth.get("/logout", async (c) => {
 
   const url = new URL(c.req.url);
   const hostname = url.hostname;
-  const isDployrHost = hostname === "dployr.dev" || hostname.endsWith(".dployr.dev");
+  const isDployrHost = hostname === "dployr.io" || hostname.endsWith(".dployr.io");
 
   setCookie(c, "session", "", {
     maxAge: 0,
     path: "/",
-    ...(isDployrHost ? { domain: ".dployr.dev" } : {}),
+    ...(isDployrHost ? { domain: ".dployr.io" } : {}),
   });
 
   return c.json(createSuccessResponse({}, "Logged out successfully"));

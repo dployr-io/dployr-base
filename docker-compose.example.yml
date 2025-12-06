@@ -83,7 +83,7 @@ services:
       - -c
       - |
           cp -r /src/docs/* /usr/share/caddy/ &&
-          sed -i "s#https://base.dployr.dev#${DPLOYR_BASE_URL:-http://192.168.100.35:7878}#" /usr/share/caddy/openapi.yaml &&
+          sed -i "s#https://base.dployr.io#${DPLOYR_BASE_URL:-http://192.168.100.35:7878}#" /usr/share/caddy/openapi.yaml &&
           caddy file-server --root /usr/share/caddy --listen :80
     networks:
       - dployr-network

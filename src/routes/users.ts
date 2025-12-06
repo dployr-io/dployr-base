@@ -60,7 +60,7 @@ users.get("/me", async (c) => {
 
         return c.json(createSuccessResponse({ user, clusters }));
     } catch (error) {
-        const helpLink = "https://monitoring.dployr.dev";
+        const helpLink = "https://monitoring.dployr.io";
         console.error(`Failed to save cluster for user ${user.id}:`, error);
         return c.json(createErrorResponse({ 
             message: "Failed to load user data", 

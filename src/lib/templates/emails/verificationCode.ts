@@ -18,7 +18,7 @@ export const loginCodeTemplate = (name: string, code: string) => `
   <hr />
 
   <p>
-    <a href="https://dployr.dev">dployr.dev</a><br>
+    <a href="https://dployr.io">dployr.io</a><br>
     <i>Your app, your server, your rules!</i>
   </p>
 

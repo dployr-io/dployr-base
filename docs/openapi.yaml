@@ -13,7 +13,7 @@ info:
     or via email. Session-based authentication with a cookie.
 
     ### Authentication Flow
-    See https://docs.dployr.dev/auth for more details.
+    See https://docs.dployr.io/auth for more details.
     
     ## Authorization
     Role-based access control with four levels:
@@ -22,7 +22,7 @@ info:
     - **Developer**: Deploy apps, view logs and events
     - **Viewer**: Read-only access to services
 
-    See https://docs.dployr.dev/auth for more details.
+    See https://docs.dployr.io/auth for more details.
 
     ## Rate limiting
     To protect the service, Dployr Base applies per-user rate limits:
@@ -43,7 +43,7 @@ info:
     `X-RateLimit-*` headers indicating when it is safe to retry.
 
 servers:
-  - url: https://base.dployr.dev
+  - url: https://base.dployr.io
     description: Production
 
 tags:
@@ -1884,7 +1884,7 @@ paths:
       operationId: listClusterRemotes
       tags:
         - Clusters
-      summary: List GitHub remotes for a cluster. GitHub integration is required for this endpoint to work. Visit https://app.dployr.dev/clusters/{id}/settings/integrations to manage GitHub integration.
+      summary: List GitHub remotes for a cluster. GitHub integration is required for this endpoint to work. Visit https://app.dployr.io/clusters/{id}/settings/integrations to manage GitHub integration.
       x-requiredRole: viewer
       security:
         - sessionCookie: []

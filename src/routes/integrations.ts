@@ -111,7 +111,7 @@ integrations.post("/github/webhook", async (c) => {
     return c.json(createSuccessResponse({}, "Webhook processed"));
   } catch (error) {
     console.error("Webhook error:", error);
-    const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.io";
     return c.json(createErrorResponse({ 
       message: "Internal server error", 
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code, 

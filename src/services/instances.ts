@@ -194,6 +194,6 @@ export class InstanceService {
 
     await kv.saveDomain(instance.tag, instance.address);
 
-    return `${instance.tag}.dployr.dev`;
+    return `${instance.tag}.dployr.io`;
   }
 }

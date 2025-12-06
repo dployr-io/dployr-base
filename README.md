@@ -79,6 +79,6 @@ npm run dev
 
 ## Links
 
-- Self‑hosting guide: https://docs.dployr.dev/installation/self-hosting
+- Self‑hosting guide: https://docs.dployr.io/installation/self-hosting
 
 License: Apache 2.0

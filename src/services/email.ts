@@ -23,7 +23,7 @@ export class EmailService {
                 }
             }],
             from: {
-                address: this.env.EMAIL_FROM || 'noreply@dployr.dev'
+                address: this.env.EMAIL_FROM || 'noreply@dployr.io'
             },
             subject,
             htmlbody: body

@@ -176,7 +176,7 @@ instances.post("/", requireClusterOwner, async (c) => {
       );
     }
 
-    const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.io";
     return c.json(createErrorResponse({ 
       message: "Instance creation failed", 
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,

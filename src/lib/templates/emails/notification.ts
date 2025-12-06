@@ -53,11 +53,11 @@ export const notificationTemplate = (event: string, data: Record<string, any>) =
   <hr />
 
   <p>
-    <a href="https://app.dployr.dev">View Dashboard</a>
+    <a href="https://app.dployr.io">View Dashboard</a>
   </p>
 
   <p>
-    <a href="https://dployr.dev">dployr.dev</a><br>
+    <a href="https://dployr.io">dployr.io</a><br>
     <i>Your app, your server, your rules!</i>
   </p>
 

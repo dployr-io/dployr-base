@@ -203,7 +203,7 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
   } catch (error) {
     console.error("Add users error:", error);
 
-    const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.io";
 
     return c.json(
       createErrorResponse({
@@ -261,7 +261,7 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
     return c.json(createSuccessResponse({ users }, "Users removed successfully"));
   } catch (error) {
     console.error("Update roles error:", error);
-    const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.io";
     return c.json(createErrorResponse({
       message: "Failed to remove users",
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
@@ -332,7 +332,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
     return c.json(createSuccessResponse({ cluster }, "Roles updated successfully"));
   } catch (error) {
     console.error("Update roles error:", error);
-    const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.io";
     return c.json(createErrorResponse({
       message: "Failed to update roles",
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
@@ -370,7 +370,7 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
     return c.json(createSuccessResponse({ newOwnerId, previousOwnerRole }, "Ownership transferred successfully"));
   } catch (error) {
     console.error("Transfer ownership error:", error);
-    const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.io";
     return c.json(createErrorResponse({
       message: "Failed to transfer ownership",
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
@@ -404,7 +404,7 @@ clusters.get("/:id/integrations", async (c) => {
     return c.json(createSuccessResponse(integrations));
   } catch (error) {
     console.error("List remotes error:", error);
-    const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.io";
     return c.json(createErrorResponse({
       message: "Failed to list remotes",
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
@@ -437,7 +437,7 @@ clusters.get("/:id/remotes", async (c) => {
     return c.json(createSuccessResponse(paginatedData));
   } catch (error) {
     console.error("List remotes error:", error);
-    const helpLink = "https://monitoring.dployr.dev";
+    const helpLink = "https://monitoring.dployr.io";
     return c.json(createErrorResponse({
       message: "Failed to list remotes",
       code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,

@@ -56,7 +56,7 @@ export function sanitizeReturnTo(returnTo: string) {
     if (returnTo.startsWith("/")) return returnTo;
     const url = new URL(returnTo);
     // TODO: use env
-    if (url.origin === "https://app.dployr.dev") return url.pathname + url.search + url.hash;
+    if (url.origin === "https://app.dployr.io") return url.pathname + url.search + url.hash;
   } catch (e) { /* ignore */ }
   return "/dashboard";
 }
