@@ -322,7 +322,7 @@ User=$SERVICE_USER
 WorkingDirectory=$INSTALL_DIR
 Environment="NODE_ENV=production"
 Environment="CONFIG_PATH=$CONFIG_DIR/config.toml"
-ExecStart=/usr/bin/node $INSTALL_DIR/dist/index.js
+ExecStart=/usr/bin/node --import tsx $INSTALL_DIR/src/index.ts
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/dployr-base/output.log
@@ -334,12 +334,40 @@ EOF
 
 # Set permissions
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
+chown -R "$SERVICE_USER:$SERVICE_USER" "$CONFIG_DIR"
 chown -R "$SERVICE_USER:$SERVICE_USER" /var/log/dployr-base
 chown -R "$SERVICE_USER:$SERVICE_USER" /var/lib/dployr-base
 chmod 600 "$CONFIG_DIR/config.toml"
 
 # Reload systemd
 systemctl daemon-reload
+
+# Configure reverse proxy
+if command -v caddy &> /dev/null && [ -d /etc/caddy ]; then
+	CADDYFILE="/etc/caddy/Caddyfile"
+	if [ ! -f "$CADDYFILE" ]; then
+		echo "Configuring Caddy to proxy :80 -> 127.0.0.1:$PORT ..."
+		cat > "$CADDYFILE" <<EOF
+:80 {
+	reverse_proxy 127.0.0.1:$PORT
+}
+EOF
+	else
+		echo "Appending Dployr site to existing Caddyfile..."
+		cat >> "$CADDYFILE" <<EOF
+
+# Dployr Base
+:80 {
+	reverse_proxy 127.0.0.1:$PORT
+}
+EOF
+	fi
+
+	# Reload Caddy service if managed by systemd
+	if command -v systemctl &> /dev/null; then
+		systemctl reload caddy || systemctl restart caddy || true
+	fi
+fi
 
 echo ""
 echo "Installation completed successfully!"
