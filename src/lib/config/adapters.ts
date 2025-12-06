@@ -14,12 +14,24 @@ export async function createKVFromConfig(
 ): Promise<IKVAdapter> {
   switch (config.kv.type) {
     case "redis": {
-      if (!config.kv.url) {
-        throw new Error("Redis URL required in config.toml: kv.url");
+      if (!config.kv.host || !config.kv.port || !config.kv.username || !config.kv.password) {
+        throw new Error("Redis credentials required in config.toml: kv.host, kv.port, kv.username, kv.password");
       }
       const { createClient } = await import("redis");
-      const client = createClient({ url: config.kv.url });
+      
+      const client = createClient({
+        username: config.kv.username,
+        password: config.kv.password,
+        socket: {
+          host: config.kv.host,
+          port: config.kv.port
+        }
+      });
+
+      client.on('error', (err: any) => console.log('Redis Client Error', err));
+      
       await client.connect();
+
       return new RedisKV(client);
     }
 

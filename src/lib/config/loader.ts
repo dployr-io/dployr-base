@@ -22,7 +22,11 @@ const ConfigSchema = z.object({
   }),
   kv: z.object({
     type: z.enum(['redis', 'upstash', 'memory']),
-    url: z.string().optional(),
+    name: z.string().optional(),
+    host: z.string().optional(),
+    port: z.number().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
     rest_url: z.string().optional(),
     rest_token: z.string().optional(),
   }),
