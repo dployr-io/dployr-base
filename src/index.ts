@@ -146,7 +146,11 @@ app.get("/v1/health", (c) => {
 export default app;
 
 // Node.js server
-if (isNode && import.meta.url === `file://${process.argv[1]}`) {
+// In self-hosted mode (Node), always start the HTTP server.
+// The previous guard comparing import.meta.url to process.argv[1]
+// breaks on Windows due to path vs URL differences, so we only
+// check that we're running under Node.
+if (isNode) {
   const { createServer } = await import('http');
   const { loadConfig } = await import('@/lib/config/loader.js');
   const { WebSocketServer } = await import('ws');

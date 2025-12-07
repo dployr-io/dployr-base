@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync } from 'fs';
 import { parse as parseToml } from 'smol-toml';
 import { z } from 'zod';
 
