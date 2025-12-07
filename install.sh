@@ -357,6 +357,13 @@ chown -R "$SERVICE_USER:$SERVICE_USER" /var/log/dployr-base
 chown -R "$SERVICE_USER:$SERVICE_USER" /var/lib/dployr-base
 chmod 600 "$CONFIG_DIR/config.toml"
 
+# Fix TLS cert permissions for Caddy (if certs exist)
+if [ -d "$CONFIG_DIR/tls" ] && [ -f "$CONFIG_DIR/tls/cf-origin.crt" ]; then
+	echo "[INFO] Setting TLS certificate permissions for Caddy..."
+	chown caddy:caddy "$CONFIG_DIR/tls/cf-origin.crt" "$CONFIG_DIR/tls/cf-origin.key" 2>/dev/null || true
+	chmod 640 "$CONFIG_DIR/tls/cf-origin.crt" "$CONFIG_DIR/tls/cf-origin.key" 2>/dev/null || true
+fi
+
 # Reload systemd
 systemctl daemon-reload
 
