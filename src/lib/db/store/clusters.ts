@@ -39,7 +39,7 @@ export class ClusterStore extends BaseStore {
           viewer: [],
           invited: [],
         },
-        metadata: existingCluster.metadata ? JSON.parse(existingCluster.metadata as string) : {},
+        metadata: existingCluster.metadata,
         createdAt: existingCluster.created_at as number,
         updatedAt: existingCluster.updated_at as number,
       };
@@ -84,7 +84,7 @@ export class ClusterStore extends BaseStore {
         viewer: [],
         invited: [],
       },
-      metadata: clusterRow.metadata ? JSON.parse(clusterRow.metadata as string) : {},
+      metadata: (clusterRow as any).metadata || {},
       createdAt: clusterRow.created_at as number,
       updatedAt: clusterRow.updated_at as number,
     };
@@ -132,7 +132,7 @@ export class ClusterStore extends BaseStore {
       name: cluster.name as string,
       users,
       roles,
-      metadata: cluster.metadata ? JSON.parse(cluster.metadata as string) : {},
+      metadata: (cluster as any).metadata || {},
       createdAt: cluster.created_at as number,
       updatedAt: cluster.updated_at as number,
     };
@@ -158,15 +158,13 @@ export class ClusterStore extends BaseStore {
     if (updates.name) clusterUpdates.name = updates.name;
 
     if (updates.metadata) {
-      // Use atomic JSON merge
-      const updatesJson = JSON.stringify(updates.metadata);
       statements.push(
         this.db.prepare(`
           UPDATE clusters 
           SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
               updated_at = $2
           WHERE id = $3
-        `).bind(updatesJson, this.now(), id)
+        `).bind(updates.metadata, this.now(), id)
       );
     }
 
@@ -220,13 +218,11 @@ export class ClusterStore extends BaseStore {
 
     const clusterId = cluster.id as string;
 
-    // Update the cluster's GitHub integration metadata
-    const updatesJson = JSON.stringify(integration);
     await this.db.prepare(`
       UPDATE clusters 
       SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{gitHub}', $1::jsonb)
           WHERE id = $2
-    `).bind(updatesJson, clusterId).run();
+    `).bind(integration, clusterId).run();
 
     return this.get(clusterId);
   }
@@ -640,7 +636,7 @@ export class ClusterStore extends BaseStore {
       SELECT metadata FROM clusters WHERE id = $1
     `);
     const result = await stmt.bind(clusterId).first();
-    const metadata = result?.metadata ? JSON.parse(result.metadata as string) : {};
+    const metadata = result?.metadata ? (result as any).metadata : {};
     
     // Default event subscriptions for all notification integrations
     const defaultNotificationEvents = [

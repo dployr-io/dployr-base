@@ -10,7 +10,7 @@ export class UserStore extends BaseStore {
     >): Promise<User | null> {
         const id = this.generateId();
         const now = this.now();
-        const metadataJson = JSON.stringify(user.metadata || {});
+        const metadataJson = user.metadata || {};
 
         const statements = [];
 
@@ -22,7 +22,7 @@ export class UserStore extends BaseStore {
                 name = COALESCE(excluded.name, users.name),
                 picture = COALESCE(excluded.picture, users.picture),
                 provider = excluded.provider,
-                metadata = COALESCE(excluded.metadata, users.metadata),
+                metadata = COALESCE(metadata, '{}'::jsonb) || excluded.metadata::jsonb,
                 updated_at = excluded.updated_at
             RETURNING id, email, name, picture, provider, metadata, created_at, updated_at
         `).bind(
@@ -49,7 +49,7 @@ export class UserStore extends BaseStore {
                         JOIN users u ON uc.user_id = u.id
                         WHERE u.email = $3 AND uc.role IN ('owner', 'admin')
                     )
-                `).bind(metadataJson, now, user.email)
+                `).bind(user.metadata, now, user.email)
             );
         }
 
@@ -59,7 +59,7 @@ export class UserStore extends BaseStore {
             name: string | null;
             picture: string | null;
             provider: string;
-            metadata: string;
+            metadata: Record<string, unknown>;
             created_at: number;
             updated_at: number;
         }>();
@@ -76,7 +76,7 @@ export class UserStore extends BaseStore {
             name: savedUser.name || "",
             picture: savedUser.picture || "",
             provider: savedUser.provider as OAuthProvider,
-            metadata: JSON.parse(savedUser.metadata),
+            metadata: savedUser.metadata,
             createdAt: savedUser.created_at,
             updatedAt: savedUser.updated_at,
         };
@@ -93,7 +93,7 @@ export class UserStore extends BaseStore {
 
         return {
             ...result,
-            metadata: result.metadata ? JSON.parse(result.metadata as string) : {},
+            metadata: (result as any).metadata || {},
         } as User;
     }
 
@@ -127,7 +127,7 @@ export class UserStore extends BaseStore {
         }
         if (updates.metadata !== undefined) {
             setClauses.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${paramIndex++}::jsonb`);
-            values.push(JSON.stringify(updates.metadata));
+            values.push(updates.metadata);
         }
 
         setClauses.push(`updated_at = $${paramIndex++}`);
@@ -146,7 +146,7 @@ export class UserStore extends BaseStore {
             name: string | null;
             picture: string | null;
             provider: string;
-            metadata: string;
+            metadata: Record<string, unknown>;
             created_at: number;
             updated_at: number;
         }>();
@@ -159,7 +159,7 @@ export class UserStore extends BaseStore {
             name: result.name || "",
             picture: result.picture || "",
             provider: result.provider as OAuthProvider,
-            metadata: JSON.parse(result.metadata),
+            metadata: result.metadata,
             createdAt: result.created_at,
             updatedAt: result.updated_at,
         };

@@ -31,7 +31,7 @@ export class InstanceStore extends BaseStore {
                     clusterId,
                     data.address || null,
                     data.tag,
-                    JSON.stringify(data.metadata || {}),
+                    data.metadata || {},
                     now,
                     now,
                 )
@@ -73,7 +73,8 @@ export class InstanceStore extends BaseStore {
             id: result.id as string,
             address: result.address as string,
             tag: result.tag as string,
-            metadata: result.metadata ? JSON.parse(result.metadata as string) : {},
+            metadata: (result as any).metadata || {},
+
             createdAt: result.created_at as number,
             updatedAt: result.updated_at as number,
             clusterId: result.clusterId as string,
@@ -88,7 +89,7 @@ export class InstanceStore extends BaseStore {
             WHERE id = $3
         `);
 
-        await stmt.bind(JSON.stringify(metadata || {}), now, id).run();
+        await stmt.bind(metadata || {}, now, id).run();
     }
 
     async delete(id: string): Promise<void> {
@@ -125,7 +126,8 @@ export class InstanceStore extends BaseStore {
             id: row.id as string,
             address: row.address as string,
             tag: row.tag as string,
-            metadata: row.metadata ? JSON.parse(row.metadata as string) : {},
+            metadata: (row as any).metadata || {},
+
             createdAt: row.created_at as number,
             updatedAt: row.updated_at as number,
         }));

@@ -48,13 +48,13 @@ export abstract class BaseStore {
      *   { theme: "dark", lang: "en" }, 
      *   { theme: "light" }
      * );
-     * // Result: '{"theme":"light","lang":"en"}'
+     * // Result: { theme: "light", lang: "en" }
      * ```
      */
-    protected mergeJson(existing: any, updates: any): string {
+    protected mergeJson(existing: any, updates: any): any {
         const existingObj = existing || {};
         const updatesObj = updates || {};
-        return JSON.stringify({ ...existingObj, ...updatesObj });
+        return { ...existingObj, ...updatesObj };
     }
 
     /**
@@ -70,7 +70,7 @@ export abstract class BaseStore {
      * ```typescript
      * await this.updateEntity("users", "user123", {
      *   name: "John Doe",
-     *   metadata: '{"theme":"dark"}'
+     *   metadata: { theme: "dark" }
      * });
      * ```
      */
@@ -113,13 +113,13 @@ export abstract class BaseStore {
      * 
      * @example
      * ```typescript
-     * // Existing metadata: {"theme":"dark","lang":"en"}
-     * // Updates: {"theme":"light","notifications":true}
+     * // Existing metadata: { theme: "dark", lang: "en" }
+     * // Updates: { theme: "light", notifications: true }
      * await this.mergeJsonField("users", "user123", "metadata", {
      *   theme: "light",
      *   notifications: true
      * });
-     * // Result in DB: {"theme":"light","lang":"en","notifications":true}
+     * // Result in DB: { theme: "light", lang: "en", notifications: true }
      * ```
      */
     protected async mergeJsonField(
@@ -129,9 +129,6 @@ export abstract class BaseStore {
         updates: any,
         idColumn: string = "id"
     ): Promise<void> {
-        const updatesJson = JSON.stringify(updates);
-
-        // Use PostgreSQL jsonb || operator to merge JSON objects
         const stmt = this.db.prepare(`
             UPDATE ${table} 
             SET ${field} = COALESCE(${field}, '{}'::jsonb) || $1::jsonb,
@@ -139,7 +136,7 @@ export abstract class BaseStore {
             WHERE ${idColumn} = $3
         `);
 
-        const result = await stmt.bind(updatesJson, this.now(), id).run();
+        const result = await stmt.bind(updates, this.now(), id).run();
 
         if (result.meta.changes === 0) {
             throw new Error(`Record not found in ${table}`);
