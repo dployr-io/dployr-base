@@ -2,7 +2,8 @@
   "name": "dployr-base",
   "type": "module",
   "scripts": {
-    "dev": "node --import tsx src/index.ts"
+    "dev": "node --import tsx src/index.ts",
+    "build": "tsc --noEmit"
   },
   "dependencies": {
     "@octokit/auth-app": "^8.1.2",
