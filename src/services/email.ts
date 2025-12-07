@@ -15,6 +15,12 @@ export class EmailService {
     }
 
     async sendEmail(subject: string, body: string): Promise<{ success: boolean; error?: string }> {
+        const fromAddress = this.env.EMAIL_FROM;
+        if (!fromAddress) {
+            console.error('EMAIL_FROM is not configured');
+            return { success: false, error: 'EMAIL_FROM is not configured' };
+        }
+
         const emailPayload = {
             to: [{
                 email_address: {
@@ -23,7 +29,7 @@ export class EmailService {
                 }
             }],
             from: {
-                address: this.env.EMAIL_FROM || 'noreply@dployr.io'
+                address: fromAddress
             },
             subject,
             htmlbody: body

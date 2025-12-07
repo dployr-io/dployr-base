@@ -47,10 +47,19 @@ const ConfigSchema = z.object({
   email: z.object({
     provider: z.enum(['zepto', 'resend', 'smtp']),
     zepto_api_key: z.string().optional(),
+    from_address: z.email().optional(),
     smtp_host: z.string().optional(),
     smtp_port: z.number().optional(),
     smtp_user: z.string().optional(),
     smtp_pass: z.string().optional(),
+  }).superRefine((val, ctx) => {
+    if (val.provider === 'zepto' && val.zepto_api_key && !val.from_address) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['from_address'],
+        message: 'email.from_address is required when using Zepto with a non-empty zepto_api_key',
+      });
+    }
   }),
   security: z.object({
     session_ttl: z.number().default(86400),
@@ -129,6 +138,7 @@ function loadConfigFromEnv(): Config {
     email: {
       provider: process.env.EMAIL_PROVIDER || 'zepto',
       zepto_api_key: process.env.ZEPTO_API_KEY,
+      from_address: process.env.EMAIL_FROM,
       smtp_host: process.env.SMTP_HOST,
       smtp_port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : undefined,
       smtp_user: process.env.SMTP_USER,

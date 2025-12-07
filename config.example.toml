@@ -42,7 +42,8 @@ github_client_secret = ""
 [email]
 # Email provider: "zepto" 
 provider = "zepto"
-zepto_api_key = ""
+zepto_api_key = "wSsVR612+EOlBvw..."
+from_address = "email@example.com"
 
 [security]
 # Session TTL (seconds)

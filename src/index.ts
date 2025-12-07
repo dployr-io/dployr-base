@@ -55,6 +55,8 @@ app.use("*", async (c, next) => {
   
   c.env = {
     BASE_URL: process.env.BASE_URL || '',
+    EMAIL_FROM: process.env.EMAIL_FROM || '',
+    ZEPTO_API_KEY: process.env.ZEPTO_API_KEY || '',
     GITHUB_APP_ID: process.env.GITHUB_APP_ID || '',
     GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY || '',
     GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID || '',
