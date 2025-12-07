@@ -84,6 +84,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          build-args: |
+            BASE_VERSION=${{ github.ref_name }}
           tags: |
             ghcr.io/dployr-io/dployr-base:${{ github.ref_name }}
             ghcr.io/dployr-io/dployr-base:latest
