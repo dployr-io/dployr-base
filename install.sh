@@ -368,6 +368,16 @@ fi
 # Reload systemd
 systemctl daemon-reload
 
+echo "[INFO] Enabling and (re)starting dployr-base service..."
+systemctl enable dployr-base >/dev/null 2>&1 || true
+if systemctl is-active --quiet dployr-base; then
+  echo "[INFO] Restarting existing dployr-base service..."
+  systemctl restart dployr-base
+else
+  echo "[INFO] Starting dployr-base service..."
+  systemctl start dployr-base
+fi
+
 # Configure reverse proxy
 if command -v caddy &> /dev/null && [ -d /etc/caddy ]; then
 	CADDYFILE="/etc/caddy/Caddyfile"
