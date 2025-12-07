@@ -74,6 +74,8 @@ app.use(
       const raw = adapters?.config?.cors?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS;
       if (!raw) {
         console.error("CORS allowed origins are not configured; refusing cross-origin requests.");
+        console.error("Debug: adapters.config.cors =", JSON.stringify(adapters?.config?.cors));
+        console.error("Debug: process.env.CORS_ALLOWED_ORIGINS =", process.env.CORS_ALLOWED_ORIGINS);
         return null;
       }
 

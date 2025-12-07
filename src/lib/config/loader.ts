@@ -76,10 +76,6 @@ export function loadConfig(path?: string): Config {
 
   // Fall back to TOML file
   const configPath = path || process.env.CONFIG_PATH || './config.toml';
-  
-  if (!existsSync(configPath)) {
-    throw new Error(`Configuration file not found: ${configPath}\nCopy config.example.toml to config.toml and customize it.`);
-  }
 
   const content = readFileSync(configPath, 'utf-8');
   const raw = parseToml(content);
