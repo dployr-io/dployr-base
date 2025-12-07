@@ -40,14 +40,25 @@ export class RedisKV implements IKVAdapter {
   async list(options: { prefix: string; limit?: number }): Promise<Array<{ name: string }>> {
     const pattern = `${options.prefix}*`;
     const keys: string[] = [];
-    
-    let cursor = '0';
-    do {
-      const [newCursor, batch] = await this.client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
-      cursor = newCursor;
-      keys.push(...batch);
-      if (options.limit && keys.length >= options.limit) break;
-    } while (cursor !== '0');
+
+    try {
+      let cursor = '0';
+      do {
+        const res: any = await this.client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        
+        // Handle both [cursor, keys] and { cursor, keys } shapes
+        const [newCursor, batch] = Array.isArray(res) 
+          ? [res[0] ?? '0', res[1] ?? []]
+          : [res?.cursor ?? '0', res?.keys ?? []];
+
+        cursor = String(newCursor);
+        keys.push(...batch);
+        
+        if (options.limit && keys.length >= options.limit) break;
+      } while (cursor !== '0');
+    } catch (error) {
+      console.error('[RedisKV] scan failed:', error);
+    }
 
     return keys.slice(0, options.limit).map(name => ({ name }));
   }

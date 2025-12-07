@@ -210,14 +210,17 @@ auth.post("/login/email", async (c) => {
       console.error("Send OTP error:", error);
       return c.json(createErrorResponse({
         message: "Failed to send code. Wait a few moments and try again.",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code
-      }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+        code: ERROR.REQUEST.BAD_REQUEST.code
+      }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
     return c.json(createSuccessResponse({ email }, "OTP sent to your email"));
   } catch (error) {
     console.error("Send OTP error:", error);
-    return c.redirect(`${c.env.APP_URL}/?authError=${encodeURIComponent("Failed to send code. Wait a few moments and try again.")}`);
+    return c.json(createErrorResponse({
+      message: "Failed to send code. Wait a few moments and try again.",
+      code: ERROR.REQUEST.BAD_REQUEST.code
+    }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 });
 
@@ -299,7 +302,10 @@ auth.post("/login/email/verify", async (c) => {
     return c.json(createSuccessResponse({ email }, "Login successful"));
   } catch (error) {
     console.error("Verify OTP error:", error);
-    return c.redirect(`${c.env.APP_URL}/?authError=${encodeURIComponent("Failed to verify code. Cross-check and try again.")}`);
+    return c.json(createErrorResponse({
+      message: "Failed to verify code. Cross-check and try again.",
+      code: ERROR.REQUEST.BAD_REQUEST.code
+    }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 });
 

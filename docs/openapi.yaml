@@ -253,6 +253,140 @@ components:
           mode: ready
           uptime_s: 3605
 
+    DaemonTask:
+      type: object
+      description: Task structure sent from base to daemon via WebSocket.
+      properties:
+        ID:
+          type: string
+          description: Unique task identifier (typically a ULID or streamId).
+          example: instance-abc123:/var/log/app.log
+        Type:
+          type: string
+          description: Task address in format "path:method" (e.g., "logs/stream:post").
+          example: logs/stream:post
+        Payload:
+          type: object
+          description: Task-specific payload data.
+          additionalProperties: true
+        Status:
+          type: string
+          enum: [pending, in_progress, done, failed]
+          description: Current status of the task.
+          example: pending
+      required:
+        - ID
+        - Type
+        - Payload
+        - Status
+
+    LogStreamPayload:
+      type: object
+      description: Payload for log streaming tasks sent to daemon.
+      properties:
+        path:
+          type: string
+          description: Path to the log file on the instance.
+          example: /var/log/app.log
+        startOffset:
+          type: integer
+          description: Optional byte offset to start reading from.
+          example: 0
+        limit:
+          type: integer
+          description: Optional maximum number of log entries to return.
+          example: 100
+        streamId:
+          type: string
+          description: Unique identifier for this log stream (instanceId:path).
+          example: instance-abc123:/var/log/app.log
+      required:
+        - path
+        - streamId
+
+    AgentTaskMessage:
+      type: object
+      description: WebSocket message delivering tasks from base to daemon.
+      properties:
+        kind:
+          type: string
+          enum: [task]
+          example: task
+        items:
+          type: array
+          description: Array of tasks to execute.
+          items:
+            $ref: '#/components/schemas/DaemonTask'
+      required:
+        - kind
+        - items
+      example:
+        kind: task
+        items:
+          - ID: instance-abc123:/var/log/app.log
+            Type: logs/stream:post
+            Payload:
+              path: /var/log/app.log
+              streamId: instance-abc123:/var/log/app.log
+              startOffset: 0
+            Status: pending
+
+    AgentPullMessage:
+      type: object
+      description: WebSocket message from daemon requesting pending tasks.
+      properties:
+        kind:
+          type: string
+          enum: [pull]
+          example: pull
+      required:
+        - kind
+
+    AgentAckMessage:
+      type: object
+      description: WebSocket message from daemon acknowledging completed tasks.
+      properties:
+        kind:
+          type: string
+          enum: [ack]
+          example: ack
+        ids:
+          type: array
+          description: Array of completed task IDs.
+          items:
+            type: string
+          example: [instance-abc123:/var/log/app.log]
+      required:
+        - kind
+        - ids
+
+    LogChunkMessage:
+      type: object
+      description: WebSocket message from daemon containing log data.
+      properties:
+        kind:
+          type: string
+          enum: [log_chunk]
+          example: log_chunk
+        streamId:
+          type: string
+          description: Stream identifier matching the original request.
+          example: instance-abc123:/var/log/app.log
+        lines:
+          type: array
+          description: Array of log lines.
+          items:
+            type: string
+        offset:
+          type: integer
+          description: Current byte offset in the log file.
+        eof:
+          type: boolean
+          description: True if end of file reached.
+      required:
+        - kind
+        - streamId
+
     User:
       type: object
       properties:
@@ -2209,19 +2343,28 @@ paths:
 
         The daemon must include a Bearer agent access token in the
         `Authorization` header. On successful authentication and
-        instance lookup, the connection is upgraded and pinned to the
-        instance's Durable Object.
+        instance lookup, the connection is upgraded.
 
-        The WebSocket payloads are small JSON messages with a `kind`
-        field:
+        ## WebSocket Message Types
 
-        - `{"kind":"pull"}`: Daemon requests pending tasks.
-        - `{"kind":"task","items":[...]}`: Base delivers tasks.
-        - `{"kind":"ack","ids":["..."]}`: Daemon acknowledges
-          completed task IDs.
+        ### From Daemon to Base:
+        - **AgentPullMessage**: `{"kind":"pull"}` - Daemon requests pending tasks.
+        - **AgentAckMessage**: `{"kind":"ack","ids":["..."]}` - Daemon acknowledges completed task IDs.
+        - **LogChunkMessage**: `{"kind":"log_chunk","streamId":"...","lines":[...]}` - Daemon sends log data.
 
-        Each task item uses a canonical task address of the form
-        `<path>:<method>`, for example `system/status?showCompleted=true:put`.
+        ### From Base to Daemon:
+        - **AgentTaskMessage**: `{"kind":"task","items":[...]}` - Base delivers tasks to execute.
+
+        ## Task Structure
+
+        Each task (DaemonTask) has:
+        - **ID**: Unique task identifier
+        - **Type**: Task address in format `<path>:<method>` (e.g., `logs/stream:post`)
+        - **Payload**: Task-specific data (e.g., LogStreamPayload for log streaming)
+        - **Status**: One of `pending`, `in_progress`, `done`, `failed`
+
+        See the schema definitions for AgentTaskMessage, DaemonTask, and LogStreamPayload
+        for complete type information.
       parameters:
         - in: path
           name: instanceId

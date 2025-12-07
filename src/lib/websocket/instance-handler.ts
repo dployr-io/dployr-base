@@ -3,11 +3,20 @@
 
 import type { WebSocket } from "ws";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
+import { createLogStreamTask, type DaemonTask } from "@/lib/tasks/types.js";
 
 interface InstanceConnection {
   ws: WebSocket;
   role: "agent" | "client";
   instanceId: string;
+}
+
+interface LogStreamSubscription {
+  streamId: string;
+  path: string;
+  clientWs: WebSocket;
+  startOffset?: number;
+  limit?: number;
 }
 
 /**
@@ -16,13 +25,19 @@ interface InstanceConnection {
  */
 export class WebSocketHandler {
   private connections = new Map<string, Set<InstanceConnection>>();
+  // Track active log stream subscriptions: streamId -> subscription details
+  private logStreams = new Map<string, LogStreamSubscription>();
 
   constructor(private kv: IKVAdapter) {}
 
   /**
    * Register a new WebSocket connection for an instance.
    */
-  acceptWebSocket(instanceId: string, ws: WebSocket, role: "agent" | "client"): void {
+  acceptWebSocket(
+    instanceId: string,
+    ws: WebSocket,
+    role: "agent" | "client"
+  ): void {
     if (!this.connections.has(instanceId)) {
       this.connections.set(instanceId, new Set());
     }
@@ -32,7 +47,10 @@ export class WebSocketHandler {
 
     ws.on("message", (data) => {
       this.handleMessage(conn, data).catch((err) => {
-        console.error(`[WS] Error handling message for instance ${instanceId}:`, err);
+        console.error(
+          `[WS] Error handling message for instance ${instanceId}:`,
+          err
+        );
       });
     });
 
@@ -41,14 +59,20 @@ export class WebSocketHandler {
     });
 
     ws.on("error", (err) => {
-      console.error(`[WS] Error on connection for instance ${instanceId}:`, err);
+      console.error(
+        `[WS] Error on connection for instance ${instanceId}:`,
+        err
+      );
       this.removeConnection(conn);
     });
 
     console.log(`[WS] ${role} connected to instance ${instanceId}`);
   }
 
-  private async handleMessage(conn: InstanceConnection, data: any): Promise<void> {
+  private async handleMessage(
+    conn: InstanceConnection,
+    data: any
+  ): Promise<void> {
     let payload: any;
     try {
       payload = JSON.parse(data.toString());
@@ -57,25 +81,87 @@ export class WebSocketHandler {
     }
 
     const kind = payload?.kind;
-    if (!kind) return;
+    if (!kind) {
+      console.error("[WS] Invalid message format for instance", payload);
+      return;
+    }
 
     // Agent sends updates/status/logs
     if (conn.role === "agent") {
-      if (kind === "update" || kind === "status_report" || kind === "log_chunk") {
+      if (
+        kind === "update" ||
+        kind === "status_report"
+      ) {
         // Broadcast to all clients subscribed to this instance
         this.broadcastToClients(conn.instanceId, payload);
+      }
+
+      // Handle log chunks - route to specific stream subscriber
+      if (kind === "log_chunk") {
+        const streamId = payload?.streamId as string | undefined;
+        if (streamId) {
+          const subscription = this.logStreams.get(streamId);
+          if (subscription) {
+            try {
+              subscription.clientWs.send(JSON.stringify(payload));
+            } catch (err) {
+              console.error(`[WS] Failed to send log chunk to client:`, err);
+              // Clean up dead subscription
+              this.logStreams.delete(streamId);
+            }
+          }
+        } else {
+          console.warn(`[WS] Received log_chunk without streamId`);
+        }
       }
     }
 
     // Client subscribes to updates
-    if (conn.role === "client" && kind === "client_subscribe") {
-      // Send latest cached status if available
-      const cached = await this.kv.get(`instance:${conn.instanceId}:status`);
-      if (cached) {
-        try {
-          conn.ws.send(cached);
-        } catch (err) {
-          console.error(`[WS] Failed to send cached status:`, err);
+    if (conn.role === "client") {
+      if (kind === "client_subscribe") {
+        const cached = await this.kv.get(`instance:${conn.instanceId}:status`);
+        if (cached) {
+          try {
+            conn.ws.send(cached);
+          } catch (err) {
+            console.error(`[WS] Failed to send cached status:`, err);
+          }
+        }
+      }
+
+      if (kind === "log_subscribe") {
+        const path = payload?.path as string | undefined;
+        const startOffset = payload?.startOffset as number | undefined;
+        const limit = payload?.limit as number | undefined;
+
+        if (!path) {
+          console.error("[WS] log_subscribe missing path");
+          return;
+        }
+
+        const streamId = `${conn.instanceId}:${path}`;
+
+        this.logStreams.set(streamId, {
+          streamId,
+          path,
+          clientWs: conn.ws,
+          startOffset,
+          limit,
+        });
+
+        const task = createLogStreamTask(streamId, path, startOffset, limit);
+
+        this.sendTaskToAgent(conn.instanceId, task);
+
+        console.log(`[WS] Created log stream task ${streamId} for instance ${conn.instanceId}`);
+      }
+
+      if (kind === "log_unsubscribe") {
+        const path = payload?.path as string | undefined;
+        if (path) {
+          const streamId = `${conn.instanceId}:${path}`;
+          this.logStreams.delete(streamId);
+          console.log(`[WS] Removed log stream ${streamId}`);
         }
       }
     }
@@ -104,6 +190,35 @@ export class WebSocketHandler {
     }
   }
 
+  /**
+   * Send a task to the agent for this instance
+   */
+  private sendTaskToAgent(instanceId: string, task: DaemonTask): void {
+    const conns = this.connections.get(instanceId);
+    if (!conns) {
+      console.warn(`[WS] No connections for instance ${instanceId}`);
+      return;
+    }
+
+    const agentConn = Array.from(conns).find(c => c.role === "agent");
+    if (!agentConn) {
+      console.warn(`[WS] No agent connection for instance ${instanceId}`);
+      return;
+    }
+
+    const message = {
+      kind: "task",
+      items: [task],
+    };
+
+    try {
+      agentConn.ws.send(JSON.stringify(message));
+      console.log(`[WS] Sent task ${task.ID} to agent for instance ${instanceId}`);
+    } catch (err) {
+      console.error(`[WS] Failed to send task to agent:`, err);
+    }
+  }
+
   private removeConnection(conn: InstanceConnection): void {
     const conns = this.connections.get(conn.instanceId);
     if (conns) {
@@ -112,6 +227,19 @@ export class WebSocketHandler {
         this.connections.delete(conn.instanceId);
       }
     }
-    console.log(`[WS] ${conn.role} disconnected from instance ${conn.instanceId}`);
+
+    // Clean up log streams for this client
+    if (conn.role === "client") {
+      for (const [streamId, subscription] of this.logStreams.entries()) {
+        if (subscription.clientWs === conn.ws) {
+          this.logStreams.delete(streamId);
+          console.log(`[WS] Cleaned up log stream ${streamId}`);
+        }
+      }
+    }
+
+    console.log(
+      `[WS] ${conn.role} disconnected from instance ${conn.instanceId}`
+    );
   }
 }

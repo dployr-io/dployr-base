@@ -55,7 +55,7 @@ const ConfigSchema = z.object({
   }).superRefine((val, ctx) => {
     if (val.provider === 'zepto' && val.zepto_api_key && !val.from_address) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ['from_address'],
         message: 'email.from_address is required when using Zepto with a non-empty zepto_api_key',
       });

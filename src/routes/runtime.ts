@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
-import { authMiddleware } from "@/middleware/auth.js";
+import { authMiddleware, requireClusterViewer } from "@/middleware/auth.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKV, type AppVariables } from "@/lib/context.js";
@@ -18,7 +18,7 @@ type EventsFilters = {
 const runtime = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 runtime.use("*", authMiddleware);
 
-runtime.get("/events", async (c) => {
+runtime.get("/events", requireClusterViewer, async (c) => {
   const kv = new KVStore(getKV(c));
   const session = c.get("session")!;
   const clusterId = c.req.query("clusterId");
@@ -28,15 +28,6 @@ runtime.get("/events", async (c) => {
       message: "clusterId is required",
       code: ERROR.REQUEST.MISSING_PARAMS.code,
     }), ERROR.REQUEST.MISSING_PARAMS.status);
-  }
-
-  const hasAccessToCluster = session.clusters?.some((cluster) => cluster.id === clusterId);
-
-  if (!hasAccessToCluster) {
-    return c.json(createErrorResponse({
-      message: "Insufficient permissions to view this cluster's events",
-      code: ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.code,
-    }), ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.status);
   }
 
   try {
