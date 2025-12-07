@@ -340,6 +340,7 @@ User=$SERVICE_USER
 WorkingDirectory=$INSTALL_DIR
 Environment="NODE_ENV=production"
 Environment="CONFIG_PATH=$CONFIG_DIR/config.toml"
+Environment="BASE_VERSION=$VERSION"
 ExecStart=/usr/bin/node --import tsx $INSTALL_DIR/src/index.ts
 Restart=always
 RestartSec=10

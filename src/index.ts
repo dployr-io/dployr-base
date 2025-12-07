@@ -26,6 +26,8 @@ import { globalRateLimit } from "@/middleware/ratelimit.js";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+const VERSION = process.env.BASE_VERSION || "unknown";
+
 const isNode = typeof process !== 'undefined' && process.versions?.node;
 
 let adapters: any = null;
@@ -139,7 +141,8 @@ app.route("/v1/agent", agent);
 app.get("/v1/health", (c) => {
   return c.json({ 
     status: "ok", 
-    timestamp: new Date().toISOString() 
+    timestamp: new Date().toISOString(),
+    version: VERSION,
   });
 });
 
