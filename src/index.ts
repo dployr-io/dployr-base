@@ -53,15 +53,20 @@ app.use("*", async (c, next) => {
   c.set('storageAdapter', adapters.storage);
   c.set('wsHandler', adapters.ws);
   
+  const serverConfig = adapters.config?.server;
+  const emailConfig = adapters.config?.email;
+  const corsConfig = adapters.config?.cors;
+
   c.env = {
-    BASE_URL: process.env.BASE_URL || '',
-    EMAIL_FROM: process.env.EMAIL_FROM || '',
-    ZEPTO_API_KEY: process.env.ZEPTO_API_KEY || '',
+    BASE_URL: serverConfig?.base_url || process.env.BASE_URL || '',
+    APP_URL: serverConfig?.app_url || process.env.APP_URL || '',
+    EMAIL_FROM: emailConfig?.from_address || process.env.EMAIL_FROM || '',
+    ZEPTO_API_KEY: emailConfig?.zepto_api_key || process.env.ZEPTO_API_KEY || '',
     GITHUB_APP_ID: process.env.GITHUB_APP_ID || '',
     GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY || '',
     GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID || '',
     GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || '',
-    CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS || '',
+    CORS_ALLOWED_ORIGINS: corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS || '',
   } as unknown as Bindings;
   
   await next();
