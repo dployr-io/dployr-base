@@ -48,7 +48,8 @@ export const ERROR = {
     },
     RUNTIME: {
         BAD_WEBHOOK_SIGNATURE: { code: "runtime.bad_webhook_signature", status: 500, message: "Invalid webhook signature" },
-        INTERNAL_SERVER_ERROR: { code: "runtime.internal_server_error", status: 500, message: "Internal server error" }
+        INTERNAL_SERVER_ERROR: { code: "runtime.internal_server_error", status: 500, message: "Internal server error" },
+        AGENT_NOT_CONNECTED: { code: "runtime.agent_not_connected", status: 503, message: "Agent not connected to instance" }
     }
 } as const;
 

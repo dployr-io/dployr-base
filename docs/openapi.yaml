@@ -1769,6 +1769,165 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/instances/{instanceId}/system/install:
+    post:
+      operationId: systemInstall
+      tags:
+        - Instances
+      summary: Install or upgrade dployrd
+      x-requiredRole: owner
+      security:
+        - sessionCookie: []
+      description: |
+        Triggers the dployrd install script on the instance. This can be used to
+        install a specific version or upgrade to the latest version.
+
+        The request is asynchronous - it sends a task to the daemon and returns
+        immediately. The actual installation progress and result will be reported
+        via WebSocket status updates.
+
+        On success, the daemon runs install.sh followed by a system doctor check.
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version:
+                  type: string
+                  description: Version tag to install (e.g. "v0.4.8"). Omit to install latest.
+                  example: "v0.4.8"
+      responses:
+        '202':
+          description: Install task accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            enum: [accepted]
+                          taskId:
+                            type: string
+                            description: Unique task ID for tracking.
+                          message:
+                            type: string
+        '400':
+          description: Missing clusterId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Agent not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/instances/{instanceId}/system/restart:
+    post:
+      operationId: systemRestart
+      tags:
+        - Instances
+      summary: Restart the instance (OS reboot)
+      x-requiredRole: owner
+      security:
+        - sessionCookie: []
+      description: |
+        Triggers an OS reboot on the instance via the dployrd daemon.
+
+        By default, the daemon will wait for any pending tasks to complete before
+        rebooting. Set `force: true` to bypass this check and reboot immediately.
+
+        The request returns before the machine actually reboots. Expect connection
+        loss shortly after an "accepted" response.
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  default: false
+                  description: If true, bypass pending tasks check and reboot immediately.
+      responses:
+        '202':
+          description: Restart task accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            enum: [accepted]
+                          taskId:
+                            type: string
+                            description: Unique task ID for tracking.
+                          message:
+                            type: string
+        '400':
+          description: Missing clusterId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Agent not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v1/instances/{instanceId}/tokens/rotate:
     post:
       operationId: agentRotateBootstrapToken
@@ -1923,6 +2082,110 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/runtime/compatibility/check:
+    post:
+      operationId: checkDaemonCompatibility
+      tags:
+        - Runtime
+      summary: Check dployrd version compatibility
+      x-requiredRole: public
+      security: []
+      description: |
+        Validates whether dployrd installation's compatibility date meets the base server's
+        requirements. This is a public endpoint that daemons can call without
+        authentication to verify compatibility before connecting.
+
+        The compatibility check uses date-based versioning (YYYY-MM-DD format).
+        A dployrd installation is compatible if its compatibility_date is greater than or equal
+        to the server's required LATEST_COMPATIBILITY_DATE.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - compatibility_date
+              properties:
+                compatibility_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                  description: Daemon's compatibility date in YYYY-MM-DD format.
+                  example: "2025-11-23"
+                version:
+                  type: string
+                  description: Optional daemon version string for logging/debugging.
+                  example: "v0.4.6"
+      responses:
+        '200':
+          description: Compatibility check result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          compatible:
+                            type: boolean
+                            description: Whether the daemon is compatible.
+                          compatibility_date:
+                            type: string
+                            description: The daemon's compatibility date.
+                          version:
+                            type: string
+                            description: The daemon's version (if provided).
+                          latest_version:
+                            type: string
+                            description: Latest known daemon/base version tag used for upgrade level calculation.
+                          upgrade_level:
+                            type: string
+                            description: Upgrade level relative to latest_version (major, minor, patch, or none).
+                          required_compatibility_date:
+                            type: string
+                            description: The server's required compatibility date.
+                          message:
+                            type: string
+                            description: Human-readable compatibility status message.
+              examples:
+                compatible:
+                  value:
+                    success: true
+                    data:
+                      compatible: true
+                      compatibility_date: "2025-11-23"
+                      version: "v0.4.6"
+                      latest_version: "v0.4.6"
+                      upgrade_level: "none"
+                      required_compatibility_date: "2025-11-23"
+                      message: "dployrd is supported"
+                incompatible:
+                  value:
+                    success: true
+                    data:
+                      compatible: false
+                      compatibility_date: "2025-10-15"
+                      version: "v0.3.2"
+                      latest_version: "v0.4.6"
+                      upgrade_level: "major"
+                      required_compatibility_date: "2025-11-23"
+                      message: "dployrd requires compatibility_date 2025-11-23 (received: 2025-10-15)"
+        '400':
+          description: Invalid request body or date format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:

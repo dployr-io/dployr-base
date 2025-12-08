@@ -191,19 +191,20 @@ export class WebSocketHandler {
   }
 
   /**
-   * Send a task to the agent for this instance
+   * Send a task to the agent for this instance.
+   * Returns true if the task was sent, false if no agent is connected.
    */
-  private sendTaskToAgent(instanceId: string, task: DaemonTask): void {
+  public sendTaskToAgent(instanceId: string, task: DaemonTask): boolean {
     const conns = this.connections.get(instanceId);
     if (!conns) {
       console.warn(`[WS] No connections for instance ${instanceId}`);
-      return;
+      return false;
     }
 
     const agentConn = Array.from(conns).find(c => c.role === "agent");
     if (!agentConn) {
       console.warn(`[WS] No agent connection for instance ${instanceId}`);
-      return;
+      return false;
     }
 
     const message = {
@@ -214,9 +215,20 @@ export class WebSocketHandler {
     try {
       agentConn.ws.send(JSON.stringify(message));
       console.log(`[WS] Sent task ${task.ID} to agent for instance ${instanceId}`);
+      return true;
     } catch (err) {
       console.error(`[WS] Failed to send task to agent:`, err);
+      return false;
     }
+  }
+
+  /**
+   * Check if an agent is connected for the given instance.
+   */
+  public hasAgentConnection(instanceId: string): boolean {
+    const conns = this.connections.get(instanceId);
+    if (!conns) return false;
+    return Array.from(conns).some(c => c.role === "agent");
   }
 
   private removeConnection(conn: InstanceConnection): void {

@@ -407,4 +407,136 @@ instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer
   }
 });
 
+// System install - triggers dployrd install.sh with optional version
+instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => {
+  try {
+    const instanceId = c.req.param("instanceId");
+    const clusterId = c.req.query("clusterId");
+
+    if (!clusterId) {
+      return c.json(createErrorResponse({
+        message: "Cluster ID is required",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }), ERROR.REQUEST.BAD_REQUEST.status);
+    }
+
+    const db = new DatabaseStore(getDB(c) as any);
+    const instance = await db.instances.get(instanceId);
+    if (!instance || instance.clusterId !== clusterId) {
+      return c.json(createErrorResponse({
+        message: "Instance not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+    }
+
+    let version: string | undefined;
+    try {
+      const body = await c.req.json();
+      version = typeof body?.version === "string" ? body.version : undefined;
+    } catch {
+      // Empty body is valid - will install latest
+    }
+
+    const ws = getWS(c);
+    if (!ws.hasAgentConnection(instanceId)) {
+      return c.json(createErrorResponse({
+        message: "Agent not connected",
+        code: ERROR.RUNTIME.AGENT_NOT_CONNECTED.code,
+      }), ERROR.RUNTIME.AGENT_NOT_CONNECTED.status);
+    }
+
+    const { createSystemInstallTask } = await import("@/lib/tasks/types.js");
+    const taskId = ulid();
+    const task = createSystemInstallTask(taskId, version);
+
+    const sent = ws.sendTaskToAgent(instanceId, task);
+    if (!sent) {
+      return c.json(createErrorResponse({
+        message: "Failed to send install task to agent",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    }
+
+    return c.json(createSuccessResponse({
+      status: "accepted",
+      taskId,
+      message: version
+        ? `Install task sent for version ${version}`
+        : "Install task sent for latest version",
+    }), 202);
+  } catch (error) {
+    console.error("Failed to send system install task", error);
+    return c.json(createErrorResponse({
+      message: "Failed to send system install task",
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
+});
+
+// System restart - triggers OS reboot via dployrd
+instances.post("/:instanceId/system/restart", requireClusterOwner, async (c) => {
+  try {
+    const instanceId = c.req.param("instanceId");
+    const clusterId = c.req.query("clusterId");
+
+    if (!clusterId) {
+      return c.json(createErrorResponse({
+        message: "Cluster ID is required",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }), ERROR.REQUEST.BAD_REQUEST.status);
+    }
+
+    const db = new DatabaseStore(getDB(c) as any);
+    const instance = await db.instances.get(instanceId);
+    if (!instance || instance.clusterId !== clusterId) {
+      return c.json(createErrorResponse({
+        message: "Instance not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+    }
+
+    let force = false;
+    try {
+      const body = await c.req.json();
+      force = body?.force === true;
+    } catch {
+      // Empty body is valid - force defaults to false
+    }
+
+    const ws = getWS(c);
+    if (!ws.hasAgentConnection(instanceId)) {
+      return c.json(createErrorResponse({
+        message: "Agent not connected",
+        code: ERROR.RUNTIME.AGENT_NOT_CONNECTED.code,
+      }), ERROR.RUNTIME.AGENT_NOT_CONNECTED.status);
+    }
+
+    const { createSystemRestartTask } = await import("@/lib/tasks/types.js");
+    const taskId = ulid();
+    const task = createSystemRestartTask(taskId, force);
+
+    const sent = ws.sendTaskToAgent(instanceId, task);
+    if (!sent) {
+      return c.json(createErrorResponse({
+        message: "Failed to send restart task to agent",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    }
+
+    return c.json(createSuccessResponse({
+      status: "accepted",
+      taskId,
+      message: force
+        ? "Restart task sent (force mode - bypassing pending tasks check)"
+        : "Restart task sent (will wait for pending tasks to complete)",
+    }), 202);
+  } catch (error) {
+    console.error("Failed to send system restart task", error);
+    return c.json(createErrorResponse({
+      message: "Failed to send system restart task",
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
+});
+
 export default instances;

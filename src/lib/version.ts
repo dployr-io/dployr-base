@@ -32,7 +32,7 @@ export function isCompatible(
   return instanceCompatibilityDate >= requiredCompatibilityDate;
 }
 
-export type UpgradeLevel = "major" | "minor" | "none";
+export type UpgradeLevel = "major" | "minor" | "patch" | "none";
 
 /**
  * Returns the upgrade level for the given latest tag and current version.
@@ -47,5 +47,12 @@ export function getUpgradeLevel(
   if (!latest || !current) return "none";
   if (latest.major > current.major) return "major";
   if (latest.major === current.major && latest.minor > current.minor) return "minor";
+  if (
+    latest.major === current.major &&
+    latest.minor === current.minor &&
+    latest.patch > current.patch
+  ) {
+    return "patch";
+  }
   return "none";
 }

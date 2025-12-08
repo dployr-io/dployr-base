@@ -28,17 +28,17 @@ export interface DaemonTask {
 }
 
 // Log streaming task payload
-export const LogStreamPayloadSchema = z.object({
+export const LogStreamSchema = z.object({
   path: z.string().min(1),
   startOffset: z.number().int().optional(),
   limit: z.number().int().optional(),
   streamId: z.string().min(1),
 });
 
-export type LogStreamPayload = z.infer<typeof LogStreamPayloadSchema>;
+export type LogStreamPayload = z.infer<typeof LogStreamSchema>;
 
 // WebSocket message types for agent communication
-export const AgentTaskMessageSchema = z.object({
+export const AgentTaskSchema = z.object({
   kind: z.literal("task"),
   items: z.array(z.object({
     ID: z.string(),
@@ -48,18 +48,58 @@ export const AgentTaskMessageSchema = z.object({
   })),
 });
 
-export const AgentPullMessageSchema = z.object({
+export const AgentPullSchema = z.object({
   kind: z.literal("pull"),
 });
 
-export const AgentAckMessageSchema = z.object({
+export const AgentAckSchema = z.object({
   kind: z.literal("ack"),
   ids: z.array(z.string()),
 });
 
-export type AgentTaskMessage = z.infer<typeof AgentTaskMessageSchema>;
-export type AgentPullMessage = z.infer<typeof AgentPullMessageSchema>;
-export type AgentAckMessage = z.infer<typeof AgentAckMessageSchema>;
+export type AgentTaskMessage = z.infer<typeof AgentTaskSchema>;
+export type AgentPullMessage = z.infer<typeof AgentPullSchema>;
+export type AgentAckMessage = z.infer<typeof AgentAckSchema>;
+
+// System install task payload
+export const SystemInstallSchema = z.object({
+  version: z.string().optional(),
+});
+
+export type SystemInstallPayload = z.infer<typeof SystemInstallSchema>;
+
+// System restart task payload
+export const SystemRestartSchema = z.object({
+  force: z.boolean().optional().default(false),
+});
+
+export type SystemRestartPayload = z.infer<typeof SystemRestartSchema>;
+
+// Helper to create a system install task
+export function createSystemInstallTask(
+  taskId: string,
+  version?: string
+): DaemonTask {
+  return {
+    ID: taskId,
+    Type: "system/install:post",
+    Payload: { version },
+    Status: "pending",
+  };
+}
+
+// Helper to create a system restart task
+export function createSystemRestartTask(
+  taskId: string,
+  force: boolean = false
+): DaemonTask {
+  return {
+    ID: taskId,
+    Type: "system/restart:post",
+    Payload: { force },
+    Status: "pending",
+  };
+}
 
 // Helper to create a log streaming task
 export function createLogStreamTask(
