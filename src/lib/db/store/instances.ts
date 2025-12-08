@@ -59,7 +59,7 @@ export class InstanceStore extends BaseStore {
 
     async get(id: string): Promise<(Instance & { clusterId: string }) | null> {
         const stmt = this.db.prepare(`
-            SELECT instances.id, instances.address, instances.tag, instances.metadata, instances.created_at, instances.updated_at, clusters.id as clusterId
+            SELECT instances.id, instances.address, instances.tag, instances.metadata, instances.created_at, instances.updated_at, instances.cluster_id as cluster_id
             FROM instances
             JOIN user_clusters ON user_clusters.cluster_id = instances.cluster_id
             JOIN clusters ON clusters.id = user_clusters.cluster_id
@@ -74,10 +74,9 @@ export class InstanceStore extends BaseStore {
             address: result.address as string,
             tag: result.tag as string,
             metadata: (result as any).metadata || {},
-
             createdAt: result.created_at as number,
             updatedAt: result.updated_at as number,
-            clusterId: result.clusterId as string,
+            clusterId: result.cluster_id as string,
         };
     }
 

@@ -3,7 +3,10 @@
 
 import type { WebSocket } from "ws";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { createLogStreamTask, type DaemonTask } from "@/lib/tasks/types.js";
+import type { DployrdTask } from "@/lib/tasks/types.js";
+import { DployrdService } from "@/services/dployrd-service.js";
+import { KVStore } from "@/lib/db/store/kv.js";
+import { JWTService } from "@/services/jwt.js";
 
 interface InstanceConnection {
   ws: WebSocket;
@@ -27,6 +30,7 @@ export class WebSocketHandler {
   private connections = new Map<string, Set<InstanceConnection>>();
   // Track active log stream subscriptions: streamId -> subscription details
   private logStreams = new Map<string, LogStreamSubscription>();
+  private dployrd = new DployrdService();
 
   constructor(private kv: IKVAdapter) {}
 
@@ -139,7 +143,18 @@ export class WebSocketHandler {
           return;
         }
 
-        const streamId = `${conn.instanceId}:${path}`;
+        const offsetKey = startOffset ?? 0;
+        const limitKey = limit ?? -1;
+        const streamId = `${conn.instanceId}:${path}:${offsetKey}:${limitKey}`;
+
+        const existing = this.logStreams.get(streamId);
+        if (existing) {
+          // Reuse existing daemon log stream; just attach this client
+          existing.clientWs = conn.ws;
+          this.logStreams.set(streamId, existing);
+          console.log(`[WS] Reusing existing log stream ${streamId} for instance ${conn.instanceId}`);
+          return;
+        }
 
         this.logStreams.set(streamId, {
           streamId,
@@ -149,7 +164,11 @@ export class WebSocketHandler {
           limit,
         });
 
-        const task = createLogStreamTask(streamId, path, startOffset, limit);
+        const kvStore = new KVStore(this.kv);
+        const jwtService = new JWTService(kvStore);
+        const token = await jwtService.createAgentAccessToken(conn.instanceId);
+
+        const task = this.dployrd.createLogStreamTask(streamId, path, startOffset, limit, token);
 
         this.sendTaskToAgent(conn.instanceId, task);
 
@@ -159,9 +178,13 @@ export class WebSocketHandler {
       if (kind === "log_unsubscribe") {
         const path = payload?.path as string | undefined;
         if (path) {
-          const streamId = `${conn.instanceId}:${path}`;
-          this.logStreams.delete(streamId);
-          console.log(`[WS] Removed log stream ${streamId}`);
+          // Remove all streams for this instance/path belonging to this client
+          for (const [streamId, subscription] of this.logStreams.entries()) {
+            if (subscription.path === path && subscription.clientWs === conn.ws) {
+              this.logStreams.delete(streamId);
+              console.log(`[WS] Removed log stream ${streamId}`);
+            }
+          }
         }
       }
     }
@@ -194,7 +217,7 @@ export class WebSocketHandler {
    * Send a task to the agent for this instance.
    * Returns true if the task was sent, false if no agent is connected.
    */
-  public sendTaskToAgent(instanceId: string, task: DaemonTask): boolean {
+  public sendTaskToAgent(instanceId: string, task: DployrdTask): boolean {
     const conns = this.connections.get(instanceId);
     if (!conns) {
       console.warn(`[WS] No connections for instance ${instanceId}`);

@@ -5,16 +5,16 @@ import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse, SystemStatus } from "@/types/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { DatabaseStore } from "@/lib/db/store/index.js";
+import { DployrdService } from "@/services/dployrd-service.js";
 import { InstanceService } from "@/services/instances.js";
 import { InstanceConflictError } from "@/lib/db/store/instances.js";
 import z from "zod";
-import { requireClusterOwner, requireClusterViewer } from "@/middleware/auth.js";
+import { requireClusterAdmin, requireClusterOwner, requireClusterViewer } from "@/middleware/auth.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware } from "@/middleware/auth.js";
 import { JWTService } from "@/services/jwt.js";
 import { NotificationService } from "@/services/notifications.js";
 import { ulid } from "ulid";
-import { strictRateLimit } from "@/middleware/ratelimit.js";
 import { getKV, getDB, runBackground, getWS, type AppVariables } from "@/lib/context.js";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
@@ -31,13 +31,6 @@ const createInstanceSchema = z.object({
 
 const rotateSchema = z.object({
   token: z.string().min(1, "Token is required")
-});
-
-const logStreamRequestSchema = z.object({
-  path: z.string().min(2, "Path is required"),
-  mode: z.enum(["tail", "historical"]).default("tail"),
-  startFrom: z.number().int().optional(),
-  limit: z.number().int().min(1).max(1000).optional(),
 });
 
 // List all instances by cluster
@@ -206,7 +199,7 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
     const kv = new KVStore(getKV(c));
     const instance = await db.instances.get(instanceId);
 
-    if (!instance || instance.clusterId !== clusterId) {
+    if (!instance) {
       return c.json(
         createErrorResponse({
           message: "Instance not found",
@@ -214,6 +207,13 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
         }),
         ERROR.RESOURCE.MISSING_RESOURCE.status,
       );
+    }
+
+    if (instance.clusterId !== clusterId) {
+      return c.json(createErrorResponse({
+        message: ERROR.PERMISSION.OWNER_ROLE_REQUIRED.message,
+        code: ERROR.PERMISSION.OWNER_ROLE_REQUIRED.code,
+      }), ERROR.PERMISSION.OWNER_ROLE_REQUIRED.status);
     }
 
     await db.instances.delete(instanceId);
@@ -322,91 +322,6 @@ instances.post("/:instanceId/tokens/rotate", async (c) => {
   return c.json(createSuccessResponse({ token: rotated }), 200);
 });
 
-// Client WebSocket subscription for instance status/updates
-instances.get("/:instanceId/stream", requireClusterViewer, async (c) => {
-  const instanceId = c.req.param("instanceId");
-  const clusterId = c.req.query("clusterId");
-
-  if (!clusterId) {
-    return c.json(createErrorResponse({
-      message: "Cluster ID is required",
-      code: ERROR.REQUEST.BAD_REQUEST.code,
-    }), ERROR.REQUEST.BAD_REQUEST.status);
-  }
-
-  const db = new DatabaseStore(getDB(c) as any);
-  const instance = await db.instances.get(instanceId);
-  if (!instance || instance.clusterId !== clusterId) {
-    return c.json(createErrorResponse({
-      message: "Instance not found",
-      code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-    }), ERROR.RESOURCE.MISSING_RESOURCE.status);
-  }
-
-  // WebSocket upgrade is handled by the server-level upgrade handler
-  // This endpoint just validates the instance exists
-  return c.text("WebSocket upgrade required", 426);
-});
-
-// Stream logs from instance
-instances.post("/:instanceId/logs/stream", strictRateLimit, requireClusterViewer, async (c) => {
-  try {
-    const instanceId = c.req.param("instanceId");
-    const clusterId = c.req.query("clusterId");
-    const session = c.get("session")!;
-
-    if (!clusterId) {
-      return c.json(createErrorResponse({
-        message: "Cluster ID is required",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }), ERROR.REQUEST.BAD_REQUEST.status);
-    }
-
-    const body = await c.req.json();
-    const validation = logStreamRequestSchema.safeParse(body);
-    if (!validation.success) {
-      const errors = validation.error.issues.map((err) => ({
-        field: err.path.join("."),
-        message: err.message,
-      }));
-      return c.json(createErrorResponse({
-        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }), ERROR.REQUEST.BAD_REQUEST.status);
-    }
-
-    const { path, mode, startFrom: rawStartFrom, limit: rawLimit } = validation.data;
-    const startFrom = typeof rawStartFrom === "number" ? rawStartFrom : -1;
-    const limit = typeof rawLimit === "number" ? rawLimit : 100;
-
-    const db = new DatabaseStore(getDB(c) as any);
-    const instance = await db.instances.get(instanceId);
-    if (!instance || instance.clusterId !== clusterId) {
-      return c.json(createErrorResponse({
-        message: "Instance not found",
-        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-      }), ERROR.RESOURCE.MISSING_RESOURCE.status);
-    }
-
-    const service = new InstanceService(c.env);
-    const kv = new KVStore(getKV(c));
-    const token = await service.getOrCreateInstanceUserToken(kv, session, instanceId);
-    // streamId: instanceId:path - stable across reconnects
-    const streamId = `${instanceId}:${path}`;
-
-    // WebSocket log streaming is handled by the WS handler
-    // This HTTP endpoint is for historical log fetching only
-    // TODO: Implement HTTP-based log history endpoint if needed
-    return c.json({ error: "Use WebSocket /stream endpoint for log streaming" }, 501);
-  } catch (error) {
-    console.error("Failed to initiate log stream", error);
-    return c.json(createErrorResponse({
-      message: "Failed to initiate log stream",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
-  }
-});
-
 // System install - triggers dployrd install.sh with optional version
 instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => {
   try {
@@ -422,11 +337,18 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
 
     const db = new DatabaseStore(getDB(c) as any);
     const instance = await db.instances.get(instanceId);
-    if (!instance || instance.clusterId !== clusterId) {
+    if (!instance) {
       return c.json(createErrorResponse({
         message: "Instance not found",
         code: ERROR.RESOURCE.MISSING_RESOURCE.code,
       }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+    }
+
+    if (instance.clusterId !== clusterId) {
+      return c.json(createErrorResponse({
+        message: ERROR.PERMISSION.OWNER_ROLE_REQUIRED.message,
+        code: ERROR.PERMISSION.OWNER_ROLE_REQUIRED.code,
+      }), ERROR.PERMISSION.OWNER_ROLE_REQUIRED.status);
     }
 
     let version: string | undefined;
@@ -445,9 +367,16 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
       }), ERROR.RUNTIME.AGENT_NOT_CONNECTED.status);
     }
 
-    const { createSystemInstallTask } = await import("@/lib/tasks/types.js");
+    const kv = new KVStore(getKV(c));
+    const jwtService = new JWTService(kv);
+
     const taskId = ulid();
-    const task = createSystemInstallTask(taskId, version);
+    const dployrd = new DployrdService();
+    const token = await jwtService.createAgentAccessToken(instanceId, {
+      issuer: c.env.BASE_URL,
+      audience: "dployr-instance",
+    });
+    const task = dployrd.createSystemInstallTask(taskId, version, token);
 
     const sent = ws.sendTaskToAgent(instanceId, task);
     if (!sent) {
@@ -474,7 +403,7 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
 });
 
 // System restart - triggers OS reboot via dployrd
-instances.post("/:instanceId/system/restart", requireClusterOwner, async (c) => {
+instances.post("/:instanceId/system/restart", requireClusterAdmin, async (c) => {
   try {
     const instanceId = c.req.param("instanceId");
     const clusterId = c.req.query("clusterId");
@@ -488,11 +417,19 @@ instances.post("/:instanceId/system/restart", requireClusterOwner, async (c) => 
 
     const db = new DatabaseStore(getDB(c) as any);
     const instance = await db.instances.get(instanceId);
-    if (!instance || instance.clusterId !== clusterId) {
+
+    if (!instance) {
       return c.json(createErrorResponse({
         message: "Instance not found",
         code: ERROR.RESOURCE.MISSING_RESOURCE.code,
       }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+    }
+
+    if (instance.clusterId !== clusterId) {
+      return c.json(createErrorResponse({
+        message: ERROR.PERMISSION.ADMIN_ROLE_REQUIRED.message,
+        code: ERROR.PERMISSION.ADMIN_ROLE_REQUIRED.code,
+      }), ERROR.PERMISSION.ADMIN_ROLE_REQUIRED.status);
     }
 
     let force = false;
@@ -511,9 +448,16 @@ instances.post("/:instanceId/system/restart", requireClusterOwner, async (c) => 
       }), ERROR.RUNTIME.AGENT_NOT_CONNECTED.status);
     }
 
-    const { createSystemRestartTask } = await import("@/lib/tasks/types.js");
+    const kv = new KVStore(getKV(c));
+    const jwtService = new JWTService(kv);
+
     const taskId = ulid();
-    const task = createSystemRestartTask(taskId, force);
+    const dployrd = new DployrdService();
+    const token = await jwtService.createAgentAccessToken(instanceId, {
+      issuer: c.env.BASE_URL,
+      audience: "dployr-instance",
+    });
+    const task = dployrd.createSystemRestartTask(taskId, force, token);
 
     const sent = ws.sendTaskToAgent(instanceId, task);
     if (!sent) {

@@ -20,7 +20,7 @@ export type TaskAddress = `${string}:${HttpMethod}`;
 export type TaskStatus = "pending" | "in_progress" | "done" | "failed";
 
 // Base Task structure that daemon expects
-export interface DaemonTask {
+export interface DployrdTask {
   ID: string;
   Type: TaskAddress;
   Payload: any;
@@ -74,49 +74,3 @@ export const SystemRestartSchema = z.object({
 });
 
 export type SystemRestartPayload = z.infer<typeof SystemRestartSchema>;
-
-// Helper to create a system install task
-export function createSystemInstallTask(
-  taskId: string,
-  version?: string
-): DaemonTask {
-  return {
-    ID: taskId,
-    Type: "system/install:post",
-    Payload: { version },
-    Status: "pending",
-  };
-}
-
-// Helper to create a system restart task
-export function createSystemRestartTask(
-  taskId: string,
-  force: boolean = false
-): DaemonTask {
-  return {
-    ID: taskId,
-    Type: "system/restart:post",
-    Payload: { force },
-    Status: "pending",
-  };
-}
-
-// Helper to create a log streaming task
-export function createLogStreamTask(
-  streamId: string,
-  path: string,
-  startOffset?: number,
-  limit?: number
-): DaemonTask {
-  return {
-    ID: streamId,
-    Type: "logs/stream:post",
-    Payload: {
-      path,
-      startOffset,
-      limit,
-      streamId,
-    },
-    Status: "pending",
-  };
-}
