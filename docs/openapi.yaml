@@ -1763,7 +1763,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          description: Agent not connected
+          description: Instance is not connected or unresponsive
           content:
             application/json:
               schema:
@@ -1772,6 +1772,86 @@ paths:
   /v1/instances/{instanceId}/system/restart:
     post:
       operationId: systemRestart
+      tags:
+        - Instances
+      summary: Restart the dployrd daemon 
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      description: |
+        Triggers a restart of the dployrd daemon on the instance without rebooting
+        the underlying operating system.
+
+        By default, the daemon will wait for any pending tasks to complete before
+        restarting. Set `force: true` to bypass this check and restart immediately.
+
+        The request returns before the daemon has fully restarted. Expect temporary
+        loss of agent connectivity shortly after an "accepted" response.
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  default: false
+                  description: If true, bypass pending tasks check and restart immediately.
+      responses:
+        '202':
+          description: Restart task accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            enum: [accepted]
+                          taskId:
+                            type: string
+                            description: Unique task ID for tracking.
+                          message:
+                            type: string
+        '400':
+          description: Missing clusterId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Instance is not connected or unresponsive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/instances/{instanceId}/system/reboot:
+    post:
+      operationId: systemReboot
       tags:
         - Instances
       summary: Restart the instance (OS reboot)
@@ -1842,7 +1922,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          description: Agent not connected
+          description: Instance is not connected or unresponsive
           content:
             application/json:
               schema:
@@ -2057,19 +2137,19 @@ paths:
                           compatible:
                             type: boolean
                             description: Whether the daemon is compatible.
-                          compatibility_date:
+                          compatibilityDate:
                             type: string
                             description: The daemon's compatibility date.
                           version:
                             type: string
                             description: The daemon's version (if provided).
-                          latest_version:
+                          latestVersion:
                             type: string
                             description: Latest known daemon/base version tag used for upgrade level calculation.
-                          upgrade_level:
+                          upgradeLevel:
                             type: string
                             description: Upgrade level relative to latest_version (major, minor, patch, or none).
-                          required_compatibility_date:
+                          requiredCompatibilityDate:
                             type: string
                             description: The server's required compatibility date.
                           message:
@@ -2081,22 +2161,22 @@ paths:
                     success: true
                     data:
                       compatible: true
-                      compatibility_date: "2025-11-23"
+                      compatibilityDate: "2025-11-23"
                       version: "v0.4.6"
-                      latest_version: "v0.4.6"
-                      upgrade_level: "none"
-                      required_compatibility_date: "2025-11-23"
+                      latestVersion: "v0.4.6"
+                      upgradeLevel: "none"
+                      requiredCompatibilityDate: "2025-11-23"
                       message: "dployrd is supported"
                 incompatible:
                   value:
                     success: true
                     data:
                       compatible: false
-                      compatibility_date: "2025-10-15"
+                      compatibilityDate: "2025-10-15"
                       version: "v0.3.2"
-                      latest_version: "v0.4.6"
-                      upgrade_level: "major"
-                      required_compatibility_date: "2025-11-23"
+                      latestVersion: "v0.4.6"
+                      upgradeLevel: "major"
+                      requiredCompatibilityDate: "2025-11-23"
                       message: "dployrd requires compatibility_date 2025-11-23 (received: 2025-10-15)"
         '400':
           description: Invalid request body or date format
@@ -2106,6 +2186,81 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/runtime/versions:
+    get:
+      operationId: listRuntimeVersions
+      tags:
+        - Runtime
+      summary: List available dployrd versions
+      x-requiredRole: public
+      security: []
+      description: |
+        Returns the list of published dployrd release tags from GitHub.
+
+        By default this includes only stable releases. Pass `showPreReleases=true`
+        to include prerelease versions as well.
+      parameters:
+        - in: query
+          name: showPreReleases
+          required: false
+          schema:
+            type: boolean
+          description: If true, include prerelease versions in the results.
+      responses:
+        '200':
+          description: Available versions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          latest:
+                            type: string
+                            nullable: true
+                            description: Latest available version tag (first non-draft release).
+                          versions:
+                            type: array
+                            description: Ordered list of available version tags (most recent first).
+                            items:
+                              type: string
+                          oldestSupportedVersion:
+                            type: string
+                            nullable: true
+                          includePreReleases:
+                            type: boolean
+                            description: Whether prerelease versions were included in this response.
+              examples:
+                default:
+                  value:
+                    success: true
+                    message: Fetched available dployrd versions
+                    data:
+                      latest: v0.4.8
+                      oldestSupportedVersion: v0.4.5
+                      versions:
+                        - v0.4.8
+                        - v0.4.7
+                        - v0.4.6
+                        - v0.4.5
+                      includePreReleases: false
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Failed to fetch versions
           content:
             application/json:
               schema:

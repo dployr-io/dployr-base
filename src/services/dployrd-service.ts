@@ -14,11 +14,22 @@ export class DployrdService {
     };
   }
 
-  // Create a system restart task
-  createSystemRestartTask(taskId: string, force: boolean = false, token?: string): DployrdTask {
+  
+  // Create a dployrd restart task
+  createDaemonRestartTask(taskId: string, force: boolean = false, token?: string): DployrdTask {
     return {
       ID: taskId,
       Type: "system/restart:post",
+      Payload: { force, token },
+      Status: "pending",
+    };
+  }
+
+  // Create a system reboot task
+  createSystemRebootTask(taskId: string, force: boolean = false, token?: string): DployrdTask {
+    return {
+      ID: taskId,
+      Type: "system/reboot:post",
       Payload: { force, token },
       Status: "pending",
     };

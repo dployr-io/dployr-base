@@ -9,7 +9,7 @@ import { DployrdService } from "@/services/dployrd-service.js";
 import { InstanceService } from "@/services/instances.js";
 import { InstanceConflictError } from "@/lib/db/store/instances.js";
 import z from "zod";
-import { requireClusterAdmin, requireClusterOwner, requireClusterViewer } from "@/middleware/auth.js";
+import { requireClusterAdmin, requireClusterDeveloper, requireClusterOwner, requireClusterViewer } from "@/middleware/auth.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware } from "@/middleware/auth.js";
 import { JWTService } from "@/services/jwt.js";
@@ -362,20 +362,26 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
     const ws = getWS(c);
     if (!ws.hasAgentConnection(instanceId)) {
       return c.json(createErrorResponse({
-        message: "Agent not connected",
-        code: ERROR.RUNTIME.AGENT_NOT_CONNECTED.code,
-      }), ERROR.RUNTIME.AGENT_NOT_CONNECTED.status);
+        message: "Instance is not connected or unresponsive",
+        code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code,
+      }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
 
+    const session = c.get("session")!;
     const kv = new KVStore(getKV(c));
     const jwtService = new JWTService(kv);
 
     const taskId = ulid();
     const dployrd = new DployrdService();
-    const token = await jwtService.createAgentAccessToken(instanceId, {
-      issuer: c.env.BASE_URL,
-      audience: "dployr-instance",
-    });
+    const token = await jwtService.createInstanceAccessToken(
+      session,
+      instanceId,
+      "owner",
+      {
+        issuer: c.env.BASE_URL,
+        audience: "dployr-instance",
+      },
+    );
     const task = dployrd.createSystemInstallTask(taskId, version, token);
 
     const sent = ws.sendTaskToAgent(instanceId, task);
@@ -402,8 +408,8 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
   }
 });
 
-// System restart - triggers OS reboot via dployrd
-instances.post("/:instanceId/system/restart", requireClusterAdmin, async (c) => {
+// System reboot - triggers OS reboot via dployrd
+instances.post("/:instanceId/system/reboot", requireClusterAdmin, async (c) => {
   try {
     const instanceId = c.req.param("instanceId");
     const clusterId = c.req.query("clusterId");
@@ -443,9 +449,9 @@ instances.post("/:instanceId/system/restart", requireClusterAdmin, async (c) => 
     const ws = getWS(c);
     if (!ws.hasAgentConnection(instanceId)) {
       return c.json(createErrorResponse({
-        message: "Agent not connected",
-        code: ERROR.RUNTIME.AGENT_NOT_CONNECTED.code,
-      }), ERROR.RUNTIME.AGENT_NOT_CONNECTED.status);
+        message: "Instance is not connected or unresponsive",
+        code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code,
+      }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
 
     const kv = new KVStore(getKV(c));
@@ -453,11 +459,104 @@ instances.post("/:instanceId/system/restart", requireClusterAdmin, async (c) => 
 
     const taskId = ulid();
     const dployrd = new DployrdService();
-    const token = await jwtService.createAgentAccessToken(instanceId, {
-      issuer: c.env.BASE_URL,
-      audience: "dployr-instance",
-    });
-    const task = dployrd.createSystemRestartTask(taskId, force, token);
+    const session = c.get("session")!;
+    const token = await jwtService.createInstanceAccessToken(
+      session,
+      instanceId,
+      "admin",
+      {
+        issuer: c.env.BASE_URL,
+        audience: "dployr-instance",
+      },
+    );
+    const task = dployrd.createSystemRebootTask(taskId, force, token);
+
+    const sent = ws.sendTaskToAgent(instanceId, task);
+    if (!sent) {
+      return c.json(createErrorResponse({
+        message: "Failed to send reboot task to agent",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    }
+
+    return c.json(createSuccessResponse({
+      status: "accepted",
+      taskId,
+      message: force
+        ? "Reboot task sent (force mode - bypassing pending tasks check)"
+        : "Reboot task sent (will wait for pending tasks to complete)",
+    }), 202);
+  } catch (error) {
+    console.error("Failed to send system reboot task", error);
+    return c.json(createErrorResponse({
+      message: "Failed to send system reboot task",
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
+});
+
+// System restart - restarts the dployrd daemon on the instance
+instances.post("/:instanceId/system/restart", requireClusterDeveloper, async (c) => {
+  try {
+    const instanceId = c.req.param("instanceId");
+    const clusterId = c.req.query("clusterId");
+
+    if (!clusterId) {
+      return c.json(createErrorResponse({
+        message: "Cluster ID is required",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }), ERROR.REQUEST.BAD_REQUEST.status);
+    }
+
+    const db = new DatabaseStore(getDB(c) as any);
+    const instance = await db.instances.get(instanceId);
+
+    if (!instance) {
+      return c.json(createErrorResponse({
+        message: "Instance not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+    }
+
+    if (instance.clusterId !== clusterId) {
+      return c.json(createErrorResponse({
+        message: ERROR.PERMISSION.ADMIN_ROLE_REQUIRED.message,
+        code: ERROR.PERMISSION.ADMIN_ROLE_REQUIRED.code,
+      }), ERROR.PERMISSION.ADMIN_ROLE_REQUIRED.status);
+    }
+
+    let force = false;
+    try {
+      const body = await c.req.json();
+      force = body?.force === true;
+    } catch {
+      // Empty body is valid - force defaults to false
+    }
+
+    const ws = getWS(c);
+    if (!ws.hasAgentConnection(instanceId)) {
+      return c.json(createErrorResponse({
+        message: "Instance is not connected or unresponsive",
+        code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code,
+      }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
+    }
+
+    const kv = new KVStore(getKV(c));
+    const jwtService = new JWTService(kv);
+
+    const taskId = ulid();
+    const dployrd = new DployrdService();
+    const session = c.get("session")!;
+    const token = await jwtService.createInstanceAccessToken(
+      session,
+      instanceId,
+      "admin",
+      {
+        issuer: c.env.BASE_URL,
+        audience: "dployr-instance",
+      },
+    );
+    const task = dployrd.createDaemonRestartTask(taskId, force, token);
 
     const sent = ws.sendTaskToAgent(instanceId, task);
     if (!sent) {

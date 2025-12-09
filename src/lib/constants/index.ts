@@ -4,7 +4,7 @@
 export const WORKFLOW_NAME = 'dployr-bootstrap';
 
 // Versioning
-export const LATEST_COMPATIBILITY_DATE = "2025-11-23";
+export const LATEST_COMPATIBILITY_DATE = "2025-12-09";
 
 // KVs
 export const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
@@ -49,7 +49,7 @@ export const ERROR = {
     RUNTIME: {
         BAD_WEBHOOK_SIGNATURE: { code: "runtime.bad_webhook_signature", status: 500, message: "Invalid webhook signature" },
         INTERNAL_SERVER_ERROR: { code: "runtime.internal_server_error", status: 500, message: "Internal server error" },
-        AGENT_NOT_CONNECTED: { code: "runtime.agent_not_connected", status: 503, message: "Agent not connected to instance" }
+        INSTANCE_NOT_CONNECTED: { code: "runtime.agent_not_connected", status: 503, message: "Instance is not connected or unresponsive to instance" }
     }
 } as const;
 

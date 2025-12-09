@@ -18,9 +18,16 @@ type EventsFilters = {
 };
 
 const compatibilityCheckSchema = z.object({
-  compatibility_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format. Expected YYYY-MM-DD"),
+  compatibilityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format. Expected YYYY-MM-DD"),
   version: z.string().optional(),
 });
+
+type GitHubRelease = {
+  tag_name?: string;
+  prerelease?: boolean;
+  draft?: boolean;
+  published_at?: string;
+};
 
 const runtime = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
@@ -41,10 +48,10 @@ runtime.post("/compatibility/check", async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const { compatibility_date, version } = validation.data;
-    const compatible = isCompatible(compatibility_date, LATEST_COMPATIBILITY_DATE);
+    const { compatibilityDate, version } = validation.data;
+    const compatible = isCompatible(compatibilityDate, LATEST_COMPATIBILITY_DATE);
 
-    let latest_version: string | undefined;
+    let latestVersion: string | undefined;
     try {
       const resp = await fetch("https://api.github.com/repos/dployr-io/dployr/releases/latest", {
         headers: {
@@ -56,7 +63,7 @@ runtime.post("/compatibility/check", async (c) => {
       if (resp.ok) {
         const data = await resp.json() as { tag_name?: string };
         if (typeof data.tag_name === "string" && data.tag_name.length > 0) {
-          latest_version = data.tag_name;
+          latestVersion = data.tag_name;
         }
       } else {
         console.error("Failed to fetch latest daemon version from GitHub", resp.status, await resp.text());
@@ -65,20 +72,20 @@ runtime.post("/compatibility/check", async (c) => {
       console.error("Error fetching latest daemon version from GitHub", err);
     }
 
-    const upgrade_level = latest_version && version
-      ? getUpgradeLevel(latest_version, version)
+    const upgradeLevel = latestVersion && version
+      ? getUpgradeLevel(latestVersion, version)
       : "none";
 
     return c.json(createSuccessResponse({
       compatible,
-      compatibility_date,
+      compatibilityDate,
       version,
-      latest_version,
-      upgrade_level,
-      required_compatibility_date: LATEST_COMPATIBILITY_DATE,
+      latestVersion,
+      upgradeLevel,
+      requiredCompatibilityDate: LATEST_COMPATIBILITY_DATE,
       message: compatible
         ? "dployrd is supported"
-        : `dployrd requires compatibility_date ${LATEST_COMPATIBILITY_DATE} (received: ${compatibility_date})`,
+        : `dployrd requires compatibility_date ${LATEST_COMPATIBILITY_DATE} (received: ${compatibilityDate})`,
     }));
   } catch (error) {
     console.error("Failed to check compatibility", error);
@@ -89,11 +96,74 @@ runtime.post("/compatibility/check", async (c) => {
   }
 });
 
-runtime.use("*", authMiddleware);
+// Public endpoint to list available dployrd versions from GitHub releases
+runtime.get("/versions", async (c) => {
+  try {
+    const showPreReleases = c.req.query("showPreReleases");
+    const includePreReleases = showPreReleases === "true";
 
-runtime.get("/events", requireClusterViewer, async (c) => {
+    const resp = await fetch("https://api.github.com/repos/dployr-io/dployr/releases", {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "dployr-base",
+      },
+    });
+
+    if (!resp.ok) {
+      console.error("Failed to fetch releases from GitHub", resp.status, await resp.text());
+      return c.json(createErrorResponse({
+        message: "Failed to fetch available versions",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    }
+
+    const releases = await resp.json() as GitHubRelease[];
+
+    const filtered = releases.filter((r) => {
+      if (r.draft) return false;
+      if (!includePreReleases && r.prerelease) return false;
+      return typeof r.tag_name === "string" && r.tag_name.length > 0;
+    });
+
+    const versions = filtered.map((r) => r.tag_name!) as string[];
+    const latest = versions[0] ?? null;
+    const compatibilityCutoffTimestamp = Date.parse(`${LATEST_COMPATIBILITY_DATE}T00:00:00Z`);
+
+    let oldestSupportedVersion: string | null = null;
+    if (!Number.isNaN(compatibilityCutoffTimestamp)) {
+      for (let i = filtered.length - 1; i >= 0; i -= 1) {
+        const publishedAt = filtered[i].published_at;
+        if (!publishedAt) continue;
+        const publishedTimestamp = Date.parse(publishedAt);
+        if (Number.isNaN(publishedTimestamp)) continue;
+        if (publishedTimestamp >= compatibilityCutoffTimestamp) {
+          oldestSupportedVersion = filtered[i].tag_name!;
+          break;
+        }
+      }
+    }
+
+    if (!oldestSupportedVersion && versions.length > 0) {
+      oldestSupportedVersion = versions[versions.length - 1];
+    }
+
+    return c.json(createSuccessResponse({
+      latest,
+      oldestSupportedVersion,
+      versions,
+      includePreReleases,
+    }));
+  } catch (error) {
+    console.error("Failed to fetch available versions", error);
+    return c.json(createErrorResponse({
+      message: "Failed to fetch available versions",
+      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
+});
+
+runtime.get("/events", authMiddleware, requireClusterViewer, async (c) => {
   const kv = new KVStore(getKV(c));
-  const session = c.get("session")!;
   const clusterId = c.req.query("clusterId");
 
   if (!clusterId) {
