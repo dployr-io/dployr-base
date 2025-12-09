@@ -171,18 +171,40 @@ export class KVStore {
     const events = await Promise.all(
       result.map(async (key) => {
         const data = await this.kv.get(key.name);
-        return data ? JSON.parse(data) : null;
+        if (!data) return null;
+        try {
+          return JSON.parse(data);
+        } catch (err) {
+          console.warn("[KV] Skipping invalid event JSON", { key: key.name, err });
+          return null;
+        }
       })
     );
     return events.filter(e => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
   }
 
   async getClusterEvents(clusterId: string): Promise<any[]> {
-    const result = await this.kv.list({ prefix: `target:${clusterId}:event:` });
+    const prefix = `target:${clusterId}:event:`;
+    const result = await this.kv.list({ prefix });
     const events = await Promise.all(
       result.map(async (key) => {
+        if (!key.name.startsWith(prefix)) {
+          console.warn("[KV] Skipping unexpected cluster event key", { key: key.name, expectedPrefix: prefix });
+          return null;
+        }
         const data = await this.kv.get(key.name);
-        return data ? JSON.parse(data) : null;
+        if (!data) return null;
+        const trimmed = data.trimStart();
+        if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) {
+          console.warn("[KV] Skipping non-JSON cluster event payload", { key: key.name });
+          return null;
+        }
+        try {
+          return JSON.parse(data);
+        } catch (err) {
+          console.warn("[KV] Skipping invalid cluster event JSON", { key: key.name, err });
+          return null;
+        }
       })
     );
     return events.filter(e => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
