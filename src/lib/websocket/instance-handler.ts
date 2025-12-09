@@ -3,36 +3,41 @@
 
 import type { WebSocket } from "ws";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import type { DployrdTask } from "@/lib/tasks/types.js";
-import { DployrdService } from "@/services/dployrd-service.js";
+import type { AgentTask } from "@/lib/tasks/types.js";
+import { AgentService } from "@/services/dployrd-service.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { JWTService } from "@/services/jwt.js";
-
-interface InstanceConnection {
-  ws: WebSocket;
-  role: "agent" | "client";
-  instanceId: string;
-}
-
-interface LogStreamSubscription {
-  streamId: string;
-  path: string;
-  clientWs: WebSocket;
-  startOffset?: number;
-  limit?: number;
-}
+import { ConnectionManager } from "./connection-manager.js";
+import { AgentMessageHandler } from "./handlers/dployrd-handler.js";
+import { ClientMessageHandler } from "./handlers/client-handler.js";
+import { parseMessage, MessageKind, type InstanceConnection } from "./message-types.js";
 
 /**
- * Simple in-memory WebSocket handler for instance streams.
- * Replaces the old Durable Object adapter with a Node-native implementation.
+ * WebSocket handler for instance streams.
+ * Coordinates connection management and message routing between agents and clients.
  */
 export class WebSocketHandler {
-  private connections = new Map<string, Set<InstanceConnection>>();
-  // Track active log stream subscriptions: streamId -> subscription details
-  private logStreams = new Map<string, LogStreamSubscription>();
-  private dployrd = new DployrdService();
+  private connectionManager: ConnectionManager;
+  private dployrdHandler: AgentMessageHandler;
+  private clientHandler: ClientMessageHandler;
 
-  constructor(private kv: IKVAdapter) {}
+  constructor(private kv: IKVAdapter) {
+    this.connectionManager = new ConnectionManager();
+
+    // Initialize handlers with dependencies
+    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, kv);
+
+    const jwtService = new JWTService(new KVStore(this.kv));
+    const dployrdService = new AgentService();
+
+    this.clientHandler = new ClientMessageHandler({
+      connectionManager: this.connectionManager,
+      kv,
+      jwtService,
+      dployrdService,
+      sendTaskToAgent: this.sendTaskToAgent.bind(this),
+    });
+  }
 
   /**
    * Register a new WebSocket connection for an instance.
@@ -42,174 +47,38 @@ export class WebSocketHandler {
     ws: WebSocket,
     role: "agent" | "client"
   ): void {
-    if (!this.connections.has(instanceId)) {
-      this.connections.set(instanceId, new Set());
-    }
-
-    const conn: InstanceConnection = { ws, role, instanceId };
-    this.connections.get(instanceId)!.add(conn);
+    const conn = this.connectionManager.addConnection(instanceId, ws, role);
 
     ws.on("message", (data) => {
       this.handleMessage(conn, data).catch((err) => {
-        console.error(
-          `[WS] Error handling message for instance ${instanceId}:`,
-          err
-        );
+        console.error(`[WS] Error handling message for instance ${instanceId}:`, err);
       });
     });
 
     ws.on("close", () => {
-      this.removeConnection(conn);
+      this.connectionManager.removeConnection(conn);
     });
 
     ws.on("error", (err) => {
-      console.error(
-        `[WS] Error on connection for instance ${instanceId}:`,
-        err
-      );
-      this.removeConnection(conn);
+      console.error(`[WS] Error on connection for instance ${instanceId}:`, err);
+      this.connectionManager.removeConnection(conn);
     });
-
-    console.log(`[WS] ${role} connected to instance ${instanceId}`);
   }
 
-  private async handleMessage(
-    conn: InstanceConnection,
-    data: any
-  ): Promise<void> {
-    let payload: any;
-    try {
-      payload = JSON.parse(data.toString());
-    } catch {
+  /**
+   * Route incoming messages to the appropriate handler
+   */
+  private async handleMessage(conn: InstanceConnection, data: unknown): Promise<void> {
+    const message = parseMessage(data);
+    if (!message) {
+      console.error("[WS] Invalid message format");
       return;
     }
 
-    const kind = payload?.kind;
-    if (!kind) {
-      console.error("[WS] Invalid message format for instance", payload);
-      return;
-    }
-
-    // Agent sends updates/status/logs
     if (conn.role === "agent") {
-      if (
-        kind === "update" ||
-        kind === "status_report"
-      ) {
-        // Broadcast to all clients subscribed to this instance
-        this.broadcastToClients(conn.instanceId, payload);
-      }
-
-      // Handle log chunks - route to specific stream subscriber
-      if (kind === "log_chunk") {
-        const streamId = payload?.streamId as string | undefined;
-        if (streamId) {
-          const subscription = this.logStreams.get(streamId);
-          if (subscription) {
-            try {
-              subscription.clientWs.send(JSON.stringify(payload));
-            } catch (err) {
-              console.error(`[WS] Failed to send log chunk to client:`, err);
-              // Clean up dead subscription
-              this.logStreams.delete(streamId);
-            }
-          }
-        } else {
-          console.warn(`[WS] Received log_chunk without streamId`);
-        }
-      }
-    }
-
-    // Client subscribes to updates
-    if (conn.role === "client") {
-      if (kind === "client_subscribe") {
-        const cached = await this.kv.get(`instance:${conn.instanceId}:status`);
-        if (cached) {
-          try {
-            conn.ws.send(cached);
-          } catch (err) {
-            console.error(`[WS] Failed to send cached status:`, err);
-          }
-        }
-      }
-
-      if (kind === "log_subscribe") {
-        const path = payload?.path as string | undefined;
-        const startOffset = payload?.startOffset as number | undefined;
-        const limit = payload?.limit as number | undefined;
-
-        if (!path) {
-          console.error("[WS] log_subscribe missing path");
-          return;
-        }
-
-        const offsetKey = startOffset ?? 0;
-        const limitKey = limit ?? -1;
-        const streamId = `${conn.instanceId}:${path}:${offsetKey}:${limitKey}`;
-
-        const existing = this.logStreams.get(streamId);
-        if (existing) {
-          // Reuse existing daemon log stream; just attach this client
-          existing.clientWs = conn.ws;
-          this.logStreams.set(streamId, existing);
-          console.log(`[WS] Reusing existing log stream ${streamId} for instance ${conn.instanceId}`);
-          return;
-        }
-
-        this.logStreams.set(streamId, {
-          streamId,
-          path,
-          clientWs: conn.ws,
-          startOffset,
-          limit,
-        });
-
-        const kvStore = new KVStore(this.kv);
-        const jwtService = new JWTService(kvStore);
-        const token = await jwtService.createAgentAccessToken(conn.instanceId);
-
-        const task = this.dployrd.createLogStreamTask(streamId, path, startOffset, limit, token);
-
-        this.sendTaskToAgent(conn.instanceId, task);
-
-        console.log(`[WS] Created log stream task ${streamId} for instance ${conn.instanceId}`);
-      }
-
-      if (kind === "log_unsubscribe") {
-        const path = payload?.path as string | undefined;
-        if (path) {
-          // Remove all streams for this instance/path belonging to this client
-          for (const [streamId, subscription] of this.logStreams.entries()) {
-            if (subscription.path === path && subscription.clientWs === conn.ws) {
-              this.logStreams.delete(streamId);
-              console.log(`[WS] Removed log stream ${streamId}`);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  private broadcastToClients(instanceId: string, message: any): void {
-    const conns = this.connections.get(instanceId);
-    if (!conns) return;
-
-    const payload = JSON.stringify(message);
-    for (const conn of conns) {
-      if (conn.role === "client") {
-        try {
-          conn.ws.send(payload);
-        } catch (err) {
-          console.error(`[WS] Failed to send to client:`, err);
-        }
-      }
-    }
-
-    // Cache latest status for new subscribers
-    if (message.kind === "status_report" || message.kind === "update") {
-      this.kv
-        .put(`instance:${instanceId}:status`, payload, { expirationTtl: 300 })
-        .catch((err) => console.error(`[WS] Failed to cache status:`, err));
+      await this.dployrdHandler.handleMessage(conn, message);
+    } else {
+      await this.clientHandler.handleMessage(conn, message);
     }
   }
 
@@ -217,21 +86,15 @@ export class WebSocketHandler {
    * Send a task to the agent for this instance.
    * Returns true if the task was sent, false if no agent is connected.
    */
-  public sendTaskToAgent(instanceId: string, task: DployrdTask): boolean {
-    const conns = this.connections.get(instanceId);
-    if (!conns) {
-      console.warn(`[WS] No connections for instance ${instanceId}`);
-      return false;
-    }
-
-    const agentConn = Array.from(conns).find(c => c.role === "agent");
+  public sendTaskToAgent(instanceId: string, task: AgentTask): boolean {
+    const agentConn = this.connectionManager.getAgentConnection(instanceId);
     if (!agentConn) {
       console.warn(`[WS] No agent connection for instance ${instanceId}`);
       return false;
     }
 
     const message = {
-      kind: "task",
+      kind: MessageKind.TASK,
       items: [task],
     };
 
@@ -249,32 +112,6 @@ export class WebSocketHandler {
    * Check if an agent is connected for the given instance.
    */
   public hasAgentConnection(instanceId: string): boolean {
-    const conns = this.connections.get(instanceId);
-    if (!conns) return false;
-    return Array.from(conns).some(c => c.role === "agent");
-  }
-
-  private removeConnection(conn: InstanceConnection): void {
-    const conns = this.connections.get(conn.instanceId);
-    if (conns) {
-      conns.delete(conn);
-      if (conns.size === 0) {
-        this.connections.delete(conn.instanceId);
-      }
-    }
-
-    // Clean up log streams for this client
-    if (conn.role === "client") {
-      for (const [streamId, subscription] of this.logStreams.entries()) {
-        if (subscription.clientWs === conn.ws) {
-          this.logStreams.delete(streamId);
-          console.log(`[WS] Cleaned up log stream ${streamId}`);
-        }
-      }
-    }
-
-    console.log(
-      `[WS] ${conn.role} disconnected from instance ${conn.instanceId}`
-    );
+    return this.connectionManager.hasAgentConnection(instanceId);
   }
 }

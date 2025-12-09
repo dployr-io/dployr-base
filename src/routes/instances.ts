@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse, SystemStatus } from "@/types/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { DatabaseStore } from "@/lib/db/store/index.js";
-import { DployrdService } from "@/services/dployrd-service.js";
+import { AgentService } from "@/services/dployrd-service.js";
 import { InstanceService } from "@/services/instances.js";
 import { InstanceConflictError } from "@/lib/db/store/instances.js";
 import z from "zod";
@@ -372,7 +372,7 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
     const jwtService = new JWTService(kv);
 
     const taskId = ulid();
-    const dployrd = new DployrdService();
+    const dployrd = new AgentService();
     const token = await jwtService.createInstanceAccessToken(
       session,
       instanceId,
@@ -458,7 +458,7 @@ instances.post("/:instanceId/system/reboot", requireClusterAdmin, async (c) => {
     const jwtService = new JWTService(kv);
 
     const taskId = ulid();
-    const dployrd = new DployrdService();
+    const dployrd = new AgentService();
     const session = c.get("session")!;
     const token = await jwtService.createInstanceAccessToken(
       session,
@@ -545,7 +545,7 @@ instances.post("/:instanceId/system/restart", requireClusterDeveloper, async (c)
     const jwtService = new JWTService(kv);
 
     const taskId = ulid();
-    const dployrd = new DployrdService();
+    const dployrd = new AgentService();
     const session = c.get("session")!;
     const token = await jwtService.createInstanceAccessToken(
       session,

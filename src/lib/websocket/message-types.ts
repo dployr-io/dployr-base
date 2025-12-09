@@ -1,0 +1,130 @@
+// Copyright 2025 Emmanuel Madehin
+// SPDX-License-Identifier: Apache-2.0
+
+import type { WebSocket } from "ws";
+
+/**
+ * Message kind constants
+ */
+export const MessageKind = {
+  // Agent -> Server
+  UPDATE: "update",
+  LOG_CHUNK: "log_chunk",
+
+  // Client -> Server
+  CLIENT_SUBSCRIBE: "client_subscribe",
+  LOG_SUBSCRIBE: "log_subscribe",
+  LOG_UNSUBSCRIBE: "log_unsubscribe",
+
+  // Server -> Agent
+  TASK: "task",
+} as const;
+
+export type MessageKindType = (typeof MessageKind)[keyof typeof MessageKind];
+
+/**
+ * Base message interface
+ */
+export interface BaseMessage {
+  kind: string;
+}
+
+/**
+ * Agent messages
+ */
+export interface UpdateMessage extends BaseMessage {
+  kind: typeof MessageKind.UPDATE;
+  [key: string]: unknown;
+}
+
+export interface LogChunkMessage extends BaseMessage {
+  kind: typeof MessageKind.LOG_CHUNK;
+  streamId?: string;
+  data?: string;
+  [key: string]: unknown;
+}
+
+export type AgentMessage = UpdateMessage | LogChunkMessage;
+
+/**
+ * Client messages
+ */
+export interface ClientSubscribeMessage extends BaseMessage {
+  kind: typeof MessageKind.CLIENT_SUBSCRIBE;
+}
+
+export interface LogSubscribeMessage extends BaseMessage {
+  kind: typeof MessageKind.LOG_SUBSCRIBE;
+  path: string;
+  startOffset?: number;
+  limit?: number;
+}
+
+export interface LogUnsubscribeMessage extends BaseMessage {
+  kind: typeof MessageKind.LOG_UNSUBSCRIBE;
+  path?: string;
+}
+
+export type ClientMessage = ClientSubscribeMessage | LogSubscribeMessage | LogUnsubscribeMessage;
+
+/**
+ * All inbound messages
+ */
+export type InboundMessage = AgentMessage | ClientMessage;
+
+/**
+ * Connection types
+ */
+export type ConnectionRole = "agent" | "client";
+
+export interface InstanceConnection {
+  ws: WebSocket;
+  role: ConnectionRole;
+  instanceId: string;
+}
+
+export interface LogStreamSubscription {
+  ws: WebSocket;
+  streamId: string;
+  path: string;
+  startOffset?: number;
+  limit?: number;
+}
+
+/**
+ * Parse and validate an inbound message
+ */
+export function parseMessage(data: unknown): BaseMessage | null {
+  try {
+    const payload = JSON.parse(String(data));
+    if (typeof payload?.kind !== "string") {
+      return null;
+    }
+    return payload as BaseMessage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Type guards for message types
+ */
+export function isAgentBroadcastMessage(msg: BaseMessage): msg is UpdateMessage {
+  return msg.kind === MessageKind.UPDATE;
+}
+
+export function isLogChunkMessage(msg: BaseMessage): msg is LogChunkMessage {
+  return msg.kind === MessageKind.LOG_CHUNK;
+}
+
+export function isClientSubscribeMessage(msg: BaseMessage): msg is ClientSubscribeMessage {
+  return msg.kind === MessageKind.CLIENT_SUBSCRIBE;
+}
+
+export function isLogSubscribeMessage(msg: BaseMessage): msg is LogSubscribeMessage {
+  return msg.kind === MessageKind.LOG_SUBSCRIBE;
+}
+
+export function isLogUnsubscribeMessage(msg: BaseMessage): msg is LogUnsubscribeMessage {
+  return msg.kind === MessageKind.LOG_UNSUBSCRIBE;
+}

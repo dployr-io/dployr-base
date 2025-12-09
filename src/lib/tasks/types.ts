@@ -20,7 +20,7 @@ export type TaskAddress = `${string}:${HttpMethod}`;
 export type TaskStatus = "pending" | "in_progress" | "done" | "failed";
 
 // Base Task structure that daemon expects
-export interface DployrdTask {
+export interface AgentTask {
   ID: string;
   Type: TaskAddress;
   Payload: any;

@@ -1,11 +1,11 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { DployrdTask } from "@/lib/tasks/types.js";
+import type { AgentTask } from "@/lib/tasks/types.js";
 
-export class DployrdService {
+export class AgentService {
   // Create a system install task
-  createSystemInstallTask(taskId: string, version?: string, token?: string): DployrdTask {
+  createSystemInstallTask(taskId: string, version?: string, token?: string): AgentTask {
     return {
       ID: taskId,
       Type: "system/install:post",
@@ -16,7 +16,7 @@ export class DployrdService {
 
   
   // Create a dployrd restart task
-  createDaemonRestartTask(taskId: string, force: boolean = false, token?: string): DployrdTask {
+  createDaemonRestartTask(taskId: string, force: boolean = false, token?: string): AgentTask {
     return {
       ID: taskId,
       Type: "system/restart:post",
@@ -26,7 +26,7 @@ export class DployrdService {
   }
 
   // Create a system reboot task
-  createSystemRebootTask(taskId: string, force: boolean = false, token?: string): DployrdTask {
+  createSystemRebootTask(taskId: string, force: boolean = false, token?: string): AgentTask {
     return {
       ID: taskId,
       Type: "system/reboot:post",
@@ -42,7 +42,7 @@ export class DployrdService {
     startOffset?: number,
     limit?: number,
     token?: string,
-  ): DployrdTask {
+  ): AgentTask {
     return {
       ID: streamId,
       Type: "logs/stream:post",
