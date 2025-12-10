@@ -4,7 +4,7 @@
 import { Notifier, NotificationPayload, NotificationEvent } from "./notifier.js";
 import { EmailService } from "./email.js";
 import { notificationTemplate } from "@/lib/templates/emails/notification.js";
-import { EVENT_METADATA } from "./event-metadata.js";
+import { EVENT_METADATA } from "@/lib/constants/event-metadata.js";
 import type { Bindings } from "@/types/index.js";
 
 export class EmailNotificationService implements Notifier {

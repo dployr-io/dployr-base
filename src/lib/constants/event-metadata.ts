@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { EVENTS, EventMetadataMap } from "./notifier.js";
+import { EVENTS, EventMetadataMap } from "@/services/notifier.js";
 
 export const EVENT_METADATA: EventMetadataMap = {
   // Instance events

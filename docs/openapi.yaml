@@ -2406,8 +2406,6 @@ paths:
         - GitHub
       summary: Manage GitHub connection
       x-requiredRole: public
-      description: Redirects the user to GitHub to manage their connection to the Dployr GitHub App.
-      responses:
         '302':
           description: Redirect to GitHub connection management page
 
@@ -2451,6 +2449,343 @@ paths:
                             example: dployr-instance
         '400':
           description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/dns/setup:
+    post:
+      operationId: setupCustomDomain
+      tags:
+        - Domains
+      summary: Request custom domain setup
+      x-requiredRole: developer
+      description: Initiates custom domain setup with automatic DNS provider detection and optional OAuth setup.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - domain
+                - instanceId
+              properties:
+                domain:
+                  type: string
+                  description: Domain name to register
+                  example: example.com
+                instanceId:
+                  type: string
+                  description: Instance ULID to associate with the domain
+                  example: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+      responses:
+        '200':
+          description: Domain setup initiated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          domain:
+                            type: string
+                          provider:
+                            type: string
+                            enum:
+                              - cloudflare
+                              - godaddy
+                              - digitalocean
+                              - route53
+                              - namecheap
+                              - google
+                              - unknown
+                          hasOAuth:
+                            type: boolean
+                          record:
+                            type: object
+                            properties:
+                              type:
+                                type: string
+                                enum: [A, CNAME, TXT]
+                              name:
+                                type: string
+                              value:
+                                type: string
+                              ttl:
+                                type: integer
+                          verification:
+                            type: object
+                            properties:
+                              type:
+                                type: string
+                                enum: [A, CNAME, TXT]
+                              name:
+                                type: string
+                              value:
+                                type: string
+                          autoSetupUrl:
+                            type: string
+                            nullable: true
+                          manualGuideUrl:
+                            type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Permission denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Domain already registered to another instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/dns/verify:
+    get:
+      operationId: verifyDomain
+      tags:
+        - Domains
+      summary: Verify domain ownership (Caddy callback)
+      x-requiredRole: public
+      description: Caddy calls this endpoint to verify the TXT record before issuing a certificate.
+      security: []
+      parameters:
+        - in: query
+          name: domain
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Domain verified and activated
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+        '400':
+          description: Missing domain parameter
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: missing domain parameter
+        '403':
+          description: Verification pending (TXT record not found)
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: verification pending
+        '404':
+          description: Domain not registered
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: domain not registered
+
+  /v1/dns/status/{domain}:
+    get:
+      operationId: getDomainStatus
+      tags:
+        - Domains
+      summary: Get domain status
+      x-requiredRole: viewer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: domain
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Domain status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          domain:
+                            type: string
+                          status:
+                            type: string
+                            enum: [pending, active]
+                          instanceId:
+                            type: string
+                          provider:
+                            type: string
+                            nullable: true
+                          createdAt:
+                            type: integer
+                            format: int64
+                          activatedAt:
+                            type: integer
+                            format: int64
+                            nullable: true
+        '404':
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/dns/instance/{instanceId}:
+    get:
+      operationId: listInstanceDomains
+      tags:
+        - Domains
+      summary: List domains for an instance
+      x-requiredRole: viewer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of domains
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          domains:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                domain:
+                                  type: string
+                                status:
+                                  type: string
+                                  enum: [pending, active]
+                                provider:
+                                  type: string
+                                  nullable: true
+                                createdAt:
+                                  type: integer
+                                  format: int64
+                                activatedAt:
+                                  type: integer
+                                  format: int64
+                                  nullable: true
+        '403':
+          description: Permission denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/dns/{domain}:
+    delete:
+      operationId: removeDomain
+      tags:
+        - Domains
+      summary: Remove domain
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: domain
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Domain removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '403':
+          description: Permission denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Domain or instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/dns/callback/{provider}:
+    get:
+      operationId: oauthCallback
+      tags:
+        - Domains
+      summary: OAuth callback handler
+      x-requiredRole: public
+      security: []
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [cloudflare, godaddy, digitalocean, google]
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: state
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to frontend with status
+        '400':
+          description: Missing parameters
           content:
             application/json:
               schema:

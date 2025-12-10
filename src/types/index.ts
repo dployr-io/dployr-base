@@ -26,6 +26,16 @@ export type Bindings = {
   BASE_URL: string;
   EMAIL_FROM?: string;
   CORS_ALLOWED_ORIGINS?: string;
+
+  // DNS OAuth (optional)
+  CLOUDFLARE_CLIENT_ID?: string;
+  CLOUDFLARE_CLIENT_SECRET?: string;
+  GODADDY_CLIENT_ID?: string;
+  GODADDY_CLIENT_SECRET?: string;
+  DIGITALOCEAN_CLIENT_ID?: string;
+  DIGITALOCEAN_CLIENT_SECRET?: string;
+  GOOGLE_DNS_CLIENT_ID?: string;
+  GOOGLE_DNS_CLIENT_SECRET?: string;
 };
 
 export type OAuthProvider = "google" | "github" | "microsoft" | "email";
