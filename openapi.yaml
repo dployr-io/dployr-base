@@ -2457,12 +2457,8 @@ paths:
                             example: dployr-instance
         '400':
           description: Invalid or expired token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/setup:
+  /v1/domains/setup:
     post:
       operationId: setupCustomDomain
       tags:
@@ -2474,6 +2470,13 @@ paths:
         Returns the A record that needs to be added to the domain's DNS configuration.
       security:
         - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Cluster ULID for permission checks.
       requestBody:
         required: true
         content:
@@ -2574,7 +2577,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/verify:
+  /v1/domains/verify:
     get:
       operationId: verifyDomain
       tags:
@@ -2619,7 +2622,7 @@ paths:
                 type: string
                 example: domain not registered
 
-  /v1/dns/status/{domain}:
+  /v1/domains/status/{domain}:
     get:
       operationId: getDomainStatus
       tags:
@@ -2637,6 +2640,12 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Cluster ULID for permission checks.
       responses:
         '200':
           description: Domain status
@@ -2715,7 +2724,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/instance/{instanceId}:
+  /v1/domains/instance/{instanceId}:
     get:
       operationId: listInstanceDomains
       tags:
@@ -2730,6 +2739,12 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Cluster ULID for permission checks.
       responses:
         '200':
           description: List of domains
@@ -2778,7 +2793,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/{domain}:
+  /v1/domains/{domain}:
     delete:
       operationId: removeDomain
       tags:
@@ -2793,6 +2808,12 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Cluster ULID for permission checks.
       responses:
         '204':
           description: Domain removed successfully
@@ -2809,7 +2830,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/callback/{provider}:
+  /v1/domains/callback/{provider}:
     get:
       operationId: oauthCallback
       tags:

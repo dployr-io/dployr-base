@@ -28,29 +28,37 @@ export class DNSService {
   }
 
   /**
-   * Generates DNS records for domain setup
+   * Generates a new verification token for domain setup.
+   * Should only be called once when creating a new domain record.
    */
-  generateRecords(
+  generateToken(): string {
+    return ulid();
+  }
+
+  /**
+   * Builds DNS records from stored domain data.
+   * Uses A record pointing directly to instance IP address.
+   */
+  buildRecordsFromStored(
     domain: string,
-    instanceTag: string
-  ): { record: DNSRecord; verification: DNSRecord; token: string } {
+    instanceAddress: string,
+    verificationToken: string
+  ): { record: DNSRecord; verification: DNSRecord } {
     const parts = domain.split(".");
     const name = parts.length > 2 ? parts[0] : "@";
-    const token = ulid();
 
     return {
       record: {
-        type: "CNAME",
+        type: "A",
         name,
-        value: `${instanceTag}.dployr.io`,
+        value: instanceAddress,
         ttl: 300,
       },
       verification: {
         type: "TXT",
         name: "_dployr",
-        value: `dployr-verify=${token}`,
+        value: `dployr-verify=${verificationToken}`,
       },
-      token,
     };
   }
 

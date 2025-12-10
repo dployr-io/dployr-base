@@ -15,7 +15,7 @@ export class DomainStore extends BaseStore {
     const now = this.now();
 
     await this.db.prepare(`
-      INSERT INTO custom_domains (id, instance_id, domain, verification_token, provider, created_at)
+      INSERT INTO domains (id, instance_id, domain, verification_token, provider, created_at)
       VALUES ($1, $2, $3, $4, $5, $6)
     `).bind(id, instanceId, domain, token, provider, now).run();
 
@@ -34,7 +34,7 @@ export class DomainStore extends BaseStore {
   async get(domain: string): Promise<CustomDomain | null> {
     const row = await this.db.prepare(`
       SELECT id, instance_id, domain, status, verification_token, provider, created_at, activated_at
-      FROM custom_domains WHERE domain = $1
+      FROM domains WHERE domain = $1
     `).bind(domain).first();
 
     if (!row) return null;
@@ -53,14 +53,14 @@ export class DomainStore extends BaseStore {
 
   async activate(domain: string): Promise<void> {
     await this.db.prepare(`
-      UPDATE custom_domains SET status = 'active', activated_at = $1 WHERE domain = $2
+      UPDATE domains SET status = 'active', activated_at = $1 WHERE domain = $2
     `).bind(this.now(), domain).run();
   }
 
   async listByInstance(instanceId: string): Promise<CustomDomain[]> {
     const { results } = await this.db.prepare(`
       SELECT id, instance_id, domain, status, verification_token, provider, created_at, activated_at
-      FROM custom_domains WHERE instance_id = $1 ORDER BY created_at DESC
+      FROM domains WHERE instance_id = $1 ORDER BY created_at DESC
     `).bind(instanceId).all();
 
     return results.map(row => ({
@@ -76,6 +76,6 @@ export class DomainStore extends BaseStore {
   }
 
   async delete(domain: string): Promise<void> {
-    await this.db.prepare(`DELETE FROM custom_domains WHERE domain = $1`).bind(domain).run();
+    await this.db.prepare(`DELETE FROM domains WHERE domain = $1`).bind(domain).run();
   }
 }

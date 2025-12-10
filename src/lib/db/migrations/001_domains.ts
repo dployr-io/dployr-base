@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 export const domains = `
-CREATE TABLE IF NOT EXISTS custom_domains (
+CREATE TABLE IF NOT EXISTS domains (
   id TEXT PRIMARY KEY,
   instance_id TEXT NOT NULL,
   domain TEXT NOT NULL UNIQUE,
@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_custom_domains_instance ON custom_domains(instance_id);
-CREATE INDEX IF NOT EXISTS idx_custom_domains_domain ON custom_domains(domain);
+CREATE INDEX IF NOT EXISTS idx_domains_instance ON domains(instance_id);
+CREATE INDEX IF NOT EXISTS idx_domains_domain ON domains(domain);
 
 -- Prevent token modification after creation
 CREATE OR REPLACE FUNCTION prevent_token_update()
@@ -29,7 +29,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER prevent_token_update
-BEFORE UPDATE ON custom_domains
+BEFORE UPDATE ON domains
 FOR EACH ROW
 EXECUTE FUNCTION prevent_token_update();
 `;
