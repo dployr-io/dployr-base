@@ -318,7 +318,7 @@ domains.delete("/:domain", authMiddleware, requireClusterDeveloper, async (c) =>
   }
 
   await db.domains.delete(domain);
-  return c.json(createSuccessResponse({}, "Domain removed"));
+  return c.body(null, 204);
 });
 
 // OAuth callbacks (per provider)

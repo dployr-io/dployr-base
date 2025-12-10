@@ -1676,12 +1676,20 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: Instance deleted
+        '204':
+          description: Instance deleted successfully
+        '400':
+          description: Missing clusterId
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Permission denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Instance not found
           content:
@@ -2737,12 +2745,8 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: Domain removed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
+        '204':
+          description: Domain removed successfully
         '403':
           description: Permission denied
           content:

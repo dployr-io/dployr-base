@@ -242,9 +242,7 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
       }, db)
     );
 
-    return c.json(
-      createSuccessResponse({}, "Instance deleted successfully"),
-    );
+    return c.body(null, 204);
   } catch (error) {
     console.error("Failed to delete instance", error);
     return c.json(
