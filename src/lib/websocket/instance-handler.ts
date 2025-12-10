@@ -8,8 +8,9 @@ import { AgentService } from "@/services/dployrd-service.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { JWTService } from "@/services/jwt.js";
 import { ConnectionManager } from "./connection-manager.js";
-import { AgentMessageHandler } from "./handlers/dployrd-handler.js";
+import { AgentMessageHandler } from "./handlers/agent-handler.js";
 import { ClientMessageHandler } from "./handlers/client-handler.js";
+import { ClientNotifier } from "./handlers/client-notifier.js";
 import { parseMessage, MessageKind, type InstanceConnection } from "./message-types.js";
 
 /**
@@ -24,8 +25,10 @@ export class WebSocketHandler {
   constructor(private kv: IKVAdapter) {
     this.connectionManager = new ConnectionManager();
 
+    const clientNotifier = new ClientNotifier(this.connectionManager, kv);
+
     // Initialize handlers with dependencies
-    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, kv);
+    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, clientNotifier);
 
     const jwtService = new JWTService(new KVStore(this.kv));
     const dployrdService = new AgentService();
@@ -75,7 +78,7 @@ export class WebSocketHandler {
       return;
     }
 
-    if (conn.role === "agent") {
+    if (conn.role === "agent") {  
       await this.dployrdHandler.handleMessage(conn, message);
     } else {
       await this.clientHandler.handleMessage(conn, message);
