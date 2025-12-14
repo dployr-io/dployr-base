@@ -11,10 +11,10 @@ import { ConnectionManager } from "./connection-manager.js";
 import { AgentMessageHandler } from "./handlers/agent-handler.js";
 import { ClientMessageHandler } from "./handlers/client-handler.js";
 import { ClientNotifier } from "./handlers/client-notifier.js";
-import { parseMessage, MessageKind, type InstanceConnection } from "./message-types.js";
+import { parseMessage, MessageKind, type ClusterConnection } from "./message-types.js";
 
 /**
- * WebSocket handler for instance streams.
+ * WebSocket handler for cluster streams.
  * Coordinates connection management and message routing between agents and clients.
  */
 export class WebSocketHandler {
@@ -38,23 +38,27 @@ export class WebSocketHandler {
       kv,
       jwtService,
       dployrdService,
-      sendTaskToAgent: this.sendTaskToAgent.bind(this),
+      sendTaskToCluster: this.sendTaskToCluster.bind(this),
     });
   }
 
   /**
-   * Register a new WebSocket connection for an instance.
+   * Register a new WebSocket connection for a cluster.
+   * @param clusterId - The cluster to connect to
+   * @param ws - The WebSocket connection
+   * @param role - Whether this is an agent or client connection
+   * @param instanceId - Optional instance ID (for agent connections)
    */
   acceptWebSocket(
-    instanceId: string,
+    clusterId: string,
     ws: WebSocket,
     role: "agent" | "client"
   ): void {
-    const conn = this.connectionManager.addConnection(instanceId, ws, role);
+    const conn = this.connectionManager.addConnection(clusterId, ws, role);
 
     ws.on("message", (data) => {
       this.handleMessage(conn, data).catch((err) => {
-        console.error(`[WS] Error handling message for instance ${instanceId}:`, err);
+        console.error(`[WS] Error handling message for cluster ${clusterId}:`, err);
       });
     });
 
@@ -63,7 +67,7 @@ export class WebSocketHandler {
     });
 
     ws.on("error", (err) => {
-      console.error(`[WS] Error on connection for instance ${instanceId}:`, err);
+      console.error(`[WS] Error on connection for cluster ${clusterId}:`, err);
       this.connectionManager.removeConnection(conn);
     });
   }
@@ -71,7 +75,7 @@ export class WebSocketHandler {
   /**
    * Route incoming messages to the appropriate handler
    */
-  private async handleMessage(conn: InstanceConnection, data: unknown): Promise<void> {
+  private async handleMessage(conn: ClusterConnection, data: unknown): Promise<void> {
     const message = parseMessage(data);
     if (!message) {
       console.error("[WS] Invalid message format");
@@ -86,13 +90,13 @@ export class WebSocketHandler {
   }
 
   /**
-   * Send a task to the agent for this instance.
-   * Returns true if the task was sent, false if no agent is connected.
+   * Send a task to all agents in a cluster.
+   * Returns true if the task was sent to at least one agent.
    */
-  public sendTaskToAgent(instanceId: string, task: AgentTask): boolean {
-    const agentConn = this.connectionManager.getAgentConnection(instanceId);
-    if (!agentConn) {
-      console.warn(`[WS] No agent connection for instance ${instanceId}`);
+  public sendTaskToCluster(clusterId: string, task: AgentTask): boolean {
+    const agentConns = this.connectionManager.getAgentConnections(clusterId);
+    if (agentConns.length === 0) {
+      console.warn(`[WS] No agent connections for cluster ${clusterId}`);
       return false;
     }
 
@@ -101,20 +105,26 @@ export class WebSocketHandler {
       items: [task],
     };
 
-    try {
-      agentConn.ws.send(JSON.stringify(message));
-      console.log(`[WS] Sent task ${task.ID} to agent for instance ${instanceId}`);
-      return true;
-    } catch (err) {
-      console.error(`[WS] Failed to send task to agent:`, err);
-      return false;
+    const payload = JSON.stringify(message);
+    let sentCount = 0;
+
+    for (const agentConn of agentConns) {
+      try {
+        agentConn.ws.send(payload);
+        sentCount++;
+      } catch (err) {
+        console.error(`[WS] Failed to send task to agent:`, err);
+      }
     }
+
+    console.log(`[WS] Sent task ${task.ID} to ${sentCount}/${agentConns.length} agents in cluster ${clusterId}`);
+    return sentCount > 0;
   }
 
   /**
-   * Check if an agent is connected for the given instance.
+   * Check if any agent is connected for the given cluster.
    */
-  public hasAgentConnection(instanceId: string): boolean {
-    return this.connectionManager.hasAgentConnection(instanceId);
+  public hasAgentConnection(clusterId: string): boolean {
+    return this.connectionManager.hasAgentConnection(clusterId);
   }
 }

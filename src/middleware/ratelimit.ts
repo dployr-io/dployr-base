@@ -67,7 +67,7 @@ export function rateLimit(config: RateLimitConfig) {
       
       // Store updated timestamps with TTL slightly longer than window
       await kv.put(key, JSON.stringify(timestamps), {
-        expirationTtl: Math.ceil(config.windowMs / 1000) + 60,
+        ttl: Math.ceil(config.windowMs / 1000) + 60,
       });
       
       // Set rate limit headers

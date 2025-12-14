@@ -6,7 +6,7 @@
  */
 export interface IKVAdapter {
   get(key: string): Promise<string | null>;
-  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  put(key: string, value: string, options?: { ttl?: number }): Promise<void>;
   delete(key: string): Promise<void>;
   list(options: { prefix: string; limit?: number }): Promise<Array<{ name: string }>>;
 }
@@ -25,9 +25,9 @@ export class RedisKV implements IKVAdapter {
     return this.client.get(key);
   }
 
-  async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
-    if (options?.expirationTtl) {
-      await this.client.set(key, value, { EX: options.expirationTtl });
+  async put(key: string, value: string, options?: { ttl?: number }): Promise<void> {
+    if (options?.ttl) {
+      await this.client.set(key, value, { EX: options.ttl });
     } else {
       await this.client.set(key, value);
     }
@@ -80,8 +80,8 @@ export class MemoryKV implements IKVAdapter {
     return item.value;
   }
 
-  async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
-    const expiresAt = options?.expirationTtl ? Date.now() + options.expirationTtl * 1000 : undefined;
+  async put(key: string, value: string, options?: { ttl?: number }): Promise<void> {
+    const expiresAt = options?.ttl ? Date.now() + options.ttl * 1000 : undefined;
     this.store.set(key, { value, expiresAt });
   }
 

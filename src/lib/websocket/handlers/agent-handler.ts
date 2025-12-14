@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { ConnectionManager } from "../connection-manager.js";
-import type { InstanceConnection, BaseMessage } from "../message-types.js";
+import type { ClusterConnection, BaseMessage } from "../message-types.js";
 import { isAgentBroadcastMessage, isLogChunkMessage } from "../message-types.js";
 import { ClientNotifier } from "./client-notifier.js";
 
@@ -16,16 +16,14 @@ export class AgentMessageHandler {
   ) {}
 
   /**
-   * Process a message from an dployrd
+   * Process a message from an agent
    */
-  async handleMessage(conn: InstanceConnection, message: BaseMessage): Promise<void> {
-    // Broadcast update/status messages to all clients
+  async handleMessage(conn: ClusterConnection, message: BaseMessage): Promise<void> {
     if (isAgentBroadcastMessage(message)) {
-      await this.clientNotifier.broadcast(conn.instanceId, message);
+      await this.clientNotifier.broadcast(conn.clusterId, message);
       return;
     }
 
-    // Route log chunks to specific stream subscriber
     if (isLogChunkMessage(message)) {
       this.handleLogChunk(message);
       return;

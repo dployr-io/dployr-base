@@ -358,9 +358,9 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
     }
 
     const ws = getWS(c);
-    if (!ws.hasAgentConnection(instanceId)) {
+    if (!ws.hasAgentConnection(clusterId)) {
       return c.json(createErrorResponse({
-        message: "Instance is not connected or unresponsive",
+        message: "No agents connected to cluster",
         code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code,
       }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
@@ -382,7 +382,7 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
     );
     const task = dployrd.createSystemInstallTask(taskId, version, token);
 
-    const sent = ws.sendTaskToAgent(instanceId, task);
+    const sent = ws.sendTaskToCluster(clusterId, task);
     if (!sent) {
       return c.json(createErrorResponse({
         message: "Failed to send install task to agent",
@@ -445,9 +445,9 @@ instances.post("/:instanceId/system/reboot", requireClusterAdmin, async (c) => {
     }
 
     const ws = getWS(c);
-    if (!ws.hasAgentConnection(instanceId)) {
+    if (!ws.hasAgentConnection(clusterId)) {
       return c.json(createErrorResponse({
-        message: "Instance is not connected or unresponsive",
+        message: "No agents connected to cluster",
         code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code,
       }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
@@ -469,7 +469,7 @@ instances.post("/:instanceId/system/reboot", requireClusterAdmin, async (c) => {
     );
     const task = dployrd.createSystemRebootTask(taskId, force, token);
 
-    const sent = ws.sendTaskToAgent(instanceId, task);
+    const sent = ws.sendTaskToCluster(clusterId, task);
     if (!sent) {
       return c.json(createErrorResponse({
         message: "Failed to send reboot task to agent",
@@ -532,9 +532,9 @@ instances.post("/:instanceId/system/restart", requireClusterDeveloper, async (c)
     }
 
     const ws = getWS(c);
-    if (!ws.hasAgentConnection(instanceId)) {
+    if (!ws.hasAgentConnection(clusterId)) {
       return c.json(createErrorResponse({
-        message: "Instance is not connected or unresponsive",
+        message: "No agents connected to cluster",
         code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code,
       }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
@@ -556,7 +556,7 @@ instances.post("/:instanceId/system/restart", requireClusterDeveloper, async (c)
     );
     const task = dployrd.createDaemonRestartTask(taskId, force, token);
 
-    const sent = ws.sendTaskToAgent(instanceId, task);
+    const sent = ws.sendTaskToCluster(clusterId, task);
     if (!sent) {
       return c.json(createErrorResponse({
         message: "Failed to send restart task to agent",

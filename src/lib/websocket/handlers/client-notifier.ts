@@ -11,15 +11,15 @@ import { ConnectionManager } from "@/lib/websocket/connection-manager.js";
  */
 export class ClientNotifier {
   constructor(
-    private connectionManager: ConnectionManager,
+    private conn: ConnectionManager,
     private kv: IKVAdapter,
   ) {}
 
   /**
-   * Broadcast agent updates to all client connections for an instance.
+   * Broadcast agent updates to all client connections 
    */
-  async broadcast(instanceId: string, message: BaseMessage): Promise<void> {
-    const clients = this.connectionManager.getClientConnections(instanceId);
+  async broadcast(clusterId: string, message: BaseMessage): Promise<void> {
+    const clients = this.conn.getClientConnections(clusterId);
     if (clients.length === 0) return;
 
     const payload = JSON.stringify(message);
@@ -32,13 +32,13 @@ export class ClientNotifier {
       }
     }
 
-    await this.cacheStatusIfNeeded(instanceId, message, payload);
+    await this.cacheStatusIfNeeded(clusterId, message, payload);
   }
 
-  private async cacheStatusIfNeeded(instanceId: string, message: BaseMessage, payload: string): Promise<void> {
-    if (message.kind === "status_report" || message.kind === MessageKind.UPDATE) {
+  private async cacheStatusIfNeeded(clusterId: string, message: BaseMessage, payload: string): Promise<void> {
+    if (message.kind === MessageKind.UPDATE) {
       try {
-        await this.kv.put(`instance:${instanceId}:status`, payload, { expirationTtl: 300 });
+        await this.kv.put(`cluster:${clusterId}:status`, payload, { ttl: 300 });
       } catch (err) {
         console.error(`[WS] Failed to cache status:`, err);
       }

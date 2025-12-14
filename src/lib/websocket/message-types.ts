@@ -55,6 +55,7 @@ export interface ClientSubscribeMessage extends BaseMessage {
 
 export interface LogSubscribeMessage extends BaseMessage {
   kind: typeof MessageKind.LOG_SUBSCRIBE;
+  instanceId: string;
   path: string;
   startOffset?: number;
   limit?: number;
@@ -77,10 +78,10 @@ export type InboundMessage = AgentMessage | ClientMessage;
  */
 export type ConnectionRole = "agent" | "client";
 
-export interface InstanceConnection {
+export interface ClusterConnection {
   ws: WebSocket;
   role: ConnectionRole;
-  instanceId: string;
+  clusterId: string;
 }
 
 export interface LogStreamSubscription {

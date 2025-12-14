@@ -24,7 +24,7 @@ export class KVStore {
     };
 
     await this.kv.put(`session:${sessionId}`, JSON.stringify(session), {
-      expirationTtl: SESSION_TTL,
+      ttl: SESSION_TTL,
     });
 
     return session;
@@ -126,7 +126,7 @@ export class KVStore {
       if (exists) {
         return;
       }
-      await this.kv.put(idemKey, "1", { expirationTtl: DEDUP_TTL });
+      await this.kv.put(idemKey, "1", { ttl: DEDUP_TTL });
     }
 
     if (targets && targets.length > 0) {
@@ -140,7 +140,7 @@ export class KVStore {
 
       const actorKey = `actor:${actor.id}:event:${id}`;
       const writes: Promise<any>[] = [
-        this.kv.put(actorKey, JSON.stringify(actorEvent), { expirationTtl: EVENT_TTL })
+        this.kv.put(actorKey, JSON.stringify(actorEvent), { ttl: EVENT_TTL })
       ];
 
       for (const target of targets) {
@@ -150,7 +150,7 @@ export class KVStore {
           targets: [target],
         };
         const targetKey = `target:${target.id}:event:${id}`;
-        writes.push(this.kv.put(targetKey, JSON.stringify(event), { expirationTtl: EVENT_TTL }));
+        writes.push(this.kv.put(targetKey, JSON.stringify(event), { ttl: EVENT_TTL }));
       }
 
       await Promise.all(writes);
@@ -162,7 +162,7 @@ export class KVStore {
       };
 
       const actorKey = `actor:${actor.id}:event:${event.id}`;
-      await this.kv.put(actorKey, JSON.stringify(event), { expirationTtl: EVENT_TTL });
+      await this.kv.put(actorKey, JSON.stringify(event), { ttl: EVENT_TTL });
     }
   }
 
@@ -212,7 +212,7 @@ export class KVStore {
 
   async createWorkflowFailedEvent(id: string, data: Record<string, unknown>): Promise<void> {
     await this.kv.put(`workflow:${id}`, JSON.stringify(data), {
-      expirationTtl: FAILED_WORKFLOW_EVENT_TTL,
+      ttl: FAILED_WORKFLOW_EVENT_TTL,
     });
   }
 
@@ -223,7 +223,7 @@ export class KVStore {
       redirectUrl,
       createdAt: Date.now()
     }), {
-      expirationTtl: STATE_TTL,
+      ttl: STATE_TTL,
     });
   }
 
@@ -252,7 +252,7 @@ export class KVStore {
         createdAt: Date.now(),
         attempts: 0,
       }),
-      { expirationTtl: OTP_TTL }
+      { ttl: OTP_TTL }
     );
 
     return code;
@@ -276,7 +276,7 @@ export class KVStore {
 
     otpData.attempts++;
     await this.kv.put(`otp:${email}`, JSON.stringify(otpData), {
-      expirationTtl: OTP_TTL,
+      ttl: OTP_TTL,
     });
 
     if (otpData.code === code) {
@@ -316,7 +316,7 @@ export class KVStore {
     
     // Save latest update with TTL
     await this.kv.put(`agent:${instanceId}:update`, JSON.stringify(data), {
-      expirationTtl: AGENT_UPDATE_TTL,
+      ttl: AGENT_UPDATE_TTL,
     });
   }
 
@@ -350,7 +350,7 @@ export class KVStore {
       if (!tag) return null;
 
       await this.kv.put("version:latest", JSON.stringify({ tag }), {
-        expirationTtl: RELEASE_CACHE_TTL,
+        ttl: RELEASE_CACHE_TTL,
       });
 
       return tag;

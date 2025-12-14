@@ -94,7 +94,7 @@ export class InstanceService {
 
     try {
       if (ttl > 0) {
-        await kv.kv.put(key, JSON.stringify({ token }), { expirationTtl: ttl });
+        await kv.kv.put(key, JSON.stringify({ token }), { ttl: ttl });
       }
     } catch {}
 

@@ -8,6 +8,7 @@ import type { IncomingMessage } from 'http';
 import type { Socket } from 'net';
 import type { Hono } from 'hono';
 import { initializeAdapters, type Adapters } from '@/lib/bootstrap.js';
+import { DatabaseStore } from '@/lib/db/store/index.js';
 import { loadConfig } from '@/lib/config/loader.js';
 
 export class WebSocketService {
@@ -79,21 +80,42 @@ export class WebSocketService {
     this.server.on('upgrade', async (message: IncomingMessage, socket: Socket, head: Buffer) => {
       const url = new URL(message.url || '', `http://${message.headers.host}`);
       
-      // Handle instance WebSocket streams
-      // Matches: /v1/instances/{id}/stream OR /v1/agent/instances/{id}/ws
-      if (url.pathname.match(/\/v1\/(instances\/[^\/]+\/stream|agent\/instances\/[^\/]+\/ws)$/)) {
-        const pathParts = url.pathname.split('/');
-        const instanceIdIndex = pathParts.indexOf('instances') + 1;
-        const instanceId = pathParts[instanceIdIndex];
+      // Handle cluster WebSocket streams
+      // Matches: /v1/instances/stream OR /v1/agent/instances/:instanceId/ws
+      if (url.pathname.match(/\/v1\/(instances\/stream|agent\/instances\/[^/]+\/ws)$/)) {
+        const role = url.pathname.includes('/ws') ? 'agent' : 'client';
         
-        if (!instanceId || !this.adapters?.ws) {
+        let clusterId: string | null = null;
+        
+        if (role === 'agent') {
+          const match = url.pathname.match(/\/v1\/agent\/instances\/([^/]+)\/ws$/);
+          const instanceId = match?.[1];
+          
+          if (!instanceId || !this.adapters?.db) {
+            socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+            socket.destroy();
+            return;
+          }
+          
+          const db = new DatabaseStore(this.adapters.db);
+          const instance = await db.instances.get(instanceId);
+          
+          if (!instance) {
+            socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+            socket.destroy();
+            return;
+          }
+          
+          clusterId = instance.clusterId;
+        } else {
+          clusterId = url.searchParams.get('clusterId');
+        }
+        
+        if (!clusterId || !this.adapters?.ws) {
           socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
           socket.destroy();
           return;
         }
-
-        // Determine role: agent daemon uses /ws, clients use /stream
-        const role = url.pathname.includes('/ws') ? 'agent' : 'client';
 
         // Validate auth token for agent endpoint
         if (role === 'agent') {
@@ -107,7 +129,7 @@ export class WebSocketService {
         }
 
         this.wss.handleUpgrade(message, socket, head, (ws: WebSocket) => {
-          this.adapters!.ws.acceptWebSocket(instanceId, ws, role);
+          this.adapters!.ws.acceptWebSocket(clusterId, ws, role);
         });
       } else {
         socket.destroy();

@@ -2,80 +2,79 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { WebSocket } from "ws";
-import type { InstanceConnection, ConnectionRole, LogStreamSubscription } from "./message-types.js";
+import type { ClusterConnection, ConnectionRole, LogStreamSubscription } from "./message-types.js";
 
 /**
  * Manages WebSocket connections and log stream subscriptions.
  */
 export class ConnectionManager {
-  private connections = new Map<string, Set<InstanceConnection>>();
+  private connections = new Map<string, Set<ClusterConnection>>();
   private logStreams = new Map<string, LogStreamSubscription>();
 
   /**
-   * Add a new connection for an instance
+   * Add a new websocket connection for a cluster
    */
-  addConnection(instanceId: string, ws: WebSocket, role: ConnectionRole): InstanceConnection {
-    if (!this.connections.has(instanceId)) {
-      this.connections.set(instanceId, new Set());
+  addConnection(clusterId: string, ws: WebSocket, role: ConnectionRole): ClusterConnection {
+    if (!this.connections.has(clusterId)) {
+      this.connections.set(clusterId, new Set());
     }
 
-    const conn: InstanceConnection = { ws, role, instanceId };
-    this.connections.get(instanceId)!.add(conn);
+    const conn: ClusterConnection = { ws, role, clusterId };
+    this.connections.get(clusterId)!.add(conn);
 
-    console.log(`[WS] ${role} connected to instance ${instanceId}`);
-    return conn;
+    console.log(`[WS] ${role} connected to cluster ${clusterId}`);
+    return conn; 
   }
 
   /**
-   * Remove a connection
+   * Remove a websocket connection
    */
-  removeConnection(conn: InstanceConnection): void {
-    const conns = this.connections.get(conn.instanceId);
+  removeConnection(conn: ClusterConnection): void {
+    const conns = this.connections.get(conn.clusterId);
     if (conns) {
       conns.delete(conn);
       if (conns.size === 0) {
-        this.connections.delete(conn.instanceId);
+        this.connections.delete(conn.clusterId);
       }
     }
-
-    // Clean up log streams for this client
+    
     if (conn.role === "client") {
       this.removeLogStreamsForClient(conn.ws);
     }
 
-    console.log(`[WS] ${conn.role} disconnected from instance ${conn.instanceId}`);
+    console.log(`[WS] ${conn.role} disconnected from cluster ${conn.clusterId}`);
   }
 
   /**
-   * Get all connections for an instance
+   * Get all connections for a cluster
    */
-  getConnections(instanceId: string): Set<InstanceConnection> | undefined {
-    return this.connections.get(instanceId);
+  getConnections(clusterId: string): Set<ClusterConnection> | undefined {
+    return this.connections.get(clusterId);
   }
 
   /**
-   * Get the dployrd connection for an instance
+   * Get all agent connections for a cluster
    */
-  getAgentConnection(instanceId: string): InstanceConnection | undefined {
+  getAgentConnections(instanceId: string): ClusterConnection[] {
     const conns = this.connections.get(instanceId);
-    if (!conns) return undefined;
-    return Array.from(conns).find((c) => c.role === "agent");
+    if (!conns) return [];
+    return Array.from(conns).filter((c) => c.role === "agent");
   }
 
   /**
-   * Get all client connections for an instance
+   * Get all client connections for a cluster
    */
-  getClientConnections(instanceId: string): InstanceConnection[] {
-    const conns = this.connections.get(instanceId);
+  getClientConnections(clusterId: string): ClusterConnection[] {
+    const conns = this.connections.get(clusterId);
     if (!conns) return [];
     return Array.from(conns).filter((c) => c.role === "client");
   }
 
   /**
-   * Check if an dployrd is connected for an instance
+   * Check if any agent is connected for a cluster
    */
   hasAgentConnection(instanceId: string): boolean {
-    return this.getAgentConnection(instanceId) !== undefined;
+    return this.getAgentConnections(instanceId).length > 0;
   }
 
   /**

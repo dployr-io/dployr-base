@@ -4,7 +4,7 @@
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import type { AgentTask } from "@/lib/tasks/types.js";
 import type { ConnectionManager } from "../connection-manager.js";
-import type { InstanceConnection, BaseMessage, LogSubscribeMessage } from "../message-types.js";
+import type { ClusterConnection, BaseMessage, LogSubscribeMessage } from "../message-types.js";
 import { isClientSubscribeMessage, isLogSubscribeMessage, isLogUnsubscribeMessage } from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
@@ -14,7 +14,7 @@ export interface ClientHandlerDependencies {
   kv: IKVAdapter;
   jwtService: JWTService;
   dployrdService: AgentService;
-  sendTaskToAgent: (instanceId: string, task: AgentTask) => boolean;
+  sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
 }
 
 /**
@@ -25,20 +25,20 @@ export class ClientMessageHandler {
   private kv: IKVAdapter;
   private jwtService: JWTService;
   private dployrdService: AgentService;
-  private sendTaskToAgent: (instanceId: string, task: AgentTask) => boolean;
+  private sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
 
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
     this.kv = deps.kv;
     this.jwtService = deps.jwtService;
     this.dployrdService = deps.dployrdService;
-    this.sendTaskToAgent = deps.sendTaskToAgent;
+    this.sendTaskToCluster = deps.sendTaskToCluster;
   }
 
   /**
    * Process a message from a client
    */
-  async handleMessage(conn: InstanceConnection, message: BaseMessage): Promise<void> {
+  async handleMessage(conn: ClusterConnection, message: BaseMessage): Promise<void> {
     if (isClientSubscribeMessage(message)) {
       await this.handleClientSubscribe(conn);
       return;
@@ -58,8 +58,8 @@ export class ClientMessageHandler {
   /**
    * Handle client subscription - send cached status
    */
-  private async handleClientSubscribe(conn: InstanceConnection): Promise<void> {
-    const cached = await this.kv.get(`instance:${conn.instanceId}:status`);
+  private async handleClientSubscribe(conn: ClusterConnection): Promise<void> {
+    const cached = await this.kv.get(`cluster:${conn.clusterId}:status`);
     if (cached) {
       try {
         conn.ws.send(cached);
@@ -72,15 +72,15 @@ export class ClientMessageHandler {
   /**
    * Handle log stream subscription
    */
-  private async handleLogSubscribe(conn: InstanceConnection, message: LogSubscribeMessage): Promise<void> {
-    const { path, startOffset, limit } = message;
+  private async handleLogSubscribe(conn: ClusterConnection, message: LogSubscribeMessage): Promise<void> {
+    const { instanceId, path, startOffset, limit } = message;
 
-    if (!path) {
-      console.error("[WS] log_subscribe missing path");
+    if (!instanceId || !path) {
+      console.error("[WS] log_subscribe missing instanceId or path");
       return;
     }
 
-    const streamId = this.buildStreamId(conn.instanceId, path, startOffset, limit);
+    const streamId = this.buildStreamId(conn.clusterId, path, startOffset, limit);
 
     // Check for existing stream
     if (this.connectionManager.updateLogStreamClient(streamId, conn.ws)) {
@@ -96,18 +96,18 @@ export class ClientMessageHandler {
       limit,
     });
 
-    // Create and send task to agent
-    const token = await this.jwtService.createAgentAccessToken(conn.instanceId);
+    // Create and send task to agents in cluster
+    const token = await this.jwtService.createAgentAccessToken(instanceId);
     const task = this.dployrdService.createLogStreamTask(streamId, path, startOffset, limit, token);
-    this.sendTaskToAgent(conn.instanceId, task);
+    this.sendTaskToCluster(conn.clusterId, task);
 
-    console.log(`[WS] Created log stream task ${streamId} for instance ${conn.instanceId}`);
+    console.log(`[WS] Created log stream task ${streamId} for cluster ${conn.clusterId}`);
   }
 
   /**
    * Handle log stream unsubscription
    */
-  private handleLogUnsubscribe(conn: InstanceConnection, path?: string): void {
+  private handleLogUnsubscribe(conn: ClusterConnection, path?: string): void {
     if (path) {
       this.connectionManager.removeLogStreamsByPath(path, conn.ws);
     }
@@ -116,9 +116,9 @@ export class ClientMessageHandler {
   /**
    * Build a unique stream ID
    */
-  private buildStreamId(instanceId: string, path: string, startOffset?: number, limit?: number): string {
+  private buildStreamId(clusterId: string, path: string, startOffset?: number, limit?: number): string {
     const offsetKey = startOffset ?? 0;
     const limitKey = limit ?? -1;
-    return `${instanceId}:${path}:${offsetKey}:${limitKey}`;
+    return `${clusterId}:${path}:${offsetKey}:${limitKey}`;
   }
 }

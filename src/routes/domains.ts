@@ -448,7 +448,7 @@ domains.get("/callback/:provider", async (c) => {
       domain,
       createdAt: Date.now(),
     }), {
-      expirationTtl: 3600, // 1 hour
+      ttl: 3600, // 1 hour
     });
 
     const url = new URL(`${c.env.APP_URL}${redirectPath}`);
