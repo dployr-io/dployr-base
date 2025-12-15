@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { WebSocket } from "ws";
+import type { DeploymentPayload } from "@/lib/tasks/types.js";
 
 /**
  * Message kind constants
@@ -15,6 +16,7 @@ export const MessageKind = {
   CLIENT_SUBSCRIBE: "client_subscribe",
   LOG_SUBSCRIBE: "log_subscribe",
   LOG_UNSUBSCRIBE: "log_unsubscribe",
+  DEPLOY: "deploy",
 
   // Server -> Agent
   TASK: "task",
@@ -66,7 +68,13 @@ export interface LogUnsubscribeMessage extends BaseMessage {
   path?: string;
 }
 
-export type ClientMessage = ClientSubscribeMessage | LogSubscribeMessage | LogUnsubscribeMessage;
+export interface DeployMessage extends BaseMessage {
+  kind: typeof MessageKind.DEPLOY;
+  instanceId: string;
+  payload: DeploymentPayload;
+}
+
+export type ClientMessage = ClientSubscribeMessage | LogSubscribeMessage | LogUnsubscribeMessage | DeployMessage;
 
 /**
  * All inbound messages
@@ -128,4 +136,8 @@ export function isLogSubscribeMessage(msg: BaseMessage): msg is LogSubscribeMess
 
 export function isLogUnsubscribeMessage(msg: BaseMessage): msg is LogUnsubscribeMessage {
   return msg.kind === MessageKind.LOG_UNSUBSCRIBE;
+}
+
+export function isDeployMessage(msg: BaseMessage): msg is DeployMessage {
+  return msg.kind === MessageKind.DEPLOY;
 }

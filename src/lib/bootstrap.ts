@@ -72,14 +72,16 @@ export async function bootstrapMiddleware(
   const serverConfig = adapters!.config?.server;
   const emailConfig = adapters!.config?.email;
   const corsConfig = adapters!.config?.cors;
+  const integrationsConfig = adapters!.config?.integrations;
 
   c.env = {
     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
     APP_URL: serverConfig?.app_url || process.env.APP_URL || "",
     EMAIL_FROM: emailConfig?.from_address || process.env.EMAIL_FROM || "",
     ZEPTO_API_KEY: emailConfig?.zepto_api_key || process.env.ZEPTO_API_KEY || "",
-    GITHUB_APP_ID: process.env.GITHUB_APP_ID || "",
-    GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY || "",
+    GITHUB_APP_ID: integrationsConfig?.github_app_id || process.env.GITHUB_APP_ID || "",
+    GITHUB_APP_PRIVATE_KEY: integrationsConfig?.github_app_private_key || process.env.GITHUB_APP_PRIVATE_KEY || "",
+    GITHUB_WEBHOOK_SECRET: integrationsConfig?.github_webhook_secret || process.env.GITHUB_WEBHOOK_SECRET || "",
     GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID || "",
     GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || "",
     CORS_ALLOWED_ORIGINS: corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS || "",

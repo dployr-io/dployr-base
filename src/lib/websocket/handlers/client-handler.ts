@@ -4,8 +4,18 @@
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import type { AgentTask } from "@/lib/tasks/types.js";
 import type { ConnectionManager } from "../connection-manager.js";
-import type { ClusterConnection, BaseMessage, LogSubscribeMessage } from "../message-types.js";
-import { isClientSubscribeMessage, isLogSubscribeMessage, isLogUnsubscribeMessage } from "../message-types.js";
+import type {
+  ClusterConnection,
+  BaseMessage,
+  DeployMessage,
+  LogSubscribeMessage,
+} from "../message-types.js";
+import {
+  isClientSubscribeMessage,
+  isDeployMessage,
+  isLogSubscribeMessage,
+  isLogUnsubscribeMessage,
+} from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
 
@@ -38,7 +48,10 @@ export class ClientMessageHandler {
   /**
    * Process a message from a client
    */
-  async handleMessage(conn: ClusterConnection, message: BaseMessage): Promise<void> {
+  async handleMessage(
+    conn: ClusterConnection,
+    message: BaseMessage
+  ): Promise<void> {
     if (isClientSubscribeMessage(message)) {
       await this.handleClientSubscribe(conn);
       return;
@@ -51,6 +64,11 @@ export class ClientMessageHandler {
 
     if (isLogUnsubscribeMessage(message)) {
       this.handleLogUnsubscribe(conn, message.path);
+      return;
+    }
+
+    if (isDeployMessage(message)) {
+      this.handleDeploy(conn, message);
       return;
     }
   }
@@ -72,7 +90,10 @@ export class ClientMessageHandler {
   /**
    * Handle log stream subscription
    */
-  private async handleLogSubscribe(conn: ClusterConnection, message: LogSubscribeMessage): Promise<void> {
+  private async handleLogSubscribe(
+    conn: ClusterConnection,
+    message: LogSubscribeMessage
+  ): Promise<void> {
     const { instanceId, path, startOffset, limit } = message;
 
     if (!instanceId || !path) {
@@ -80,7 +101,12 @@ export class ClientMessageHandler {
       return;
     }
 
-    const streamId = this.buildStreamId(conn.clusterId, path, startOffset, limit);
+    const streamId = this.buildStreamId(
+      conn.clusterId,
+      path,
+      startOffset,
+      limit
+    );
 
     // Check for existing stream
     if (this.connectionManager.updateLogStreamClient(streamId, conn.ws)) {
@@ -98,10 +124,18 @@ export class ClientMessageHandler {
 
     // Create and send task to agents in cluster
     const token = await this.jwtService.createAgentAccessToken(instanceId);
-    const task = this.dployrdService.createLogStreamTask(streamId, path, startOffset, limit, token);
+    const task = this.dployrdService.createLogStreamTask(
+      streamId,
+      path,
+      startOffset,
+      limit,
+      token
+    );
     this.sendTaskToCluster(conn.clusterId, task);
 
-    console.log(`[WS] Created log stream task ${streamId} for cluster ${conn.clusterId}`);
+    console.log(
+      `[WS] Created log stream task ${streamId} for cluster ${conn.clusterId}`
+    );
   }
 
   /**
@@ -113,10 +147,21 @@ export class ClientMessageHandler {
     }
   }
 
+  private handleDeploy(conn: ClusterConnection, message: DeployMessage): void {
+    const { instanceId, payload } = message;
+    const task = this.dployrdService.createDeployTask(instanceId, payload);
+    this.sendTaskToCluster(conn.clusterId, task);
+  }
+
   /**
    * Build a unique stream ID
    */
-  private buildStreamId(clusterId: string, path: string, startOffset?: number, limit?: number): string {
+  private buildStreamId(
+    clusterId: string,
+    path: string,
+    startOffset?: number,
+    limit?: number
+  ): string {
     const offsetKey = startOffset ?? 0;
     const limitKey = limit ?? -1;
     return `${clusterId}:${path}:${offsetKey}:${limitKey}`;

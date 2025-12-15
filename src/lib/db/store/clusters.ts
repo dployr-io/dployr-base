@@ -205,18 +205,13 @@ export class ClusterStore extends BaseStore {
   }
 
   async installGitHubIntegration(
-    integration: Partial<Omit<GitHubIntegration, "remotesCount">>
+    clusterId: string,
+    integration: Omit<GitHubIntegration, "remotesCount">
   ): Promise<Cluster | null> {
-    const cluster = await this.db.prepare(`
-      SELECT id, metadata FROM clusters 
-      WHERE metadata->'gitHub'->>'loginId' = $1
-    `).bind(integration.loginId).first();
-
+    const cluster = await this.get(clusterId);
     if (!cluster) {
       return null;
     }
-
-    const clusterId = cluster.id as string;
 
     await this.db.prepare(`
       UPDATE clusters 

@@ -19,7 +19,7 @@ export type Bindings = {
   MICROSOFT_CLIENT_SECRET: string;
 
   GITHUB_APP_ID: string;
-  GITHUB_PRIVATE_KEY: string;
+  GITHUB_APP_PRIVATE_KEY: string;
   GITHUB_WEBHOOK_SECRET: string;
 
   APP_URL: string;
@@ -137,6 +137,19 @@ export interface BitBucketIntegration {
   accessToken: string;
   remotesCount: number;
   enabled: boolean;
+}
+
+export interface Remote {
+  url: string;
+  branch: string;
+  commit_hash?: string | null;
+  avatar_url?: string | null;
+}
+
+export interface RemoteListResult {
+  provider: "github" | "gitlab" | "bitbucket";
+  remotes: Remote[];
+  error?: string;
 }
 
 export interface ResendMailIntegration { }

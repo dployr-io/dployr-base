@@ -44,6 +44,15 @@ const ConfigSchema = z.object({
     github_client_id: z.string().optional(),
     github_client_secret: z.string().optional(),
   }),
+  integrations: z.object({
+    github_app_id: z.string().optional(),
+    github_app_private_key: z.string().optional(),
+    github_webhook_secret: z.string().optional(),
+    gitlab_app_id: z.string().optional(),
+    gitlab_app_secret: z.string().optional(),
+    bitbucket_app_id: z.string().optional(),
+    bitbucket_app_secret: z.string().optional(),
+  }).optional(),
   email: z.object({
     provider: z.enum(['zepto', 'resend', 'smtp']),
     zepto_api_key: z.string().optional(),
@@ -134,6 +143,15 @@ function loadConfigFromEnv(): Config {
       google_client_secret: process.env.GOOGLE_CLIENT_SECRET,
       github_client_id: process.env.GITHUB_CLIENT_ID,
       github_client_secret: process.env.GITHUB_CLIENT_SECRET,
+    },
+    integrations: {
+      github_app_id: process.env.GITHUB_APP_ID,
+      github_app_private_key: process.env.GITHUB_APP_PRIVATE_KEY,
+      github_webhook_secret: process.env.GITHUB_WEBHOOK_SECRET,
+      gitlab_app_id: process.env.GITLAB_APP_ID,
+      gitlab_app_secret: process.env.GITLAB_APP_SECRET,
+      bitbucket_app_id: process.env.BITBUCKET_APP_ID,
+      bitbucket_app_secret: process.env.BITBUCKET_APP_SECRET,
     },
     email: {
       provider: process.env.EMAIL_PROVIDER || 'zepto',

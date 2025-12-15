@@ -6,7 +6,7 @@ import { ulid } from "ulid";
 import { CryptoKey, importPKCS8 } from "jose";
 import { generateKeyPair } from "@/lib/crypto/keystore.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, AGENT_UPDATE_TTL, RELEASE_CACHE_TTL, DEDUP_TTL } from "@/lib/constants/index.js";
+import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, AGENT_UPDATE_TTL, RELEASE_CACHE_TTL, DEDUP_TTL, PENDING_GITHUB_INSTALL_TTL } from "@/lib/constants/index.js";
 import { JsonWebKey } from "crypto";
 
 export class KVStore {
@@ -189,20 +189,17 @@ export class KVStore {
     const events = await Promise.all(
       result.map(async (key) => {
         if (!key.name.startsWith(prefix)) {
-          console.warn("[KV] Skipping unexpected cluster event key", { key: key.name, expectedPrefix: prefix });
           return null;
         }
         const data = await this.kv.get(key.name);
         if (!data) return null;
         const trimmed = data.trimStart();
         if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) {
-          console.warn("[KV] Skipping non-JSON cluster event payload", { key: key.name });
           return null;
         }
         try {
           return JSON.parse(data);
         } catch (err) {
-          console.warn("[KV] Skipping invalid cluster event JSON", { key: key.name, err });
           return null;
         }
       })
@@ -363,5 +360,20 @@ export class KVStore {
     const cached = await this.getCachedLatestVersion();
     if (cached) return cached;
     return this.fetchAndCacheLatestVersion();
+  }
+
+  // Pending GitHub installation
+  async setPendingGitHubInstall(userId: string, clusterId: string): Promise<void> {
+    await this.kv.put(`pending_github_install:${userId}`, clusterId, {
+      ttl: PENDING_GITHUB_INSTALL_TTL,
+    });
+  }
+
+  async getPendingGitHubInstall(userId: string): Promise<string | null> {
+    return this.kv.get(`pending_github_install:${userId}`);
+  }
+
+  async deletePendingGitHubInstall(userId: string): Promise<void> {
+    await this.kv.delete(`pending_github_install:${userId}`);
   }
 }

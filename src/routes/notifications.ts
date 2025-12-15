@@ -5,12 +5,10 @@ import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { DatabaseStore } from "@/lib/db/store/index.js";
 import { ERROR, DEFAULT_EVENTS } from "@/lib/constants/index.js";
-import { authMiddleware, requireClusterDeveloper } from "@/middleware/auth.js";
+import { requireClusterDeveloper } from "@/middleware/auth.js";
 import { getDB, type AppVariables } from "@/lib/context.js";
 
 const notifications = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
-
-notifications.use("*", authMiddleware);
 
 // Notification events subscription management
 notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
@@ -20,19 +18,17 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
       events: string[];
     }>();
 
-    const session = c.get("session");
+    const clusterId = c.req.query("clusterId");
 
-    if (!session?.clusters?.[0]?.id) {
+    if (!clusterId) {
       return c.json(
         createErrorResponse({
-          message: "No cluster found",
+          message: "Missing clusterId query parameter",
           code: ERROR.AUTH.BAD_SESSION.code,
         }),
         ERROR.AUTH.BAD_SESSION.status,
       );
     }
-
-    const clusterId = session.clusters[0].id;
     const db = new DatabaseStore(getDB(c) as any);
     const cluster = await db.clusters.get(clusterId);
 
@@ -78,17 +74,17 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
 notifications.post("/discord/setup", requireClusterDeveloper, async (c) => {
   try {
     const { webhookUrl, enabled, events } = await c.req.json();
-    const session = c.get("session");
+    const clusterId = c.req.query("clusterId");
     
-    if (!session?.clusters?.[0]?.id) {
+    if (!clusterId) {
       return c.json(createErrorResponse({ 
-        message: "No cluster found", 
+        message: "Missing clusterId query parameter", 
         code: ERROR.AUTH.BAD_SESSION.code 
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const db = new DatabaseStore(getDB(c) as any);
-    await db.clusters.update(session.clusters[0].id, {
+    await db.clusters.update(clusterId, {
       metadata: { discord: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
 
@@ -106,17 +102,17 @@ notifications.post("/discord/setup", requireClusterDeveloper, async (c) => {
 notifications.post("/slack/setup", requireClusterDeveloper, async (c) => {
   try {
     const { webhookUrl, enabled, events } = await c.req.json();
-    const session = c.get("session");
+    const clusterId = c.req.query("clusterId");
     
-    if (!session?.clusters?.[0]?.id) {
+    if (!clusterId) {
       return c.json(createErrorResponse({ 
-        message: "No cluster found", 
+        message: "Missing clusterId query parameter", 
         code: ERROR.AUTH.BAD_SESSION.code 
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const db = new DatabaseStore(getDB(c) as any);
-    await db.clusters.update(session.clusters[0].id, {
+    await db.clusters.update(clusterId, {
       metadata: { slack: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
 
@@ -134,17 +130,17 @@ notifications.post("/slack/setup", requireClusterDeveloper, async (c) => {
 notifications.post("/webhook/setup", requireClusterDeveloper, async (c) => {
   try {
     const { webhookUrl, enabled, events } = await c.req.json();
-    const session = c.get("session");
+    const clusterId = c.req.query("clusterId");
     
-    if (!session?.clusters?.[0]?.id) {
+    if (!clusterId) {
       return c.json(createErrorResponse({ 
-        message: "No cluster found", 
+        message: "Missing clusterId query parameter", 
         code: ERROR.AUTH.BAD_SESSION.code 
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const db = new DatabaseStore(getDB(c) as any);
-    await db.clusters.update(session.clusters[0].id, {
+    await db.clusters.update(clusterId, {
       metadata: { customWebhook: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
 
@@ -162,17 +158,17 @@ notifications.post("/webhook/setup", requireClusterDeveloper, async (c) => {
 notifications.post("/email/setup", requireClusterDeveloper, async (c) => {
   try {
     const { enabled, events } = await c.req.json();
-    const session = c.get("session");
+    const clusterId = c.req.query("clusterId");
     
-    if (!session?.clusters?.[0]?.id) {
+    if (!clusterId) {
       return c.json(createErrorResponse({ 
-        message: "No cluster found", 
+        message: "Missing clusterId query parameter", 
         code: ERROR.AUTH.BAD_SESSION.code 
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
     const db = new DatabaseStore(getDB(c) as any);
-    await db.clusters.update(session.clusters[0].id, {
+    await db.clusters.update(clusterId, {
       metadata: { emailNotification: { enabled, events } }
     });
 

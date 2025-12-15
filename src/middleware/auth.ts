@@ -4,38 +4,75 @@
 // middleware/auth.ts
 import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
-import { Bindings, Variables } from "@/types/index.js";
+import { Bindings, Variables, Session } from "@/types/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { DatabaseStore } from "@/lib/db/store/index.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKV, getDB } from "@/lib/context.js";
 
-export async function authMiddleware(
-  c: Context<{ Bindings: Bindings; Variables: Variables }>,
-  next: Next
-) {
-  const sessionId = getCookie(c, "session");
+/**
+ * Authenticates the user and returns the session, or null if not authenticated.
+ */
+async function authenticate(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>
+): Promise<Session | null> {
+  // Check if session is already set (from previous middleware)
+  const existingSession = c.get("session");
+  if (existingSession) {
+    return existingSession;
+  }
 
+  const sessionId = getCookie(c, "session");
   if (!sessionId) {
-    return c.json({ error: "Not authenticated" }, 401);
+    return null;
   }
 
   const kv = new KVStore(getKV(c));
   const session = await kv.getSession(sessionId);
 
-  if (!session) {
-    return c.json({ error: "Invalid or expired session" }, 401);
+  if (session) {
+    c.set("session", session);
   }
 
-  c.set("session", session);
+  return session;
+}
+
+/**
+ * Extracts clusterId from request body, path param, or query param.
+ */
+function getClusterId(c: Context, data: Record<string, any>): string | undefined {
+  const param = c.req.param("id");
+  const query = c.req.query("clusterId");
+  return data.clusterId || param || query;
+}
+
+/**
+ * Basic authentication middleware 
+ */
+export async function authMiddleware(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  next: Next
+) {
+  const session = await authenticate(c);
+
+  if (!session) {
+    return c.json({ 
+      error: "Not authenticated", 
+      code: ERROR.AUTH.BAD_SESSION.code 
+    }, ERROR.AUTH.BAD_SESSION.status);
+  }
+
   await next();
 }
 
+/**
+ * Requires viewer role 
+ */
 export async function requireClusterViewer(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
   next: Next
 ) {
-  const session = c.get("session");
+  const session = await authenticate(c);
 
   if (!session) {
     return c.json({ 
@@ -50,12 +87,13 @@ export async function requireClusterViewer(
   } catch {
     data = {};
   }
-  const param = c.req.param("id");
-  const query = c.req.query("clusterId");
-  const clusterId = data.clusterId || param || query;
+  const clusterId = getClusterId(c, data);
 
   if (!clusterId) {
-    return c.json({ error: "clusterId is required" }, 400);
+    return c.json({ 
+      error: "clusterId is required", 
+      code: ERROR.REQUEST.BAD_REQUEST.code 
+    }, ERROR.REQUEST.BAD_REQUEST.status);
   }
 
   const db = new DatabaseStore(getDB(c) as any);
@@ -63,7 +101,7 @@ export async function requireClusterViewer(
 
   if (!canRead) {
     return c.json({ 
-      error: "Insufficient permissions. Viewer role is required to perform this action", 
+      error: "Insufficient permissions. Viewer role is required", 
       code: ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.code 
     }, ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.status);
   }
@@ -71,11 +109,14 @@ export async function requireClusterViewer(
   await next();
 }
 
+/**
+ * Requires developer role 
+ */
 export async function requireClusterDeveloper(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
   next: Next
 ) {
-  const session = c.get("session");
+  const session = await authenticate(c);
 
   if (!session) {
     return c.json({ 
@@ -90,12 +131,13 @@ export async function requireClusterDeveloper(
   } catch {
     data = {};
   }
-  const param = c.req.param("id");
-  const query = c.req.query("clusterId");
-  const clusterId = data.clusterId || param || query;
+  const clusterId = getClusterId(c, data);
 
   if (!clusterId) {
-    return c.json({ error: "clusterId is required" }, 400);
+    return c.json({ 
+      error: "clusterId is required", 
+      code: ERROR.REQUEST.BAD_REQUEST.code 
+    }, ERROR.REQUEST.BAD_REQUEST.status);
   }
 
   const db = new DatabaseStore(getDB(c) as any);
@@ -103,7 +145,7 @@ export async function requireClusterDeveloper(
 
   if (!canWrite) {
     return c.json({ 
-      error: "Insufficient permissions. Developer role is requried to perform this action", 
+      error: "Insufficient permissions. Developer role is required", 
       code: ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.code 
     }, ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.status);
   }
@@ -111,14 +153,20 @@ export async function requireClusterDeveloper(
   await next();
 }
 
+/**
+ * Requires admin role
+ */
 export async function requireClusterAdmin(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
   next: Next
 ) {
-  const session = c.get("session");
+  const session = await authenticate(c);
 
   if (!session) {
-    return c.json({ error: "Not authenticated" }, 401);
+    return c.json({ 
+      error: "Not authenticated", 
+      code: ERROR.AUTH.BAD_SESSION.code 
+    }, ERROR.AUTH.BAD_SESSION.status);
   }
 
   let data;
@@ -127,12 +175,13 @@ export async function requireClusterAdmin(
   } catch {
     data = {};
   }
-  const param = c.req.param("id");
-  const query = c.req.query("clusterId");
-  const clusterId = data.clusterId || param || query;
+  const clusterId = getClusterId(c, data);
 
   if (!clusterId) {
-    return c.json({ error: "clusterId is required" }, 400);
+    return c.json({ 
+      error: "clusterId is required", 
+      code: ERROR.REQUEST.BAD_REQUEST.code 
+    }, ERROR.REQUEST.BAD_REQUEST.status);
   }
 
   const db = new DatabaseStore(getDB(c) as any);
@@ -140,7 +189,7 @@ export async function requireClusterAdmin(
 
   if (!isAdmin) {
     return c.json({ 
-      error: "Insufficient permissions. Admin role is requried to perform this action", 
+      error: "Insufficient permissions. Admin role is required", 
       code: ERROR.PERMISSION.ADMIN_ROLE_REQUIRED.code 
     }, ERROR.PERMISSION.ADMIN_ROLE_REQUIRED.status);
   }
@@ -148,14 +197,20 @@ export async function requireClusterAdmin(
   await next();
 }
 
+/**
+ * Requires owner role 
+ */
 export async function requireClusterOwner(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
   next: Next
 ) {
-  const session = c.get("session");
+  const session = await authenticate(c);
 
   if (!session) {
-    return c.json({ error: "Not authenticated" }, 401);
+    return c.json({ 
+      error: "Not authenticated", 
+      code: ERROR.AUTH.BAD_SESSION.code 
+    }, ERROR.AUTH.BAD_SESSION.status);
   }
 
   let data;
@@ -164,12 +219,13 @@ export async function requireClusterOwner(
   } catch {
     data = {};
   }
-  const param = c.req.param("id");
-  const query = c.req.query("clusterId");
-  const clusterId = data.clusterId || param || query;
+  const clusterId = getClusterId(c, data);
 
   if (!clusterId) {
-    return c.json({ error: "clusterId is required" }, 400);
+    return c.json({ 
+      error: "clusterId is required", 
+      code: ERROR.REQUEST.BAD_REQUEST.code 
+    }, ERROR.REQUEST.BAD_REQUEST.status);
   }
 
   const db = new DatabaseStore(getDB(c) as any);
@@ -177,7 +233,7 @@ export async function requireClusterOwner(
 
   if (!isOwner) {
     return c.json({ 
-      error: "Insufficient permissions. Owner role is requried to perform this action", 
+      error: "Insufficient permissions. Owner role is required", 
       code: ERROR.PERMISSION.OWNER_ROLE_REQUIRED.code 
     }, ERROR.PERMISSION.OWNER_ROLE_REQUIRED.status);
   }

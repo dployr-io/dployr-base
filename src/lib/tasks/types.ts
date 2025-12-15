@@ -35,7 +35,25 @@ export const LogStreamSchema = z.object({
   streamId: z.string().min(1),
 });
 
-export type LogStreamPayload = z.infer<typeof LogStreamSchema>;
+// Deployment task payload
+export const DeploymentSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional(),
+  userId: z.string().min(1, "User ID is required"),
+  source: z.enum(["remote", "image"], { message: "Source must be either 'remote' or 'image'" }),
+  runtime: z.string().min(1, "Runtime is required"),
+  version: z.string().optional(),
+  runCmd: z.string().optional(),
+  buildCmd: z.string().optional(),
+  port: z.number().int().positive().optional(),
+  workingDir: z.string().optional(),
+  staticDir: z.string().optional(),
+  image: z.string().optional(),
+  envVars: z.record(z.string(), z.string()).optional(),
+  secrets: z.record(z.string(), z.string()).optional(),
+  remote: z.record(z.string(), z.any()).optional(),
+  domain: z.string().optional(),
+});
 
 // WebSocket message types for agent communication
 export const AgentTaskSchema = z.object({
@@ -57,6 +75,8 @@ export const AgentAckSchema = z.object({
   ids: z.array(z.string()),
 });
 
+export type LogStreamPayload = z.infer<typeof LogStreamSchema>;
+export type DeploymentPayload = z.infer<typeof DeploymentSchema>;
 export type AgentTaskMessage = z.infer<typeof AgentTaskSchema>;
 export type AgentPullMessage = z.infer<typeof AgentPullSchema>;
 export type AgentAckMessage = z.infer<typeof AgentAckSchema>;

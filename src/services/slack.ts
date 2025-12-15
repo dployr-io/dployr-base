@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Notifier, NotificationPayload, EVENTS, NotificationEvent } from "./notifier.js";
+import { Notifier, NotificationPayload, NotificationEvent } from "./notifier.js";
 import { EVENT_METADATA } from "@/lib/constants/event-metadata.js";
 
 export class SlackService implements Notifier {

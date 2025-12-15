@@ -18,6 +18,7 @@ export const AGENT_UPDATE_TTL = 60 * 5; // 5 minutes
 export const INSTANCE_STATUS_TTL = 60 * 15; // 15 minutes
 export const DEDUP_TTL = 60 * 60; // 1 hour
 export const RELEASE_CACHE_TTL = 60 * 10; // 10 minutes
+export const PENDING_GITHUB_INSTALL_TTL = 60 * 10; // 10 minutes
 
 export const ERROR = {
     REQUEST: {

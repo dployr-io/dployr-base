@@ -43,6 +43,8 @@ info:
     `X-RateLimit-*` headers indicating when it is safe to retry.
 
 servers:
+  - url: https://base.dployr.dev
+    description: Development
   - url: https://base.dployr.io
     description: Production
 
@@ -61,6 +63,8 @@ tags:
     description: Instance domains and bootstrap registration.
   - name: Deployments
     description: Deployment history and status.
+  - name: Integrations
+    description: VCS and notification integrations setup and management.
   - name: Notifications
     description: Notification integrations and event subscriptions.
   - name: GitHub
@@ -303,6 +307,129 @@ components:
       required:
         - path
         - streamId
+
+    Remote:
+      type: object
+      description: Remote repository information from integrated VCS providers.
+      properties:
+        url:
+          type: string
+          description: Repository URL.
+          example: https://github.com/user/repo
+        branch:
+          type: string
+          description: Default branch name.
+          example: main
+        commit_hash:
+          type: string
+          nullable: true
+          description: Optional latest commit hash.
+          example: abc123def456
+        avatar_url:
+          type: string
+          nullable: true
+          description: Optional avatar or icon URL for the repository.
+          example: https://avatars.githubusercontent.com/u/123456
+      required:
+        - url
+        - branch
+
+    RemoteListResult:
+      type: object
+      description: Remote repositories grouped by VCS provider.
+      properties:
+        provider:
+          type: string
+          enum: [github, gitlab, bitbucket]
+          description: VCS provider name
+        remotes:
+          type: array
+          description: List of repositories from this provider
+          items:
+            $ref: '#/components/schemas/Remote'
+        error:
+          type: string
+          nullable: true
+          description: Error message if provider fetch failed
+      required:
+        - provider
+        - remotes
+
+    DeploymentPayload:
+      type: object
+      description: Payload for deployment tasks sent to daemon.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Deployment name.
+        description:
+          type: string
+          nullable: true
+          description: Optional deployment description.
+        userId:
+          type: string
+          minLength: 1
+          description: User ID initiating the deployment.
+        source:
+          type: string
+          enum: [remote, image]
+          description: Deployment source.
+        runtime:
+          type: string
+          minLength: 1
+          description: Runtime identifier.
+        version:
+          type: string
+          nullable: true
+          description: Optional runtime version.
+        runCmd:
+          type: string
+          nullable: true
+          description: Optional command used to run the app.
+        buildCmd:
+          type: string
+          nullable: true
+          description: Optional command used to build the app.
+        port:
+          type: integer
+          minimum: 1
+          description: Optional app port.
+        workingDir:
+          type: string
+          nullable: true
+          description: Optional working directory.
+        staticDir:
+          type: string
+          nullable: true
+          description: Optional static files directory.
+        image:
+          type: string
+          nullable: true
+          description: Optional container image reference when source is image.
+        envVars:
+          type: object
+          description: Optional environment variables.
+          additionalProperties:
+            type: string
+        secrets:
+          type: object
+          description: Optional secret environment variables.
+          additionalProperties:
+            type: string
+        remote:
+          type: object
+          description: Optional remote source configuration.
+          additionalProperties: true
+        domain:
+          type: string
+          nullable: true
+          description: Optional custom domain.
+      required:
+        - name
+        - userId
+        - source
+        - runtime
 
     AgentTaskMessage:
       type: object
@@ -1200,15 +1327,74 @@ paths:
                                   events:
                                     $ref: '#/components/schemas/NotificationEventArray'
 
+  /v1/clusters/{id}/remotes:
+    get:
+      operationId: listClusterRemotes
+      tags:
+        - Clusters
+      summary: List GitHub remotes for a cluster
+      description: GitHub integration is required for this endpoint to work. Visit https://app.dployr.io/clusters/{id}/settings/integrations to manage GitHub integration.
+      x-requiredRole: viewer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Cluster ID
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Paginated list of GitHub remotes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaginatedResponse'
+        '401':
+          description: Not authenticated or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v1/integrations/list:
     get:
       operationId: listIntegrations
       tags:
-        - Clusters
-      summary: List all integrations for the current user's cluster
+        - Integrations
+      summary: List all integrations for a cluster
       x-requiredRole: developer
       security:
         - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Target cluster ID
       responses:
         '200':
           description: All integrations for the cluster
@@ -1245,6 +1431,77 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/integrations/github/install:
+    get:
+      operationId: initiateGitHubInstall
+      tags:
+        - Integrations
+      summary: Initiate GitHub App installation
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      description: |
+        Initiates the GitHub App installation flow. Stores the cluster ID, redirects to GitHub to install the app.
+        
+        After installation, GitHub redirects to `/v1/integrations/github/callback` which
+        looks up the pending installation using the user's session and links it to the cluster.
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Target cluster ID to link the GitHub installation to
+      responses:
+        '302':
+          description: Redirect to GitHub App installation page
+          headers:
+            Location:
+              schema:
+                type: string
+                example: https://github.com/apps/dployr-io/installations/new
+        '400':
+          description: Missing clusterId parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/integrations/github/callback:
+    get:
+      operationId: handleGitHubCallback
+      tags:
+        - Integrations
+      summary: GitHub App installation callback
+      x-requiredRole: public
+      security: []
+      description: |
+        Handles the redirect from GitHub after app installation.
+        
+        Uses the user's session to look up the pending installation from KV storage,
+        fetches installation details from GitHub API, and saves the integration to the cluster.
+        
+        **Note**: This endpoint should be configured as the "Setup URL" in GitHub App settings.
+      parameters:
+        - in: query
+          name: installation_id
+          schema:
+            type: string
+          description: GitHub installation ID (provided by GitHub)
+        - in: query
+          name: setup_action
+          schema:
+            type: string
+          description: GitHub setup action (install, update, etc.)
+      responses:
+        '302':
+          description: Redirect to cluster integrations settings page
+          headers:
+            Location:
+              schema:
+                type: string
+                example: https://app.dployr.dev/clusters/{cluster_id}/settings/integrations?success=github
+
   /v1/notifications/discord/setup:
     post:
       operationId: setupDiscordIntegration
@@ -1258,9 +1515,9 @@ paths:
         - in: query
           name: clusterId
           required: true
-          description: Target cluster ID
           schema:
             type: string
+          description: Target cluster ID
       requestBody:
         required: true
         content:
@@ -1305,9 +1562,9 @@ paths:
         - in: query
           name: clusterId
           required: true
-          description: Target cluster ID
           schema:
             type: string
+          description: Target cluster ID
       requestBody:
         required: true
         content:
@@ -1352,9 +1609,9 @@ paths:
         - in: query
           name: clusterId
           required: true
-          description: Target cluster ID
           schema:
             type: string
+          description: Target cluster ID
       requestBody:
         required: true
         content:
@@ -1390,11 +1647,18 @@ paths:
     post:
       operationId: setupGitLabIntegration
       tags:
-        - Clusters
+        - Integrations
       summary: Configure GitLab integration
       x-requiredRole: developer
       security:
         - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Target cluster ID
       requestBody:
         required: true
         content:
@@ -1427,11 +1691,18 @@ paths:
     post:
       operationId: setupBitBucketIntegration
       tags:
-        - Clusters
+        - Integrations
       summary: Configure BitBucket integration
       x-requiredRole: developer
       security:
         - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Target cluster ID
       requestBody:
         required: true
         content:
@@ -1460,6 +1731,106 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/integrations/remotes:
+    get:
+      operationId: listAllRemotes
+      tags:
+        - Integrations
+      summary: List all remotes from configured integrations
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Target cluster ID
+      description: |
+        Retrieves all remote repositories from all configured VCS integrations
+        (GitHub, GitLab, BitBucket) for the specified cluster.
+      responses:
+        '200':
+          description: Remotes from all configured integrations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          remotes:
+                            type: array
+                            description: Array of remote results grouped by provider
+                            items:
+                              $ref: '#/components/schemas/RemoteListResult'
+        '401':
+          description: Not authenticated or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/integrations/github/callback:
+    get:
+      operationId: handleGitHubOAuthCallback
+      tags:
+        - Integrations
+      summary: GitHub OAuth callback handler
+      x-requiredRole: public
+      description: |
+        The full URL to redirect to after a user authorizes a GitHub App installation.
+        This endpoint handles the OAuth callback from GitHub and redirects the user
+        to the cluster integrations settings page.
+      security: []
+      parameters:
+        - in: query
+          name: cluster_id
+          required: true
+          schema:
+            type: string
+          description: The cluster ID to redirect to
+        - in: query
+          name: code
+          schema:
+            type: string
+          description: OAuth authorization code from GitHub
+        - in: query
+          name: state
+          schema:
+            type: string
+          description: State parameter for CSRF protection
+      responses:
+        '302':
+          description: Redirect to cluster integrations settings page
+          headers:
+            Location:
+              schema:
+                type: string
+                example: https://app.dployr.dev/clusters/{cluster_id}/settings/integrations
+        '400':
+          description: Missing cluster_id parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v1/notifications/email/setup:
     post:
       operationId: setupEmailNotificationIntegration
@@ -1473,9 +1844,9 @@ paths:
         - in: query
           name: clusterId
           required: true
-          description: Target cluster ID
           schema:
             type: string
+          description: Target cluster ID
       description: |
         Configure email notifications for cluster events. By default, notifications are sent to the cluster owner's email.
         
@@ -1511,11 +1882,6 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
         '400':
           description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /v1/notifications/events/setup:
     post:
       operationId: setupNotificationEvents
@@ -1529,9 +1895,9 @@ paths:
         - in: query
           name: clusterId
           required: true
-          description: Target cluster ID
           schema:
             type: string
+          description: Target cluster ID
       description: |
         Update which notification events are enabled for a specific integration
         (Discord, Slack, custom webhook, or email) in the current cluster.
@@ -2368,7 +2734,8 @@ paths:
       operationId: listClusterRemotes
       tags:
         - Clusters
-      summary: List GitHub remotes for a cluster. GitHub integration is required for this endpoint to work. Visit https://app.dployr.io/clusters/{id}/settings/integrations to manage GitHub integration.
+      summary: List GitHub remotes for a cluster.
+      description: GitHub integration is required for this endpoint to work. Visit https://app.dployr.io/clusters/{id}/settings/integrations to manage GitHub integration.
       x-requiredRole: viewer
       security:
         - sessionCookie: []

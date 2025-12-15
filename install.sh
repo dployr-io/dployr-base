@@ -286,6 +286,15 @@ google_client_secret = "$GOOGLE_CLIENT_SECRET"
 github_client_id = "$GITHUB_CLIENT_ID"
 github_client_secret = "$GITHUB_CLIENT_SECRET"
 
+[integrations]
+github_app_id = "$GITHUB_APP_ID"
+github_app_private_key = "$GITHUB_APP_PRIVATE_KEY"
+github_webhook_secret = "$GITHUB_WEBHOOK_SECRET"
+gitlab_app_id = "$GITLAB_APP_ID"
+gitlab_app_secret = "$GITLAB_APP_SECRET"
+bitbucket_app_id = "$BITBUCKET_APP_ID"
+bitbucket_app_secret = "$BITBUCKET_APP_SECRET"
+
 [email]
 provider = "$EMAIL_PROVIDER"
 zepto_api_key = "$ZEPTO_API_KEY"

@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { AgentTask } from "@/lib/tasks/types.js";
+import type { AgentTask, DeploymentPayload } from "@/lib/tasks/types.js";
 
 export class AgentService {
   // Create a system install task
@@ -53,6 +53,15 @@ export class AgentService {
         streamId,
         token,
       },
+      Status: "pending",
+    };
+  }
+
+  createDeployTask(taskId: string, payload: DeploymentPayload, token?: string): AgentTask {
+    return {
+      ID: taskId,
+      Type: "deployments:post",
+      Payload: { ...payload, token },
       Status: "pending",
     };
   }
