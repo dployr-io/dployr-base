@@ -66,19 +66,25 @@ export class JWTService {
       .sign(privateKey);
   }
 
+  /**
+   * Creates a new instance access token for the given session and instance ID.
+   */
   async createInstanceAccessToken(
     session: Session,
     instanceId: string,
-    userRole: string,
+    clusterId: string,
     options?: { issuer?: string; audience?: string },
   ): Promise<string> {
     const privateKey = await this.keyStore.getPrivateKey();
     const publicKeyJwk = await this.keyStore.getPublicKey();
 
+    const cluster = session.clusters.find(c => c.id === clusterId);
+    const role = cluster?.role || 'user';
+
     let jwt = new SignJWT({
       sub: session.userId,
       instance_id: instanceId,
-      perm: userRole,
+      perm: role,
       scopes: ['system.status'],
     })
       .setProtectedHeader({

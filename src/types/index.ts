@@ -63,7 +63,7 @@ export interface Session {
   userId: string;
   email: string;
   provider: OAuthProvider;
-  clusters: { id: string, name: string, owner: string }[];
+  clusters: { id: string, name: string, owner: string, role: string }[];
   createdAt: number;
   expiresAt: number;
 }

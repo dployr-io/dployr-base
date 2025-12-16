@@ -3,6 +3,7 @@
 
 import type { WebSocket } from "ws";
 import type { DeploymentPayload } from "@/lib/tasks/types.js";
+import type { Session } from "@/types/index.js";
 
 /**
  * Message kind constants
@@ -90,6 +91,7 @@ export interface ClusterConnection {
   ws: WebSocket;
   role: ConnectionRole;
   clusterId: string;
+  session?: Session;
 }
 
 export interface LogStreamSubscription {

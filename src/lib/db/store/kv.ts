@@ -13,12 +13,12 @@ export class KVStore {
   constructor(public kv: IKVAdapter) { }
 
   // Session management
-  async createSession(sessionId: string, user: Omit<User, "createdAt" | "updatedAt">, clusters: { id: string, name: string, owner: string }[]): Promise<Session> {
+  async createSession(sessionId: string, user: Omit<User, "createdAt" | "updatedAt">, clusters: { id: string, name: string, owner: string, role: string }[]): Promise<Session> {
     const session: Session = {
       userId: user.id,
       email: user.email,
       provider: user.provider,
-      clusters: clusters,
+      clusters,
       createdAt: Date.now(),
       expiresAt: Date.now() + SESSION_TTL * 1000,
     };

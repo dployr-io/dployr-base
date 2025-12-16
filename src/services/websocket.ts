@@ -9,7 +9,9 @@ import type { Socket } from 'net';
 import type { Hono } from 'hono';
 import { initializeAdapters, type Adapters } from '@/lib/bootstrap.js';
 import { DatabaseStore } from '@/lib/db/store/index.js';
+import { KVStore } from '@/lib/db/store/kv.js';
 import { loadConfig } from '@/lib/config/loader.js';
+import type { Session } from '@/types/index.js';
 
 export class WebSocketService {
   private server: Server;
@@ -128,8 +130,23 @@ export class WebSocketService {
           }
         }
 
+        // Get session for client connections
+        let session: Session | undefined;
+        if (role === 'client' && this.adapters?.kv) {
+          const cookies = message.headers.cookie || '';
+          const sessionId = cookies.split(';')
+            .map(c => c.trim())
+            .find(c => c.startsWith('session='))
+            ?.split('=')[1];
+          
+          if (sessionId) {
+            const kv = new KVStore(this.adapters.kv);
+            session = await kv.getSession(sessionId) || undefined;
+          }
+        }
+
         this.wss.handleUpgrade(message, socket, head, (ws: WebSocket) => {
-          this.adapters!.ws.acceptWebSocket(clusterId, ws, role);
+          this.adapters!.ws.acceptWebSocket(clusterId, ws, role, session);
         });
       } else {
         socket.destroy();

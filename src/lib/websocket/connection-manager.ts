@@ -3,6 +3,7 @@
 
 import type { WebSocket } from "ws";
 import type { ClusterConnection, ConnectionRole, LogStreamSubscription } from "./message-types.js";
+import type { Session } from "@/types/index.js";
 
 /**
  * Manages WebSocket connections and log stream subscriptions.
@@ -14,12 +15,12 @@ export class ConnectionManager {
   /**
    * Add a new websocket connection for a cluster
    */
-  addConnection(clusterId: string, ws: WebSocket, role: ConnectionRole): ClusterConnection {
+  addConnection(clusterId: string, ws: WebSocket, role: ConnectionRole, session?: Session): ClusterConnection {
     if (!this.connections.has(clusterId)) {
       this.connections.set(clusterId, new Set());
     }
 
-    const conn: ClusterConnection = { ws, role, clusterId };
+    const conn: ClusterConnection = { ws, role, clusterId, session };
     this.connections.get(clusterId)!.add(conn);
 
     console.log(`[WS] ${role} connected to cluster ${clusterId}`);

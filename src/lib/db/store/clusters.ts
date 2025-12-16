@@ -451,12 +451,13 @@ export class ClusterStore extends BaseStore {
    * @param userId - The user ID
    * @returns A list of cluster IDs
    */
-  async listUserClusters(userId: string): Promise<{ id: string, name: string, owner: string }[]> {
+  async listUserClusters(userId: string): Promise<{ id: string, name: string, owner: string, role: string }[]> {
     const stmt = this.db.prepare(`
       SELECT 
         c.id,
         c.name,
-        owner_u.name as owner
+        owner_u.name as owner,
+        uc.role
       FROM user_clusters uc
       JOIN clusters c ON uc.cluster_id = c.id
       JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'
@@ -467,7 +468,8 @@ export class ClusterStore extends BaseStore {
     return results.results.map((r) => ({
       id: r.id as string,
       name: r.name as string,
-      owner: r.owner as string
+      owner: r.owner as string,
+      role: r.role as string
     }));
   }
 

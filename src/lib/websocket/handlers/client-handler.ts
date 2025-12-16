@@ -18,6 +18,7 @@ import {
 } from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
+import { ulid } from "ulid";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -147,10 +148,38 @@ export class ClientMessageHandler {
     }
   }
 
-  private handleDeploy(conn: ClusterConnection, message: DeployMessage): void {
+  /**
+   * Handle deploy message
+   */
+  private async handleDeploy(conn: ClusterConnection, message: DeployMessage): Promise<void> {
     const { instanceId, payload } = message;
-    const task = this.dployrdService.createDeployTask(instanceId, payload);
-    this.sendTaskToCluster(conn.clusterId, task);
+
+    if (!instanceId || !payload) {
+      console.error("[WS] deploy message missing instanceId or payload");
+      return;
+    }
+
+    if (!conn.session) {
+      console.error("[WS] deploy message missing session");
+      return;
+    }
+
+    const token = await this.jwtService.createInstanceAccessToken(
+      conn.session,
+      instanceId,
+      conn.clusterId
+    );
+    const taskId = ulid();
+    const task = this.dployrdService.createDeployTask(taskId, payload, token);
+    const sent = this.sendTaskToCluster(conn.clusterId, task);
+
+    if (!sent) {
+      console.warn(`[WS] Failed to send deploy task ${taskId} to cluster ${conn.clusterId}`);
+    }
+
+    console.log(
+      `[WS] Created deploy task ${taskId} for cluster ${conn.clusterId}`
+    );
   }
 
   /**

@@ -4,6 +4,7 @@
 import type { WebSocket } from "ws";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import type { AgentTask } from "@/lib/tasks/types.js";
+import type { Session } from "@/types/index.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { JWTService } from "@/services/jwt.js";
@@ -47,14 +48,15 @@ export class WebSocketHandler {
    * @param clusterId - The cluster to connect to
    * @param ws - The WebSocket connection
    * @param role - Whether this is an agent or client connection
-   * @param instanceId - Optional instance ID (for agent connections)
+   * @param session - Optional session (for client connections)
    */
   acceptWebSocket(
     clusterId: string,
     ws: WebSocket,
-    role: "agent" | "client"
+    role: "agent" | "client",
+    session?: Session
   ): void {
-    const conn = this.connectionManager.addConnection(clusterId, ws, role);
+    const conn = this.connectionManager.addConnection(clusterId, ws, role, session);
 
     ws.on("message", (data) => {
       this.handleMessage(conn, data).catch((err) => {
