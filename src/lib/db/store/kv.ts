@@ -10,7 +10,7 @@ import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, 
 import { JsonWebKey } from "crypto";
 
 export class KVStore {
-  constructor(public kv: IKVAdapter) { }
+  constructor(public kv: IKVAdapter, private githubToken?: string) { }
 
   // Session management
   async createSession(sessionId: string, user: Omit<User, "createdAt" | "updatedAt">, clusters: { id: string, name: string, owner: string, role: string }[]): Promise<Session> {
@@ -338,7 +338,16 @@ export class KVStore {
 
   private async fetchAndCacheLatestVersion(): Promise<string | null> {
     try {
-      const resp = await fetch("https://api.github.com/repos/dployr-io/dployr/releases/latest");
+      const headers: Record<string, string> = {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "dployr-base",
+      };
+      const token = (this.githubToken || "").trim();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const resp = await fetch("https://api.github.com/repos/dployr-io/dployr/releases/latest", { headers });
       if (!resp.ok) {
         return null;
       }

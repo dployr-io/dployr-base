@@ -21,6 +21,7 @@ export type Bindings = {
   GITHUB_APP_ID: string;
   GITHUB_APP_PRIVATE_KEY: string;
   GITHUB_WEBHOOK_SECRET: string;
+  GITHUB_TOKEN: string;
 
   APP_URL: string;
   BASE_URL: string;

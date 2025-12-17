@@ -53,11 +53,17 @@ runtime.post("/compatibility/check", async (c) => {
 
     let latestVersion: string | undefined;
     try {
+      const ghToken = (c.env.GITHUB_TOKEN || "").trim();
+      const headers: Record<string, string> = {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "dployr-base",
+      };
+      if (ghToken) {
+        headers.Authorization = `Bearer ${ghToken}`;
+      }
+
       const resp = await fetch("https://api.github.com/repos/dployr-io/dployr/releases/latest", {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "User-Agent": "dployr-base",
-        },
+        headers,
       });
 
       if (resp.ok) {
@@ -102,11 +108,17 @@ runtime.get("/versions", async (c) => {
     const showPreReleases = c.req.query("showPreReleases");
     const includePreReleases = showPreReleases === "true";
 
+    const ghToken = (c.env.GITHUB_TOKEN || "").trim();
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "dployr-base",
+    };
+    if (ghToken) {
+      headers.Authorization = `Bearer ${ghToken}`;
+    }
+
     const resp = await fetch("https://api.github.com/repos/dployr-io/dployr/releases", {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "User-Agent": "dployr-base",
-      },
+      headers,
     });
 
     if (!resp.ok) {

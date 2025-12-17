@@ -36,7 +36,7 @@ const setupSchema = z.object({
 });
 
 // Register instance with bootstrap token
-domains.post("/", async (c) => {
+domains.post("/register", async (c) => {
   try {
     const body = await c.req.json();
     const validation = registerInstanceSchema.safeParse(body);
@@ -128,8 +128,8 @@ domains.post("/", async (c) => {
   }
 });
 
-// Request custom domain setup
-domains.post("/setup", authMiddleware, requireClusterDeveloper, async (c) => {
+// Create custom domain
+domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   const session = c.get("session")!;
   const db = new DatabaseStore(getDB(c) as any);
   const kv = new KVStore(getKV(c));
@@ -243,8 +243,47 @@ domains.get("/verify", async (c) => {
   return c.text("ok", 200);
 });
 
-// Get domain status
-domains.get("/status/:domain", authMiddleware, async (c) => {
+// Client-initiated domain verification check
+domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (c) => {
+  try {
+    const domain = c.req.param("domain").toLowerCase();
+    const db = new DatabaseStore(getDB(c) as any);
+    const dns = new DNSService(c.env);
+
+    const record = await db.domains.get(domain);
+    if (!record) {
+      return c.json(
+        createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
+        404
+      );
+    }
+
+    const instance = await db.instances.get(record.instanceId);
+    if (!instance) {
+      return c.json(
+        createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
+        404
+      );
+    }
+
+    await dns.checkTxtRecord(domain, record.verificationToken);
+
+    await db.domains.activate(domain);
+    return new Response(null, { status: 204 });
+  } catch (err) {
+    console.error("Domain verification error:", err);
+    return c.json(
+      createErrorResponse({
+        message: "Domain verification failed",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
+});
+
+// Get domain details
+domains.get("/:domain", authMiddleware, async (c) => {
   const domain = c.req.param("domain").toLowerCase();
   const session = c.get("session")!;
   const db = new DatabaseStore(getDB(c) as any);

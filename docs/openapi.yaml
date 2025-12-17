@@ -2786,59 +2786,14 @@ paths:
 
   /v1/domains:
     post:
-      operationId: registerInstanceDomain
+      operationId: createCustomDomain
       tags:
         - Domains
-      summary: Register instance domain
-      x-requiredRole: public
-      description: Registers an instance using a one-time token issued by the base service, during instance creation.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [token]
-              properties:
-                token:
-                  type: string
-      responses:
-        '200':
-          description: Instance registered
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        properties:
-                          instanceId:
-                            type: string
-                          issuer:
-                            type: string
-                          audience:
-                            type: string
-                            example: dployr-instance
-        '400':
-          description: Invalid or expired token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /v1/dns/setup:
-    post:
-      operationId: setupCustomDomain
-      tags:
-        - Domains
-      summary: Request custom domain setup
+      summary: Create custom domain
       x-requiredRole: developer
       description: |
-        Initiates custom domain setup with automatic DNS provider detection and optional OAuth setup.
-        Returns the A record that needs to be added to the domain's DNS configuration.
+        Creates a custom domain with automatic DNS provider detection and optional OAuth setup.
+        Returns the DNS records that need to be added to the domain's configuration.
       security:
         - sessionCookie: []
       requestBody:
@@ -2861,7 +2816,7 @@ paths:
                   example: 01ARZ3NDEKTSV4RRFFQ69G5FAV
       responses:
         '200':
-          description: Domain setup initiated
+          description: Domain created
           content:
             application/json:
               schema:
@@ -2941,57 +2896,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/verify:
-    get:
-      operationId: verifyDomain
+  /v1/domains/register:
+    post:
+      operationId: registerInstanceDomain
       tags:
         - Domains
-      summary: Verify domain ownership (Caddy callback)
+      summary: Register instance domain
       x-requiredRole: public
-      description: Caddy calls this endpoint to verify the TXT record before issuing a certificate.
-      security: []
-      parameters:
-        - in: query
-          name: domain
-          required: true
-          schema:
-            type: string
+      description: Registers an instance using a one-time token issued by the base service, during instance creation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
       responses:
         '200':
-          description: Domain verified and activated
+          description: Instance registered
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-                example: ok
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          instanceId:
+                            type: string
+                          issuer:
+                            type: string
+                          audience:
+                            type: string
+                            example: dployr-instance
         '400':
-          description: Missing domain parameter
+          description: Invalid or expired token
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-                example: missing domain parameter
-        '403':
-          description: Verification pending (TXT record not found)
-          content:
-            text/plain:
-              schema:
-                type: string
-                example: verification pending
-        '404':
-          description: Domain not registered
-          content:
-            text/plain:
-              schema:
-                type: string
-                example: domain not registered
+                $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/status/{domain}:
+  /v1/domains/{domain}:
     get:
-      operationId: getDomainStatus
+      operationId: getDomain
       tags:
         - Domains
-      summary: Get domain status
+      summary: Get domain details
       x-requiredRole: viewer
       description: |
         Returns the current status of a domain. For pending domains, includes the DNS records
@@ -3081,8 +3036,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      operationId: removeDomain
+      tags:
+        - Domains
+      summary: Remove domain
+      x-requiredRole: developer
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: domain
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Domain removed successfully
+        '403':
+          description: Permission denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Domain or instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/instance/{instanceId}:
+  /v1/domains/instance/{instanceId}:
     get:
       operationId: listInstanceDomains
       tags:
@@ -3145,13 +3129,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/{domain}:
-    delete:
-      operationId: removeDomain
+  /v1/domains/{domain}/verify:
+    post:
+      operationId: checkDomainVerification
       tags:
         - Domains
-      summary: Remove domain
+      summary: Check domain verification status
       x-requiredRole: developer
+      description: |
+        Checks if the DNS TXT record has been added and activates the domain if verification is complete.
       security:
         - sessionCookie: []
       parameters:
@@ -3160,9 +3146,16 @@ paths:
           required: true
           schema:
             type: string
+          description: Domain name to verify
       responses:
         '204':
-          description: Domain removed successfully
+          description: Domain check in-flight
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Permission denied
           content:
@@ -3175,8 +3168,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Domain verification failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/dns/callback/{provider}:
+  /v1/domains/callback/{provider}:
     get:
       operationId: oauthCallback
       tags:
