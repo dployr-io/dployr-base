@@ -17,6 +17,7 @@ export const MessageKind = {
   CLIENT_SUBSCRIBE: "client_subscribe",
   LOG_SUBSCRIBE: "log_subscribe",
   LOG_UNSUBSCRIBE: "log_unsubscribe",
+  LOG_STREAM: "log_stream",
   DEPLOY: "deploy",
 
   // Server -> Agent
@@ -75,7 +76,24 @@ export interface DeployMessage extends BaseMessage {
   payload: DeploymentPayload;
 }
 
-export type ClientMessage = ClientSubscribeMessage | LogSubscribeMessage | LogUnsubscribeMessage | DeployMessage;
+/**
+ * Log stream message for deployment/service logs
+ * path formats:
+ *   - "<deployment-id>" for deployment logs
+ *   - "service:<service-name>" for service logs
+ */
+export type LogStreamMode = "tail" | "head";
+
+export interface LogStreamMessage extends BaseMessage {
+  kind: typeof MessageKind.LOG_STREAM;
+  token: string;
+  path: string;
+  streamId: string;
+  mode: LogStreamMode;
+  startFrom: number;
+}
+
+export type ClientMessage = ClientSubscribeMessage | LogSubscribeMessage | LogUnsubscribeMessage | DeployMessage | LogStreamMessage;
 
 /**
  * All inbound messages
@@ -142,4 +160,8 @@ export function isLogUnsubscribeMessage(msg: BaseMessage): msg is LogUnsubscribe
 
 export function isDeployMessage(msg: BaseMessage): msg is DeployMessage {
   return msg.kind === MessageKind.DEPLOY;
+}
+
+export function isLogStreamMessage(msg: BaseMessage): msg is LogStreamMessage {
+  return msg.kind === MessageKind.LOG_STREAM;
 }

@@ -9,12 +9,14 @@ import type {
   BaseMessage,
   DeployMessage,
   LogSubscribeMessage,
+  LogStreamMessage,
 } from "../message-types.js";
 import {
   isClientSubscribeMessage,
   isDeployMessage,
   isLogSubscribeMessage,
   isLogUnsubscribeMessage,
+  isLogStreamMessage,
 } from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
@@ -70,6 +72,11 @@ export class ClientMessageHandler {
 
     if (isDeployMessage(message)) {
       this.handleDeploy(conn, message);
+      return;
+    }
+
+    if (isLogStreamMessage(message)) {
+      await this.handleLogStream(conn, message);
       return;
     }
   }
@@ -179,6 +186,65 @@ export class ClientMessageHandler {
 
     console.log(
       `[WS] Created deploy task ${taskId} for cluster ${conn.clusterId}`
+    );
+  }
+
+  /**
+   * Handle log stream for deployments and services
+   * path formats:
+   *   - "<deployment-id>" for deployment logs
+   *   - "service:<service-name>" for service logs
+   */
+  private async handleLogStream(
+    conn: ClusterConnection,
+    message: LogStreamMessage
+  ): Promise<void> {
+    const { token, path, streamId, mode, startFrom } = message;
+
+    if (!token || !path || !streamId) {
+      console.error("[WS] log_stream missing required fields (token, path, or streamId)");
+      return;
+    }
+
+    // Validate token
+    try {
+      await this.jwtService.verifyToken(token);
+    } catch {
+      console.error("[WS] log_stream invalid token");
+      conn.ws.send(JSON.stringify({ error: "invalid_token", streamId }));
+      return;
+    }
+
+    // Check for existing stream and reuse if possible
+    if (this.connectionManager.updateLogStreamClient(streamId, conn.ws)) {
+      return;
+    }
+
+    // Create new subscription
+    const startOffset = startFrom === -1 ? undefined : startFrom;
+    const limit = mode === "tail" ? undefined : 1000;
+
+    this.connectionManager.addLogStream({
+      streamId,
+      path,
+      ws: conn.ws,
+      startOffset,
+      limit,
+    });
+
+    // Create and send task to agents in cluster
+    const agentToken = await this.jwtService.createAgentAccessToken(conn.clusterId);
+    const task = this.dployrdService.createLogStreamTask(
+      streamId,
+      path,
+      startOffset,
+      limit,
+      agentToken
+    );
+    this.sendTaskToCluster(conn.clusterId, task);
+
+    console.log(
+      `[WS] Created log stream ${streamId} for path ${path} in cluster ${conn.clusterId}`
     );
   }
 
