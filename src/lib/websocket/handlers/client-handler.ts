@@ -10,10 +10,20 @@ import type {
   DeployMessage,
   LogSubscribeMessage,
   LogStreamMessage,
+  FileReadMessage,
+  FileWriteMessage,
+  FileCreateMessage,
+  FileDeleteMessage,
+  FileTreeMessage,
 } from "../message-types.js";
 import {
   isClientSubscribeMessage,
   isDeployMessage,
+  isFileReadMessage,
+  isFileWriteMessage,
+  isFileCreateMessage,
+  isFileDeleteMessage,
+  isFileTreeMessage,
   isLogSubscribeMessage,
   isLogUnsubscribeMessage,
   isLogStreamMessage,
@@ -79,6 +89,31 @@ export class ClientMessageHandler {
       await this.handleLogStream(conn, message);
       return;
     }
+
+    if (isFileReadMessage(message)) {
+      await this.handleFileRead(conn, message);
+      return;
+    }
+
+    if (isFileWriteMessage(message)) {
+      await this.handleFileWrite(conn, message);
+      return;
+    }
+
+    if (isFileCreateMessage(message)) {
+      await this.handleFileCreate(conn, message);
+      return;
+    }
+
+    if (isFileDeleteMessage(message)) {
+      await this.handleFileDelete(conn, message);
+      return;
+    }
+
+    if (isFileTreeMessage(message)) {
+      await this.handleFileTree(conn, message);
+      return;
+    }
   }
 
   /**
@@ -102,7 +137,7 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: LogSubscribeMessage
   ): Promise<void> {
-    const { instanceId, path, startOffset, limit } = message;
+    const { instanceId, path, startOffset, limit, duration } = message;
 
     if (!instanceId || !path) {
       console.error("[WS] log_subscribe missing instanceId or path");
@@ -113,7 +148,8 @@ export class ClientMessageHandler {
       conn.clusterId,
       path,
       startOffset,
-      limit
+      limit,
+      duration
     );
 
     // Check for existing stream
@@ -128,17 +164,19 @@ export class ClientMessageHandler {
       ws: conn.ws,
       startOffset,
       limit,
+      duration,
     });
 
     // Create and send task to agents in cluster
     const token = await this.jwtService.createAgentAccessToken(instanceId);
-    const task = this.dployrdService.createLogStreamTask(
+    const task = this.dployrdService.createLogStreamTask({
       streamId,
       path,
       startOffset,
       limit,
-      token
-    );
+      duration,
+      token,
+    });
     this.sendTaskToCluster(conn.clusterId, task);
 
     console.log(
@@ -199,10 +237,10 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: LogStreamMessage
   ): Promise<void> {
-    const { token, path, streamId, mode, startFrom } = message;
+    const { token, path, streamId, duration, startFrom } = message;
 
-    if (!token || !path || !streamId) {
-      console.error("[WS] log_stream missing required fields (token, path, or streamId)");
+    if (!token || !path || !streamId || !duration) {
+      console.error("[WS] log_stream missing required fields (token, path, streamId, duration)");
       return;
     }
 
@@ -222,30 +260,209 @@ export class ClientMessageHandler {
 
     // Create new subscription
     const startOffset = startFrom === -1 ? undefined : startFrom;
-    const limit = mode === "tail" ? undefined : 1000;
 
     this.connectionManager.addLogStream({
       streamId,
       path,
       ws: conn.ws,
       startOffset,
-      limit,
+      duration
     });
 
     // Create and send task to agents in cluster
     const agentToken = await this.jwtService.createAgentAccessToken(conn.clusterId);
-    const task = this.dployrdService.createLogStreamTask(
+    const task = this.dployrdService.createLogStreamTask({
       streamId,
       path,
       startOffset,
-      limit,
-      agentToken
-    );
+      duration,
+      token: agentToken,
+    });
     this.sendTaskToCluster(conn.clusterId, task);
 
     console.log(
       `[WS] Created log stream ${streamId} for path ${path} in cluster ${conn.clusterId}`
     );
+  }
+
+  /**
+   * Handle file read request
+   */
+  private async handleFileRead(
+    conn: ClusterConnection,
+    message: FileReadMessage
+  ): Promise<void> {
+    const { instanceId, path } = message;
+
+    if (!instanceId || !path) {
+      console.error("[WS] file_read missing instanceId or path");
+      conn.ws.send(JSON.stringify({ error: "missing_instanceId_or_path" }));
+      return;
+    }
+
+    if (!conn.session) {
+      console.error("[WS] file_read missing session");
+      return;
+    }
+
+    const taskId = ulid();
+    const token = await this.jwtService.createInstanceAccessToken(
+      conn.session,
+      instanceId,
+      conn.clusterId
+    );
+    const task = this.dployrdService.createFileReadTask(taskId, path, token);
+    const sent = this.sendTaskToCluster(conn.clusterId, task);
+
+    if (!sent) {
+      console.warn(`[WS] Failed to send file read task ${taskId} to cluster ${conn.clusterId}`);
+    }
+
+    console.log(`[WS] Created file read task ${taskId} for path: ${path}`);
+  }
+
+  /**
+   * Handle file write request
+   */
+  private async handleFileWrite(
+    conn: ClusterConnection,
+    message: FileWriteMessage
+  ): Promise<void> {
+    const { instanceId, path, content, encoding } = message;
+
+    if (!instanceId || !path || !content) {
+      console.error("[WS] file_write missing instanceId, path, or content");
+      conn.ws.send(JSON.stringify({ error: "missing_instanceId_path_or_content" }));
+      return;
+    }
+
+    if (!conn.session) {
+      console.error("[WS] file_write missing session");
+      return;
+    }
+
+    const taskId = ulid();
+    const token = await this.jwtService.createInstanceAccessToken(
+      conn.session,
+      instanceId,
+      conn.clusterId
+    );
+    const task = this.dployrdService.createFileWriteTask(taskId, path, content, encoding, token);
+    const sent = this.sendTaskToCluster(conn.clusterId, task);
+
+    if (!sent) {
+      console.warn(`[WS] Failed to send file write task ${taskId} to cluster ${conn.clusterId}`);
+    }
+
+    console.log(`[WS] Created file write task ${taskId} for path: ${path}, encoding: ${encoding ?? "utf8"}`);
+  }
+
+  /**
+   * Handle file create request
+   */
+  private async handleFileCreate(
+    conn: ClusterConnection,
+    message: FileCreateMessage
+  ): Promise<void> {
+    const { instanceId, path, type } = message;
+
+    if (!instanceId || !path || !type) {
+      console.error("[WS] file_create missing instanceId, path, or type");
+      conn.ws.send(JSON.stringify({ error: "missing_instanceId_path_or_type" }));
+      return;
+    }
+
+    if (!conn.session) {
+      console.error("[WS] file_create missing session");
+      return;
+    }
+
+    const taskId = ulid();
+    const token = await this.jwtService.createInstanceAccessToken(
+      conn.session,
+      instanceId,
+      conn.clusterId
+    );
+    const task = this.dployrdService.createFileCreateTask(taskId, path, type, token);
+    const sent = this.sendTaskToCluster(conn.clusterId, task);
+
+    if (!sent) {
+      console.warn(`[WS] Failed to send file create task ${taskId} to cluster ${conn.clusterId}`);
+    }
+
+    console.log(`[WS] Created file create task ${taskId} for path: ${path}, type: ${type}`);
+  }
+
+  /**
+   * Handle file delete request
+   */
+  private async handleFileDelete(
+    conn: ClusterConnection,
+    message: FileDeleteMessage
+  ): Promise<void> {
+    const { instanceId, path } = message;
+
+    if (!instanceId || !path) {
+      console.error("[WS] file_delete missing instanceId or path");
+      conn.ws.send(JSON.stringify({ error: "missing_instanceId_or_path" }));
+      return;
+    }
+
+    if (!conn.session) {
+      console.error("[WS] file_delete missing session");
+      return;
+    }
+
+    const taskId = ulid();
+    const token = await this.jwtService.createInstanceAccessToken(
+      conn.session,
+      instanceId,
+      conn.clusterId
+    );
+    const task = this.dployrdService.createFileDeleteTask(taskId, path, token);
+    const sent = this.sendTaskToCluster(conn.clusterId, task);
+
+    if (!sent) {
+      console.warn(`[WS] Failed to send file delete task ${taskId} to cluster ${conn.clusterId}`);
+    }
+
+    console.log(`[WS] Created file delete task ${taskId} for path: ${path}`);
+  }
+
+  /**
+   * Handle file tree request
+   */
+  private async handleFileTree(
+    conn: ClusterConnection,
+    message: FileTreeMessage
+  ): Promise<void> {
+    const { instanceId, path } = message;
+
+    if (!instanceId) {
+      console.error("[WS] file_tree missing instanceId");
+      conn.ws.send(JSON.stringify({ error: "missing_instanceId" }));
+      return;
+    }
+
+    if (!conn.session) {
+      console.error("[WS] file_tree missing session");
+      return;
+    }
+
+    const taskId = ulid();
+    const token = await this.jwtService.createInstanceAccessToken(
+      conn.session,
+      instanceId,
+      conn.clusterId
+    );
+    const task = this.dployrdService.createFileTreeTask(taskId, path, token);
+    const sent = this.sendTaskToCluster(conn.clusterId, task);
+
+    if (!sent) {
+      console.warn(`[WS] Failed to send file tree task ${taskId} to cluster ${conn.clusterId}`);
+    }
+
+    console.log(`[WS] Created file tree task ${taskId} for path: ${path ?? "root"}`);
   }
 
   /**
@@ -255,10 +472,11 @@ export class ClientMessageHandler {
     clusterId: string,
     path: string,
     startOffset?: number,
-    limit?: number
+    limit?: number,
+    duration?: string
   ): string {
     const offsetKey = startOffset ?? 0;
     const limitKey = limit ?? -1;
-    return `${clusterId}:${path}:${offsetKey}:${limitKey}`;
+    return `${clusterId}:${path}:${offsetKey}:${limitKey}:${duration}`;
   }
 }

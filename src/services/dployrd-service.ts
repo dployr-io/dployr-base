@@ -36,22 +36,24 @@ export class AgentService {
   }
 
   // Create a log streaming task
-  createLogStreamTask(
-    streamId: string,
-    path: string,
-    startOffset?: number,
-    limit?: number,
-    token?: string,
-  ): AgentTask {
+  createLogStreamTask(options: {
+    streamId: string;
+    path: string;
+    startOffset?: number;
+    limit?: number;
+    duration?: string;
+    token?: string;
+  }): AgentTask {
     return {
-      ID: streamId,
+      ID: options.streamId,
       Type: "logs/stream:post",
       Payload: {
-        path,
-        startOffset,
-        limit,
-        streamId,
-        token,
+        path: options.path,
+        startOffset: options.startOffset,
+        limit: options.limit,
+        streamId: options.streamId,
+        duration: options.duration,
+        token: options.token,
       },
       Status: "pending",
     };
@@ -62,6 +64,56 @@ export class AgentService {
       ID: taskId,
       Type: "deployments:post",
       Payload: { ...payload, token },
+      Status: "pending",
+    };
+  }
+
+  // Create a file read task
+  createFileReadTask(taskId: string, path: string, token?: string): AgentTask {
+    return {
+      ID: taskId,
+      Type: "system/fs/read:get",
+      Payload: { path, token },
+      Status: "pending",
+    };
+  }
+
+  // Create a file write task
+  createFileWriteTask(taskId: string, path: string, content: string, encoding?: "utf8" | "base64", token?: string): AgentTask {
+    return {
+      ID: taskId,
+      Type: "system/fs/write:put",
+      Payload: { path, content, encoding, token },
+      Status: "pending",
+    };
+  }
+
+  // Create a file create task
+  createFileCreateTask(taskId: string, path: string, type: "file" | "directory", token?: string): AgentTask {
+    return {
+      ID: taskId,
+      Type: "system/fs/create:post",
+      Payload: { path, type, token },
+      Status: "pending",
+    };
+  }
+
+  // Create a file delete task
+  createFileDeleteTask(taskId: string, path: string, token?: string): AgentTask {
+    return {
+      ID: taskId,
+      Type: "system/fs/delete:delete",
+      Payload: { path, token },
+      Status: "pending",
+    };
+  }
+
+  // Create a file tree task
+  createFileTreeTask(taskId: string, path?: string, token?: string): AgentTask {
+    return {
+      ID: taskId,
+      Type: "system/fs/tree:get",
+      Payload: { path, token },
       Status: "pending",
     };
   }
