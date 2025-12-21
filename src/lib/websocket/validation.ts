@@ -104,6 +104,64 @@ export const FileTreeResponseSchema = z.object({
   }).optional(),
 });
 
+// Instance operation schemas
+export const InstanceListMessageSchema = z.object({
+  kind: z.literal("instance_list"),
+  requestId: z.string().min(1),
+  clusterId: z.string().min(1),
+  page: z.number().int().positive().optional(),
+  pageSize: z.number().int().positive().optional(),
+});
+
+export const InstanceCreateMessageSchema = z.object({
+  kind: z.literal("instance_create"),
+  requestId: z.string().min(1),
+  clusterId: z.string().min(1),
+  address: z.string().regex(
+    /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/,
+    "Address must be a valid IPv4 address"
+  ),
+  tag: z.string().min(3).max(15),
+});
+
+export const InstanceDeleteMessageSchema = z.object({
+  kind: z.literal("instance_delete"),
+  requestId: z.string().min(1),
+  instanceId: z.string().min(1),
+  clusterId: z.string().min(1),
+});
+
+export const InstanceTokenRotateMessageSchema = z.object({
+  kind: z.literal("instance_token_rotate"),
+  requestId: z.string().min(1),
+  instanceId: z.string().min(1),
+  token: z.string().min(1),
+});
+
+export const InstanceSystemInstallMessageSchema = z.object({
+  kind: z.literal("instance_system_install"),
+  requestId: z.string().min(1),
+  instanceId: z.string().min(1),
+  clusterId: z.string().min(1),
+  version: z.string().optional(),
+});
+
+export const InstanceSystemRebootMessageSchema = z.object({
+  kind: z.literal("instance_system_reboot"),
+  requestId: z.string().min(1),
+  instanceId: z.string().min(1),
+  clusterId: z.string().min(1),
+  force: z.boolean().optional(),
+});
+
+export const InstanceSystemRestartMessageSchema = z.object({
+  kind: z.literal("instance_system_restart"),
+  requestId: z.string().min(1),
+  instanceId: z.string().min(1),
+  clusterId: z.string().min(1),
+  force: z.boolean().optional(),
+});
+
 /**
  * Validate and parse a message with proper error handling
  */
@@ -138,6 +196,20 @@ export function getSchemaForKind(kind: string): z.ZodType<any> | null {
       return FileTreeMessageSchema;
     case "task_response":
       return TaskResponseSchema;
+    case "instance_list":
+      return InstanceListMessageSchema;
+    case "instance_create":
+      return InstanceCreateMessageSchema;
+    case "instance_delete":
+      return InstanceDeleteMessageSchema;
+    case "instance_token_rotate":
+      return InstanceTokenRotateMessageSchema;
+    case "instance_system_install":
+      return InstanceSystemInstallMessageSchema;
+    case "instance_system_reboot":
+      return InstanceSystemRebootMessageSchema;
+    case "instance_system_restart":
+      return InstanceSystemRestartMessageSchema;
     default:
       return null;
   }

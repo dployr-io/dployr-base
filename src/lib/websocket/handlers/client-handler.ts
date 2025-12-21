@@ -16,6 +16,10 @@ import type {
   FileDeleteMessage,
   FileTreeMessage,
   AckMessage,
+  InstanceTokenRotateMessage,
+  InstanceSystemInstallMessage,
+  InstanceSystemRebootMessage,
+  InstanceSystemRestartMessage,
 } from "../message-types.js";
 import {
   isClientSubscribeMessage,
@@ -29,17 +33,24 @@ import {
   isLogUnsubscribeMessage,
   isLogStreamMessage,
   isAckMessage,
+  isInstanceTokenRotateMessage,
+  isInstanceSystemInstallMessage,
+  isInstanceSystemRebootMessage,
+  isInstanceSystemRestartMessage,
   validateRequestMessage,
   createWSError,
   WSErrorCode,
 } from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
+import { type IDBAdapter } from "@/lib/context.js";
 import { ulid } from "ulid";
+import { DatabaseStore } from "@/lib/db/store/index.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
   kv: IKVAdapter;
+  db: IDBAdapter;
   jwtService: JWTService;
   dployrdService: AgentService;
   sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
@@ -51,6 +62,7 @@ export interface ClientHandlerDependencies {
 export class ClientMessageHandler {
   private connectionManager: ConnectionManager;
   private kv: IKVAdapter;
+  private db: IDBAdapter;
   private jwtService: JWTService;
   private dployrdService: AgentService;
   private sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
@@ -58,6 +70,7 @@ export class ClientMessageHandler {
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
     this.kv = deps.kv;
+    this.db = deps.db;
     this.jwtService = deps.jwtService;
     this.dployrdService = deps.dployrdService;
     this.sendTaskToCluster = deps.sendTaskToCluster;
@@ -94,10 +107,10 @@ export class ClientMessageHandler {
     // Check rate limiting
     if (!this.connectionManager.canAcceptRequest(conn.ws)) {
       this.sendError(
-        conn, 
-        message.requestId!, 
-        WSErrorCode.RATE_LIMITED, 
-        `Too many pending requests (max: ${this.connectionManager.getPendingCountForClient(conn.ws)})` 
+        conn,
+        message.requestId!,
+        WSErrorCode.RATE_LIMITED,
+        `Too many pending requests (max: ${this.connectionManager.getPendingCountForClient(conn.ws)})`
       );
       return;
     }
@@ -146,15 +159,35 @@ export class ClientMessageHandler {
       await this.handleFileTree(conn, message);
       return;
     }
+
+    if (isInstanceTokenRotateMessage(message)) {
+      await this.handleInstanceTokenRotate(conn, message);
+      return;
+    }
+
+    if (isInstanceSystemInstallMessage(message)) {
+      await this.handleInstanceSystemInstall(conn, message);
+      return;
+    }
+
+    if (isInstanceSystemRebootMessage(message)) {
+      await this.handleInstanceSystemReboot(conn, message);
+      return;
+    }
+
+    if (isInstanceSystemRestartMessage(message)) {
+      await this.handleInstanceSystemRestart(conn, message);
+      return;
+    }
   }
 
   /**
    * Send error response to client
    */
   private sendError(
-    conn: ClusterConnection, 
-    requestId: string, 
-    code: WSErrorCode, 
+    conn: ClusterConnection,
+    requestId: string,
+    code: WSErrorCode,
     message: string,
     details?: Record<string, unknown>
   ): void {
@@ -258,7 +291,7 @@ export class ClientMessageHandler {
     // Send acknowledgment
     try {
       conn.ws.send(JSON.stringify({ kind: "log_unsubscribe_response", requestId, success: true }));
-    } catch {}
+    } catch { }
   }
 
   /**
@@ -278,7 +311,7 @@ export class ClientMessageHandler {
     }
 
     const taskId = ulid();
-    
+
     // Track pending request
     const added = this.connectionManager.addPendingRequest(
       taskId,
@@ -640,5 +673,230 @@ export class ClientMessageHandler {
     const offsetKey = startOffset ?? 0;
     const limitKey = limit ?? -1;
     return `${clusterId}:${path}:${offsetKey}:${limitKey}:${duration}`;
+  }
+
+  /**
+   * Handle instance token rotate request
+   */
+  private async handleInstanceTokenRotate(
+    conn: ClusterConnection,
+    message: InstanceTokenRotateMessage
+  ): Promise<void> {
+    const { instanceId, token, requestId } = message;
+
+    try {
+      let payload: any;
+      try {
+        payload = await this.jwtService.verifyTokenIgnoringExpiry(token);
+      } catch {
+        this.sendError(conn, requestId, WSErrorCode.VALIDATION_ERROR, "Invalid token signature");
+        return;
+      }
+
+      if (payload.token_type !== "bootstrap" || payload.instance_id !== instanceId) {
+        this.sendError(conn, requestId, WSErrorCode.VALIDATION_ERROR, "Invalid bootstrap token for instance");
+        return;
+      }
+
+      const nonce = payload.nonce as string | undefined;
+      if (!nonce) {
+        this.sendError(conn, requestId, WSErrorCode.VALIDATION_ERROR, "Invalid bootstrap token payload");
+        return;
+      }
+
+      const rotated = await this.jwtService.rotateBootstrapToken(instanceId, nonce, "5m");
+
+      conn.ws.send(JSON.stringify({
+        kind: "instance_token_rotate_response",
+        requestId,
+        success: true,
+        data: {
+          token: rotated,
+        },
+      }));
+    } catch (error) {
+      console.error("[WS] Failed to rotate token:", error);
+      this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to rotate token");
+    }
+  }
+
+  /**
+   * Handle instance system install request
+   */
+  private async handleInstanceSystemInstall(
+    conn: ClusterConnection,
+    message: InstanceSystemInstallMessage
+  ): Promise<void> {
+    const { instanceId, clusterId, version, requestId } = message;
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    try {
+      const db = new DatabaseStore(this.db as any);
+      const instance = await db.instances.get(instanceId);
+
+      if (!instance) {
+        this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+        return;
+      }
+
+      if (instance.clusterId !== clusterId) {
+        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+        return;
+      }
+
+      const taskId = ulid();
+      const token = await this.jwtService.createInstanceAccessToken(
+        conn.session,
+        instanceId,
+        clusterId
+      );
+      const task = this.dployrdService.createSystemInstallTask(taskId, version, token);
+
+      const sent = this.sendTaskToCluster(clusterId, task);
+      if (!sent) {
+        this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+        return;
+      }
+
+      conn.ws.send(JSON.stringify({
+        kind: "instance_system_install_response",
+        requestId,
+        success: true,
+        data: {
+          status: "accepted",
+          taskId,
+          message: version
+            ? `Install task sent for version ${version}`
+            : "Install task sent for latest version",
+        },
+      }));
+    } catch (error) {
+      console.error("[WS] Failed to send system install task:", error);
+      this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system install task");
+    }
+  }
+
+  /**
+   * Handle instance system reboot request
+   */
+  private async handleInstanceSystemReboot(
+    conn: ClusterConnection,
+    message: InstanceSystemRebootMessage
+  ): Promise<void> {
+    const { instanceId, clusterId, force = false, requestId } = message;
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    try {
+      const db = new DatabaseStore(this.db as any);
+      const instance = await db.instances.get(instanceId);
+
+      if (!instance) {
+        this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+        return;
+      }
+
+      if (instance.clusterId !== clusterId) {
+        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+        return;
+      }
+
+      const taskId = ulid();
+      const token = await this.jwtService.createInstanceAccessToken(
+        conn.session,
+        instanceId,
+        clusterId
+      );
+      const task = this.dployrdService.createSystemRebootTask(taskId, force, token);
+
+      const sent = this.sendTaskToCluster(clusterId, task);
+      if (!sent) {
+        this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+        return;
+      }
+
+      conn.ws.send(JSON.stringify({
+        kind: "instance_system_reboot_response",
+        requestId,
+        success: true,
+        data: {
+          status: "accepted",
+          taskId,
+          message: force
+            ? "Reboot task sent (force mode - bypassing pending tasks check)"
+            : "Reboot task sent (will wait for pending tasks to complete)",
+        },
+      }));
+    } catch (error) {
+      console.error("[WS] Failed to send system reboot task:", error);
+      this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system reboot task");
+    }
+  }
+
+  /**
+   * Handle instance system restart request
+   */
+  private async handleInstanceSystemRestart(
+    conn: ClusterConnection,
+    message: InstanceSystemRestartMessage
+  ): Promise<void> {
+    const { instanceId, clusterId, force = false, requestId } = message;
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    try {
+      const db = new DatabaseStore(this.db as any);
+      const instance = await db.instances.get(instanceId);
+
+      if (!instance) {
+        this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+        return;
+      }
+
+      if (instance.clusterId !== clusterId) {
+        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+        return;
+      }
+
+      const taskId = ulid();
+      const token = await this.jwtService.createInstanceAccessToken(
+        conn.session,
+        instanceId,
+        clusterId
+      );
+      const task = this.dployrdService.createDaemonRestartTask(taskId, force, token);
+
+      const sent = this.sendTaskToCluster(clusterId, task);
+      if (!sent) {
+        this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+        return;
+      }
+
+      conn.ws.send(JSON.stringify({
+        kind: "instance_system_restart_response",
+        requestId,
+        success: true,
+        data: {
+          status: "accepted",
+          taskId,
+          message: force
+            ? "Restart task sent (force mode - bypassing pending tasks check)"
+            : "Restart task sent (will wait for pending tasks to complete)",
+        },
+      }));
+    } catch (error) {
+      console.error("[WS] Failed to send system restart task:", error);
+      this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system restart task");
+    }
   }
 }

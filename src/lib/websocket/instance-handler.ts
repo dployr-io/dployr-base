@@ -3,6 +3,7 @@
 
 import type { WebSocket } from "ws";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
+import type { IDBAdapter } from "@/lib/context.js";
 import type { AgentTask } from "@/lib/tasks/types.js";
 import type { Session } from "@/types/index.js";
 import { AgentService } from "@/services/dployrd-service.js";
@@ -29,7 +30,7 @@ export class WebSocketHandler {
   private clientNotifier: ClientNotifier;
   private sessionConnections = new Map<string, string>();
 
-  constructor(private kv: IKVAdapter, config?: WebSocketHandlerConfig) {
+  constructor(private kv: IKVAdapter, private db: IDBAdapter, config?: WebSocketHandlerConfig) {
     this.connectionManager = new ConnectionManager(config?.connectionManager);
 
     this.clientNotifier = new ClientNotifier(this.connectionManager, kv);
@@ -43,6 +44,7 @@ export class WebSocketHandler {
     this.clientHandler = new ClientMessageHandler({
       connectionManager: this.connectionManager,
       kv,
+      db,
       jwtService,
       dployrdService,
       sendTaskToCluster: this.sendTaskToCluster.bind(this),

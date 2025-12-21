@@ -65,6 +65,12 @@ export const MessageKind = {
   FILE_CREATE: "file_create",
   FILE_DELETE: "file_delete",
   FILE_TREE: "file_tree",
+  
+  // Instance operations
+  INSTANCE_TOKEN_ROTATE: "instance_token_rotate",
+  INSTANCE_SYSTEM_INSTALL: "instance_system_install",
+  INSTANCE_SYSTEM_REBOOT: "instance_system_reboot",
+  INSTANCE_SYSTEM_RESTART: "instance_system_restart",
 
   // Server -> Client
   TASK: "task",
@@ -268,6 +274,146 @@ export type FileOperationResponse =
   | FileDeleteResponseMessage 
   | FileTreeResponseMessage;
 
+/**
+ * Instance operation messages
+ */
+export interface InstanceTokenRotateMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.INSTANCE_TOKEN_ROTATE;
+  instanceId: string;
+  token: string;
+}
+
+export interface InstanceSystemInstallMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.INSTANCE_SYSTEM_INSTALL;
+  instanceId: string;
+  clusterId: string;
+  version?: string;
+}
+
+export interface InstanceSystemRebootMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.INSTANCE_SYSTEM_REBOOT;
+  instanceId: string;
+  clusterId: string;
+  force?: boolean;
+}
+
+export interface InstanceSystemRestartMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.INSTANCE_SYSTEM_RESTART;
+  instanceId: string;
+  clusterId: string;
+  force?: boolean;
+}
+
+/**
+ * Instance operation response messages
+ */
+export interface InstanceListResponseMessage extends BaseMessage {
+  kind: "instance_list_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    instances: any[];
+    page: number;
+    pageSize: number;
+    total: number;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface InstanceCreateResponseMessage extends BaseMessage {
+  kind: "instance_create_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    instance: any;
+    token: string;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface InstanceDeleteResponseMessage extends BaseMessage {
+  kind: "instance_delete_response";
+  requestId: string;
+  success: boolean;
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface InstanceTokenRotateResponseMessage extends BaseMessage {
+  kind: "instance_token_rotate_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    token: string;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface InstanceSystemInstallResponseMessage extends BaseMessage {
+  kind: "instance_system_install_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    status: string;
+    taskId: string;
+    message: string;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface InstanceSystemRebootResponseMessage extends BaseMessage {
+  kind: "instance_system_reboot_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    status: string;
+    taskId: string;
+    message: string;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface InstanceSystemRestartResponseMessage extends BaseMessage {
+  kind: "instance_system_restart_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    status: string;
+    taskId: string;
+    message: string;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export type InstanceOperationResponse =
+  | InstanceListResponseMessage
+  | InstanceCreateResponseMessage
+  | InstanceDeleteResponseMessage
+  | InstanceTokenRotateResponseMessage
+  | InstanceSystemInstallResponseMessage
+  | InstanceSystemRebootResponseMessage
+  | InstanceSystemRestartResponseMessage;
+
 export type ClientMessage = 
   | ClientSubscribeMessage 
   | LogSubscribeMessage 
@@ -279,6 +425,10 @@ export type ClientMessage =
   | FileCreateMessage 
   | FileDeleteMessage 
   | FileTreeMessage
+  | InstanceTokenRotateMessage
+  | InstanceSystemInstallMessage
+  | InstanceSystemRebootMessage
+  | InstanceSystemRestartMessage
   | AckMessage;
 
 /**
@@ -454,6 +604,22 @@ export function isFileTreeMessage(msg: BaseMessage): msg is FileTreeMessage {
 
 export function isAckMessage(msg: BaseMessage): msg is AckMessage {
   return msg.kind === MessageKind.ACK;
+}
+
+export function isInstanceTokenRotateMessage(msg: BaseMessage): msg is InstanceTokenRotateMessage {
+  return msg.kind === MessageKind.INSTANCE_TOKEN_ROTATE;
+}
+
+export function isInstanceSystemInstallMessage(msg: BaseMessage): msg is InstanceSystemInstallMessage {
+  return msg.kind === MessageKind.INSTANCE_SYSTEM_INSTALL;
+}
+
+export function isInstanceSystemRebootMessage(msg: BaseMessage): msg is InstanceSystemRebootMessage {
+  return msg.kind === MessageKind.INSTANCE_SYSTEM_REBOOT;
+}
+
+export function isInstanceSystemRestartMessage(msg: BaseMessage): msg is InstanceSystemRestartMessage {
+  return msg.kind === MessageKind.INSTANCE_SYSTEM_RESTART;
 }
 
 /**
