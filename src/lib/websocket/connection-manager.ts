@@ -33,6 +33,7 @@ export class ConnectionManager {
   private pendingRequests = new Map<string, PendingRequest>();
   private requestsByClient = new Map<WebSocket, Set<string>>();
   private unackedMessages = new Map<string, { message: unknown; timestamp: number; retries: number }>();
+  private fileWatchSubscriptions = new Map<string, Set<string>>();
   private config: ConnectionManagerConfig;
   private cleanupTimer: NodeJS.Timeout | null = null;
   private lastActivityMap = new Map<WebSocket, number>();
@@ -109,6 +110,7 @@ export class ConnectionManager {
     
     if (conn.role === "client") {
       this.removeLogStreamsForClient(conn.ws);
+      this.removeFileWatchesForConnection(conn.connectionId);
     }
     
     this.lastActivityMap.delete(conn.ws);
@@ -431,6 +433,64 @@ export class ConnectionManager {
     }
   }
 
+  // ==================== File Watch Management ====================
+
+  /**
+   * Add a file watch subscription
+   */
+  addFileWatch(watchKey: string, connectionId: string): void {
+    if (!this.fileWatchSubscriptions.has(watchKey)) {
+      this.fileWatchSubscriptions.set(watchKey, new Set());
+    }
+    this.fileWatchSubscriptions.get(watchKey)!.add(connectionId);
+    console.log(`[WS] Added file watch: ${watchKey} for connection ${connectionId}`);
+  }
+
+  /**
+   * Remove a file watch subscription
+   */
+  removeFileWatch(watchKey: string, connectionId: string): boolean {
+    const subscribers = this.fileWatchSubscriptions.get(watchKey);
+    if (!subscribers) return false;
+    
+    const removed = subscribers.delete(connectionId);
+    if (subscribers.size === 0) {
+      this.fileWatchSubscriptions.delete(watchKey);
+    }
+    
+    if (removed) {
+      console.log(`[WS] Removed file watch: ${watchKey} for connection ${connectionId}`);
+    }
+    return removed;
+  }
+
+  /**
+   * Get all subscribers for a file watch
+   */
+  getFileWatchSubscribers(watchKey: string): Set<string> | undefined {
+    return this.fileWatchSubscriptions.get(watchKey);
+  }
+
+  /**
+   * Remove all file watches for a connection
+   */
+  removeFileWatchesForConnection(connectionId: string): void {
+    for (const [watchKey, subscribers] of this.fileWatchSubscriptions.entries()) {
+      subscribers.delete(connectionId);
+      if (subscribers.size === 0) {
+        this.fileWatchSubscriptions.delete(watchKey);
+      }
+    }
+  }
+
+  /**
+   * Check if a watch key has any subscribers
+   */
+  hasFileWatchSubscribers(watchKey: string): boolean {
+    const subscribers = this.fileWatchSubscriptions.get(watchKey);
+    return subscribers ? subscribers.size > 0 : false;
+  }
+
   // ==================== Acknowledgment System ====================
 
   /**
@@ -484,6 +544,7 @@ export class ConnectionManager {
     connectionsByCluster: Record<string, number>;
     pendingRequests: number;
     logStreams: number;
+    fileWatches: number;
     unackedMessages: number;
   } {
     const connectionsByCluster: Record<string, number> = {};
@@ -499,6 +560,7 @@ export class ConnectionManager {
       connectionsByCluster,
       pendingRequests: this.pendingRequests.size,
       logStreams: this.logStreams.size,
+      fileWatches: this.fileWatchSubscriptions.size,
       unackedMessages: this.unackedMessages.size,
     };
   }

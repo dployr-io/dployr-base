@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { ConnectionManager } from "../connection-manager.js";
-import type { ClusterConnection, BaseMessage, TaskResponseMessage } from "../message-types.js";
-import { isAgentBroadcastMessage, isLogChunkMessage, isTaskResponseMessage } from "../message-types.js";
+import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "../message-types.js";
+import { isAgentBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind } from "../message-types.js";
 import { ClientNotifier } from "./client-notifier.js";
 
 /**
@@ -37,6 +37,12 @@ export class AgentMessageHandler {
     // Handle log chunks - route to specific subscription
     if (isLogChunkMessage(message)) {
       this.handleLogChunk(message);
+      return;
+    }
+
+    // Handle file system updates - broadcast to subscribed clients
+    if (isFileUpdateMessage(message)) {
+      this.handleFileUpdate(conn.clusterId, message);
       return;
     }
   }
@@ -106,6 +112,39 @@ export class AgentMessageHandler {
       // Clean up dead subscription
       this.connectionManager.removeLogStream(streamId);
     }
+  }
+
+  /**
+   * Handle filesystem update messages from agent
+   */
+  private handleFileUpdate(clusterId: string, message: FileUpdateMessage): void {
+    const { instanceId, event } = message;
+    const watchKey = `${instanceId}:${event.path}`;
+    const subscribers = this.connectionManager.getFileWatchSubscribers(watchKey);
+
+    if (!subscribers || subscribers.size === 0) {
+      return;
+    }
+
+    const payload = JSON.stringify(message);
+    let sentCount = 0;
+
+    const allConnections = this.connectionManager.getConnections(clusterId);
+    if (!allConnections) return;
+
+    for (const connectionId of subscribers) {
+      const conn = Array.from(allConnections).find(c => c.connectionId === connectionId);
+      if (conn && conn.ws.readyState === 1) {
+        try {
+          conn.ws.send(payload);
+          sentCount++;
+        } catch (err) {
+          console.error(`[WS] Failed to send file update to connection ${connectionId}:`, err);
+        }
+      }
+    }
+
+    console.log(`[WS] Broadcast file update for ${watchKey} to ${sentCount}/${subscribers.size} subscribers`);
   }
 
   /**

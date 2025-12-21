@@ -65,6 +65,9 @@ export const MessageKind = {
   FILE_CREATE: "file_create",
   FILE_DELETE: "file_delete",
   FILE_TREE: "file_tree",
+  FILE_WATCH: "file_watch",
+  FILE_UNWATCH: "file_unwatch",
+  FILE_UPDATE: "file_update",
   
   // Instance operations
   INSTANCE_TOKEN_ROTATE: "instance_token_rotate",
@@ -206,6 +209,25 @@ export interface FileTreeMessage extends BaseRequestMessage {
   path?: string;
 }
 
+export interface FileWatchMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.FILE_WATCH;
+  instanceId: string;
+  path: string;
+  recursive?: boolean;
+}
+
+export interface FileUnwatchMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.FILE_UNWATCH;
+  instanceId: string;
+  path: string;
+}
+
+export interface FileUpdateMessage extends BaseMessage {
+  kind: typeof MessageKind.FILE_UPDATE;
+  instanceId: string;
+  event: FileUpdateEvent;
+}
+
 /**
  * File operation response messages
  */
@@ -265,6 +287,14 @@ export interface FileTreeResponseMessage extends BaseMessage {
     code: WSErrorCode;
     message: string;
   };
+}
+
+export interface FileUpdateEvent {
+  path: string;
+  type: "create" | "modify" | "delete" | "rename";
+  isDir: boolean;
+  timestamp: number;
+  oldPath?: string;
 }
 
 export type FileOperationResponse = 
@@ -425,6 +455,8 @@ export type ClientMessage =
   | FileCreateMessage 
   | FileDeleteMessage 
   | FileTreeMessage
+  | FileWatchMessage
+  | FileUnwatchMessage
   | InstanceTokenRotateMessage
   | InstanceSystemInstallMessage
   | InstanceSystemRebootMessage
@@ -600,6 +632,18 @@ export function isFileDeleteMessage(msg: BaseMessage): msg is FileDeleteMessage 
 
 export function isFileTreeMessage(msg: BaseMessage): msg is FileTreeMessage {
   return msg.kind === MessageKind.FILE_TREE;
+}
+
+export function isFileWatchMessage(msg: BaseMessage): msg is FileWatchMessage {
+  return msg.kind === MessageKind.FILE_WATCH;
+}
+
+export function isFileUnwatchMessage(msg: BaseMessage): msg is FileUnwatchMessage {
+  return msg.kind === MessageKind.FILE_UNWATCH;
+}
+
+export function isFileUpdateMessage(msg: BaseMessage): msg is FileUpdateMessage {
+  return msg.kind === MessageKind.FILE_UPDATE;
 }
 
 export function isAckMessage(msg: BaseMessage): msg is AckMessage {

@@ -20,6 +20,8 @@ import type {
   InstanceSystemInstallMessage,
   InstanceSystemRebootMessage,
   InstanceSystemRestartMessage,
+  FileWatchMessage,
+  FileUnwatchMessage,
 } from "../message-types.js";
 import {
   isClientSubscribeMessage,
@@ -37,6 +39,8 @@ import {
   isInstanceSystemInstallMessage,
   isInstanceSystemRebootMessage,
   isInstanceSystemRestartMessage,
+  isFileWatchMessage,
+  isFileUnwatchMessage,
   validateRequestMessage,
   createWSError,
   WSErrorCode,
@@ -177,6 +181,16 @@ export class ClientMessageHandler {
 
     if (isInstanceSystemRestartMessage(message)) {
       await this.handleInstanceSystemRestart(conn, message);
+      return;
+    }
+
+    if (isFileWatchMessage(message)) {
+      await this.handleFileWatch(conn, message);
+      return;
+    }
+
+    if (isFileUnwatchMessage(message)) {
+      await this.handleFileUnwatch(conn, message);
       return;
     }
   }
@@ -838,6 +852,101 @@ export class ClientMessageHandler {
       console.error("[WS] Failed to send system reboot task:", error);
       this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system reboot task");
     }
+  }
+
+  /**
+   * Handle file watch request
+   */
+  private async handleFileWatch(
+    conn: ClusterConnection,
+    message: FileWatchMessage
+  ): Promise<void> {
+    const { instanceId, path, recursive = false, requestId } = message;
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    const watchKey = `${instanceId}:${path}`;
+    this.connectionManager.addFileWatch(watchKey, conn.connectionId);
+
+    const taskId = ulid();
+    const token = await this.jwtService.createInstanceAccessToken(
+      conn.session,
+      instanceId,
+      conn.clusterId
+    );
+
+    const task = this.dployrdService.createFileWatchTask(
+      taskId,
+      instanceId,
+      path,
+      recursive,
+      requestId,
+      token
+    );
+
+    const sent = this.sendTaskToCluster(conn.clusterId, task);
+    if (!sent) {
+      this.connectionManager.removeFileWatch(watchKey, conn.connectionId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
+    }
+
+    conn.ws.send(JSON.stringify({
+      kind: "file_watch_response",
+      requestId,
+      taskId,
+      success: true,
+      data: { path, recursive },
+    }));
+  }
+
+  /**
+   * Handle file unwatch request
+   */
+  private async handleFileUnwatch(
+    conn: ClusterConnection,
+    message: FileUnwatchMessage
+  ): Promise<void> {
+    const { instanceId, path, requestId } = message;
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    const watchKey = `${instanceId}:${path}`;
+    this.connectionManager.removeFileWatch(watchKey, conn.connectionId);
+
+    // Only send unwatch task to agent if no more subscribers
+    if (!this.connectionManager.hasFileWatchSubscribers(watchKey)) {
+      const taskId = ulid();
+      const token = await this.jwtService.createInstanceAccessToken(
+        conn.session,
+        instanceId,
+        conn.clusterId
+      );
+
+      const task = this.dployrdService.createFileUnwatchTask(
+        taskId,
+        instanceId,
+        path,
+        requestId,
+        token
+      );
+
+      this.sendTaskToCluster(conn.clusterId, task);
+    }
+
+    conn.ws.send(JSON.stringify({
+      kind: "file_unwatch_response",
+      requestId,
+      taskId: ulid(),
+      success: true,
+      data: { path },
+    }));
   }
 
   /**

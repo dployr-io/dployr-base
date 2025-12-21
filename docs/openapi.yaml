@@ -683,6 +683,188 @@ components:
           default: 100
           description: Maximum number of log entries to read in historical mode.
 
+    FileWatchMessage:
+      type: object
+      description: WebSocket message to subscribe to filesystem changes.
+      properties:
+        kind:
+          type: string
+          enum: [file_watch]
+          example: file_watch
+        requestId:
+          type: string
+          description: Unique request identifier for correlation.
+          example: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+        instanceId:
+          type: string
+          description: Instance ID to watch.
+          example: instance-abc123
+        path:
+          type: string
+          description: File or directory path to watch.
+          example: /app/src
+        recursive:
+          type: boolean
+          description: Watch subdirectories recursively.
+          default: false
+          example: true
+      required:
+        - kind
+        - requestId
+        - instanceId
+        - path
+
+    FileUnwatchMessage:
+      type: object
+      description: WebSocket message to unsubscribe from filesystem changes.
+      properties:
+        kind:
+          type: string
+          enum: [file_unwatch]
+          example: file_unwatch
+        requestId:
+          type: string
+          description: Unique request identifier for correlation.
+          example: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+        instanceId:
+          type: string
+          description: Instance ID to stop watching.
+          example: instance-abc123
+        path:
+          type: string
+          description: File or directory path to stop watching.
+          example: /app/src
+      required:
+        - kind
+        - requestId
+        - instanceId
+        - path
+
+    FileUpdateEvent:
+      type: object
+      description: Filesystem change event details.
+      properties:
+        path:
+          type: string
+          description: Path to the file or directory that changed.
+          example: /app/src/index.ts
+        type:
+          type: string
+          enum: [create, modify, delete, rename]
+          description: Type of filesystem change.
+          example: modify
+        isDir:
+          type: boolean
+          description: True if the path is a directory.
+          example: false
+        timestamp:
+          type: integer
+          format: int64
+          description: Milliseconds since Unix epoch when the change occurred.
+          example: 1732627200000
+        oldPath:
+          type: string
+          description: Previous path (only present for rename events).
+          example: /app/src/old-index.ts
+          nullable: true
+      required:
+        - path
+        - type
+        - isDir
+        - timestamp
+
+    FileUpdateMessage:
+      type: object
+      description: WebSocket broadcast message containing filesystem change notifications.
+      properties:
+        kind:
+          type: string
+          enum: [file_update]
+          example: file_update
+        instanceId:
+          type: string
+          description: Instance ID where the change occurred.
+          example: instance-abc123
+        event:
+          $ref: '#/components/schemas/FileUpdateEvent'
+      required:
+        - kind
+        - instanceId
+        - event
+      example:
+        kind: file_update
+        instanceId: instance-abc123
+        event:
+          path: /app/src/index.ts
+          type: modify
+          isDir: false
+          timestamp: 1732627200000
+
+    FileWatchResponseMessage:
+      type: object
+      description: Response confirming file watch subscription.
+      properties:
+        kind:
+          type: string
+          enum: [file_watch_response]
+          example: file_watch_response
+        requestId:
+          type: string
+          description: Echoed request ID for correlation.
+          example: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+        taskId:
+          type: string
+          description: Task ID for this watch operation.
+          example: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            path:
+              type: string
+              example: /app/src
+            recursive:
+              type: boolean
+              example: true
+      required:
+        - kind
+        - requestId
+        - taskId
+        - success
+
+    FileUnwatchResponseMessage:
+      type: object
+      description: Response confirming file watch unsubscription.
+      properties:
+        kind:
+          type: string
+          enum: [file_unwatch_response]
+          example: file_unwatch_response
+        requestId:
+          type: string
+          description: Echoed request ID for correlation.
+          example: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+        taskId:
+          type: string
+          description: Task ID for this unwatch operation.
+          example: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            path:
+              type: string
+              example: /app/src
+      required:
+        - kind
+        - requestId
+        - taskId
+        - success
+
     WebSocketStats:
       type: object
       description: WebSocket connection statistics for monitoring and observability.
@@ -707,6 +889,10 @@ components:
           type: integer
           description: Total number of active log streams.
           example: 8
+        fileWatches:
+          type: integer
+          description: Total number of active file watch subscriptions.
+          example: 15
         requestsPerCluster:
           type: object
           description: Pending request count per cluster.

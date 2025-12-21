@@ -112,8 +112,28 @@ export class AgentService {
   createFileTreeTask(taskId: string, path?: string, token?: string): AgentTask {
     return {
       ID: taskId,
-      Type: "system/fs/tree:get",
+      Type: "system/fs:get",
       Payload: { path, token, taskId },
+      Status: "pending",
+    };
+  }
+
+  // Create a file watch task
+  createFileWatchTask(taskId: string, instanceId: string, path: string, recursive: boolean, requestId: string, token?: string): AgentTask {
+    return {
+      ID: taskId,
+      Type: "system/fs/watch:post",
+      Payload: { instanceId, path, recursive, token, requestId },
+      Status: "pending",
+    };
+  }
+
+  // Create a file unwatch task
+  createFileUnwatchTask(taskId: string, instanceId: string, path: string, requestId: string, token?: string): AgentTask {
+    return {
+      ID: taskId,
+      Type: "system/fs/unwatch:post",
+      Payload: { instanceId, path, token, requestId },
       Status: "pending",
     };
   }
