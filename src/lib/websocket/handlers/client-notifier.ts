@@ -40,11 +40,12 @@ export class ClientNotifier {
       messageId,
     });
 
+    // Store for potential retry on reconnect
+    this.conn.storeUnackedMessage(`${clusterId}:${messageId}`, message);
+
     for (const client of clients) {
       try {
         client.ws.send(payload);
-        // Store for potential retry on reconnect
-        this.conn.storeUnackedMessage(`${clusterId}:${messageId}`, message);
       } catch (err) {
         console.error(`[WS] Failed to send to client:`, err);
       }
