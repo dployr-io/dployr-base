@@ -683,6 +683,43 @@ components:
           default: 100
           description: Maximum number of log entries to read in historical mode.
 
+    WebSocketStats:
+      type: object
+      description: WebSocket connection statistics for monitoring and observability.
+      properties:
+        totalConnections:
+          type: integer
+          description: Total number of active WebSocket connections.
+          example: 42
+        agentConnections:
+          type: integer
+          description: Number of active agent connections.
+          example: 5
+        clientConnections:
+          type: integer
+          description: Number of active client connections.
+          example: 37
+        pendingRequests:
+          type: integer
+          description: Total number of pending requests across all connections.
+          example: 12
+        logStreams:
+          type: integer
+          description: Total number of active log streams.
+          example: 8
+        requestsPerCluster:
+          type: object
+          description: Pending request count per cluster.
+          additionalProperties:
+            type: integer
+          example:
+            cluster-1: 5
+            cluster-2: 7
+        uptime:
+          type: integer
+          description: WebSocket service uptime in seconds.
+          example: 3600
+
 paths:
   /v1/health:
     get:
@@ -710,6 +747,45 @@ paths:
                     type: string
                     description: Semantic version of the running server (typically matches the released Git tag).
                     example: v0.1.20
+
+  /v1/ws/stats:
+    get:
+      operationId: getWebSocketStats
+      tags:
+        - Health
+      summary: WebSocket connection statistics
+      x-requiredRole: public
+      description: Returns real-time WebSocket connection statistics for monitoring and observability.
+      responses:
+        '200':
+          description: WebSocket statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      data:
+                        $ref: '#/components/schemas/WebSocketStats'
+                      timestamp:
+                        type: string
+                        format: date-time
+        '503':
+          description: WebSocket handler not initialized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: WebSocket handler not available
 
   /v1/auth/login/{provider}:
     get:

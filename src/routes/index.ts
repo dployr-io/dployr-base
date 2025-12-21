@@ -15,6 +15,7 @@ import jwks from "./jwks.js";
 import domains from "./domains.js";
 import agent from "./agent.js";
 import notifications from "./notifications.js";
+import { getWS } from "@/lib/context.js";
 
 const VERSION = process.env.BASE_VERSION || "unknown";
 
@@ -42,5 +43,23 @@ export function registerRoutes(app: Hono<{ Bindings: Bindings; Variables: Variab
       timestamp: new Date().toISOString(),
       version: VERSION,
     });
+  });
+
+  // WebSocket stats endpoint (for monitoring/observability)
+  app.get("/v1/ws/stats", (c) => {
+    try {
+      const ws = getWS(c);
+      const stats = ws.getStats();
+      return c.json({
+        success: true,
+        data: stats,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      return c.json({
+        success: false,
+        error: "WebSocket handler not available",
+      }, 503);
+    }
   });
 }

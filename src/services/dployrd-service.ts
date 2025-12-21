@@ -73,7 +73,7 @@ export class AgentService {
     return {
       ID: taskId,
       Type: "system/fs/read:get",
-      Payload: { path, token },
+      Payload: { path, token, taskId },
       Status: "pending",
     };
   }
@@ -83,7 +83,7 @@ export class AgentService {
     return {
       ID: taskId,
       Type: "system/fs/write:put",
-      Payload: { path, content, encoding, token },
+      Payload: { path, content, encoding, token, taskId },
       Status: "pending",
     };
   }
@@ -93,7 +93,7 @@ export class AgentService {
     return {
       ID: taskId,
       Type: "system/fs/create:post",
-      Payload: { path, type, token },
+      Payload: { path, type, token, taskId },
       Status: "pending",
     };
   }
@@ -103,7 +103,7 @@ export class AgentService {
     return {
       ID: taskId,
       Type: "system/fs/delete:delete",
-      Payload: { path, token },
+      Payload: { path, token, taskId },
       Status: "pending",
     };
   }
@@ -113,7 +113,7 @@ export class AgentService {
     return {
       ID: taskId,
       Type: "system/fs/tree:get",
-      Payload: { path, token },
+      Payload: { path, token, taskId },
       Status: "pending",
     };
   }

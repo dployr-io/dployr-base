@@ -8,11 +8,15 @@ import type { Session } from "@/types/index.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { JWTService } from "@/services/jwt.js";
-import { ConnectionManager } from "./connection-manager.js";
+import { ConnectionManager, ConnectionManagerConfig } from "./connection-manager.js";
 import { AgentMessageHandler } from "./handlers/agent-handler.js";
 import { ClientMessageHandler } from "./handlers/client-handler.js";
 import { ClientNotifier } from "./handlers/client-notifier.js";
-import { parseMessage, MessageKind, type ClusterConnection } from "./message-types.js";
+import { parseMessage, MessageKind, type ClusterConnection, isAckMessage } from "./message-types.js";
+
+export interface WebSocketHandlerConfig {
+  connectionManager?: Partial<ConnectionManagerConfig>;
+}
 
 /**
  * WebSocket handler for cluster streams.
@@ -22,14 +26,16 @@ export class WebSocketHandler {
   private connectionManager: ConnectionManager;
   private dployrdHandler: AgentMessageHandler;
   private clientHandler: ClientMessageHandler;
+  private clientNotifier: ClientNotifier;
+  private sessionConnections = new Map<string, string>();
 
-  constructor(private kv: IKVAdapter) {
-    this.connectionManager = new ConnectionManager();
+  constructor(private kv: IKVAdapter, config?: WebSocketHandlerConfig) {
+    this.connectionManager = new ConnectionManager(config?.connectionManager);
 
-    const clientNotifier = new ClientNotifier(this.connectionManager, kv);
+    this.clientNotifier = new ClientNotifier(this.connectionManager, kv);
 
     // Initialize handlers with dependencies
-    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, clientNotifier);
+    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, this.clientNotifier);
 
     const jwtService = new JWTService(new KVStore(this.kv));
     const dployrdService = new AgentService();
@@ -58,6 +64,16 @@ export class WebSocketHandler {
   ): void {
     const conn = this.connectionManager.addConnection(clusterId, ws, role, session);
 
+    // Handle reconnection for clients
+    if (role === "client" && session) {
+      const previousConnectionId = this.sessionConnections.get(session.userId);
+      if (previousConnectionId) {
+        // Replay unacked messages
+        this.clientNotifier.replayUnackedMessages(clusterId, conn.connectionId);
+      }
+      this.sessionConnections.set(session.userId, conn.connectionId);
+    }
+
     ws.on("message", (data) => {
       this.handleMessage(conn, data).catch((err) => {
         console.error(`[WS] Error handling message for cluster ${clusterId}:`, err);
@@ -65,13 +81,47 @@ export class WebSocketHandler {
     });
 
     ws.on("close", () => {
-      this.connectionManager.removeConnection(conn);
+      this.handleDisconnect(conn);
     });
 
     ws.on("error", (err) => {
       console.error(`[WS] Error on connection for cluster ${clusterId}:`, err);
-      this.connectionManager.removeConnection(conn);
+      this.handleDisconnect(conn);
     });
+
+    // Send hello message for agents
+    if (role === "agent") {
+      this.sendHello(ws);
+    }
+  }
+
+  /**
+   * Send hello message to agent on connect
+   */
+  private sendHello(ws: WebSocket): void {
+    try {
+      ws.send(JSON.stringify({
+        kind: "hello",
+        status: "accepted",
+        timestamp: Date.now(),
+      }));
+    } catch (err) {
+      console.error(`[WS] Failed to send hello:`, err);
+    }
+  }
+
+  /**
+   * Handle connection disconnect
+   */
+  private handleDisconnect(conn: ClusterConnection): void {
+    this.connectionManager.removeConnection(conn);
+
+    if (conn.role === "agent") {
+      this.dployrdHandler.handleAgentDisconnect(conn.clusterId);
+    }
+
+    // Don't immediately remove session mapping for clients (allow reconnection)
+    // Session mapping will be overwritten on reconnect
   }
 
   /**
@@ -128,5 +178,20 @@ export class WebSocketHandler {
    */
   public hasAgentConnection(clusterId: string): boolean {
     return this.connectionManager.hasAgentConnection(clusterId);
+  }
+
+  /**
+   * Get connection manager stats for monitoring/observability
+   */
+  public getStats(): ReturnType<ConnectionManager["getStats"]> {
+    return this.connectionManager.getStats();
+  }
+
+  /**
+   * Graceful shutdown
+   */
+  public shutdown(): void {
+    this.connectionManager.stopCleanupLoop();
+    console.log("[WS] WebSocket handler shutdown complete");
   }
 }

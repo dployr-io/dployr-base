@@ -33,6 +33,39 @@ export class WebSocketService {
     this.server.listen(this.config.server.port, this.config.server.host, () => {
       console.log(`Dployr Base running on http://${this.config.server.host}:${this.config.server.port}`);
     });
+    this.setupGracefulShutdown();
+  }
+
+  /**
+   * Setup graceful shutdown handlers
+   */
+  private setupGracefulShutdown(): void {
+    const shutdown = async (signal: string) => {
+      console.log(`\n[Server] Received ${signal}, starting graceful shutdown...`);
+      
+      // Stop accepting new connections
+      this.wss.close();
+      
+      // Shutdown WebSocket handler
+      if (this.adapters?.ws) {
+        this.adapters.ws.shutdown();
+      }
+      
+      // Close HTTP server
+      this.server.close(() => {
+        console.log('[Server] HTTP server closed');
+        process.exit(0);
+      });
+
+      // Force exit after 10 seconds
+      setTimeout(() => {
+        console.error('[Server] Forced shutdown after timeout');
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   }
 
   private createHttpServer(): Server {

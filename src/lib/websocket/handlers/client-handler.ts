@@ -15,6 +15,7 @@ import type {
   FileCreateMessage,
   FileDeleteMessage,
   FileTreeMessage,
+  AckMessage,
 } from "../message-types.js";
 import {
   isClientSubscribeMessage,
@@ -27,6 +28,10 @@ import {
   isLogSubscribeMessage,
   isLogUnsubscribeMessage,
   isLogStreamMessage,
+  isAckMessage,
+  validateRequestMessage,
+  createWSError,
+  WSErrorCode,
 } from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
@@ -65,8 +70,35 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: BaseMessage
   ): Promise<void> {
+    // Update activity timestamp
+    this.connectionManager.updateActivity(conn.ws);
+
+    // Handle acknowledgments
+    if (isAckMessage(message)) {
+      this.handleAck(message);
+      return;
+    }
+
+    // Handle client subscribe (no requestId required)
     if (isClientSubscribeMessage(message)) {
-      await this.handleClientSubscribe(conn);
+      await this.handleClientSubscribe(conn, message.requestId);
+      return;
+    }
+
+    // Validate requestId for all other operations
+    if (!validateRequestMessage(message)) {
+      this.sendError(conn, "", WSErrorCode.MISSING_FIELD, "requestId is required");
+      return;
+    }
+
+    // Check rate limiting
+    if (!this.connectionManager.canAcceptRequest(conn.ws)) {
+      this.sendError(
+        conn, 
+        message.requestId!, 
+        WSErrorCode.RATE_LIMITED, 
+        `Too many pending requests (max: ${this.connectionManager.getPendingCountForClient(conn.ws)})` 
+      );
       return;
     }
 
@@ -76,7 +108,7 @@ export class ClientMessageHandler {
     }
 
     if (isLogUnsubscribeMessage(message)) {
-      this.handleLogUnsubscribe(conn, message.path);
+      this.handleLogUnsubscribe(conn, message.path, message.requestId!);
       return;
     }
 
@@ -117,13 +149,45 @@ export class ClientMessageHandler {
   }
 
   /**
+   * Send error response to client
+   */
+  private sendError(
+    conn: ClusterConnection, 
+    requestId: string, 
+    code: WSErrorCode, 
+    message: string,
+    details?: Record<string, unknown>
+  ): void {
+    try {
+      const error = createWSError(requestId, code, message, details);
+      conn.ws.send(JSON.stringify(error));
+    } catch (err) {
+      console.error(`[WS] Failed to send error to client:`, err);
+    }
+  }
+
+  /**
+   * Handle acknowledgment messages
+   */
+  private handleAck(message: AckMessage): void {
+    const { messageId } = message;
+    if (messageId) {
+      this.connectionManager.acknowledgeMessage(messageId);
+    }
+  }
+
+  /**
    * Handle client subscription - send cached status
    */
-  private async handleClientSubscribe(conn: ClusterConnection): Promise<void> {
+  private async handleClientSubscribe(conn: ClusterConnection, requestId?: string): Promise<void> {
     const cached = await this.kv.get(`cluster:${conn.clusterId}:status`);
     if (cached) {
       try {
-        conn.ws.send(cached);
+        const response = {
+          ...JSON.parse(cached),
+          requestId,
+        };
+        conn.ws.send(JSON.stringify(response));
       } catch (err) {
         console.error(`[WS] Failed to send cached status:`, err);
       }
@@ -137,10 +201,10 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: LogSubscribeMessage
   ): Promise<void> {
-    const { instanceId, path, startOffset, limit, duration } = message;
+    const { instanceId, path, startOffset, limit, duration, requestId } = message;
 
     if (!instanceId || !path) {
-      console.error("[WS] log_subscribe missing instanceId or path");
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId and path are required");
       return;
     }
 
@@ -187,25 +251,45 @@ export class ClientMessageHandler {
   /**
    * Handle log stream unsubscription
    */
-  private handleLogUnsubscribe(conn: ClusterConnection, path?: string): void {
+  private handleLogUnsubscribe(conn: ClusterConnection, path: string | undefined, requestId: string): void {
     if (path) {
       this.connectionManager.removeLogStreamsByPath(path, conn.ws);
     }
+    // Send acknowledgment
+    try {
+      conn.ws.send(JSON.stringify({ kind: "log_unsubscribe_response", requestId, success: true }));
+    } catch {}
   }
 
   /**
    * Handle deploy message
    */
   private async handleDeploy(conn: ClusterConnection, message: DeployMessage): Promise<void> {
-    const { instanceId, payload } = message;
+    const { instanceId, payload, requestId } = message;
 
     if (!instanceId || !payload) {
-      console.error("[WS] deploy message missing instanceId or payload");
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId and payload are required");
       return;
     }
 
     if (!conn.session) {
-      console.error("[WS] deploy message missing session");
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required for deploy");
+      return;
+    }
+
+    const taskId = ulid();
+    
+    // Track pending request
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      conn.clusterId,
+      "deploy"
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
       return;
     }
 
@@ -214,17 +298,16 @@ export class ClientMessageHandler {
       instanceId,
       conn.clusterId
     );
-    const taskId = ulid();
     const task = this.dployrdService.createDeployTask(taskId, payload, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
-      console.warn(`[WS] Failed to send deploy task ${taskId} to cluster ${conn.clusterId}`);
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
     }
 
-    console.log(
-      `[WS] Created deploy task ${taskId} for cluster ${conn.clusterId}`
-    );
+    console.log(`[WS] Created deploy task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -237,10 +320,10 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: LogStreamMessage
   ): Promise<void> {
-    const { token, path, streamId, duration, startFrom } = message;
+    const { token, path, streamId, duration, startFrom, requestId } = message;
 
     if (!token || !path || !streamId || !duration) {
-      console.error("[WS] log_stream missing required fields (token, path, streamId, duration)");
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "token, path, streamId, and duration are required");
       return;
     }
 
@@ -248,8 +331,7 @@ export class ClientMessageHandler {
     try {
       await this.jwtService.verifyToken(token);
     } catch {
-      console.error("[WS] log_stream invalid token");
-      conn.ws.send(JSON.stringify({ error: "invalid_token", streamId }));
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Invalid token");
       return;
     }
 
@@ -292,20 +374,34 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: FileReadMessage
   ): Promise<void> {
-    const { instanceId, path } = message;
+    const { instanceId, path, requestId } = message;
 
     if (!instanceId || !path) {
-      console.error("[WS] file_read missing instanceId or path");
-      conn.ws.send(JSON.stringify({ error: "missing_instanceId_or_path" }));
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId and path are required");
       return;
     }
 
     if (!conn.session) {
-      console.error("[WS] file_read missing session");
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
       return;
     }
 
     const taskId = ulid();
+
+    // Track pending request
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      conn.clusterId,
+      "file_read"
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
     const token = await this.jwtService.createInstanceAccessToken(
       conn.session,
       instanceId,
@@ -315,10 +411,12 @@ export class ClientMessageHandler {
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
-      console.warn(`[WS] Failed to send file read task ${taskId} to cluster ${conn.clusterId}`);
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
     }
 
-    console.log(`[WS] Created file read task ${taskId} for path: ${path}`);
+    console.log(`[WS] Created file read task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -328,20 +426,34 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: FileWriteMessage
   ): Promise<void> {
-    const { instanceId, path, content, encoding } = message;
+    const { instanceId, path, content, encoding, requestId } = message;
 
-    if (!instanceId || !path || !content) {
-      console.error("[WS] file_write missing instanceId, path, or content");
-      conn.ws.send(JSON.stringify({ error: "missing_instanceId_path_or_content" }));
+    if (!instanceId || !path || content === undefined) {
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId, path, and content are required");
       return;
     }
 
     if (!conn.session) {
-      console.error("[WS] file_write missing session");
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
       return;
     }
 
     const taskId = ulid();
+
+    // Track pending request
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      conn.clusterId,
+      "file_write"
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
     const token = await this.jwtService.createInstanceAccessToken(
       conn.session,
       instanceId,
@@ -351,10 +463,12 @@ export class ClientMessageHandler {
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
-      console.warn(`[WS] Failed to send file write task ${taskId} to cluster ${conn.clusterId}`);
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
     }
 
-    console.log(`[WS] Created file write task ${taskId} for path: ${path}, encoding: ${encoding ?? "utf8"}`);
+    console.log(`[WS] Created file write task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -364,20 +478,34 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: FileCreateMessage
   ): Promise<void> {
-    const { instanceId, path, type } = message;
+    const { instanceId, path, type, requestId } = message;
 
     if (!instanceId || !path || !type) {
-      console.error("[WS] file_create missing instanceId, path, or type");
-      conn.ws.send(JSON.stringify({ error: "missing_instanceId_path_or_type" }));
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId, path, and type are required");
       return;
     }
 
     if (!conn.session) {
-      console.error("[WS] file_create missing session");
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
       return;
     }
 
     const taskId = ulid();
+
+    // Track pending request
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      conn.clusterId,
+      "file_create"
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
     const token = await this.jwtService.createInstanceAccessToken(
       conn.session,
       instanceId,
@@ -387,10 +515,12 @@ export class ClientMessageHandler {
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
-      console.warn(`[WS] Failed to send file create task ${taskId} to cluster ${conn.clusterId}`);
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
     }
 
-    console.log(`[WS] Created file create task ${taskId} for path: ${path}, type: ${type}`);
+    console.log(`[WS] Created file create task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -400,20 +530,34 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: FileDeleteMessage
   ): Promise<void> {
-    const { instanceId, path } = message;
+    const { instanceId, path, requestId } = message;
 
     if (!instanceId || !path) {
-      console.error("[WS] file_delete missing instanceId or path");
-      conn.ws.send(JSON.stringify({ error: "missing_instanceId_or_path" }));
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId and path are required");
       return;
     }
 
     if (!conn.session) {
-      console.error("[WS] file_delete missing session");
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
       return;
     }
 
     const taskId = ulid();
+
+    // Track pending request
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      conn.clusterId,
+      "file_delete"
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
     const token = await this.jwtService.createInstanceAccessToken(
       conn.session,
       instanceId,
@@ -423,10 +567,12 @@ export class ClientMessageHandler {
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
-      console.warn(`[WS] Failed to send file delete task ${taskId} to cluster ${conn.clusterId}`);
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
     }
 
-    console.log(`[WS] Created file delete task ${taskId} for path: ${path}`);
+    console.log(`[WS] Created file delete task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -436,20 +582,34 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: FileTreeMessage
   ): Promise<void> {
-    const { instanceId, path } = message;
+    const { instanceId, path, requestId } = message;
 
     if (!instanceId) {
-      console.error("[WS] file_tree missing instanceId");
-      conn.ws.send(JSON.stringify({ error: "missing_instanceId" }));
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId is required");
       return;
     }
 
     if (!conn.session) {
-      console.error("[WS] file_tree missing session");
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
       return;
     }
 
     const taskId = ulid();
+
+    // Track pending request
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      conn.clusterId,
+      "file_tree"
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
     const token = await this.jwtService.createInstanceAccessToken(
       conn.session,
       instanceId,
@@ -459,10 +619,12 @@ export class ClientMessageHandler {
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
-      console.warn(`[WS] Failed to send file tree task ${taskId} to cluster ${conn.clusterId}`);
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
     }
 
-    console.log(`[WS] Created file tree task ${taskId} for path: ${path ?? "root"}`);
+    console.log(`[WS] Created file tree task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -473,7 +635,7 @@ export class ClientMessageHandler {
     path: string,
     startOffset?: number,
     limit?: number,
-    duration?: string
+    duration?: string,
   ): string {
     const offsetKey = startOffset ?? 0;
     const limitKey = limit ?? -1;

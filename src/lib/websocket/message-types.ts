@@ -6,12 +6,53 @@ import type { DeploymentPayload } from "@/lib/tasks/types.js";
 import type { Session } from "@/types/index.js";
 
 /**
+ * Error codes for WebSocket operations
+ */
+export enum WSErrorCode {
+  // Validation errors (1xxx)
+  VALIDATION_ERROR = 1000,
+  MISSING_FIELD = 1001,
+  INVALID_FORMAT = 1002,
+  
+  // Permission errors (2xxx)
+  PERMISSION_DENIED = 2000,
+  NOT_FOUND = 2001,
+  UNAUTHORIZED = 2002,
+  
+  // Agent errors (3xxx)
+  AGENT_TIMEOUT = 3000,
+  AGENT_DISCONNECTED = 3001,
+  AGENT_ERROR = 3002,
+  
+  // Rate limiting (4xxx)
+  RATE_LIMITED = 4000,
+  TOO_MANY_PENDING = 4001,
+  
+  // Internal errors (5xxx)
+  INTERNAL_ERROR = 5000,
+  TASK_FAILED = 5001,
+}
+
+/**
+ * Structured error response
+ */
+export interface WSErrorResponse {
+  kind: "error";
+  requestId: string;
+  code: WSErrorCode;
+  message: string;
+  details?: Record<string, unknown>;
+  timestamp: number;
+}
+
+/**
  * Message kind constants
  */
 export const MessageKind = {
   // Agent -> Server
   UPDATE: "update",
   LOG_CHUNK: "log_chunk",
+  TASK_RESPONSE: "task_response",
 
   // Client -> Server
   CLIENT_SUBSCRIBE: "client_subscribe",
@@ -25,17 +66,29 @@ export const MessageKind = {
   FILE_DELETE: "file_delete",
   FILE_TREE: "file_tree",
 
-  // Server -> Agent
+  // Server -> Client
   TASK: "task",
+  ERROR: "error",
+  
+  // Acknowledgments
+  ACK: "ack",
 } as const;
 
 export type MessageKindType = (typeof MessageKind)[keyof typeof MessageKind];
 
 /**
- * Base message interface
+ * Base message interface - all messages must have requestId for correlation
  */
 export interface BaseMessage {
   kind: string;
+  requestId?: string;
+}
+
+/**
+ * Base request message - client messages requiring response
+ */
+export interface BaseRequestMessage extends BaseMessage {
+  requestId: string;
 }
 
 /**
@@ -53,16 +106,36 @@ export interface LogChunkMessage extends BaseMessage {
   [key: string]: unknown;
 }
 
-export type AgentMessage = UpdateMessage | LogChunkMessage;
+export interface TaskResponseMessage extends BaseMessage {
+  kind: typeof MessageKind.TASK_RESPONSE;
+  taskId: string;
+  requestId: string;
+  success: boolean;
+  data?: unknown;
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export type AgentMessage = UpdateMessage | LogChunkMessage | TaskResponseMessage;
 
 /**
- * Client messages
+ * Acknowledgment message
  */
-export interface ClientSubscribeMessage extends BaseMessage {
+export interface AckMessage extends BaseMessage {
+  kind: typeof MessageKind.ACK;
+  messageId: string;
+}
+
+/**
+ * Client messages - all require requestId
+ */
+export interface ClientSubscribeMessage extends BaseRequestMessage {
   kind: typeof MessageKind.CLIENT_SUBSCRIBE;
 }
 
-export interface LogSubscribeMessage extends BaseMessage {
+export interface LogSubscribeMessage extends BaseRequestMessage {
   kind: typeof MessageKind.LOG_SUBSCRIBE;
   instanceId: string;
   path: string;
@@ -71,25 +144,18 @@ export interface LogSubscribeMessage extends BaseMessage {
   duration?: string;
 }
 
-export interface LogUnsubscribeMessage extends BaseMessage {
+export interface LogUnsubscribeMessage extends BaseRequestMessage {
   kind: typeof MessageKind.LOG_UNSUBSCRIBE;
   path?: string;
 }
 
-export interface DeployMessage extends BaseMessage {
+export interface DeployMessage extends BaseRequestMessage {
   kind: typeof MessageKind.DEPLOY;
   instanceId: string;
   payload: DeploymentPayload;
 }
 
-/**
- * Log stream message for deployment/service logs
- * path formats:
- *   - "<deployment-id>" for deployment logs
- *   - "service:<service-name>" for service logs
- */
-
-export interface LogStreamMessage extends BaseMessage {
+export interface LogStreamMessage extends BaseRequestMessage {
   kind: typeof MessageKind.LOG_STREAM;
   token: string;
   path: string;
@@ -99,15 +165,15 @@ export interface LogStreamMessage extends BaseMessage {
 }
 
 /**
- * File operation messages
+ * File operation messages - all require requestId
  */
-export interface FileReadMessage extends BaseMessage {
+export interface FileReadMessage extends BaseRequestMessage {
   kind: typeof MessageKind.FILE_READ;
   instanceId: string;
   path: string;
 }
 
-export interface FileWriteMessage extends BaseMessage {
+export interface FileWriteMessage extends BaseRequestMessage {
   kind: typeof MessageKind.FILE_WRITE;
   instanceId: string;
   path: string;
@@ -115,26 +181,105 @@ export interface FileWriteMessage extends BaseMessage {
   encoding?: "utf8" | "base64";
 }
 
-export interface FileCreateMessage extends BaseMessage {
+export interface FileCreateMessage extends BaseRequestMessage {
   kind: typeof MessageKind.FILE_CREATE;
   instanceId: string;
   path: string;
   type: "file" | "directory";
 }
 
-export interface FileDeleteMessage extends BaseMessage {
+export interface FileDeleteMessage extends BaseRequestMessage {
   kind: typeof MessageKind.FILE_DELETE;
   instanceId: string;
   path: string;
 }
 
-export interface FileTreeMessage extends BaseMessage {
+export interface FileTreeMessage extends BaseRequestMessage {
   kind: typeof MessageKind.FILE_TREE;
   instanceId: string;
   path?: string;
 }
 
-export type ClientMessage = ClientSubscribeMessage | LogSubscribeMessage | LogUnsubscribeMessage | DeployMessage | LogStreamMessage | FileReadMessage | FileWriteMessage | FileCreateMessage | FileDeleteMessage | FileTreeMessage;
+/**
+ * File operation response messages
+ */
+export interface FileReadResponseMessage extends BaseMessage {
+  kind: "file_read_response";
+  requestId: string;
+  taskId: string;
+  success: boolean;
+  content?: string;
+  encoding?: "utf8" | "base64";
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface FileWriteResponseMessage extends BaseMessage {
+  kind: "file_write_response";
+  requestId: string;
+  taskId: string;
+  success: boolean;
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface FileCreateResponseMessage extends BaseMessage {
+  kind: "file_create_response";
+  requestId: string;
+  taskId: string;
+  success: boolean;
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface FileDeleteResponseMessage extends BaseMessage {
+  kind: "file_delete_response";
+  requestId: string;
+  taskId: string;
+  success: boolean;
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface FileTreeResponseMessage extends BaseMessage {
+  kind: "file_tree_response";
+  requestId: string;
+  taskId: string;
+  success: boolean;
+  root?: FileNode;
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export type FileOperationResponse = 
+  | FileReadResponseMessage 
+  | FileWriteResponseMessage 
+  | FileCreateResponseMessage 
+  | FileDeleteResponseMessage 
+  | FileTreeResponseMessage;
+
+export type ClientMessage = 
+  | ClientSubscribeMessage 
+  | LogSubscribeMessage 
+  | LogUnsubscribeMessage 
+  | DeployMessage 
+  | LogStreamMessage 
+  | FileReadMessage 
+  | FileWriteMessage 
+  | FileCreateMessage 
+  | FileDeleteMessage 
+  | FileTreeMessage
+  | AckMessage;
 
 /**
  * All inbound messages
@@ -151,6 +296,8 @@ export interface ClusterConnection {
   role: ConnectionRole;
   clusterId: string;
   session?: Session;
+  connectionId: string;
+  connectedAt: number;
 }
 
 export interface LogStreamSubscription {
@@ -197,6 +344,38 @@ export interface FileTreeResponse {
 }
 
 /**
+ * Pending request tracking
+ */
+export interface PendingRequest {
+  requestId: string;
+  taskId: string;
+  ws: WebSocket;
+  clusterId: string;
+  kind: string;
+  createdAt: number;
+  timeoutMs: number;
+}
+
+/**
+ * Create error response helper
+ */
+export function createWSError(
+  requestId: string,
+  code: WSErrorCode,
+  message: string,
+  details?: Record<string, unknown>
+): WSErrorResponse {
+  return {
+    kind: "error",
+    requestId,
+    code,
+    message,
+    details,
+    timestamp: Date.now(),
+  };
+}
+
+/**
  * Parse and validate an inbound message
  */
 export function parseMessage(data: unknown): BaseMessage | null {
@@ -212,6 +391,13 @@ export function parseMessage(data: unknown): BaseMessage | null {
 }
 
 /**
+ * Validate request message has required requestId
+ */
+export function validateRequestMessage(msg: BaseMessage): msg is BaseRequestMessage {
+  return typeof msg.requestId === "string" && msg.requestId.length > 0;
+}
+
+/**
  * Type guards for message types
  */
 export function isAgentBroadcastMessage(msg: BaseMessage): msg is UpdateMessage {
@@ -220,6 +406,10 @@ export function isAgentBroadcastMessage(msg: BaseMessage): msg is UpdateMessage 
 
 export function isLogChunkMessage(msg: BaseMessage): msg is LogChunkMessage {
   return msg.kind === MessageKind.LOG_CHUNK;
+}
+
+export function isTaskResponseMessage(msg: BaseMessage): msg is TaskResponseMessage {
+  return msg.kind === MessageKind.TASK_RESPONSE;
 }
 
 export function isClientSubscribeMessage(msg: BaseMessage): msg is ClientSubscribeMessage {
@@ -260,6 +450,10 @@ export function isFileDeleteMessage(msg: BaseMessage): msg is FileDeleteMessage 
 
 export function isFileTreeMessage(msg: BaseMessage): msg is FileTreeMessage {
   return msg.kind === MessageKind.FILE_TREE;
+}
+
+export function isAckMessage(msg: BaseMessage): msg is AckMessage {
+  return msg.kind === MessageKind.ACK;
 }
 
 /**
