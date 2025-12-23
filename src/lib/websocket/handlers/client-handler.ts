@@ -417,7 +417,7 @@ export class ClientMessageHandler {
       service.instanceId,
       conn.clusterId
     );
-    const task = this.dployrdService.createServiceRemoveTask(taskId, token);
+    const task = this.dployrdService.createServiceRemoveTask(taskId, service.name, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
