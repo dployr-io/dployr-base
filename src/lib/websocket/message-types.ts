@@ -322,27 +322,27 @@ export type FileOperationResponse =
  */
 export interface InstanceTokenRotateMessage extends BaseRequestMessage {
   kind: typeof MessageKind.INSTANCE_TOKEN_ROTATE;
-  instanceId: string;
+  instanceName: string;
   token: string;
 }
 
 export interface InstanceSystemInstallMessage extends BaseRequestMessage {
   kind: typeof MessageKind.INSTANCE_SYSTEM_INSTALL;
-  instanceId: string;
+  instanceName: string;
   clusterId: string;
   version?: string;
 }
 
 export interface InstanceSystemRebootMessage extends BaseRequestMessage {
   kind: typeof MessageKind.INSTANCE_SYSTEM_REBOOT;
-  instanceId: string;
+  instanceName: string;
   clusterId: string;
   force?: boolean;
 }
 
 export interface InstanceSystemRestartMessage extends BaseRequestMessage {
   kind: typeof MessageKind.INSTANCE_SYSTEM_RESTART;
-  instanceId: string;
+  instanceName: string;
   clusterId: string;
   force?: boolean;
 }

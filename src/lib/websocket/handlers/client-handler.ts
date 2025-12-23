@@ -768,9 +768,15 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: InstanceTokenRotateMessage
   ): Promise<void> {
-    const { instanceId, token, requestId } = message;
+    const { instanceName, token, requestId } = message;
 
     try {
+      const instance = await this.db.instances.getByName(instanceName);
+      if (!instance) {
+        this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+        return;
+      }
+
       let payload: any;
       try {
         payload = await this.jwtService.verifyTokenIgnoringExpiry(token);
@@ -779,7 +785,7 @@ export class ClientMessageHandler {
         return;
       }
 
-      if (payload.token_type !== "bootstrap" || payload.instance_id !== instanceId) {
+      if (payload.token_type !== "bootstrap" || payload.instance_id !== instance.id) {
         this.sendError(conn, requestId, WSErrorCode.VALIDATION_ERROR, "Invalid bootstrap token for instance");
         return;
       }
@@ -790,7 +796,7 @@ export class ClientMessageHandler {
         return;
       }
 
-      const rotated = await this.jwtService.rotateBootstrapToken(instanceId, nonce, "5m");
+      const rotated = await this.jwtService.rotateBootstrapToken(instance.id, nonce, "5m");
 
       conn.ws.send(JSON.stringify({
         kind: "instance_token_rotate_response",
@@ -813,7 +819,7 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: InstanceSystemInstallMessage
   ): Promise<void> {
-    const { instanceId, clusterId, version, requestId } = message;
+    const { instanceName, clusterId, version, requestId } = message;
 
     if (!conn.session) {
       this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
@@ -821,7 +827,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const instance = await this.db.instances.get(instanceId);
+      const instance = await this.db.instances.getByName(instanceName);
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -836,7 +842,7 @@ export class ClientMessageHandler {
       const taskId = ulid();
       const token = await this.jwtService.createInstanceAccessToken(
         conn.session,
-        instanceId,
+        instance.id,
         clusterId
       );
       const task = this.dployrdService.createSystemInstallTask(taskId, version, token);
@@ -872,7 +878,7 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: InstanceSystemRebootMessage
   ): Promise<void> {
-    const { instanceId, clusterId, force = false, requestId } = message;
+    const { instanceName, clusterId, force = false, requestId } = message;
 
     if (!conn.session) {
       this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
@@ -880,7 +886,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const instance = await this.db.instances.get(instanceId);
+      const instance = await this.db.instances.getByName(instanceName);
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -895,7 +901,7 @@ export class ClientMessageHandler {
       const taskId = ulid();
       const token = await this.jwtService.createInstanceAccessToken(
         conn.session,
-        instanceId,
+        instance.id,
         clusterId
       );
       const task = this.dployrdService.createSystemRebootTask(taskId, force, token);
@@ -1026,7 +1032,7 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: InstanceSystemRestartMessage
   ): Promise<void> {
-    const { instanceId, clusterId, force = false, requestId } = message;
+    const { instanceName, clusterId, force = false, requestId } = message;
 
     if (!conn.session) {
       this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
@@ -1034,7 +1040,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const instance = await this.db.instances.get(instanceId);
+      const instance = await this.db.instances.getByName(instanceName);
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -1049,7 +1055,7 @@ export class ClientMessageHandler {
       const taskId = ulid();
       const token = await this.jwtService.createInstanceAccessToken(
         conn.session,
-        instanceId,
+        instance.id,
         clusterId
       );
       const task = this.dployrdService.createDaemonRestartTask(taskId, force, token);
