@@ -60,6 +60,8 @@ export const MessageKind = {
   LOG_UNSUBSCRIBE: "log_unsubscribe",
   LOG_STREAM: "log_stream",
   DEPLOY: "deploy",
+  SERVICE_CREATE: "service_create",
+  SERVICE_REMOVE: "service_remove",
   FILE_READ: "file_read",
   FILE_WRITE: "file_write",
   FILE_CREATE: "file_create",
@@ -120,7 +122,7 @@ export interface TaskResponseMessage extends BaseMessage {
   taskId: string;
   requestId: string;
   success: boolean;
-  data?: unknown;
+  data?: Record<string, any>;
   error?: {
     code: WSErrorCode;
     message: string;
@@ -160,8 +162,19 @@ export interface LogUnsubscribeMessage extends BaseRequestMessage {
 
 export interface DeployMessage extends BaseRequestMessage {
   kind: typeof MessageKind.DEPLOY;
-  instanceId: string;
+  instanceName: string;
   payload: DeploymentPayload;
+}
+
+export interface ServiceCreateMessage extends BaseMessage {
+  kind: typeof MessageKind.SERVICE_CREATE;
+  instanceName: string;
+  name: string;
+}
+
+export interface ServiceRemoveMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.SERVICE_REMOVE;
+  name: string;
 }
 
 export interface LogStreamMessage extends BaseRequestMessage {
@@ -608,6 +621,14 @@ export function isLogUnsubscribeMessage(msg: BaseMessage): msg is LogUnsubscribe
 
 export function isDeployMessage(msg: BaseMessage): msg is DeployMessage {
   return msg.kind === MessageKind.DEPLOY;
+}
+
+export function isServiceCreateMessage(msg: BaseMessage): msg is ServiceCreateMessage {
+  return msg.kind === MessageKind.SERVICE_CREATE;
+}
+
+export function isServiceRemoveMessage(msg: BaseMessage): msg is ServiceRemoveMessage {
+  return msg.kind === MessageKind.SERVICE_REMOVE;
 }
 
 export function isLogStreamMessage(msg: BaseMessage): msg is LogStreamMessage {

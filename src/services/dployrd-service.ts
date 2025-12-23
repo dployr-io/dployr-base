@@ -5,7 +5,11 @@ import type { AgentTask, DeploymentPayload } from "@/lib/tasks/types.js";
 
 export class AgentService {
   // Create a system install task
-  createSystemInstallTask(taskId: string, version?: string, token?: string): AgentTask {
+  createSystemInstallTask(
+    taskId: string,
+    version?: string,
+    token?: string
+  ): AgentTask {
     return {
       ID: taskId,
       Type: "system/install:post",
@@ -14,9 +18,12 @@ export class AgentService {
     };
   }
 
-  
   // Create a dployrd restart task
-  createDaemonRestartTask(taskId: string, force: boolean = false, token?: string): AgentTask {
+  createDaemonRestartTask(
+    taskId: string,
+    force: boolean = false,
+    token?: string
+  ): AgentTask {
     return {
       ID: taskId,
       Type: "system/restart:post",
@@ -26,7 +33,11 @@ export class AgentService {
   }
 
   // Create a system reboot task
-  createSystemRebootTask(taskId: string, force: boolean = false, token?: string): AgentTask {
+  createSystemRebootTask(
+    taskId: string,
+    force: boolean = false,
+    token?: string
+  ): AgentTask {
     return {
       ID: taskId,
       Type: "system/reboot:post",
@@ -59,11 +70,28 @@ export class AgentService {
     };
   }
 
-  createDeployTask(taskId: string, payload: DeploymentPayload, token?: string): AgentTask {
+  createDeployTask(
+    taskId: string,
+    payload: DeploymentPayload,
+    token?: string
+  ): AgentTask {
     return {
       ID: taskId,
       Type: "deployments:post",
       Payload: { ...payload, token },
+      Status: "pending",
+    };
+  }
+
+  createServiceRemoveTask(
+    taskId: string,
+    serviceId: string,
+    token?: string
+  ): AgentTask {
+    return {
+      ID: taskId,
+      Type: `services/${serviceId}:delete`,
+      Payload: { token },
       Status: "pending",
     };
   }
@@ -79,7 +107,13 @@ export class AgentService {
   }
 
   // Create a file write task
-  createFileWriteTask(taskId: string, path: string, content: string, encoding?: "utf8" | "base64", token?: string): AgentTask {
+  createFileWriteTask(
+    taskId: string,
+    path: string,
+    content: string,
+    encoding?: "utf8" | "base64",
+    token?: string
+  ): AgentTask {
     return {
       ID: taskId,
       Type: "system/fs/write:put",
@@ -89,7 +123,12 @@ export class AgentService {
   }
 
   // Create a file create task
-  createFileCreateTask(taskId: string, path: string, type: "file" | "directory", token?: string): AgentTask {
+  createFileCreateTask(
+    taskId: string,
+    path: string,
+    type: "file" | "directory",
+    token?: string
+  ): AgentTask {
     return {
       ID: taskId,
       Type: "system/fs/create:post",
@@ -99,7 +138,11 @@ export class AgentService {
   }
 
   // Create a file delete task
-  createFileDeleteTask(taskId: string, path: string, token?: string): AgentTask {
+  createFileDeleteTask(
+    taskId: string,
+    path: string,
+    token?: string
+  ): AgentTask {
     return {
       ID: taskId,
       Type: "system/fs/delete:delete",
@@ -119,7 +162,14 @@ export class AgentService {
   }
 
   // Create a file watch task
-  createFileWatchTask(taskId: string, instanceId: string, path: string, recursive: boolean, requestId: string, token?: string): AgentTask {
+  createFileWatchTask(
+    taskId: string,
+    instanceId: string,
+    path: string,
+    recursive: boolean,
+    requestId: string,
+    token?: string
+  ): AgentTask {
     return {
       ID: taskId,
       Type: "system/fs/watch:post",
@@ -129,7 +179,13 @@ export class AgentService {
   }
 
   // Create a file unwatch task
-  createFileUnwatchTask(taskId: string, instanceId: string, path: string, requestId: string, token?: string): AgentTask {
+  createFileUnwatchTask(
+    taskId: string,
+    instanceId: string,
+    path: string,
+    requestId: string,
+    token?: string
+  ): AgentTask {
     return {
       ID: taskId,
       Type: "system/fs/unwatch:post",

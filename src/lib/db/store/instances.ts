@@ -80,6 +80,27 @@ export class InstanceStore extends BaseStore {
         };
     }
 
+    async getByName(tag: string): Promise<(Instance & { clusterId: string }) | null> {
+        const stmt = this.db.prepare(`
+            SELECT instances.id, instances.address, instances.tag, instances.metadata, instances.created_at, instances.updated_at, instances.cluster_id
+            FROM instances
+            WHERE instances.tag = $1
+        `);
+
+        const result = await stmt.bind(tag).first();
+        if (!result) return null;
+
+        return {
+            id: result.id as string,
+            address: result.address as string,
+            tag: result.tag as string,
+            metadata: (result as any).metadata || {},
+            createdAt: result.created_at as number,
+            updatedAt: result.updated_at as number,
+            clusterId: result.cluster_id as string,
+        };
+    }
+
     async updateMetadata(id: string, metadata: Record<string, any>): Promise<void> {
         const now = this.now();
         const stmt = this.db.prepare(`

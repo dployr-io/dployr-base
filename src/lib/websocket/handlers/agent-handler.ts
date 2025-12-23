@@ -1,9 +1,10 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
+import { DatabaseStore } from "@/lib/db/store/index.js";
 import type { ConnectionManager } from "../connection-manager.js";
 import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "../message-types.js";
-import { isAgentBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind } from "../message-types.js";
+import { isAgentBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind, isDeployMessage } from "../message-types.js";
 import { ClientNotifier } from "./client-notifier.js";
 
 /**
@@ -13,6 +14,7 @@ export class AgentMessageHandler {
   constructor(
     private connectionManager: ConnectionManager,
     private clientNotifier: ClientNotifier,
+    private db: DatabaseStore,
   ) {}
 
   /**
@@ -66,6 +68,14 @@ export class AgentMessageHandler {
       error,
     });
 
+    if (success && data && this.getResponseKind(message) === "deploy_response") {
+      this.db.services.save(data['instance_id'], data['name']);
+    }
+
+    if (success && data && this.getResponseKind(message) === "service_remove_response") {
+      this.db.services.deleteByName(data['name']);
+    }
+
     if (!routed) {
       console.warn(`[WS] Could not route response for taskId: ${taskId} (request may have timed out)`);
     }
@@ -78,12 +88,13 @@ export class AgentMessageHandler {
     const request = this.connectionManager.getPendingRequest(message.taskId);
     if (request) {
       switch (request.kind) {
-        case "file_read": return "file_read_response";
-        case "file_write": return "file_write_response";
-        case "file_create": return "file_create_response";
-        case "file_delete": return "file_delete_response";
-        case "file_tree": return "file_tree_response";
-        case "deploy": return "deploy_response";
+        case MessageKind.FILE_READ: return "file_read_response";
+        case MessageKind.FILE_WRITE: return "file_write_response";
+        case MessageKind.FILE_CREATE: return "file_create_response";
+        case MessageKind.FILE_DELETE: return "file_delete_response";
+        case MessageKind.FILE_TREE: return "file_tree_response";
+        case MessageKind.DEPLOY: return "deploy_response";
+        case MessageKind.SERVICE_REMOVE: return "service_remove_response";
         default: return "task_response";
       }
     }

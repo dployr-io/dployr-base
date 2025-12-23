@@ -1,9 +1,9 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import type { AgentTask } from "@/lib/tasks/types.js";
 import type { ConnectionManager } from "../connection-manager.js";
+import { KVStore } from "@/lib/db/store/kv.js";
 import type {
   ClusterConnection,
   BaseMessage,
@@ -22,6 +22,7 @@ import type {
   InstanceSystemRestartMessage,
   FileWatchMessage,
   FileUnwatchMessage,
+  ServiceRemoveMessage,
 } from "../message-types.js";
 import {
   isClientSubscribeMessage,
@@ -44,17 +45,18 @@ import {
   validateRequestMessage,
   createWSError,
   WSErrorCode,
+  MessageKind,
+  isServiceRemoveMessage,
 } from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
-import { type IDBAdapter } from "@/lib/context.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/index.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
-  kv: IKVAdapter;
-  db: IDBAdapter;
+  kv: KVStore;
+  db: DatabaseStore;
   jwtService: JWTService;
   dployrdService: AgentService;
   sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
@@ -65,8 +67,8 @@ export interface ClientHandlerDependencies {
  */
 export class ClientMessageHandler {
   private connectionManager: ConnectionManager;
-  private kv: IKVAdapter;
-  private db: IDBAdapter;
+  private kv: KVStore;
+  private db: DatabaseStore;
   private jwtService: JWTService;
   private dployrdService: AgentService;
   private sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
@@ -131,6 +133,11 @@ export class ClientMessageHandler {
 
     if (isDeployMessage(message)) {
       this.handleDeploy(conn, message);
+      return;
+    }
+
+    if (isServiceRemoveMessage(message)) {
+      this.handleServiceRemove(conn, message);
       return;
     }
 
@@ -227,7 +234,7 @@ export class ClientMessageHandler {
    * Handle client subscription - send cached status
    */
   private async handleClientSubscribe(conn: ClusterConnection, requestId?: string): Promise<void> {
-    const cached = await this.kv.get(`cluster:${conn.clusterId}:status`);
+    const cached = await this.kv.kv.get(`cluster:${conn.clusterId}:status`);
     if (cached) {
       try {
         const response = {
@@ -312,9 +319,9 @@ export class ClientMessageHandler {
    * Handle deploy message
    */
   private async handleDeploy(conn: ClusterConnection, message: DeployMessage): Promise<void> {
-    const { instanceId, payload, requestId } = message;
+    const { instanceName, payload, requestId } = message;
 
-    if (!instanceId || !payload) {
+    if (!instanceName || !payload) {
       this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId and payload are required");
       return;
     }
@@ -332,7 +339,7 @@ export class ClientMessageHandler {
       requestId,
       conn.ws,
       conn.clusterId,
-      "deploy"
+      MessageKind.DEPLOY,
     );
 
     if (!added) {
@@ -340,9 +347,17 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.getByName(instanceName);
+
+    if (!instance) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "No instance with matching name was found!");
+      return;
+    }
+
     const token = await this.jwtService.createInstanceAccessToken(
       conn.session,
-      instanceId,
+      instance.id,
       conn.clusterId
     );
     const task = this.dployrdService.createDeployTask(taskId, payload, token);
@@ -357,6 +372,63 @@ export class ClientMessageHandler {
     console.log(`[WS] Created deploy task ${taskId} (requestId: ${requestId})`);
   }
 
+  /**
+   * Handle service remove
+   */
+  private async handleServiceRemove(conn: ClusterConnection, message: ServiceRemoveMessage): Promise<void> {
+    const { name, requestId } = message;
+
+    if (!name || !requestId) {
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "name and requestId is required");
+      return;
+    }
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required for deploy");
+      return;
+    }
+
+    const taskId = ulid();
+
+    // Track pending request
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      conn.clusterId,
+      MessageKind.SERVICE_REMOVE,
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
+    const service = await this.db.services.getByName(name);
+    
+    if (!service) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, `Service '${name}' not found`);
+      return;
+    }
+
+    const token = await this.jwtService.createInstanceAccessToken(
+      conn.session,
+      service.instanceId,
+      conn.clusterId
+    );
+    const task = this.dployrdService.createServiceRemoveTask(taskId, token);
+    const sent = this.sendTaskToCluster(conn.clusterId, task);
+
+    if (!sent) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
+    }
+
+    console.log(`[WS] Created service remove task ${taskId} (requestId: ${requestId})`);  
+  }
+  
   /**
    * Handle log stream for deployments and services
    * path formats:
@@ -749,8 +821,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const db = new DatabaseStore(this.db as any);
-      const instance = await db.instances.get(instanceId);
+      const instance = await this.db.instances.get(instanceId);
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -809,8 +880,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const db = new DatabaseStore(this.db as any);
-      const instance = await db.instances.get(instanceId);
+      const instance = await this.db.instances.get(instanceId);
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -964,8 +1034,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const db = new DatabaseStore(this.db as any);
-      const instance = await db.instances.get(instanceId);
+      const instance = await this.db.instances.get(instanceId);
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
