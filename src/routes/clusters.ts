@@ -41,7 +41,7 @@ const updateRolesSchema = z.object({
  */
 clusters.get("/", async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   const _clusters = await db.clusters.listUserClusters(session.userId);
 
@@ -53,7 +53,7 @@ clusters.get("/", async (c) => {
  */
 clusters.get("/users/invites", async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   try {
     const clusterIds = await db.clusters.listPendingInvites(session.userId);
@@ -73,7 +73,7 @@ clusters.get("/users/invites", async (c) => {
  */
 clusters.get("/:id/users/invites/accept", async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const clusterId = c.req.param("id");
 
   try {
@@ -110,7 +110,7 @@ clusters.get("/:id/users/invites/accept", async (c) => {
  */
 clusters.get("/:id/users/invites/decline", async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const clusterId = c.req.param("id");
 
   try {
@@ -138,7 +138,7 @@ clusters.get("/:id/users/invites/decline", async (c) => {
  * List all users in a cluster 
  */
 clusters.get("/:id/users", async (c) => {
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   const clusterId = c.req.param("id");
 
@@ -163,7 +163,7 @@ clusters.get("/:id/users", async (c) => {
  */
 clusters.post("/:id/users", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const kv = new KVStore(getKV(c));
   const id = c.req.param("id");
 
@@ -221,7 +221,7 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
  */
 clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const kv = new KVStore(getKV(c));
 
   try {
@@ -278,7 +278,7 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
  */
 clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const kv = new KVStore(getKV(c));
 
   try {
@@ -345,7 +345,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
  * Transfer ownership of cluster to a new user
  */
 clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   try {
     const data = await c.req.json();
@@ -383,7 +383,7 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
  * List available connected integrations 
  */
 clusters.get("/:id/integrations", async (c) => {
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const clusterId = c.req.param("id");
 
   try {
@@ -419,7 +419,7 @@ clusters.get("/:id/integrations", async (c) => {
  */
 clusters.get("/:id/remotes", async (c) => {
   const clusterId = c.req.param("id");
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   try {
     const gitHub = new GitHubService(c.env);

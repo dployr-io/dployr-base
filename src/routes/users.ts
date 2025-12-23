@@ -33,7 +33,7 @@ users.get("/me", async (c) => {
     }
 
     const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
 
     const session = await kv.getSession(sessionId);
 
@@ -81,7 +81,7 @@ users.patch("/me", async (c) => {
     }
 
     const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
 
     const session = await kv.getSession(sessionId);
 

@@ -78,7 +78,7 @@ agent.post("/token", async (c) => {
 
 agent.post("/instances/:instanceId/cert", async (c) => {
   const instanceId = c.req.param("instanceId");
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -183,7 +183,7 @@ agent.post("/instances/:instanceId/cert", async (c) => {
 
 agent.put("/instances/:instanceId/cert", async (c) => {
   const instanceId = c.req.param("instanceId");
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -280,7 +280,7 @@ agent.put("/instances/:instanceId/cert", async (c) => {
 // Instance WebSocket endpoint for tasks
 agent.get("/instances/:instanceId/ws", async (c) => {
   const instanceId = c.req.param("instanceId");
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {

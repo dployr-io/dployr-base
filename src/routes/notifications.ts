@@ -29,7 +29,7 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
         ERROR.AUTH.BAD_SESSION.status,
       );
     }
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const cluster = await db.clusters.get(clusterId);
 
     const metadata = (cluster?.metadata as Record<string, any>) || {};
@@ -83,7 +83,7 @@ notifications.post("/discord/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     await db.clusters.update(clusterId, {
       metadata: { discord: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
@@ -111,7 +111,7 @@ notifications.post("/slack/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     await db.clusters.update(clusterId, {
       metadata: { slack: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
@@ -139,7 +139,7 @@ notifications.post("/webhook/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     await db.clusters.update(clusterId, {
       metadata: { customWebhook: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
     });
@@ -167,7 +167,7 @@ notifications.post("/email/setup", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     await db.clusters.update(clusterId, {
       metadata: { emailNotification: { enabled, events } }
     });

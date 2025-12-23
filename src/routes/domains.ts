@@ -32,7 +32,7 @@ const setupSchema = z.object({
     .min(3, "Domain must be at least 3 characters")
     .max(253, "Domain must be at most 253 characters")
     .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i, "Invalid domain format"),
-  instanceId: z.string().ulid("Invalid instance ID"),
+  instanceId: z.ulid("Invalid instance ID"),
 });
 
 // Register instance with bootstrap token
@@ -131,7 +131,7 @@ domains.post("/register", async (c) => {
 // Create custom domain
 domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const kv = new KVStore(getKV(c));
   const dns = new DNSService(c.env);
 
@@ -222,7 +222,7 @@ domains.get("/verify", async (c) => {
     return c.text("missing domain parameter", 400);
   }
 
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const dns = new DNSService(c.env);
   const record = await db.domains.get(domain);
 
@@ -247,7 +247,7 @@ domains.get("/verify", async (c) => {
 domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (c) => {
   try {
     const domain = c.req.param("domain").toLowerCase();
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const dns = new DNSService(c.env);
 
     const record = await db.domains.get(domain);
@@ -286,7 +286,7 @@ domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (
 domains.get("/:domain", authMiddleware, async (c) => {
   const domain = c.req.param("domain").toLowerCase();
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const dns = new DNSService(c.env);
 
   const domainRecord = await db.domains.get(domain);
@@ -354,7 +354,7 @@ domains.get("/:domain", authMiddleware, async (c) => {
 domains.get("/instance/:instanceId", authMiddleware, async (c) => {
   const instanceId = c.req.param("instanceId");
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   const instance = await db.instances.get(instanceId);
   if (!instance) {
@@ -380,7 +380,7 @@ domains.get("/instance/:instanceId", authMiddleware, async (c) => {
 domains.delete("/:domain", authMiddleware, requireClusterDeveloper, async (c) => {
   const domain = c.req.param("domain").toLowerCase();
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   const record = await db.domains.get(domain);
   if (!record) {
@@ -442,7 +442,7 @@ domains.get("/callback/:provider", async (c) => {
   }
 
   const kv = new KVStore(getKV(c));
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const redirectPath = await kv.validateState(state);
 
   if (!redirectPath) {

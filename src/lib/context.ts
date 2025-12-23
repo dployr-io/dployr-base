@@ -4,22 +4,7 @@
 import type { Context } from 'hono';
 import type { IKVAdapter } from '@/lib/storage/kv.interface.js';
 import type { WebSocketHandler } from '@/lib/websocket/instance-handler.js';
-
-// Database adapter interface
-export interface IDBAdapter {
-  prepare(query: string): {
-    bind(...params: any[]): {
-      all(): Promise<{ results: any[] }>;
-      first(): Promise<any>;
-      run(): Promise<{ success: boolean; meta?: any }>;
-    };
-    all(): Promise<{ results: any[] }>;
-    first(): Promise<any>;
-    run(): Promise<{ success: boolean; meta?: any }>;
-  };
-  batch?(statements: any[]): Promise<any[]>;
-  exec?(query: string): Promise<any>;
-}
+import type { PostgresAdapter } from '@/lib/db/pg-adapter.js';
 
 // Storage adapter interface
 export interface IStorageAdapter {
@@ -35,7 +20,7 @@ export interface IStorageAdapter {
  */
 export type AppVariables = {
   kvAdapter: IKVAdapter;
-  dbAdapter: IDBAdapter;
+  dbAdapter: PostgresAdapter;
   storageAdapter: IStorageAdapter;
   wsHandler: WebSocketHandler;
   session?: {
@@ -58,7 +43,7 @@ export function getKV(c: Context): IKVAdapter {
   return kv;
 }
 
-export function getDB(c: Context): IDBAdapter {
+export function getDB(c: Context): PostgresAdapter {
   const db = c.get('dbAdapter');
   if (!db) {
     throw new Error('DB adapter not initialized');

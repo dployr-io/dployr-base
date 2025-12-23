@@ -117,7 +117,7 @@ export async function initializeFromConfig(config: Config) {
   const kv = await createKVFromConfig(config);
   const db = await createDatabaseFromConfig(config);
   const storage = await createStorageFromConfig(config);
-  const wsHandler = new WebSocketHandler(kv, db as any);
+  const wsHandler = new WebSocketHandler(kv, db);
 
   return { kv, db, storage, ws: wsHandler, config };
 }

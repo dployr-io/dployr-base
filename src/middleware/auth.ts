@@ -96,7 +96,7 @@ export async function requireClusterViewer(
     }, ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const canRead = await db.clusters.canRead(session.userId, clusterId);
 
   if (!canRead) {
@@ -140,7 +140,7 @@ export async function requireClusterDeveloper(
     }, ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const canWrite = await db.clusters.canWrite(session.userId, clusterId);
 
   if (!canWrite) {
@@ -184,7 +184,7 @@ export async function requireClusterAdmin(
     }, ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const isAdmin = await db.clusters.isAdmin(session.userId, clusterId);
 
   if (!isAdmin) {
@@ -228,7 +228,7 @@ export async function requireClusterOwner(
     }, ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const isOwner = await db.clusters.isOwner(session.userId, clusterId);
 
   if (!isOwner) {

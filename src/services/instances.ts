@@ -26,7 +26,7 @@ export class InstanceService {
     session: Session;
     c: Context;
   }): Promise<{ instance: Instance; token: string }> {
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const kv = new KVStore(getKV(c));
 
     const instance = await db.instances.create(clusterId, {
@@ -110,7 +110,7 @@ export class InstanceService {
     session: Session; 
     c: Context 
   }): Promise<"enqueued"> {
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const kv = new KVStore(getKV(c));
     const instance = await db.instances.get(instanceId);
 
@@ -151,7 +151,7 @@ export class InstanceService {
     | { ok: false; reason: "invalid_token" | "invalid_type" | "already_used" }
   > {
     const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const jwtService = new JWTService(kv);
 
     let payload: any;
@@ -184,7 +184,7 @@ export class InstanceService {
     instanceId: string;
     c: Context;
   }) {
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const kv = new KVStore(getKV(c));
     const instance = await db.instances.get(instanceId);
 

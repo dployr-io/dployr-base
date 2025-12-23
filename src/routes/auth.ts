@@ -69,7 +69,7 @@ auth.get("/callback/:provider", async (c) => {
   }
 
   const kv = new KVStore(getKV(c));
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
 
   const redirectUrl = await kv.validateState(state);
 
@@ -184,7 +184,7 @@ auth.post("/login/email", async (c) => {
     }
 
     const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
 
     let user = await db.users.get(email);
     if (!user) {
@@ -243,7 +243,7 @@ auth.post("/login/email/verify", async (c) => {
     }
 
     const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const isValid = await kv.validateOTP(email, code.toUpperCase());
 
     if (!isValid) {

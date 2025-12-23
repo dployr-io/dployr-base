@@ -3,11 +3,12 @@
 
 import type { WebSocket } from "ws";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import type { IDBAdapter } from "@/lib/context.js";
 import type { AgentTask } from "@/lib/tasks/types.js";
 import type { Session } from "@/types/index.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { KVStore } from "@/lib/db/store/kv.js";
+import { DatabaseStore } from "@/lib/db/store/index.js";
+import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { JWTService } from "@/services/jwt.js";
 import { ConnectionManager, ConnectionManagerConfig } from "./connection-manager.js";
 import { AgentMessageHandler } from "./handlers/agent-handler.js";
@@ -30,21 +31,24 @@ export class WebSocketHandler {
   private clientNotifier: ClientNotifier;
   private sessionConnections = new Map<string, string>();
 
-  constructor(private kv: IKVAdapter, private db: IDBAdapter, config?: WebSocketHandlerConfig) {
+  constructor(private kv: IKVAdapter, private db: PostgresAdapter, config?: WebSocketHandlerConfig) {
     this.connectionManager = new ConnectionManager(config?.connectionManager);
 
-    this.clientNotifier = new ClientNotifier(this.connectionManager, kv);
+    const kvStore = new KVStore(this.kv);
+    const dbStore = new DatabaseStore(this.db);
+
+    this.clientNotifier = new ClientNotifier(this.connectionManager, kvStore);
 
     // Initialize handlers with dependencies
-    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, this.clientNotifier);
+    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, this.clientNotifier, dbStore);
 
-    const jwtService = new JWTService(new KVStore(this.kv));
+    const jwtService = new JWTService(kvStore);
     const dployrdService = new AgentService();
 
     this.clientHandler = new ClientMessageHandler({
       connectionManager: this.connectionManager,
-      kv,
-      db,
+      kv: kvStore,
+      db: dbStore,
       jwtService,
       dployrdService,
       sendTaskToCluster: this.sendTaskToCluster.bind(this),

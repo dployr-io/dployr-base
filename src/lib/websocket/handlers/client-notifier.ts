@@ -1,11 +1,12 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import type { BaseMessage } from "@/lib/websocket/message-types.js";
 import { MessageKind } from "@/lib/websocket/message-types.js";
 import { ConnectionManager } from "@/lib/websocket/connection-manager.js";
+import { KVStore } from "@/lib/db/store/kv.js";
 import { ulid } from "ulid";
+import { Service } from "@/lib/db/store/services.js";
 
 /**
  * Handles broadcasting messages to connected clients.
@@ -16,7 +17,7 @@ import { ulid } from "ulid";
 export class ClientNotifier {
   constructor(
     private conn: ConnectionManager,
-    private kv: IKVAdapter,
+    private kv: KVStore,
   ) {}
 
   /**
@@ -97,7 +98,7 @@ export class ClientNotifier {
   private async cacheStatusIfNeeded(clusterId: string, message: BaseMessage, payload: string): Promise<void> {
     if (message.kind === MessageKind.UPDATE) {
       try {
-        await this.kv.put(`cluster:${clusterId}:status`, payload, { ttl: 300 });
+        await this.kv.kv.put(`cluster:${clusterId}:status`, payload, { ttl: 300 });
       } catch (err) {
         console.error(`[WS] Failed to cache status:`, err);
       }

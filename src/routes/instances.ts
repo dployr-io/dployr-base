@@ -43,7 +43,7 @@ instances.get("/", requireClusterViewer, async (c) => {
     }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const kv = new KVStore(getKV(c));
   const service = new InstanceService(c.env);
   const session = c.get("session")!;
@@ -124,7 +124,7 @@ instances.post("/", requireClusterOwner, async (c) => {
 
     // Trigger notifications
     const notificationService = new NotificationService(c.env);
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     runBackground(
       notificationService.triggerEvent(EVENTS.INSTANCE.CREATED.code, {
         clusterId,
@@ -195,7 +195,7 @@ instances.delete("/:instanceId", requireClusterOwner, async (c) => {
       );
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const kv = new KVStore(getKV(c));
     const instance = await db.instances.get(instanceId);
 
@@ -276,7 +276,7 @@ instances.post("/:instanceId/tokens/rotate", async (c) => {
   const { token } = validation.data;
 
   const kv = new KVStore(getKV(c));
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const jwtService = new JWTService(kv);
 
   let payload: any;
@@ -333,7 +333,7 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const instance = await db.instances.get(instanceId);
     if (!instance) {
       return c.json(createErrorResponse({
@@ -419,7 +419,7 @@ instances.post("/:instanceId/system/reboot", requireClusterAdmin, async (c) => {
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const instance = await db.instances.get(instanceId);
 
     if (!instance) {
@@ -506,7 +506,7 @@ instances.post("/:instanceId/system/restart", requireClusterDeveloper, async (c)
       }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const instance = await db.instances.get(instanceId);
 
     if (!instance) {

@@ -45,7 +45,7 @@ integrations.post("/github/webhook", async (c) => {
       }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const kv = new KVStore(getKV(c));
     const integrationsService = new IntegrationsService(c.env, db, kv);
 
@@ -147,7 +147,7 @@ integrations.get("/github/callback", async (c) => {
     
     if (userId) await kv.deletePendingGitHubInstall(userId);
     
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     await db.clusters.installGitHubIntegration(clusterId, {
       loginId: installation.account.login,
       installUrl: installation.htmlUrl,
@@ -181,7 +181,7 @@ integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
 
     await gitlabService.remoteCount({ accessToken });
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     await db.clusters.update(clusterId, {
       metadata: { gitLab: { accessToken, enabled } }
     });
@@ -214,7 +214,7 @@ integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
     // Test access
     await bitbucketService.remoteCount({ accessToken });
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     await db.clusters.update(clusterId, {
       metadata: { bitBucket: { accessToken, enabled } }
     });
@@ -241,7 +241,7 @@ integrations.get("/list", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const integrations = await db.clusters.listClusterIntegrations(clusterId);
 
     return c.json(createSuccessResponse(integrations, "Integrations retrieved"));
@@ -266,7 +266,7 @@ integrations.get("/remotes", requireClusterDeveloper, async (c) => {
       }), ERROR.AUTH.BAD_SESSION.status);
     }
 
-    const db = new DatabaseStore(getDB(c) as any);
+    const db = new DatabaseStore(getDB(c));
     const clusterIntegrations = await db.clusters.listClusterIntegrations(clusterId);
     const integrationsService = new IntegrationsService(c.env);
     const remotes = await integrationsService.listAllRemotes(clusterIntegrations);

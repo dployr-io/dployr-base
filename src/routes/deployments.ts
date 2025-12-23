@@ -13,7 +13,7 @@ deployments.use("*", authMiddleware);
 
 // List all deployments
 deployments.get("/", async (c) => {
-  const db = new DatabaseStore(getDB(c) as any);
+  const db = new DatabaseStore(getDB(c));
   const session = c.get("session")!;
 
   if (!session) {
