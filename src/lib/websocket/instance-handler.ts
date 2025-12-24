@@ -35,7 +35,7 @@ export class WebSocketHandler {
     this.connectionManager = new ConnectionManager(config?.connectionManager);
 
     const kvStore = new KVStore(this.kv);
-    const dbStore = new DatabaseStore(this.db);
+    const dbStore = new DatabaseStore(this.db, kvStore);
 
     this.clientNotifier = new ClientNotifier(this.connectionManager, kvStore);
 

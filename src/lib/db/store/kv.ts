@@ -6,7 +6,7 @@ import { ulid } from "ulid";
 import { CryptoKey, importPKCS8 } from "jose";
 import { generateKeyPair } from "@/lib/crypto/keystore.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, AGENT_UPDATE_TTL, RELEASE_CACHE_TTL, DEDUP_TTL, PENDING_GITHUB_INSTALL_TTL } from "@/lib/constants/index.js";
+import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, AGENT_UPDATE_TTL, RELEASE_CACHE_TTL, DEDUP_TTL, PENDING_GITHUB_INSTALL_TTL, INSTANCE_STATUS_TTL } from "@/lib/constants/index.js";
 import { JsonWebKey } from "crypto";
 
 export class KVStore {
@@ -384,5 +384,64 @@ export class KVStore {
 
   async deletePendingGitHubInstall(userId: string): Promise<void> {
     await this.kv.delete(`pending_github_install:${userId}`);
+  }
+
+  // Instance caching
+  async cacheInstance(instance: { id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number }): Promise<void> {
+    const data = JSON.stringify(instance);
+    const ttl = INSTANCE_STATUS_TTL;
+    
+    // Cache by ID, clusterId+tag, and tag-only for triple lookup support
+    await Promise.all([
+      this.kv.put(`instance:id:${instance.id}`, data, { ttl }),
+      this.kv.put(`instance:name:${instance.clusterId}:${instance.tag}`, data, { ttl }),
+      this.kv.put(`instance:tag:${instance.tag}`, data, { ttl }),
+    ]);
+  }
+
+  async getCachedInstance(instanceId: string): Promise<{ id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number } | null> {
+    try {
+      const data = await this.kv.get(`instance:id:${instanceId}`);
+      if (!data) return null;
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+
+  async getCachedInstanceByName(clusterId: string, tag: string): Promise<{ id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number } | null> {
+    try {
+      const data = await this.kv.get(`instance:name:${clusterId}:${tag}`);
+      if (!data) return null;
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+
+  async getCachedInstanceByTag(tag: string): Promise<{ id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number } | null> {
+    try {
+      const data = await this.kv.get(`instance:tag:${tag}`);
+      if (!data) return null;
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+
+  async invalidateInstanceCache(instanceId: string, clusterId?: string, tag?: string): Promise<void> {
+    const deletes: Promise<void>[] = [
+      this.kv.delete(`instance:id:${instanceId}`),
+    ];
+    
+    if (clusterId && tag) {
+      deletes.push(this.kv.delete(`instance:name:${clusterId}:${tag}`));
+    }
+    
+    if (tag) {
+      deletes.push(this.kv.delete(`instance:tag:${tag}`));
+    }
+    
+    await Promise.all(deletes);
   }
 }

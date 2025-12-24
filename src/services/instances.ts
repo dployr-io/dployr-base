@@ -60,6 +60,7 @@ export class InstanceService {
     kv: KVStore,
     session: Session,
     instanceId: string,
+    db: DatabaseStore,
   ): Promise<string> {
     const role = "viewer";
     const key = `inst:${instanceId}:user:${session.userId}:role:${role}:token`;
@@ -73,10 +74,15 @@ export class InstanceService {
       }
     } catch {}
 
+    const instance = await db.instances.get(instanceId);
+    if (!instance) {
+      throw new Error("Instance not found");
+    }
+
     const jwtService = new JWTService(kv);
     const token = await jwtService.createInstanceAccessToken(
       session,
-      instanceId,
+      instance.tag,
       role,
       { issuer: this.env.BASE_URL, audience: "dployr-daemon" },
     );
@@ -132,7 +138,7 @@ export class InstanceService {
       request: c.req.raw,
     });
 
-    const token = await this.getOrCreateInstanceUserToken(kv, session, instance.id);
+    const token = await this.getOrCreateInstanceUserToken(kv, session, instance.id, db);
     
     // Task queuing removed - agents connect via WebSocket and receive tasks directly
     // TODO: Implement task queue if async task delivery is needed

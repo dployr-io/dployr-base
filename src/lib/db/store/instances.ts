@@ -3,6 +3,7 @@
 
 import { Instance } from "@/types/index.js";
 import { BaseStore } from "./base.js";
+import { KVStore } from "./kv.js";
 
 export class InstanceConflictError extends Error {
     constructor(public field: "address" | "tag" | "instance") {
@@ -12,6 +13,13 @@ export class InstanceConflictError extends Error {
 }
 
 export class InstanceStore extends BaseStore {
+    private kv?: KVStore;
+
+    constructor(db: any, kv?: KVStore) {
+        super(db);
+        this.kv = kv;
+    }
+
     async create(
         clusterId: string,
         data: Omit<Instance, "id" | "createdAt" | "updatedAt">
@@ -49,15 +57,35 @@ export class InstanceStore extends BaseStore {
             throw error;
         }
 
-        return {
+        const instance = {
             id,
             ...data,
             createdAt: now,
             updatedAt: now,
         };
+
+        // Cache the newly created instance
+        if (this.kv) {
+            await this.kv.cacheInstance({ 
+                ...instance, 
+                clusterId,
+                metadata: instance.metadata || {}
+            }).catch(() => {});
+        }
+
+        return instance;
     }
 
     async get(id: string): Promise<(Instance & { clusterId: string }) | null> {
+        // Try cache first
+        if (this.kv) {
+            const cached = await this.kv.getCachedInstance(id).catch(() => null);
+            if (cached) {
+                return cached;
+            }
+        }
+
+        // Cache miss - fetch from DB
         const stmt = this.db.prepare(`
             SELECT instances.id, instances.address, instances.tag, instances.metadata, instances.created_at, instances.updated_at, instances.cluster_id as cluster_id
             FROM instances
@@ -69,7 +97,7 @@ export class InstanceStore extends BaseStore {
         const result = await stmt.bind(id).first();
         if (!result) return null;
 
-        return {
+        const instance = {
             id: result.id as string,
             address: result.address as string,
             tag: result.tag as string,
@@ -78,9 +106,25 @@ export class InstanceStore extends BaseStore {
             updatedAt: result.updated_at as number,
             clusterId: result.cluster_id as string,
         };
+
+        // Cache the result
+        if (this.kv) {
+            await this.kv.cacheInstance(instance).catch(() => {});
+        }
+
+        return instance;
     }
 
     async getByName(tag: string): Promise<(Instance & { clusterId: string }) | null> {
+        // Try cache 
+        if (this.kv) {
+            const cached = await this.kv.getCachedInstanceByTag(tag).catch(() => null);
+            if (cached) {
+                return cached;
+            }
+        }
+
+        // Cache miss - fetch from DB
         const stmt = this.db.prepare(`
             SELECT instances.id, instances.address, instances.tag, instances.metadata, instances.created_at, instances.updated_at, instances.cluster_id
             FROM instances
@@ -90,7 +134,7 @@ export class InstanceStore extends BaseStore {
         const result = await stmt.bind(tag).first();
         if (!result) return null;
 
-        return {
+        const instance = {
             id: result.id as string,
             address: result.address as string,
             tag: result.tag as string,
@@ -99,6 +143,13 @@ export class InstanceStore extends BaseStore {
             updatedAt: result.updated_at as number,
             clusterId: result.cluster_id as string,
         };
+
+        // Cache the result for future lookups
+        if (this.kv) {
+            await this.kv.cacheInstance(instance).catch(() => {});
+        }
+
+        return instance;
     }
 
     async updateMetadata(id: string, metadata: Record<string, any>): Promise<void> {
@@ -110,10 +161,20 @@ export class InstanceStore extends BaseStore {
         `);
 
         await stmt.bind(metadata || {}, now, id).run();
+
+        // Invalidate cache after update
+        if (this.kv) {
+            await this.kv.invalidateInstanceCache(id).catch(() => {});
+        }
     }
 
     async delete(id: string): Promise<void> {
         await this.db.prepare(`DELETE FROM instances WHERE id = $1`).bind(id).run();
+
+        // Invalidate cache after deletion
+        if (this.kv) {
+            await this.kv.invalidateInstanceCache(id).catch(() => {});
+        }
     }
 
     async getByCluster(
