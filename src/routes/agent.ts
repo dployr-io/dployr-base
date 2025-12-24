@@ -43,12 +43,12 @@ agent.post("/token", async (c) => {
     );
   }
 
-  const instanceId = payload.instance_id as string | undefined;
+  const instanceName = payload.instance_id as string | undefined;
   const tokenType = payload.token_type as string | undefined;
   const exp = typeof payload.exp === "number" ? payload.exp : undefined;
   const nowSeconds = Math.floor(Date.now() / 1000);
 
-  if (!instanceId) {
+  if (!instanceName) {
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -68,7 +68,19 @@ agent.post("/token", async (c) => {
     );
   }
 
-  const token = await jwtService.createAgentAccessToken(instanceId, {
+  const db = new DatabaseStore(getDB(c));
+  const instance = await db.instances.getByName(instanceName);
+  if (!instance) {
+    return c.json(
+      createErrorResponse({
+        message: "Instance not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }),
+      ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  const token = await jwtService.createAgentAccessToken(instance.tag, {
     issuer: c.env.BASE_URL,
     audience: "dployr-instance",
   });
@@ -109,16 +121,6 @@ agent.post("/instances/:instanceId/cert", async (c) => {
     );
   }
 
-  if (token?.instance_id !== instanceId) {
-    return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
-      ERROR.AUTH.BAD_TOKEN.status,
-    );
-  }
-
   const instance = await db.instances.get(instanceId);
   if (!instance) {
     return c.json(
@@ -127,6 +129,16 @@ agent.post("/instances/:instanceId/cert", async (c) => {
         code: ERROR.RESOURCE.MISSING_RESOURCE.code,
       }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  if (token?.instance_id !== instance.tag) {
+    return c.json(
+      createErrorResponse({
+        message: ERROR.AUTH.BAD_TOKEN.message,
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
@@ -214,16 +226,6 @@ agent.put("/instances/:instanceId/cert", async (c) => {
     );
   }
 
-  if (token?.instance_id !== instanceId) {
-    return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
-      ERROR.AUTH.BAD_TOKEN.status,
-    );
-  }
-
   const instance = await db.instances.get(instanceId);
   if (!instance) {
     return c.json(
@@ -232,6 +234,16 @@ agent.put("/instances/:instanceId/cert", async (c) => {
         code: ERROR.RESOURCE.MISSING_RESOURCE.code,
       }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  if (token?.instance_id !== instance.tag) {
+    return c.json(
+      createErrorResponse({
+        message: ERROR.AUTH.BAD_TOKEN.message,
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
@@ -311,16 +323,6 @@ agent.get("/instances/:instanceId/ws", async (c) => {
     );
   }
 
-  if (token?.instance_id !== instanceId) {
-    return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
-      ERROR.AUTH.BAD_TOKEN.status,
-    );
-  }
-
   const instance = await db.instances.get(instanceId);
   if (!instance) {
     return c.json(
@@ -329,6 +331,16 @@ agent.get("/instances/:instanceId/ws", async (c) => {
         code: ERROR.RESOURCE.MISSING_RESOURCE.code,
       }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  if (token?.instance_id !== instance.tag) {
+    return c.json(
+      createErrorResponse({
+        message: ERROR.AUTH.BAD_TOKEN.message,
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
     );
   }
   

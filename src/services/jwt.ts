@@ -71,7 +71,7 @@ export class JWTService {
    */
   async createInstanceAccessToken(
     session: Session,
-    instanceId: string,
+    instanceName: string,
     clusterId: string,
     options?: { issuer?: string; audience?: string },
   ): Promise<string> {
@@ -83,7 +83,7 @@ export class JWTService {
 
     let jwt = new SignJWT({
       sub: session.userId,
-      instance_id: instanceId,
+      instance_id: instanceName,
       perm: role,
       scopes: ['system.status'],
     })
@@ -109,14 +109,14 @@ export class JWTService {
    * /v1/agent endpoints. This does not depend on a user session.
    */
   async createAgentAccessToken(
-    instanceId: string,
+    instanceName: string,
     options?: { issuer?: string; audience?: string },
   ): Promise<string> {
     const privateKey = await this.keyStore.getPrivateKey();
     const publicKeyJwk = await this.keyStore.getPublicKey();
 
     let jwt = new SignJWT({
-      instance_id: instanceId,
+      instance_id: instanceName,
       token_type: 'agent',
       perm: 'agent',
       scopes: ['agent.status', 'agent.tasks'],
