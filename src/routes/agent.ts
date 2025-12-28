@@ -43,12 +43,12 @@ agent.post("/token", async (c) => {
     );
   }
 
-  const instanceId = payload.instance_id as string | undefined;
+  const instanceName = payload.instance_id as string | undefined;
   const tokenType = payload.token_type as string | undefined;
   const exp = typeof payload.exp === "number" ? payload.exp : undefined;
   const nowSeconds = Math.floor(Date.now() / 1000);
 
-  if (!instanceId) {
+  if (!instanceName) {
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -68,7 +68,19 @@ agent.post("/token", async (c) => {
     );
   }
 
-  const token = await jwtService.createAgentAccessToken(instanceId, {
+  const db = new DatabaseStore(getDB(c));
+  const instance = await db.instances.getByName(instanceName);
+  if (!instance) {
+    return c.json(
+      createErrorResponse({
+        message: "Instance not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }),
+      ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  const token = await jwtService.createAgentAccessToken(instance.tag, {
     issuer: c.env.BASE_URL,
     audience: "dployr-instance",
   });
@@ -76,8 +88,9 @@ agent.post("/token", async (c) => {
   return c.json(createSuccessResponse({ token }), 200);
 });
 
-agent.post("/instances/:instanceId/cert", async (c) => {
-  const instanceId = c.req.param("instanceId");
+agent.post("/cert", async (c) => {
+  const instanceId = c.req.query("instanceId");
+  const instanceName = c.req.query("instanceName");
   const db = new DatabaseStore(getDB(c));
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
@@ -109,17 +122,19 @@ agent.post("/instances/:instanceId/cert", async (c) => {
     );
   }
 
-  if (token?.instance_id !== instanceId) {
+  if (!instanceId && !instanceName) {
     return c.json(
       createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
+        message: "Either instanceId or instanceName is required",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
       }),
-      ERROR.AUTH.BAD_TOKEN.status,
+      ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
 
-  const instance = await db.instances.get(instanceId);
+  const instance = instanceId
+    ? await db.instances.get(instanceId)
+    : await db.instances.getByName(instanceName!);
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -127,6 +142,16 @@ agent.post("/instances/:instanceId/cert", async (c) => {
         code: ERROR.RESOURCE.MISSING_RESOURCE.code,
       }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  if (token?.instance_id !== instance.tag) {
+    return c.json(
+      createErrorResponse({
+        message: ERROR.AUTH.BAD_TOKEN.message,
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
@@ -176,13 +201,14 @@ agent.post("/instances/:instanceId/cert", async (c) => {
     not_after: notAfter,
   };
 
-  await db.instances.updateMetadata(instanceId, metadata);
+  await db.instances.updateMetadata(instance.id, metadata);
 
   return new Response(null, { status: 204 });
 });
 
-agent.put("/instances/:instanceId/cert", async (c) => {
-  const instanceId = c.req.param("instanceId");
+agent.put("/cert", async (c) => {
+  const instanceId = c.req.query("instanceId");
+  const instanceName = c.req.query("instanceName");
   const db = new DatabaseStore(getDB(c));
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
@@ -214,17 +240,19 @@ agent.put("/instances/:instanceId/cert", async (c) => {
     );
   }
 
-  if (token?.instance_id !== instanceId) {
+  if (!instanceId && !instanceName) {
     return c.json(
       createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
+        message: "Either instanceId or instanceName is required",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
       }),
-      ERROR.AUTH.BAD_TOKEN.status,
+      ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
 
-  const instance = await db.instances.get(instanceId);
+  const instance = instanceId
+    ? await db.instances.get(instanceId)
+    : await db.instances.getByName(instanceName!);
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -232,6 +260,16 @@ agent.put("/instances/:instanceId/cert", async (c) => {
         code: ERROR.RESOURCE.MISSING_RESOURCE.code,
       }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  if (token?.instance_id !== instance.tag) {
+    return c.json(
+      createErrorResponse({
+        message: ERROR.AUTH.BAD_TOKEN.message,
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
@@ -272,14 +310,15 @@ agent.put("/instances/:instanceId/cert", async (c) => {
     not_after: notAfter,
   };
 
-  await db.instances.updateMetadata(instanceId, metadata);
+  await db.instances.updateMetadata(instance.id, metadata);
 
   return new Response(null, { status: 204 });
 });
 
 // Instance WebSocket endpoint for tasks
-agent.get("/instances/:instanceId/ws", async (c) => {
-  const instanceId = c.req.param("instanceId");
+agent.get("/ws", async (c) => {
+  const instanceId = c.req.query("instanceId");
+  const instanceName = c.req.query("instanceName");
   const db = new DatabaseStore(getDB(c));
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
@@ -311,17 +350,19 @@ agent.get("/instances/:instanceId/ws", async (c) => {
     );
   }
 
-  if (token?.instance_id !== instanceId) {
+  if (!instanceId && !instanceName) {
     return c.json(
       createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
+        message: "Either instanceId or instanceName is required",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
       }),
-      ERROR.AUTH.BAD_TOKEN.status,
+      ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
 
-  const instance = await db.instances.get(instanceId);
+  const instance = instanceId
+    ? await db.instances.get(instanceId)
+    : await db.instances.getByName(instanceName!);
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -329,6 +370,16 @@ agent.get("/instances/:instanceId/ws", async (c) => {
         code: ERROR.RESOURCE.MISSING_RESOURCE.code,
       }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  if (token?.instance_id !== instance.tag) {
+    return c.json(
+      createErrorResponse({
+        message: ERROR.AUTH.BAD_TOKEN.message,
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
     );
   }
   

@@ -255,10 +255,16 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: LogSubscribeMessage
   ): Promise<void> {
-    const { instanceId, path, startOffset, limit, duration, requestId } = message;
+    const { instanceName, path, startOffset, limit, duration, requestId } = message;
 
-    if (!instanceId || !path) {
-      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId and path are required");
+    if (!instanceName || !path) {
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceName and path are required");
+      return;
+    }
+
+    const instance = await this.db.instances.getByName(instanceName);
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
     }
 
@@ -286,7 +292,7 @@ export class ClientMessageHandler {
     });
 
     // Create and send task to agents in cluster
-    const token = await this.jwtService.createAgentAccessToken(instanceId);
+    const token = await this.jwtService.createAgentAccessToken(instance.tag);
     const task = this.dployrdService.createLogStreamTask({
       streamId,
       path,
@@ -296,6 +302,8 @@ export class ClientMessageHandler {
       token,
     });
     this.sendTaskToCluster(conn.clusterId, task);
+
+    console.log("Token", token)
 
     console.log(
       `[WS] Created log stream task ${streamId} for cluster ${conn.clusterId}`
@@ -357,7 +365,7 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(
       conn.session,
-      instance.id,
+      instanceName,
       conn.clusterId
     );
     const task = this.dployrdService.createDeployTask(taskId, payload, token);
@@ -412,9 +420,16 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.get(service.instanceId);
+    if (!instance) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
     const token = await this.jwtService.createInstanceAccessToken(
       conn.session,
-      service.instanceId,
+      instance.tag,
       conn.clusterId
     );
     const task = this.dployrdService.createServiceRemoveTask(taskId, service.name, token);
@@ -505,6 +520,12 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.get(instanceId);
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
     const taskId = ulid();
 
     // Track pending request
@@ -521,11 +542,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(
-      conn.session,
-      instanceId,
-      conn.clusterId
-    );
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileReadTask(taskId, path, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
@@ -557,6 +574,12 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.get(instanceId);
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
     const taskId = ulid();
 
     // Track pending request
@@ -573,11 +596,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(
-      conn.session,
-      instanceId,
-      conn.clusterId
-    );
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileWriteTask(taskId, path, content, encoding, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
@@ -609,6 +628,12 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.get(instanceId);
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
     const taskId = ulid();
 
     // Track pending request
@@ -625,11 +650,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(
-      conn.session,
-      instanceId,
-      conn.clusterId
-    );
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileCreateTask(taskId, path, type, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
@@ -661,6 +682,12 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.get(instanceId);
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
     const taskId = ulid();
 
     // Track pending request
@@ -677,11 +704,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(
-      conn.session,
-      instanceId,
-      conn.clusterId
-    );
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileDeleteTask(taskId, path, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
@@ -713,6 +736,12 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.get(instanceId);
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
     const taskId = ulid();
 
     // Track pending request
@@ -729,11 +758,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(
-      conn.session,
-      instanceId,
-      conn.clusterId
-    );
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileTreeTask(taskId, path, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
@@ -842,7 +867,7 @@ export class ClientMessageHandler {
       const taskId = ulid();
       const token = await this.jwtService.createInstanceAccessToken(
         conn.session,
-        instance.id,
+        instanceName,
         clusterId
       );
       const task = this.dployrdService.createSystemInstallTask(taskId, version, token);
@@ -901,7 +926,7 @@ export class ClientMessageHandler {
       const taskId = ulid();
       const token = await this.jwtService.createInstanceAccessToken(
         conn.session,
-        instance.id,
+        instanceName,
         clusterId
       );
       const task = this.dployrdService.createSystemRebootTask(taskId, force, token);
@@ -944,15 +969,17 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.get(instanceId);
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
     const watchKey = `${instanceId}:${path}`;
     this.connectionManager.addFileWatch(watchKey, conn.connectionId);
 
     const taskId = ulid();
-    const token = await this.jwtService.createInstanceAccessToken(
-      conn.session,
-      instanceId,
-      conn.clusterId
-    );
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
 
     const task = this.dployrdService.createFileWatchTask(
       taskId,
@@ -993,17 +1020,19 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.get(instanceId);
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
     const watchKey = `${instanceId}:${path}`;
     this.connectionManager.removeFileWatch(watchKey, conn.connectionId);
 
     // Only send unwatch task to agent if no more subscribers
     if (!this.connectionManager.hasFileWatchSubscribers(watchKey)) {
       const taskId = ulid();
-      const token = await this.jwtService.createInstanceAccessToken(
-        conn.session,
-        instanceId,
-        conn.clusterId
-      );
+      const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
 
       const task = this.dployrdService.createFileUnwatchTask(
         taskId,
@@ -1055,7 +1084,7 @@ export class ClientMessageHandler {
       const taskId = ulid();
       const token = await this.jwtService.createInstanceAccessToken(
         conn.session,
-        instance.id,
+        instanceName,
         clusterId
       );
       const task = this.dployrdService.createDaemonRestartTask(taskId, force, token);

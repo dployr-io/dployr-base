@@ -116,24 +116,26 @@ export class WebSocketService {
       const url = new URL(message.url || '', `http://${message.headers.host}`);
       
       // Handle cluster WebSocket streams
-      // Matches: /v1/instances/stream OR /v1/agent/instances/:instanceId/ws
-      if (url.pathname.match(/\/v1\/(instances\/stream|agent\/instances\/[^/]+\/ws)$/)) {
-        const role = url.pathname.includes('/ws') ? 'agent' : 'client';
+      // Matches: /v1/instances/stream OR /v1/agent/ws
+      if (url.pathname.match(/\/v1\/(instances\/stream|agent\/ws)$/)) {
+        const role = url.pathname.includes('/agent/ws') ? 'agent' : 'client';
         
         let clusterId: string | null = null;
         
         if (role === 'agent') {
-          const match = url.pathname.match(/\/v1\/agent\/instances\/([^/]+)\/ws$/);
-          const instanceId = match?.[1];
+          const instanceId = url.searchParams.get('instanceId');
+          const instanceName = url.searchParams.get('instanceName');
           
-          if (!instanceId || !this.adapters?.db) {
+          if ((!instanceId && !instanceName) || !this.adapters?.db) {
             socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
             socket.destroy();
             return;
           }
           
           const db = new DatabaseStore(this.adapters.db);
-          const instance = await db.instances.get(instanceId);
+          const instance = instanceId
+            ? await db.instances.get(instanceId)
+            : await db.instances.getByName(instanceName!);
           
           if (!instance) {
             socket.write('HTTP/1.1 404 Not Found\r\n\r\n');

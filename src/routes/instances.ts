@@ -63,7 +63,7 @@ instances.get("/", requireClusterViewer, async (c) => {
     _instances.map(async (instance: any) => {
       runBackground(
         service.pingInstance({
-          instanceId: instance.id,
+          instanceName: instance.tag,
           session,
           c,
         })
@@ -135,7 +135,7 @@ instances.post("/", requireClusterOwner, async (c) => {
 
     runBackground(
       service.pingInstance({
-        instanceId: instance.id,
+        instanceName: instance.tag,
         session,
         c,
       })
@@ -292,7 +292,29 @@ instances.post("/:instanceId/tokens/rotate", async (c) => {
     );
   }
 
-  if (payload.token_type !== "bootstrap" || payload.instance_id !== instanceId) {
+  if (payload.token_type !== "bootstrap") {
+    return c.json(
+      createErrorResponse({
+        message: "Invalid token type",
+        code: ERROR.AUTH.BAD_TOKEN.code,
+      }),
+      ERROR.AUTH.BAD_TOKEN.status,
+    );
+  }
+
+  // Verify instance exists and token matches
+  const instance = await db.instances.get(instanceId);
+  if (!instance) {
+    return c.json(
+      createErrorResponse({
+        message: "Instance not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }),
+      ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  if (payload.instance_id !== instance.tag) {
     return c.json(
       createErrorResponse({
         message: "Invalid bootstrap token for instance",
@@ -313,7 +335,7 @@ instances.post("/:instanceId/tokens/rotate", async (c) => {
     );
   }
 
-  const rotated = await jwtService.rotateBootstrapToken(instanceId, nonce, "5m");
+  const rotated = await jwtService.rotateBootstrapToken(instance.tag, nonce, "5m");
 
   // update token in instance
 

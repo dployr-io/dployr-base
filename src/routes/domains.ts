@@ -89,14 +89,21 @@ domains.post("/register", async (c) => {
     }
 
     const domain = await service.saveDomain({
-      instanceId: result.instanceId,
+      instanceName: result.instanceName,
       c,
     });
+
+    // Get instance to include ID in response for agent compatibility
+    const db = new DatabaseStore(getDB(c));
+    const instance = await db.instances.getByName(result.instanceName);
+    if (!instance) {
+      throw new Error("Instance not found after domain save");
+    }
 
     const kv = new KVStore(getKV(c));
     await kv.logEvent({
       actor: {
-        id: result.instanceId,
+        id: result.instanceName,
         type: "headless",
       },
       targets: [
@@ -110,7 +117,7 @@ domains.post("/register", async (c) => {
 
     return c.json(
       createSuccessResponse({
-        instanceId: result.instanceId,
+        instanceId: instance.tag,
         domain,
         issuer: c.env.BASE_URL,
         audience: "dployr-instance",

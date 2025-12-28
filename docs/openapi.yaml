@@ -2359,6 +2359,116 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/agent/cert:
+    post:
+      operationId: createAgentCert
+      tags:
+        - Agents
+      summary: Register instance client certificate
+      x-requiredRole: public
+      description: |
+        Called by the dployr instance daemon to register its client certificate
+        for mTLS authentication. The certificate is stored in the instance metadata.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: instanceId
+          required: false
+          schema:
+            type: string
+          description: Instance ID (either instanceId or instanceName must be provided)
+        - in: query
+          name: instanceName
+          required: false
+          schema:
+            type: string
+          description: Instance name (either instanceId or instanceName must be provided)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientCertUpdate'
+      responses:
+        '204':
+          description: Certificate registered successfully
+        '400':
+          description: Invalid request or missing parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Certificate already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      operationId: updateAgentCert
+      tags:
+        - Agents
+      summary: Update instance client certificate
+      x-requiredRole: public
+      description: |
+        Called by the dployr instance daemon to update its client certificate
+        for mTLS authentication. The certificate is updated in the instance metadata.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: instanceId
+          required: false
+          schema:
+            type: string
+          description: Instance ID (either instanceId or instanceName must be provided)
+        - in: query
+          name: instanceName
+          required: false
+          schema:
+            type: string
+          description: Instance name (either instanceId or instanceName must be provided)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientCertUpdate'
+      responses:
+        '204':
+          description: Certificate updated successfully
+        '400':
+          description: Invalid request or missing parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v1/deployments:
     get:
       operationId: listDeployments
@@ -3208,7 +3318,7 @@ paths:
                         e:
                           type: string
 
-  /v1/agent/instances/{instanceId}/ws:
+  /v1/agent/ws:
     get:
       operationId: agentTasksWebSocket
       tags:
@@ -3244,11 +3354,18 @@ paths:
         See the schema definitions for AgentTaskMessage, DaemonTask, and LogStreamPayload
         for complete type information.
       parameters:
-        - in: path
+        - in: query
           name: instanceId
-          required: true
+          required: false
           schema:
             type: string
+          description: Instance ID (either instanceId or instanceName must be provided)
+        - in: query
+          name: instanceName
+          required: false
+          schema:
+            type: string
+          description: Instance name (either instanceId or instanceName must be provided)
       responses:
         '101':
           description: WebSocket protocol upgrade

@@ -148,7 +148,7 @@ export interface ClientSubscribeMessage extends BaseRequestMessage {
 
 export interface LogSubscribeMessage extends BaseRequestMessage {
   kind: typeof MessageKind.LOG_SUBSCRIBE;
-  instanceId: string;
+  instanceName: string;
   path: string;
   startOffset?: number;
   limit?: number;

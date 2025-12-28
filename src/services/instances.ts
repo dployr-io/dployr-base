@@ -49,7 +49,7 @@ export class InstanceService {
     });
     
     const jwtService = new JWTService(kv);
-    const token = await jwtService.createBootstrapToken(instance.id);
+    const token = await jwtService.createBootstrapToken(instance.tag);
     const decoded = await jwtService.verifyToken(token);
     await db.bootstrapTokens.create(instance.id, decoded.nonce as string);
 
@@ -108,17 +108,17 @@ export class InstanceService {
   }
 
   async pingInstance({ 
-    instanceId,
+    instanceName,
     session,
     c,
   }: { 
-    instanceId: string; 
+    instanceName: string; 
     session: Session; 
     c: Context 
   }): Promise<"enqueued"> {
     const db = new DatabaseStore(getDB(c));
     const kv = new KVStore(getKV(c));
-    const instance = await db.instances.get(instanceId);
+    const instance = await db.instances.getByName(instanceName);
 
     if (!instance) {
       throw new Error("Instance not found");
@@ -153,7 +153,7 @@ export class InstanceService {
     token: string;
     c: Context;
   }): Promise<
-    | { ok: true; instanceId: string; jwksUrl: string }
+    | { ok: true; instanceName: string; jwksUrl: string }
     | { ok: false; reason: "invalid_token" | "invalid_type" | "already_used" }
   > {
     const kv = new KVStore(getKV(c));
@@ -178,21 +178,21 @@ export class InstanceService {
 
     return {
       ok: true,
-      instanceId: payload.instance_id,
+      instanceName: payload.instance_id,
       jwksUrl: `${this.env.BASE_URL}/v1/jwks/.well-known/jwks.json`,
     };
   }
 
   async saveDomain({
-    instanceId,
+    instanceName,
     c,
   }: {
-    instanceId: string;
+    instanceName: string;
     c: Context;
   }) {
     const db = new DatabaseStore(getDB(c));
     const kv = new KVStore(getKV(c));
-    const instance = await db.instances.get(instanceId);
+    const instance = await db.instances.getByName(instanceName);
 
     if (!instance) {
       throw new Error("Instance not found");
