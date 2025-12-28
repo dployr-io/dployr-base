@@ -7,7 +7,7 @@ import { authMiddleware, requireClusterViewer } from "@/middleware/auth.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { ERROR, LATEST_COMPATIBILITY_DATE } from "@/lib/constants/index.js";
 import { getKV, type AppVariables } from "@/lib/context.js";
-import { isCompatible, getUpgradeLevel } from "@/lib/version.js";
+import { isCompatible, getUpgradeLevel, compareSemver } from "@/lib/version.js";
 import { z } from "zod";
 
 type EventsFilters = {
@@ -137,19 +137,22 @@ runtime.get("/versions", async (c) => {
       return typeof r.tag_name === "string" && r.tag_name.length > 0;
     });
 
-    const versions = filtered.map((r) => r.tag_name!) as string[];
+    // Sort releases by semantic version (descending - newest first)
+    const sortedReleases = [...filtered].sort((a, b) => compareSemver(a.tag_name!, b.tag_name!));
+
+    const versions = sortedReleases.map((r) => r.tag_name!) as string[];
     const latest = versions[0] ?? null;
     const compatibilityCutoffTimestamp = Date.parse(`${LATEST_COMPATIBILITY_DATE}T00:00:00Z`);
 
     let oldestSupportedVersion: string | null = null;
     if (!Number.isNaN(compatibilityCutoffTimestamp)) {
-      for (let i = filtered.length - 1; i >= 0; i -= 1) {
-        const publishedAt = filtered[i].published_at;
+      for (let i = sortedReleases.length - 1; i >= 0; i -= 1) {
+        const publishedAt = sortedReleases[i].published_at;
         if (!publishedAt) continue;
         const publishedTimestamp = Date.parse(publishedAt);
         if (Number.isNaN(publishedTimestamp)) continue;
         if (publishedTimestamp >= compatibilityCutoffTimestamp) {
-          oldestSupportedVersion = filtered[i].tag_name!;
+          oldestSupportedVersion = sortedReleases[i].tag_name!;
           break;
         }
       }

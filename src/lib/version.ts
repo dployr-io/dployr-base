@@ -56,3 +56,36 @@ export function getUpgradeLevel(
   }
   return "none";
 }
+
+/**
+ * Compares two semantic version strings for sorting (descending order).
+ * Returns negative if a > b, positive if a < b, 0 if equal.
+ * Handles prerelease versions (e.g., v0.4.10-beta.2).
+ * Stable versions are prioritized over prereleases.
+ */
+export function compareSemver(a: string, b: string): number {
+  const partsA = a.replace(/^v/, '').split(/[-.]/).map(p => isNaN(Number(p)) ? p : Number(p));
+  const partsB = b.replace(/^v/, '').split(/[-.]/).map(p => isNaN(Number(p)) ? p : Number(p));
+  
+  // Compare major.minor.patch
+  for (let i = 0; i < 3; i++) {
+    const diff = (Number(partsB[i]) || 0) - (Number(partsA[i]) || 0);
+    if (diff !== 0) return diff;
+  }
+  
+  // Stable > prerelease
+  if (partsA.length > 3 && partsB.length === 3) return 1;
+  if (partsA.length === 3 && partsB.length > 3) return -1;
+  
+  // Compare prerelease parts
+  for (let i = 3; i < Math.max(partsA.length, partsB.length); i++) {
+    const pA = partsA[i], pB = partsB[i];
+    if (pA === pB) continue;
+    if (pA === undefined) return 1;
+    if (pB === undefined) return -1;
+    if (typeof pA === 'number' && typeof pB === 'number') return pB - pA;
+    return String(pB).localeCompare(String(pA));
+  }
+  
+  return 0;
+}
