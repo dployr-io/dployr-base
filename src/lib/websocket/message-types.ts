@@ -60,6 +60,7 @@ export const MessageKind = {
   LOG_UNSUBSCRIBE: "log_unsubscribe",
   LOG_STREAM: "log_stream",
   DEPLOY: "deploy",
+  DEPLOYMENT_LIST: "deployment_list",
   SERVICE_CREATE: "service_create",
   SERVICE_REMOVE: "service_remove",
   FILE_READ: "file_read",
@@ -175,6 +176,11 @@ export interface ServiceCreateMessage extends BaseMessage {
 export interface ServiceRemoveMessage extends BaseRequestMessage {
   kind: typeof MessageKind.SERVICE_REMOVE;
   name: string;
+}
+
+export interface DeploymentListMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.DEPLOYMENT_LIST;
+  instanceName: string;
 }
 
 export interface LogStreamMessage extends BaseRequestMessage {
@@ -629,6 +635,10 @@ export function isServiceCreateMessage(msg: BaseMessage): msg is ServiceCreateMe
 
 export function isServiceRemoveMessage(msg: BaseMessage): msg is ServiceRemoveMessage {
   return msg.kind === MessageKind.SERVICE_REMOVE;
+}
+
+export function isDeploymentListMessage(msg: BaseMessage): msg is DeploymentListMessage {
+  return msg.kind === MessageKind.DEPLOYMENT_LIST;
 }
 
 export function isLogStreamMessage(msg: BaseMessage): msg is LogStreamMessage {

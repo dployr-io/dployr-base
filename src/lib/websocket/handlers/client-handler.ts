@@ -8,6 +8,7 @@ import type {
   ClusterConnection,
   BaseMessage,
   DeployMessage,
+  DeploymentListMessage,
   LogSubscribeMessage,
   LogStreamMessage,
   FileReadMessage,
@@ -27,6 +28,7 @@ import type {
 import {
   isClientSubscribeMessage,
   isDeployMessage,
+  isDeploymentListMessage,
   isFileReadMessage,
   isFileWriteMessage,
   isFileCreateMessage,
@@ -133,6 +135,11 @@ export class ClientMessageHandler {
 
     if (isDeployMessage(message)) {
       this.handleDeploy(conn, message);
+      return;
+    }
+
+    if (isDeploymentListMessage(message)) {
+      await this.handleDeploymentList(conn, message);
       return;
     }
 
@@ -378,6 +385,54 @@ export class ClientMessageHandler {
     }
 
     console.log(`[WS] Created deploy task ${taskId} (requestId: ${requestId})`);
+  }
+
+  /**
+   * Handle deployment list request 
+   */
+  private async handleDeploymentList(conn: ClusterConnection, message: DeploymentListMessage): Promise<void> {
+    const { instanceName, requestId } = message;
+
+    if (!instanceName) {
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceName is required");
+      return;
+    }
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    const taskId = ulid();
+
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      conn.clusterId,
+      MessageKind.DEPLOYMENT_LIST,
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
+    const token = await this.jwtService.createInstanceAccessToken(
+      conn.session,
+      instanceName,
+      conn.clusterId
+    );
+    const task = this.dployrdService.createDeploymentListTask(taskId, token);
+    const sent = this.sendTaskToCluster(conn.clusterId, task);
+
+    if (!sent) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
+    }
+
+    console.log(`[WS] Created deployment list task ${taskId} (requestId: ${requestId})`);
   }
 
   /**

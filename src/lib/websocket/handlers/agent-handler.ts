@@ -4,7 +4,7 @@
 import { DatabaseStore } from "@/lib/db/store/index.js";
 import type { ConnectionManager } from "../connection-manager.js";
 import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "../message-types.js";
-import { isAgentBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind, isDeployMessage } from "../message-types.js";
+import { isAgentBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind, WSErrorCode, createWSError } from "../message-types.js";
 import { ClientNotifier } from "./client-notifier.js";
 
 /**
@@ -58,6 +58,69 @@ export class AgentMessageHandler {
     if (!taskId) {
       console.warn(`[WS] Received task_response without taskId`);
       return;
+    }
+
+    // If task failed, send error to client
+    if (!success && error) {
+      const request = this.connectionManager.getPendingRequest(taskId);
+      if (request) {
+        let errorCode = error.code || WSErrorCode.INTERNAL_ERROR;
+        let errorMessage = error.message || "Task failed";
+        
+        if (errorMessage.includes('{"error":')) {
+          try {
+            const jsonMatch = errorMessage.match(/\{.*?\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              if (parsed.code) {
+                switch (parsed.code) {
+                  case "auth.unauthorized":
+                    errorCode = WSErrorCode.UNAUTHORIZED;
+                    errorMessage = "Authentication failed. Please check your credentials and try again.";
+                    break;
+                  case "auth.forbidden":
+                    errorCode = WSErrorCode.PERMISSION_DENIED;
+                    errorMessage = "You don't have permission to perform this action.";
+                    break;
+                  case "resource.not_found":
+                    errorCode = WSErrorCode.NOT_FOUND;
+                    errorMessage = "The requested resource was not found.";
+                    break;
+                  case "request.missing_params":
+                    errorCode = WSErrorCode.MISSING_FIELD;
+                    errorMessage = "Missing required parameters.";
+                    break;
+                  case "request.bad_request":
+                    errorCode = WSErrorCode.MISSING_FIELD;
+                    errorMessage = "Invalid request. Please check your input and try again.";
+                    break;
+                  case "runtime.internal_server_error":
+                  case "instance.registration_failed":
+                    errorCode = WSErrorCode.INTERNAL_ERROR;
+                    errorMessage = "An internal error occurred. Please try again later.";
+                    break;
+                  default:
+                    errorCode = WSErrorCode.INTERNAL_ERROR;
+                    errorMessage = parsed.error || "An error occurred. Please try again.";
+                }
+              }
+            }
+          } catch (e) {
+            // Keep original error if parsing fails
+          }
+        }
+        
+        const errorResponse = createWSError(
+          request.requestId,
+          errorCode,
+          errorMessage
+        );
+        
+        request.ws.send(JSON.stringify(errorResponse));
+        this.connectionManager.removePendingRequest(taskId);
+        console.warn(`[WS] Task ${taskId} failed: ${errorMessage}`);
+        return;
+      }
     }
 
     // Route response directly to the requesting client

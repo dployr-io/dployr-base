@@ -6,7 +6,6 @@ import { MessageKind } from "@/lib/websocket/message-types.js";
 import { ConnectionManager } from "@/lib/websocket/connection-manager.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { ulid } from "ulid";
-import { Service } from "@/lib/db/store/services.js";
 
 /**
  * Handles broadcasting messages to connected clients.

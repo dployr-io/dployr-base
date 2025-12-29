@@ -83,6 +83,18 @@ export class AgentService {
     };
   }
 
+  createDeploymentListTask(
+    taskId: string,
+    token?: string
+  ): AgentTask {
+    return {
+      ID: taskId,
+      Type: "deployments:get",
+      Payload: { token },
+      Status: "pending",
+    };
+  }
+
   createServiceRemoveTask(
     taskId: string,
     serviceId: string,
