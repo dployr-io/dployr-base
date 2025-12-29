@@ -4,7 +4,7 @@
 export const WORKFLOW_NAME = 'dployr-bootstrap';
 
 // Versioning
-export const LATEST_COMPATIBILITY_DATE = "2025-12-09";
+export const LATEST_COMPATIBILITY_DATE = "2025-12-28";
 
 // KVs
 export const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
