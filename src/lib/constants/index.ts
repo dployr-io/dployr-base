@@ -15,6 +15,7 @@ export const EVENT_TTL = 60 * 60 * 24 * 30; // 30 days
 export const TASK_TTL = 60 * 60 * 24; // 1 day
 export const TASK_LEASE_TTL = 60; // 1 minute
 export const AGENT_UPDATE_TTL = 60 * 5; // 5 minutes
+export const PROCESS_SNAPSHOT_TTL = 60 * 60 * 24; // 24 hours
 export const INSTANCE_STATUS_TTL = 60 * 15; // 15 minutes
 export const DEDUP_TTL = 60 * 60; // 1 hour
 export const RELEASE_CACHE_TTL = 60 * 10; // 10 minutes

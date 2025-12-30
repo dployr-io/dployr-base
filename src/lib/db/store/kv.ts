@@ -444,4 +444,111 @@ export class KVStore {
     
     await Promise.all(deletes);
   }
+
+  // Service state caching
+  async cacheServices(instanceId: string, services: Array<{ id: string; name: string; instanceId: string; createdAt: number; updatedAt: number }>): Promise<void> {
+    const data = JSON.stringify(services);
+    await this.kv.put(`services:${instanceId}`, data, { ttl: 60 });
+  }
+
+  async getCachedServices(instanceId: string): Promise<Array<{ id: string; name: string; instanceId: string; createdAt: number; updatedAt: number }> | null> {
+    try {
+      const data = await this.kv.get(`services:${instanceId}`);
+      if (!data) return null;
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+
+  async invalidateServiceCache(instanceId: string): Promise<void> {
+    await this.kv.delete(`services:${instanceId}`);
+  }
+
+  async saveProcessSnapshot(instanceId: string, seq: number, snapshot: Record<string, unknown>): Promise<void> {
+    const timestamp = Date.now();
+    const key = `process:${instanceId}:snapshot:${timestamp}`;
+    await this.kv.put(key, JSON.stringify({ seq, timestamp, data: snapshot }), {
+      ttl: 60 * 60 * 24, // 24 hours
+    });
+  }
+
+  async getProcessSnapshot(instanceId: string, timestamp: number): Promise<Record<string, unknown> | null> {
+    const key = `process:${instanceId}:snapshot:${timestamp}`;
+    const data = await this.kv.get(key);
+    if (!data) return null;
+    const parsed = JSON.parse(data);
+    return parsed.data;
+  }
+
+  async getLatestProcessSnapshots(instanceId: string, limit: number = 10): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
+    const prefix = `process:${instanceId}:snapshot:`;
+    const maxLimit = Math.min(limit, 1000); // Cap at 1000 snapshots max
+    const result = await this.kv.list({ prefix, limit: maxLimit });
+    
+    const snapshots = await Promise.all(
+      result.map(async (key) => {
+        const data = await this.kv.get(key.name);
+        if (!data) return null;
+        const timestampMatch = key.name.match(/:snapshot:(\d+)$/);
+        if (!timestampMatch) return null;
+        try {
+          const parsed = JSON.parse(data);
+          return {
+            seq: parsed.seq,
+            timestamp: parseInt(timestampMatch[1], 10),
+            data: parsed.data,
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    return snapshots
+      .filter((s): s is { seq: number; timestamp: number; data: Record<string, unknown> } => s !== null)
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, maxLimit);
+  }
+
+  async getProcessSnapshotsByTimeRange(
+    instanceId: string,
+    startTime: number,
+    endTime: number
+  ): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
+    // Cap at 1 hour max range
+    const maxRange = 60 * 60 * 1000; // 1 hour in milliseconds
+    const cappedEndTime = Math.min(endTime, startTime + maxRange);
+
+    const prefix = `process:${instanceId}:snapshot:`;
+    const result = await this.kv.list({ prefix, limit: 10000 });
+    
+    const snapshots = await Promise.all(
+      result.map(async (key) => {
+        const data = await this.kv.get(key.name);
+        if (!data) return null;
+        const timestampMatch = key.name.match(/:snapshot:(\d+)$/);
+        if (!timestampMatch) return null;
+        const timestamp = parseInt(timestampMatch[1], 10);
+        
+        // Filter by time range
+        if (timestamp < startTime || timestamp > cappedEndTime) return null;
+        
+        try {
+          const parsed = JSON.parse(data);
+          return {
+            seq: parsed.seq,
+            timestamp,
+            data: parsed.data,
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    return snapshots
+      .filter((s): s is { seq: number; timestamp: number; data: Record<string, unknown> } => s !== null)
+      .sort((a, b) => a.timestamp - b.timestamp); // Ascending order for timeline
+  }
 }

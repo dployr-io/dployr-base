@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { BaseStore } from "./base.js";
+import { KVStore } from "./kv.js";
 
 export interface Service {
     id: string;
@@ -19,6 +20,12 @@ export class ServiceConflictError extends Error {
 }
 
 export class ServiceStore extends BaseStore {
+    private kv?: KVStore;
+
+    constructor(db: any, kv?: KVStore) {
+        super(db);
+        this.kv = kv;
+    }
     async save(instanceName: string, name: string): Promise<Service | null> {
         const instanceStmt = this.db.prepare(`
             SELECT id FROM instances WHERE tag = $1
@@ -48,6 +55,11 @@ export class ServiceStore extends BaseStore {
                 throw new ServiceConflictError("service");
             }
             throw error;
+        }
+
+        // Invalidate cache after write
+        if (this.kv) {
+            await this.kv.invalidateServiceCache(instanceId).catch(() => {});
         }
 
         return {
@@ -98,6 +110,15 @@ export class ServiceStore extends BaseStore {
     }
 
     async getByInstance(instanceId: string): Promise<Service[]> {
+        // Try cache first
+        if (this.kv) {
+            const cached = await this.kv.getCachedServices(instanceId).catch(() => null);
+            if (cached) {
+                return cached;
+            }
+        }
+
+        // Cache miss - fetch from DB
         const stmt = this.db.prepare(`
             SELECT id, instance_id, name, created_at, updated_at
             FROM services
@@ -107,13 +128,20 @@ export class ServiceStore extends BaseStore {
 
         const results = await stmt.bind(instanceId).all();
 
-        return results.results.map((row) => ({
+        const services = results.results.map((row) => ({
             id: row.id as string,
             instanceId: row.instance_id as string,
             name: row.name as string,
             createdAt: row.created_at as number,
             updatedAt: row.updated_at as number,
         }));
+
+        // Cache the result
+        if (this.kv) {
+            await this.kv.cacheServices(instanceId, services).catch(() => {});
+        }
+
+        return services;
     }
 
     async list(): Promise<Service[]> {
@@ -135,10 +163,24 @@ export class ServiceStore extends BaseStore {
     }
 
     async delete(id: string): Promise<void> {
+        // Get instanceId before deletion for cache invalidation
+        const service = await this.get(id);
         await this.db.prepare(`DELETE FROM services WHERE id = $1`).bind(id).run();
+        
+        // Invalidate cache
+        if (service && this.kv) {
+            await this.kv.invalidateServiceCache(service.instanceId).catch(() => {});
+        }
     }
 
     async deleteByName(name: string): Promise<void> {
+        // Get instanceId before deletion for cache invalidation
+        const service = await this.getByName(name);
         await this.db.prepare(`DELETE FROM services WHERE name = $1`).bind(name).run();
+        
+        // Invalidate cache
+        if (service && this.kv) {
+            await this.kv.invalidateServiceCache(service.instanceId).catch(() => {});
+        }
     }
 }

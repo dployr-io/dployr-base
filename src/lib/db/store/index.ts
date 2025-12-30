@@ -24,7 +24,7 @@ export class DatabaseStore {
         this.instances = new InstanceStore(db, kv);
         this.bootstrapTokens = new BootstrapTokenStore(db);
         this.domains = new DomainStore(db);
-        this.services = new ServiceStore(db);
+        this.services = new ServiceStore(db, kv);
     }
 }
 

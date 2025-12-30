@@ -2,20 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { DatabaseStore } from "@/lib/db/store/index.js";
+import { KVStore } from "@/lib/db/store/kv.js";
 import type { ConnectionManager } from "../connection-manager.js";
 import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "../message-types.js";
 import { isAgentBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind, WSErrorCode, createWSError } from "../message-types.js";
 import { ClientNotifier } from "./client-notifier.js";
+import { UpdateProcessor } from "@/lib/agent/update-processor.js";
+import { AgentUpdateV1 } from "@/types/agent.js";
 
 /**
  * Handles messages from dployrd connections.
  */
 export class AgentMessageHandler {
+  private updateProcessor: UpdateProcessor;
+
   constructor(
     private connectionManager: ConnectionManager,
     private clientNotifier: ClientNotifier,
     private db: DatabaseStore,
-  ) {}
+    private kv: KVStore,
+  ) {
+    this.updateProcessor = new UpdateProcessor(db, kv);
+  }
 
   /**
    * Process a message from an agent
@@ -32,6 +40,12 @@ export class AgentMessageHandler {
 
     // Handle status updates - broadcast to all clients
     if (isAgentBroadcastMessage(message)) {
+      const update = (message as any).update as AgentUpdateV1;
+      
+      if (update?.instance_id) {
+        await this.updateProcessor.processUpdate(update.instance_id, update);
+      }
+
       await this.clientNotifier.broadcast(conn.clusterId, message);
       return;
     }

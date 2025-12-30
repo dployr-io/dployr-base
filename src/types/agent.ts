@@ -25,17 +25,33 @@ export type CompletedTask = z.infer<typeof CompletedTaskSchema>;
 
 // WebSocket message schemas
 export const AgentUpdateV1Schema = z.object({
-  version: z.string(),
-  compatibility_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  schema: z.literal("v1"),
+  seq: z.number(),
+  epoch: z.string(),
+  full: z.boolean(),
+  instance_id: z.string(),
+  build_info: z.object({
+    version: z.string(),
+    commit: z.string(),
+    date: z.string(),
+    go_version: z.string(),
+  }).optional(),
   platform: z.object({
     os: z.string(),
     arch: z.string(),
     hostname: z.string().optional(),
   }),
-  runtime: z.object({
-    uptime: z.number(),
-    services: z.record(z.string(), z.unknown()).optional(),
-  }).optional(),
+  status: z.string(),
+  mode: z.string(),
+  uptime: z.string(),
+  deployments: z.array(z.record(z.string(), z.unknown())).optional(),
+  services: z.array(z.record(z.string(), z.unknown())).optional(),
+  proxies: z.array(z.unknown()).optional(),
+  proxy: z.record(z.string(), z.unknown()).optional(),
+  health: z.record(z.string(), z.unknown()).optional(),
+  debug: z.record(z.string(), z.unknown()).optional(),
+  fs: z.record(z.string(), z.unknown()).optional(),
+  top: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type AgentUpdateV1 = z.infer<typeof AgentUpdateV1Schema>;

@@ -40,7 +40,7 @@ export class WebSocketHandler {
     this.clientNotifier = new ClientNotifier(this.connectionManager, kvStore);
 
     // Initialize handlers with dependencies
-    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, this.clientNotifier, dbStore);
+    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, this.clientNotifier, dbStore, kvStore);
 
     const jwtService = new JWTService(kvStore);
     const dployrdService = new AgentService();
