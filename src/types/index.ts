@@ -25,6 +25,7 @@ export type Bindings = {
 
   APP_URL: string;
   BASE_URL: string;
+  PROXY_BASE_DOMAIN?: string;
   EMAIL_FROM?: string;
   CORS_ALLOWED_ORIGINS?: string;
 

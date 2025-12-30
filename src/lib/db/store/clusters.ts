@@ -676,6 +676,132 @@ export class ClusterStore extends BaseStore {
     return integrations;
   }
 
+  /**
+   * Gets a cluster by its name.
+   * Used by traffic router to resolve cluster from subdomain.
+   * 
+   * @param name - The cluster name (e.g., "production", "staging")
+   * @returns The cluster if found, null otherwise
+   */
+  async getByName(name: string): Promise<Cluster | null> {
+    const result = await this.db
+        .prepare(`SELECT * FROM clusters WHERE LOWER(name) = LOWER($1)`)
+        .bind(name)
+        .first<any>();
+
+    if (!result) return null;
+
+    // Fetch users and roles
+    const usersResult = await this.db
+        .prepare(`
+            SELECT u.email, uc.role 
+            FROM user_clusters uc 
+            JOIN users u ON uc.user_id = u.id 
+            WHERE uc.cluster_id = $1
+        `)
+        .bind(result.id)
+        .all<{ email: string; role: UserRole }>();
+
+    const users = usersResult.results?.map(r => r.email) ?? [];
+    const roles: Record<UserRole, string[]> = {
+        owner: [],
+        admin: [],
+        developer: [],
+        viewer: [],
+        invited: [],
+    };
+
+    for (const row of usersResult.results ?? []) {
+        if (roles[row.role]) {
+            roles[row.role].push(row.email);
+        }
+    }
+
+    return {
+        id: result.id,
+        name: result.name,
+        users,
+        roles,
+        metadata: result.metadata ? JSON.parse(result.metadata) : undefined,
+        createdAt: result.created_at,
+        updatedAt: result.updated_at,
+    };
+  }
+
+  /**
+   * Gets a cluster by instance ID.
+   * Used by traffic router to validate service-instance-cluster relationship.
+   * 
+   * @param instanceId - The instance ID
+   * @returns The cluster if found, null otherwise
+   */
+  async getByInstanceId(instanceId: string): Promise<Cluster | null> {
+    const result = await this.db
+        .prepare(`SELECT cluster_id FROM instances WHERE id = $1`)
+        .bind(instanceId)
+        .first<{ cluster_id: string }>();
+
+    if (!result) return null;
+
+    return this.get(result.cluster_id);
+  }
+
+  /**
+   * Validates that a service belongs to a cluster.
+   * Used by traffic router for security validation.
+   * 
+   * @param serviceName - The service name
+   * @param clusterName - The cluster name
+   * @returns Object with validation result and details
+   */
+  async validateServiceCluster(
+    serviceName: string, 
+    clusterName: string
+  ): Promise<{
+    valid: boolean;
+    serviceId?: string;
+    instanceId?: string;
+    instanceAddress?: string;
+    clusterId?: string;
+  }> {
+    const result = await this.db
+        .prepare(`
+            SELECT 
+                s.id as service_id,
+                s.name as service_name,
+                i.id as instance_id,
+                i.address as instance_address,
+                c.id as cluster_id,
+                c.name as cluster_name
+            FROM services s
+            JOIN instances i ON s.instance_id = i.id
+            JOIN clusters c ON i.cluster_id = c.id
+            WHERE LOWER(s.name) = LOWER($1) 
+              AND LOWER(c.name) = LOWER($2)
+        `)
+        .bind(serviceName, clusterName)
+        .first<{
+            service_id: string;
+            service_name: string;
+            instance_id: string;
+            instance_address: string;
+            cluster_id: string;
+            cluster_name: string;
+        }>();
+
+    if (!result) {
+        return { valid: false };
+    }
+
+    return {
+        valid: true,
+        serviceId: result.service_id,
+        instanceId: result.instance_id,
+        instanceAddress: result.instance_address,
+        clusterId: result.cluster_id,
+    };
+  }
+
   // Permission checks
   async canRead(userId: string, clusterId: string): Promise<boolean> {
     return this.hasMinRole(userId, clusterId, "viewer");

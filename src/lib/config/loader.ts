@@ -6,6 +6,24 @@ import { parse as parseToml } from 'smol-toml';
 import { z } from 'zod';
 
 /**
+ * Proxy configuration schema
+ */
+const ProxyConfigSchema = z.object({
+  /** Enable the proxy server */
+  enabled: z.boolean().default(false),
+  /** Port for the proxy server */
+  port: z.number().default(8080),
+  /** Host to bind proxy server */
+  host: z.string().default("0.0.0.0"),
+  /** Base domain for routing (e.g., "dployr.io") */
+  base_domain: z.string().default("dployr.io"),
+  /** Request timeout in milliseconds */
+  timeout_ms: z.number().default(30000),
+  /** Cache TTL for route lookups in seconds */
+  cache_ttl_seconds: z.number().default(30),
+}).optional();
+
+/**
  * Type-safe configuration schema
  */
 const ConfigSchema = z.object({
@@ -80,6 +98,7 @@ const ConfigSchema = z.object({
   cors: z.object({
     allowed_origins: z.string().optional(),
   }).optional(),
+  proxy: ProxyConfigSchema,
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -172,6 +191,14 @@ function loadConfigFromEnv(): Config {
     },
     cors: {
       allowed_origins: process.env.CORS_ALLOWED_ORIGINS,
+    },
+    proxy: {
+      enabled: process.env.PROXY_ENABLED === 'true',
+      port: process.env.PROXY_PORT ? parseInt(process.env.PROXY_PORT) : 8080,
+      host: process.env.PROXY_HOST || '0.0.0.0',
+      base_domain: process.env.PROXY_BASE_DOMAIN || 'dployr.io',
+      timeout_ms: process.env.PROXY_TIMEOUT_MS ? parseInt(process.env.PROXY_TIMEOUT_MS) : 30000,
+      cache_ttl_seconds: process.env.PROXY_CACHE_TTL_SECONDS ? parseInt(process.env.PROXY_CACHE_TTL_SECONDS) : 30,
     },
   });
 }

@@ -28,6 +28,10 @@ export const ERROR = {
         INVALID_OTP: { code: "request.invalid_otp", status: 400, message: "Invalid OTP" },
         TOO_MANY_REQUESTS: { code: "request.too_many_requests", status: 429, message: "Too many requests" }
     },
+    VALIDATION: {
+        MISSING_FIELDS: { code: "validation.missing_fields", status: 400, message: "Missing required fields" },
+        INVALID_FORMAT: { code: "validation.invalid_format", status: 400, message: "Invalid format" },
+    },
     AUTH: {
         BAD_SESSION: { code: "auth.bad_session", status: 401, message: "Session invalid" },
         BAD_TOKEN: { code: "auth.bad_token", status: 401, message: "Invalid token" },

@@ -15,6 +15,7 @@ import jwks from "./jwks.js";
 import domains from "./domains.js";
 import agent from "./agent.js";
 import notifications from "./notifications.js";
+import proxy from "./proxy.js";
 import { getWS } from "@/lib/context.js";
 
 const VERSION = process.env.BASE_VERSION || "unknown";
@@ -35,6 +36,7 @@ export function registerRoutes(app: Hono<{ Bindings: Bindings; Variables: Variab
   app.route("/v1/jwks", jwks);
   app.route("/v1/domains", domains);
   app.route("/v1/agent", agent);
+  app.route("/v1/proxy", proxy);
 
   // Health check endpoint
   app.get("/v1/health", (c) => {

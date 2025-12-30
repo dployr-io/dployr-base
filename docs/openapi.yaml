@@ -67,6 +67,8 @@ tags:
     description: VCS and notification integrations setup and management.
   - name: Notifications
     description: Notification integrations and event subscriptions.
+  - name: Proxy
+    description: Traffic routing and service discovery for wildcard domains.
   - name: GitHub
     description: GitHub App webhooks.
   - name: Runtime
@@ -3377,6 +3379,142 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/proxy/resolve:
+    get:
+      operationId: resolveProxyRoute
+      tags:
+        - Proxy
+      summary: Resolve a hostname to its route
+      description: Debug endpoint to resolve a hostname to its target service and instance.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: hostname
+          required: true
+          schema:
+            type: string
+          description: Hostname to resolve (e.g., api.production.dployr.io)
+          example: api.production.dployr.io
+      responses:
+        '200':
+          description: Route resolved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid hostname format or missing parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/proxy/stats:
+    get:
+      operationId: getProxyStats
+      tags:
+        - Proxy
+      summary: Get proxy server statistics
+      description: Returns router cache statistics and configuration.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/proxy/services:
+    get:
+      operationId: listProxyServices
+      tags:
+        - Proxy
+      summary: List routable services for a cluster
+      description: Lists all services in a cluster that can be accessed via traffic routing.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+          description: Cluster ID to list services for
+      responses:
+        '200':
+          description: Services listed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Missing clusterId parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Cluster not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/proxy/invalidate:
+    post:
+      operationId: invalidateProxyCache
+      tags:
+        - Proxy
+      summary: Invalidate proxy cache
+      description: Invalidate cached routes to force fresh lookups.
+      security:
+        - sessionCookie: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serviceName:
+                  type: string
+                  description: Service name (required with clusterName)
+                  example: api
+                clusterName:
+                  type: string
+                  description: Cluster name (required with serviceName, or alone)
+                  example: production
+                all:
+                  type: boolean
+                  description: Set to true to invalidate all routes
+                  example: false
+      responses:
+        '200':
+          description: Cache invalidated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request body
           content:
             application/json:
               schema:

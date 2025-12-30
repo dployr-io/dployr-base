@@ -77,7 +77,6 @@ export class UpdateProcessor {
 
       if (!hasChanges) {
         // No changes, skip sync
-        console.warn(`[UpdateProcessor] No changes to sync for instance ${instanceName}`);
         return;
       }
 
