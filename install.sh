@@ -38,6 +38,12 @@ GITHUB_CLIENT_ID=""
 GITHUB_CLIENT_SECRET=""
 EMAIL_PROVIDER="zepto"
 ZEPTO_API_KEY=""
+PROXY_ENABLED="false"
+PROXY_PORT="8080"
+PROXY_HOST="0.0.0.0"
+PROXY_BASE_DOMAIN="dployr.io"
+PROXY_TIMEOUT_MS="30000"
+PROXY_CACHE_TTL_SECONDS="3600"
 
 # Parse command line arguments
 CONFIG_FILE=""
@@ -111,6 +117,30 @@ while [[ $# -gt 0 ]]; do
       ZEPTO_API_KEY="$2"
       shift 2
       ;;
+    --proxy-enabled)
+      PROXY_ENABLED="$2"
+      shift 2
+      ;;
+    --proxy-port)
+      PROXY_PORT="$2"
+      shift 2
+      ;;
+    --proxy-host)
+      PROXY_HOST="$2"
+      shift 2
+      ;;
+    --proxy-base-domain)
+      PROXY_BASE_DOMAIN="$2"
+      shift 2
+      ;;
+    --proxy-timeout-ms)
+      PROXY_TIMEOUT_MS="$2"
+      shift 2
+      ;;
+    --proxy-cache-ttl-seconds)
+      PROXY_CACHE_TTL_SECONDS="$2"
+      shift 2
+      ;;
     -v|--version)
       VERSION="$2"
       shift 2
@@ -163,6 +193,24 @@ if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
       "github_client_id") GITHUB_CLIENT_ID="$value" ;;
       "github_client_secret") GITHUB_CLIENT_SECRET="$value" ;;
       "zepto_api_key") ZEPTO_API_KEY="$value" ;;
+      "enabled")
+        if [[ "$CURRENT_SECTION" == "proxy" ]]; then
+          PROXY_ENABLED="$value"
+        fi
+        ;;
+      "port")
+        if [[ "$CURRENT_SECTION" == "proxy" ]]; then
+          PROXY_PORT="$value"
+        fi
+        ;;
+      "host")
+        if [[ "$CURRENT_SECTION" == "proxy" ]]; then
+          PROXY_HOST="$value"
+        fi
+        ;;
+      "base_domain") PROXY_BASE_DOMAIN="$value" ;;
+      "timeout_ms") PROXY_TIMEOUT_MS="$value" ;;
+      "cache_ttl_seconds") PROXY_CACHE_TTL_SECONDS="$value" ;;
     esac
     
     # Track current section
@@ -304,6 +352,14 @@ session_ttl = 86400
 jwt_algorithm = "RS256"
 global_rate_limit = 100
 strict_rate_limit = 10
+
+[proxy]
+enabled = $PROXY_ENABLED
+port = $PROXY_PORT
+host = "$PROXY_HOST"
+base_domain = "$PROXY_BASE_DOMAIN"
+timeout_ms = $PROXY_TIMEOUT_MS
+cache_ttl_seconds = $PROXY_CACHE_TTL_SECONDS
 EOF
 
   echo "[INFO] Configuration created at $CONFIG_DIR/config.toml"
