@@ -155,7 +155,7 @@ auth.get("/callback/:provider", async (c) => {
       );
     }
 
-    return c.redirect(c.env.APP_URL);
+    return c.redirect(redirectUrl);
   } catch (error) {
     console.error("OAuth error:", error);
     return c.redirect(

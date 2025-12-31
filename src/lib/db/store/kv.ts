@@ -225,17 +225,26 @@ export class KVStore {
   }
 
   async validateState(state: string): Promise<string | null> {
-    const data = await this.kv.get(`state:${state}`);
-    if (!data) return null;
+    try {
+      const data = await this.kv.get(`state:${state}`);
+      if (!data) {
+        console.error(`[OAuth] State validation failed: state not found in KV store (state: ${state})`);
+        return null;
+      }
 
-    const stateData = JSON.parse(data) as {
-      state: string;
-      redirectUrl: string;
-      createdAt: number;
-    };
+      const stateData = JSON.parse(data) as {
+        state: string;
+        redirectUrl: string;
+        createdAt: number;
+      };
 
-    await this.kv.delete(`state:${state}`);
-    return stateData.redirectUrl;
+      console.log(`[OAuth] State validated successfully (redirectUrl: ${stateData.redirectUrl})`);
+      await this.kv.delete(`state:${state}`);
+      return stateData.redirectUrl;
+    } catch (error) {
+      console.error(`[OAuth] State validation error:`, error);
+      return null;
+    }
   }
 
   async createOTP(email: string): Promise<string> {

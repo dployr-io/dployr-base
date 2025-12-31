@@ -22,7 +22,7 @@ export class UserStore extends BaseStore {
                 name = COALESCE(excluded.name, users.name),
                 picture = COALESCE(excluded.picture, users.picture),
                 provider = excluded.provider,
-                metadata = COALESCE(metadata, '{}'::jsonb) || excluded.metadata::jsonb,
+                metadata = COALESCE(users.metadata, '{}'::jsonb) || excluded.metadata::jsonb,
                 updated_at = excluded.updated_at
             RETURNING id, email, name, picture, provider, metadata, created_at, updated_at
         `).bind(
