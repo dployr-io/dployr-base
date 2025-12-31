@@ -61,6 +61,8 @@ const ConfigSchema = z.object({
     google_client_secret: z.string().optional(),
     github_client_id: z.string().optional(),
     github_client_secret: z.string().optional(),
+    microsoft_client_id: z.string().optional(),
+    microsoft_client_secret: z.string().optional(),
   }),
   integrations: z.object({
     github_app_id: z.string().optional(),
@@ -163,6 +165,8 @@ function loadConfigFromEnv(): Config {
       google_client_secret: process.env.GOOGLE_CLIENT_SECRET,
       github_client_id: process.env.GITHUB_CLIENT_ID,
       github_client_secret: process.env.GITHUB_CLIENT_SECRET,
+      microsoft_client_id: process.env.MICROSOFT_CLIENT_ID,
+      microsoft_client_secret: process.env.MICROSOFT_CLIENT_SECRET,
     },
     integrations: {
       github_app_id: process.env.GITHUB_APP_ID,

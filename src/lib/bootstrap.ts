@@ -73,6 +73,7 @@ export async function bootstrapMiddleware(
   const emailConfig = adapters!.config?.email;
   const corsConfig = adapters!.config?.cors;
   const integrationsConfig = adapters!.config?.integrations;
+  const authConfig = adapters!.config?.auth;
 
   c.env = {
     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
@@ -83,8 +84,12 @@ export async function bootstrapMiddleware(
     GITHUB_APP_PRIVATE_KEY: integrationsConfig?.github_app_private_key || process.env.GITHUB_APP_PRIVATE_KEY || "",
     GITHUB_WEBHOOK_SECRET: integrationsConfig?.github_webhook_secret || process.env.GITHUB_WEBHOOK_SECRET || "",
     GITHUB_TOKEN: integrationsConfig?.github_token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "",
-    GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID || "",
-    GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || "",
+    GOOGLE_CLIENT_ID: authConfig?.google_client_id || process.env.GOOGLE_CLIENT_ID || "",
+    GOOGLE_CLIENT_SECRET: authConfig?.google_client_secret || process.env.GOOGLE_CLIENT_SECRET || "",
+    GITHUB_CLIENT_ID: authConfig?.github_client_id || process.env.GITHUB_CLIENT_ID || "",
+    GITHUB_CLIENT_SECRET: authConfig?.github_client_secret || process.env.GITHUB_CLIENT_SECRET || "",
+    MICROSOFT_CLIENT_ID: authConfig?.microsoft_client_id || process.env.MICROSOFT_CLIENT_ID || "",
+    MICROSOFT_CLIENT_SECRET: authConfig?.microsoft_client_secret || process.env.MICROSOFT_CLIENT_SECRET || "",
     CORS_ALLOWED_ORIGINS: corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS || "",
   } as unknown as Bindings;
 
