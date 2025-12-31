@@ -1,3 +1,8 @@
+## [0.1.40] - 2025-12-31
+
+### 🚜 Refactor
+
+- *(auth)* Fix redirect URL handling and metadata merge in user upsert
 ## [0.1.39] - 2025-12-31
 
 ### 🚜 Refactor
