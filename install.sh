@@ -163,8 +163,8 @@ if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
   # Simple TOML parser (reads key = "value" format)
   while IFS='=' read -r key value; do
     # Remove whitespace and quotes
-    key=$(echo "$key" | xargs)
-    value=$(echo "$value" | xargs | sed 's/^"//;s/"$//')
+    key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
     
     case "$key" in
       "base_url") BASE_URL="$value" ;;
