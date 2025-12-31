@@ -1,3 +1,10 @@
+## [0.1.39] - 2025-12-31
+
+### 🚜 Refactor
+
+- *(install)* Replace xargs with sed for whitespace trimming in TOML parser to improve POSIX compatibility
+- *(install)* Improve TOML parser to handle sections, comments, and multi-value lines with proper line-by-line processing
+- *(config)* Add Microsoft OAuth configuration support with client ID and secret in auth config schema and bootstrap middleware
 ## [0.1.38] - 2025-12-31
 
 ### 🚜 Refactor
