@@ -161,10 +161,23 @@ if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
   echo "[INFO] Loading configuration from $CONFIG_FILE"
   
   # Simple TOML parser (reads key = "value" format)
-  while IFS='=' read -r key value; do
-    # Remove whitespace and quotes
-    key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
+  CURRENT_SECTION=""
+  while IFS= read -r line; do
+    # Skip empty lines and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    
+    # Track current section
+    if [[ "$line" =~ ^\[(.+)\]$ ]]; then
+      CURRENT_SECTION="${BASH_REMATCH[1]}"
+      continue
+    fi
+    
+    # Skip lines without '='
+    [[ ! "$line" =~ = ]] && continue
+    
+    # Parse key=value
+    key=$(echo "$line" | cut -d'=' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    value=$(echo "$line" | cut -d'=' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
     
     case "$key" in
       "base_url") BASE_URL="$value" ;;
@@ -212,11 +225,6 @@ if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
       "timeout_ms") PROXY_TIMEOUT_MS="$value" ;;
       "cache_ttl_seconds") PROXY_CACHE_TTL_SECONDS="$value" ;;
     esac
-    
-    # Track current section
-    if [[ "$key" =~ ^\[(.+)\]$ ]]; then
-      CURRENT_SECTION="${BASH_REMATCH[1]}"
-    fi
   done < "$CONFIG_FILE"
 fi
 
