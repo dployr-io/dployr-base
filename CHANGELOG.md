@@ -1,3 +1,8 @@
+## [0.1.41] - 2025-12-31
+
+### 🚜 Refactor
+
+- *(auth)* Replace dynamic redirect URL with APP_URL constant in OAuth callback handler
 ## [0.1.40] - 2025-12-31
 
 ### 🚜 Refactor
