@@ -1,4 +1,9 @@
-## [0.1.41] - 2025-12-31
+## [0.1.43] - 2026-01-03
+
+### 🚜 Refactor
+
+- *(websocket)* Add proxy management operations with status, restart, add, and remove handlers
+## [0.1.42] - 2025-12-31
 
 ### 🚜 Refactor
 
