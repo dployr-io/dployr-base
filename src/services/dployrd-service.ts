@@ -205,4 +205,61 @@ export class AgentService {
       Status: "pending",
     };
   }
+
+  // Create a proxy status task
+  createProxyStatusTask(
+    taskId: string,
+    token?: string
+  ): AgentTask {
+    return {
+      ID: taskId,
+      Type: "proxy/status:get",
+      Payload: { token },
+      Status: "pending",
+    };
+  }
+
+  // Create a proxy restart task
+  createProxyRestartTask(
+    taskId: string,
+    force: boolean = false,
+    token?: string
+  ): AgentTask {
+    return {
+      ID: taskId,
+      Type: "proxy/restart:post",
+      Payload: { force, token },
+      Status: "pending",
+    };
+  }
+
+  // Create a proxy add task
+  createProxyAddTask(
+    taskId: string,
+    serviceName: string,
+    upstream: string,
+    domain?: string,
+    token?: string
+  ): AgentTask {
+    return {
+      ID: taskId,
+      Type: "proxy/add:post",
+      Payload: { serviceName, upstream, domain, token },
+      Status: "pending",
+    };
+  }
+
+  // Create a proxy remove task
+  createProxyRemoveTask(
+    taskId: string,
+    serviceName: string,
+    token?: string
+  ): AgentTask {
+    return {
+      ID: taskId,
+      Type: "proxy/remove:delete",
+      Payload: { serviceName, token },
+      Status: "pending",
+    };
+  }
 }

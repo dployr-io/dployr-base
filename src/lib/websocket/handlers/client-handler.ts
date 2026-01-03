@@ -24,6 +24,10 @@ import type {
   FileWatchMessage,
   FileUnwatchMessage,
   ServiceRemoveMessage,
+  ProxyStatusMessage,
+  ProxyRestartMessage,
+  ProxyAddMessage,
+  ProxyRemoveMessage,
 } from "../message-types.js";
 import {
   isClientSubscribeMessage,
@@ -49,6 +53,10 @@ import {
   WSErrorCode,
   MessageKind,
   isServiceRemoveMessage,
+  isProxyStatusMessage,
+  isProxyRestartMessage,
+  isProxyAddMessage,
+  isProxyRemoveMessage,
 } from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
@@ -205,6 +213,26 @@ export class ClientMessageHandler {
 
     if (isFileUnwatchMessage(message)) {
       await this.handleFileUnwatch(conn, message);
+      return;
+    }
+
+    if (isProxyStatusMessage(message)) {
+      await this.handleProxyStatus(conn, message);
+      return;
+    }
+
+    if (isProxyRestartMessage(message)) {
+      await this.handleProxyRestart(conn, message);
+      return;
+    }
+
+    if (isProxyAddMessage(message)) {
+      await this.handleProxyAdd(conn, message);
+      return;
+    }
+
+    if (isProxyRemoveMessage(message)) {
+      await this.handleProxyRemove(conn, message);
       return;
     }
   }
@@ -1166,5 +1194,231 @@ export class ClientMessageHandler {
       console.error("[WS] Failed to send system restart task:", error);
       this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system restart task");
     }
+  }
+
+  /**
+   * Handle proxy status request
+   */
+  private async handleProxyStatus(
+    conn: ClusterConnection,
+    message: ProxyStatusMessage
+  ): Promise<void> {
+    const { instanceName, clusterId, requestId } = message;
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    const taskId = ulid();
+
+    const instance = await this.db.instances.getByName(instanceName);
+
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
+    if (instance.clusterId !== clusterId) {
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+      return;
+    }
+
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      clusterId,
+      MessageKind.PROXY_STATUS
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
+    const task = this.dployrdService.createProxyStatusTask(taskId, token);
+    const sent = this.sendTaskToCluster(clusterId, task);
+
+    if (!sent) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
+    }
+
+    console.log(`[WS] Created proxy status task ${taskId} (requestId: ${requestId})`);
+  }
+
+  /**
+   * Handle proxy restart request
+   */
+  private async handleProxyRestart(
+    conn: ClusterConnection,
+    message: ProxyRestartMessage
+  ): Promise<void> {
+    const { instanceName, clusterId, force = false, requestId } = message;
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    const taskId = ulid();
+
+    const instance = await this.db.instances.getByName(instanceName);
+
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
+    if (instance.clusterId !== clusterId) {
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+      return;
+    }
+
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      clusterId,
+      MessageKind.PROXY_RESTART
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
+    const task = this.dployrdService.createProxyRestartTask(taskId, force, token);
+    const sent = this.sendTaskToCluster(clusterId, task);
+
+    if (!sent) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
+    }
+
+    console.log(`[WS] Created proxy restart task ${taskId} (requestId: ${requestId})`);
+  }
+
+  /**
+   * Handle proxy add request
+   */
+  private async handleProxyAdd(
+    conn: ClusterConnection,
+    message: ProxyAddMessage
+  ): Promise<void> {
+    const { instanceName, clusterId, serviceName, upstream, domain, requestId } = message;
+
+    if (!serviceName || !upstream) {
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "serviceName and upstream are required");
+      return;
+    }
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    const taskId = ulid();
+
+    const instance = await this.db.instances.getByName(instanceName);
+
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
+    if (instance.clusterId !== clusterId) {
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+      return;
+    }
+
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      clusterId,
+      MessageKind.PROXY_ADD
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
+    const task = this.dployrdService.createProxyAddTask(taskId, serviceName, upstream, domain, token);
+    const sent = this.sendTaskToCluster(clusterId, task);
+
+    if (!sent) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
+    }
+
+    console.log(`[WS] Created proxy add task ${taskId} for service ${serviceName} (requestId: ${requestId})`);
+  }
+
+  /**
+   * Handle proxy remove request
+   */
+  private async handleProxyRemove(
+    conn: ClusterConnection,
+    message: ProxyRemoveMessage
+  ): Promise<void> {
+    const { instanceName, clusterId, serviceName, requestId } = message;
+
+    if (!serviceName) {
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "serviceName is required");
+      return;
+    }
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    const taskId = ulid();
+
+    const instance = await this.db.instances.getByName(instanceName);
+
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
+    if (instance.clusterId !== clusterId) {
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+      return;
+    }
+
+    const added = this.connectionManager.addPendingRequest(
+      taskId,
+      requestId,
+      conn.ws,
+      clusterId,
+      MessageKind.PROXY_REMOVE
+    );
+
+    if (!added) {
+      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
+      return;
+    }
+
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
+    const task = this.dployrdService.createProxyRemoveTask(taskId, serviceName, token);
+    const sent = this.sendTaskToCluster(clusterId, task);
+
+    if (!sent) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      return;
+    }
+
+    console.log(`[WS] Created proxy remove task ${taskId} for service ${serviceName} (requestId: ${requestId})`);
   }
 }

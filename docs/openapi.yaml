@@ -897,9 +897,9 @@ components:
           example: 15
         requestsPerCluster:
           type: object
-          description: Pending request count per cluster.
           additionalProperties:
             type: integer
+          description: Pending request count per cluster.
           example:
             cluster-1: 5
             cluster-2: 7
@@ -907,6 +907,281 @@ components:
           type: integer
           description: WebSocket service uptime in seconds.
           example: 3600
+
+    ProxyStatusMessage:
+      type: object
+      description: WebSocket message to request proxy server status
+      required:
+        - kind
+        - requestId
+        - instanceName
+        - clusterId
+      properties:
+        kind:
+          type: string
+          enum: [proxy_status]
+          description: Message type
+        requestId:
+          type: string
+          description: Unique request identifier for correlation
+          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        instanceName:
+          type: string
+          description: Name of the instance to get proxy status for
+          example: "my-instance"
+        clusterId:
+          type: string
+          description: Cluster ID where the instance resides
+          example: "cluster-prod"
+
+    ProxyRestartMessage:
+      type: object
+      description: WebSocket message to restart the proxy server
+      required:
+        - kind
+        - requestId
+        - instanceName
+        - clusterId
+      properties:
+        kind:
+          type: string
+          enum: [proxy_restart]
+          description: Message type
+        requestId:
+          type: string
+          description: Unique request identifier for correlation
+          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        instanceName:
+          type: string
+          description: Name of the instance to restart proxy on
+          example: "my-instance"
+        clusterId:
+          type: string
+          description: Cluster ID where the instance resides
+          example: "cluster-prod"
+        force:
+          type: boolean
+          description: Force restart without waiting for pending tasks
+          default: false
+
+    ProxyAddMessage:
+      type: object
+      description: WebSocket message to add a service to the proxy
+      required:
+        - kind
+        - requestId
+        - instanceName
+        - clusterId
+        - serviceName
+        - upstream
+      properties:
+        kind:
+          type: string
+          enum: [proxy_add]
+          description: Message type
+        requestId:
+          type: string
+          description: Unique request identifier for correlation
+          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        instanceName:
+          type: string
+          description: Name of the instance to add proxy route on
+          example: "my-instance"
+        clusterId:
+          type: string
+          description: Cluster ID where the instance resides
+          example: "cluster-prod"
+        serviceName:
+          type: string
+          description: Name of the service to route to
+          example: "api"
+        upstream:
+          type: string
+          description: Upstream URL or target for the service
+          example: "http://localhost:3000"
+        domain:
+          type: string
+          description: Optional custom domain for the service
+          example: "api.example.com"
+
+    ProxyRemoveMessage:
+      type: object
+      description: WebSocket message to remove a service from the proxy
+      required:
+        - kind
+        - requestId
+        - instanceName
+        - clusterId
+        - serviceName
+      properties:
+        kind:
+          type: string
+          enum: [proxy_remove]
+          description: Message type
+        requestId:
+          type: string
+          description: Unique request identifier for correlation
+          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        instanceName:
+          type: string
+          description: Name of the instance to remove proxy route from
+          example: "my-instance"
+        clusterId:
+          type: string
+          description: Cluster ID where the instance resides
+          example: "cluster-prod"
+        serviceName:
+          type: string
+          description: Name of the service to remove from proxy
+          example: "api"
+
+    ProxyStatusResponseMessage:
+      type: object
+      description: Response to proxy_status request
+      required:
+        - kind
+        - requestId
+        - success
+      properties:
+        kind:
+          type: string
+          enum: [proxy_status_response]
+        requestId:
+          type: string
+          description: Echoed request identifier for correlation
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              description: Current proxy status
+            services:
+              type: array
+              description: List of routable services
+              items:
+                type: object
+            stats:
+              type: object
+              description: Proxy statistics (optional)
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+            message:
+              type: string
+              description: Error message
+
+    ProxyRestartResponseMessage:
+      type: object
+      description: Response to proxy_restart request
+      required:
+        - kind
+        - requestId
+        - success
+      properties:
+        kind:
+          type: string
+          enum: [proxy_restart_response]
+        requestId:
+          type: string
+          description: Echoed request identifier for correlation
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              description: Restart status
+            message:
+              type: string
+              description: Status message
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+            message:
+              type: string
+              description: Error message
+
+    ProxyAddResponseMessage:
+      type: object
+      description: Response to proxy_add request
+      required:
+        - kind
+        - requestId
+        - success
+      properties:
+        kind:
+          type: string
+          enum: [proxy_add_response]
+        requestId:
+          type: string
+          description: Echoed request identifier for correlation
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            serviceName:
+              type: string
+              description: Service name that was added
+            upstream:
+              type: string
+              description: Upstream URL configured
+            message:
+              type: string
+              description: Confirmation message
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+            message:
+              type: string
+              description: Error message
+
+    ProxyRemoveResponseMessage:
+      type: object
+      description: Response to proxy_remove request
+      required:
+        - kind
+        - requestId
+        - success
+      properties:
+        kind:
+          type: string
+          enum: [proxy_remove_response]
+        requestId:
+          type: string
+          description: Echoed request identifier for correlation
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            serviceName:
+              type: string
+              description: Service name that was removed
+            message:
+              type: string
+              description: Confirmation message
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+            message:
+              type: string
+              description: Error message
 
 paths:
   /v1/health:

@@ -172,6 +172,10 @@ export class AgentMessageHandler {
         case MessageKind.FILE_TREE: return "file_tree_response";
         case MessageKind.DEPLOY: return "deploy_response";
         case MessageKind.SERVICE_REMOVE: return "service_remove_response";
+        case MessageKind.PROXY_STATUS: return "proxy_status_response";
+        case MessageKind.PROXY_RESTART: return "proxy_restart_response";
+        case MessageKind.PROXY_ADD: return "proxy_add_response";
+        case MessageKind.PROXY_REMOVE: return "proxy_remove_response";
         default: return "task_response";
       }
     }

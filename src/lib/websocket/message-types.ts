@@ -78,6 +78,12 @@ export const MessageKind = {
   INSTANCE_SYSTEM_REBOOT: "instance_system_reboot",
   INSTANCE_SYSTEM_RESTART: "instance_system_restart",
 
+  // Proxy operations
+  PROXY_STATUS: "proxy_status",
+  PROXY_RESTART: "proxy_restart",
+  PROXY_ADD: "proxy_add",
+  PROXY_REMOVE: "proxy_remove",
+
   // Server -> Client
   TASK: "task",
   ERROR: "error",
@@ -354,6 +360,38 @@ export interface InstanceSystemRestartMessage extends BaseRequestMessage {
 }
 
 /**
+ * Proxy operation messages
+ */
+export interface ProxyStatusMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.PROXY_STATUS;
+  instanceName: string;
+  clusterId: string;
+}
+
+export interface ProxyRestartMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.PROXY_RESTART;
+  instanceName: string;
+  clusterId: string;
+  force?: boolean;
+}
+
+export interface ProxyAddMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.PROXY_ADD;
+  instanceName: string;
+  clusterId: string;
+  serviceName: string;
+  upstream: string;
+  domain?: string;
+}
+
+export interface ProxyRemoveMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.PROXY_REMOVE;
+  instanceName: string;
+  clusterId: string;
+  serviceName: string;
+}
+
+/**
  * Instance operation response messages
  */
 export interface InstanceListResponseMessage extends BaseMessage {
@@ -454,6 +492,67 @@ export interface InstanceSystemRestartResponseMessage extends BaseMessage {
   };
 }
 
+/**
+ * Proxy operation response messages
+ */
+export interface ProxyStatusResponseMessage extends BaseMessage {
+  kind: "proxy_status_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    status: string;
+    services: any[];
+    stats?: any;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface ProxyRestartResponseMessage extends BaseMessage {
+  kind: "proxy_restart_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    status: string;
+    message: string;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface ProxyAddResponseMessage extends BaseMessage {
+  kind: "proxy_add_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    serviceName: string;
+    upstream: string;
+    message: string;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface ProxyRemoveResponseMessage extends BaseMessage {
+  kind: "proxy_remove_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    serviceName: string;
+    message: string;
+  };
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
 export type InstanceOperationResponse =
   | InstanceListResponseMessage
   | InstanceCreateResponseMessage
@@ -462,6 +561,12 @@ export type InstanceOperationResponse =
   | InstanceSystemInstallResponseMessage
   | InstanceSystemRebootResponseMessage
   | InstanceSystemRestartResponseMessage;
+
+export type ProxyOperationResponse =
+  | ProxyStatusResponseMessage
+  | ProxyRestartResponseMessage
+  | ProxyAddResponseMessage
+  | ProxyRemoveResponseMessage;
 
 export type ClientMessage = 
   | ClientSubscribeMessage 
@@ -480,6 +585,10 @@ export type ClientMessage =
   | InstanceSystemInstallMessage
   | InstanceSystemRebootMessage
   | InstanceSystemRestartMessage
+  | ProxyStatusMessage
+  | ProxyRestartMessage
+  | ProxyAddMessage
+  | ProxyRemoveMessage
   | AckMessage;
 
 /**
@@ -695,6 +804,22 @@ export function isInstanceSystemRebootMessage(msg: BaseMessage): msg is Instance
 
 export function isInstanceSystemRestartMessage(msg: BaseMessage): msg is InstanceSystemRestartMessage {
   return msg.kind === MessageKind.INSTANCE_SYSTEM_RESTART;
+}
+
+export function isProxyStatusMessage(msg: BaseMessage): msg is ProxyStatusMessage {
+  return msg.kind === MessageKind.PROXY_STATUS;
+}
+
+export function isProxyRestartMessage(msg: BaseMessage): msg is ProxyRestartMessage {
+  return msg.kind === MessageKind.PROXY_RESTART;
+}
+
+export function isProxyAddMessage(msg: BaseMessage): msg is ProxyAddMessage {
+  return msg.kind === MessageKind.PROXY_ADD;
+}
+
+export function isProxyRemoveMessage(msg: BaseMessage): msg is ProxyRemoveMessage {
+  return msg.kind === MessageKind.PROXY_REMOVE;
 }
 
 /**
