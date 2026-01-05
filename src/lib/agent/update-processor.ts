@@ -3,14 +3,14 @@
 
 import { DatabaseStore } from "@/lib/db/store/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
-import { AgentUpdateV1 } from "@/types/agent.js";
+import { AgentUpdate, AgentUpdateV1, AgentUpdateV1_1 } from "@/types/agent.js";
 
 export class UpdateProcessor {
   constructor(private db: DatabaseStore, private kv: KVStore) {}
 
   async processUpdate(
     instanceId: string,
-    message: AgentUpdateV1
+    message: AgentUpdate
   ): Promise<void> {
     if (!message.instance_id) {
       console.warn(`[UpdateProcessor] Update missing instance_id`);
@@ -19,12 +19,26 @@ export class UpdateProcessor {
 
     const tasks: Promise<void>[] = [];
 
-    if (message.top && message.seq) {
-      tasks.push(this.saveProcessSnapshot(instanceId, message.seq, message.top));
+    // Handle v1 schema
+    if (message.schema === "v1") {
+      const v1Message = message as AgentUpdateV1;
+      if (v1Message.top && v1Message.seq) {
+        tasks.push(this.saveProcessSnapshot(instanceId, v1Message.seq, v1Message.top));
+      }
+      if (v1Message.services) {
+        tasks.push(this.syncServices(instanceId, v1Message.services));
+      }
     }
-
-    if (message.services) {
-      tasks.push(this.syncServices(instanceId, message.services));
+    
+    // Handle v1.1 schema
+    if (message.schema === "v1.1") {
+      const v1_1Message = message as AgentUpdateV1_1;
+      if (v1_1Message.processes?.list && v1_1Message.sequence) {
+        tasks.push(this.saveProcessSnapshot(instanceId, v1_1Message.sequence, { list: v1_1Message.processes.list }));
+      }
+      if (v1_1Message.workloads?.services) {
+        tasks.push(this.syncServices(instanceId, v1_1Message.workloads.services));
+      }
     }
 
     await Promise.all(tasks);

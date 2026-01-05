@@ -8,7 +8,7 @@ import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMes
 import { isAgentBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind, WSErrorCode, createWSError } from "../message-types.js";
 import { ClientNotifier } from "./client-notifier.js";
 import { UpdateProcessor } from "@/lib/agent/update-processor.js";
-import { AgentUpdateV1 } from "@/types/agent.js";
+import { AgentUpdate } from "@/types/agent.js";
 
 /**
  * Handles messages from dployrd connections.
@@ -40,7 +40,7 @@ export class AgentMessageHandler {
 
     // Handle status updates - broadcast to all clients
     if (isAgentBroadcastMessage(message)) {
-      const update = (message as any).update as AgentUpdateV1;
+      const update = (message as any).update as AgentUpdate;
       
       if (update?.instance_id) {
         await this.updateProcessor.processUpdate(update.instance_id, update);

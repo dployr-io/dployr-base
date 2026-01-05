@@ -259,6 +259,408 @@ components:
           mode: ready
           uptime_s: 3605
 
+    AgentUpdateV1_1Message:
+      type: object
+      description: |
+        Agent update message for v1.1 with restructured format and expanded metrics.
+        Supports both complete synchronization (is_full_sync: true) and incremental updates.
+      properties:
+        schema:
+          type: string
+          enum: [v1.1]
+          example: v1.1
+        sequence:
+          type: integer
+          description: Monotonically increasing sequence number for updates.
+          example: 100
+        epoch:
+          type: string
+          description: Unique epoch identifier for this agent session.
+          example: my-instance-1767603302
+        instance_id:
+          type: string
+          description: Unique identifier of the instance.
+          example: my-instance
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC3339 timestamp of the update.
+          example: "2026-01-05T10:42:24.519245753+01:00"
+        is_full_sync:
+          type: boolean
+          description: True if this is a full status snapshot, false for partial updates.
+          example: true
+        agent:
+          type: object
+          description: Agent build and platform information (full sync only).
+          properties:
+            version:
+              type: string
+              example: dev
+            commit:
+              type: string
+              example: unknown
+            build_date:
+              type: string
+              example: unknown
+            go_version:
+              type: string
+              example: go1.25.5
+            os:
+              type: string
+              example: linux
+            arch:
+              type: string
+              example: amd64
+        status:
+          type: object
+          description: Current agent status.
+          properties:
+            state:
+              type: string
+              enum: [healthy, degraded, unhealthy]
+              example: healthy
+            mode:
+              type: string
+              enum: [ready, busy, maintenance]
+              example: ready
+            uptime_seconds:
+              type: integer
+              example: 3026
+        health:
+          type: object
+          description: Health status of various subsystems.
+          properties:
+            overall:
+              type: string
+              enum: [ok, degraded, down]
+              example: ok
+            websocket:
+              type: string
+              enum: [ok, degraded, down]
+              example: ok
+            tasks:
+              type: string
+              enum: [ok, degraded, down]
+              example: ok
+            proxy:
+              type: string
+              enum: [ok, degraded, down]
+              example: ok
+            auth:
+              type: string
+              enum: [ok, degraded, down]
+              example: ok
+        resources:
+          type: object
+          description: System resource metrics.
+          properties:
+            cpu:
+              type: object
+              properties:
+                count:
+                  type: integer
+                  example: 4
+                user_percent:
+                  type: number
+                  format: float
+                  example: 0.69
+                system_percent:
+                  type: number
+                  format: float
+                  example: 0.22
+                idle_percent:
+                  type: number
+                  format: float
+                  example: 98.63
+                iowait_percent:
+                  type: number
+                  format: float
+                  example: 0.45
+                load_average:
+                  type: object
+                  properties:
+                    one_minute:
+                      type: number
+                      format: float
+                    five_minute:
+                      type: number
+                      format: float
+                    fifteen_minute:
+                      type: number
+                      format: float
+            memory:
+              type: object
+              properties:
+                total_bytes:
+                  type: integer
+                  format: int64
+                used_bytes:
+                  type: integer
+                  format: int64
+                free_bytes:
+                  type: integer
+                  format: int64
+                available_bytes:
+                  type: integer
+                  format: int64
+                buffer_cache_bytes:
+                  type: integer
+                  format: int64
+            swap:
+              type: object
+              properties:
+                total_bytes:
+                  type: integer
+                  format: int64
+                used_bytes:
+                  type: integer
+                  format: int64
+                free_bytes:
+                  type: integer
+                  format: int64
+                available_bytes:
+                  type: integer
+                  format: int64
+            disks:
+              type: array
+              items:
+                type: object
+                properties:
+                  filesystem:
+                    type: string
+                    example: /dev/sda1
+                  mount_point:
+                    type: string
+                    example: /
+                  total_bytes:
+                    type: integer
+                    format: int64
+                  used_bytes:
+                    type: integer
+                    format: int64
+                  available_bytes:
+                    type: integer
+                    format: int64
+        workloads:
+          type: object
+          description: Deployed applications and services (full sync only).
+          properties:
+            deployments:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            services:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+        proxy:
+          type: object
+          description: Proxy server status and routes.
+          properties:
+            type:
+              type: string
+              example: caddy
+            status:
+              type: string
+              enum: [running, stopped, error]
+              example: running
+            version:
+              type: string
+              example: 2.7.6
+            route_count:
+              type: integer
+              example: 1
+            routes:
+              type: array
+              description: Full route list (full sync only).
+              items:
+                type: object
+                properties:
+                  domain:
+                    type: string
+                  upstream:
+                    type: string
+                  template:
+                    type: string
+                  root:
+                    type: string
+                    nullable: true
+                  status:
+                    type: string
+        processes:
+          type: object
+          description: System process information.
+          properties:
+            summary:
+              type: object
+              properties:
+                total:
+                  type: integer
+                running:
+                  type: integer
+                sleeping:
+                  type: integer
+                stopped:
+                  type: integer
+                zombie:
+                  type: integer
+            list:
+              type: array
+              description: Top processes (full sync only).
+              items:
+                type: object
+                properties:
+                  pid:
+                    type: integer
+                  user:
+                    type: string
+                  priority:
+                    type: integer
+                  nice:
+                    type: integer
+                  virtual_memory_bytes:
+                    type: integer
+                    format: int64
+                  resident_memory_bytes:
+                    type: integer
+                    format: int64
+                  shared_memory_bytes:
+                    type: integer
+                    format: int64
+                  state:
+                    type: string
+                  cpu_percent:
+                    type: number
+                    format: float
+                  memory_percent:
+                    type: number
+                    format: float
+                  cpu_time:
+                    type: string
+                  command:
+                    type: string
+        filesystem:
+          type: object
+          description: Filesystem tree snapshot (full sync only).
+          properties:
+            generated_at:
+              type: string
+              format: date-time
+            is_stale:
+              type: boolean
+            roots:
+              type: array
+              items:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  name:
+                    type: string
+                  type:
+                    type: string
+                  size_bytes:
+                    type: integer
+                    format: int64
+                  modified_at:
+                    type: string
+                    format: date-time
+                  permissions:
+                    type: object
+                    properties:
+                      mode:
+                        type: string
+                      owner:
+                        type: string
+                      group:
+                        type: string
+                      uid:
+                        type: integer
+                      gid:
+                        type: integer
+                      readable:
+                        type: boolean
+                      writable:
+                        type: boolean
+                      executable:
+                        type: boolean
+                  children:
+                    type: array
+                    nullable: true
+                    items:
+                      type: object
+                  is_truncated:
+                    type: boolean
+                  total_children:
+                    type: integer
+        diagnostics:
+          type: object
+          description: Internal diagnostics and health metrics.
+          properties:
+            websocket:
+              type: object
+              properties:
+                is_connected:
+                  type: boolean
+                last_connected_at:
+                  type: string
+                  format: date-time
+                reconnect_count:
+                  type: integer
+                last_error:
+                  type: string
+                  nullable: true
+            tasks:
+              type: object
+              properties:
+                inflight_count:
+                  type: integer
+                unsent_count:
+                  type: integer
+                last_task_id:
+                  type: string
+                last_task_status:
+                  type: string
+                last_task_duration_ms:
+                  type: integer
+                last_task_at:
+                  type: string
+                  format: date-time
+            auth:
+              type: object
+              properties:
+                token_age_seconds:
+                  type: integer
+                token_expires_in_seconds:
+                  type: integer
+                bootstrap_token_preview:
+                  type: string
+            worker:
+              type: object
+              properties:
+                max_concurrent:
+                  type: integer
+                active_jobs:
+                  type: integer
+            cert:
+              type: object
+              properties:
+                not_after:
+                  type: string
+                  format: date-time
+                days_remaining:
+                  type: integer
+      required:
+        - schema
+        - sequence
+        - epoch
+        - instance_id
+        - timestamp
+        - is_full_sync
+
     DaemonTask:
       type: object
       description: Task structure sent from base to daemon via WebSocket.
