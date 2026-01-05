@@ -1311,7 +1311,7 @@ export class ClientMessageHandler {
     conn: ClusterConnection,
     message: ProxyAddMessage
   ): Promise<void> {
-    const { instanceName, clusterId, serviceName, upstream, domain, requestId } = message;
+    const { instanceName, clusterId, serviceName, upstream, domain, template, requestId } = message;
 
     if (!serviceName || !upstream) {
       this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "serviceName and upstream are required");
@@ -1351,7 +1351,7 @@ export class ClientMessageHandler {
     }
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
-    const task = this.dployrdService.createProxyAddTask(taskId, serviceName, upstream, domain, token);
+    const task = this.dployrdService.createProxyAddTask(taskId, serviceName, upstream, domain, template, token);
     const sent = this.sendTaskToCluster(clusterId, task);
 
     if (!sent) {

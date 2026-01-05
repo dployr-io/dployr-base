@@ -1003,6 +1003,10 @@ components:
           type: string
           description: Optional custom domain for the service
           example: "api.example.com"
+        template:
+          type: string
+          description: Optional proxy template to use (e.g., "reverse-proxy")
+          example: "reverse-proxy"
 
     ProxyRemoveMessage:
       type: object

@@ -382,6 +382,7 @@ export interface ProxyAddMessage extends BaseRequestMessage {
   serviceName: string;
   upstream: string;
   domain?: string;
+  template?: string;
 }
 
 export interface ProxyRemoveMessage extends BaseRequestMessage {
@@ -390,7 +391,6 @@ export interface ProxyRemoveMessage extends BaseRequestMessage {
   clusterId: string;
   serviceName: string;
 }
-
 /**
  * Instance operation response messages
  */

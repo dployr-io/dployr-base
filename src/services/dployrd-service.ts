@@ -239,12 +239,13 @@ export class AgentService {
     serviceName: string,
     upstream: string,
     domain?: string,
+    template?: string,
     token?: string
   ): AgentTask {
     return {
       ID: taskId,
       Type: "proxy/add:post",
-      Payload: { serviceName, upstream, domain, token },
+      Payload: { serviceName, upstream, domain, template, token },
       Status: "pending",
     };
   }
@@ -258,7 +259,7 @@ export class AgentService {
     return {
       ID: taskId,
       Type: "proxy/remove:delete",
-      Payload: { serviceName, token },
+      Payload: { domains: [serviceName], token },
       Status: "pending",
     };
   }
