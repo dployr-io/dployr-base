@@ -1,3 +1,8 @@
+## [0.1.44] - 2026-01-05
+
+### 🚜 Refactor
+
+- *(websocket)* Add template parameter to proxy add request
 ## [0.1.43] - 2026-01-03
 
 ### 🚜 Refactor
