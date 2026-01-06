@@ -28,6 +28,8 @@ import type {
   ProxyRestartMessage,
   ProxyAddMessage,
   ProxyRemoveMessage,
+  ProcessHistoryMessage,
+  ProcessHistoryResponseMessage,
 } from "../message-types.js";
 import {
   isClientSubscribeMessage,
@@ -57,6 +59,7 @@ import {
   isProxyRestartMessage,
   isProxyAddMessage,
   isProxyRemoveMessage,
+  isProcessHistoryMessage,
 } from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
@@ -233,6 +236,11 @@ export class ClientMessageHandler {
 
     if (isProxyRemoveMessage(message)) {
       await this.handleProxyRemove(conn, message);
+      return;
+    }
+
+    if (isProcessHistoryMessage(message)) {
+      await this.handleProcessHistory(conn, message);
       return;
     }
   }
@@ -1420,5 +1428,64 @@ export class ClientMessageHandler {
     }
 
     console.log(`[WS] Created proxy remove task ${taskId} for service ${serviceName} (requestId: ${requestId})`);
+  }
+
+  /**
+   * Handle process history request
+   */
+  private async handleProcessHistory(
+    conn: ClusterConnection,
+    message: ProcessHistoryMessage
+  ): Promise<void> {
+    const { instanceId, startTime, endTime, requestId } = message;
+
+    if (!instanceId) {
+      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId is required");
+      return;
+    }
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    try {
+      const instance = await this.db.instances.getByName(instanceId);
+
+      if (!instance) {
+        this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+        return;
+      }
+
+      // Verify user has access to this instance's cluster
+      const userClusters = conn.session.clusters.map(c => c.id);
+      if (!userClusters.includes(instance.clusterId)) {
+        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+        return;
+      }
+
+      // Calculate time range (default: last 1 hour)
+      const now = Date.now();
+      const start = startTime || (now - 60 * 60 * 1000); // 1 hour ago
+      const end = endTime || now;
+
+      // Retrieve process snapshots for the time range
+      const snapshots = await this.kv.getProcessSnapshotsByTimeRange(instanceId, start, end);
+
+      const response: ProcessHistoryResponseMessage = {
+        kind: "process_history_response",
+        requestId,
+        success: true,
+        data: {
+          snapshots,
+        },
+      };
+
+      conn.ws.send(JSON.stringify(response));
+      console.log(`[WS] Retrieved ${snapshots.length} process snapshots for ${instanceId} (requestId: ${requestId})`);
+    } catch (error) {
+      console.error(`[WS] Failed to retrieve process history for ${instanceId}:`, error);
+      this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to retrieve process history");
+    }
   }
 }

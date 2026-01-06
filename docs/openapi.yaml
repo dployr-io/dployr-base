@@ -1441,6 +1441,92 @@ components:
           description: Name of the service to remove from proxy
           example: "api"
 
+    ProcessHistoryMessage:
+      type: object
+      description: WebSocket message to retrieve process history snapshots for an instance
+      required:
+        - kind
+        - requestId
+        - instanceId
+      properties:
+        kind:
+          type: string
+          enum: [process_history]
+          description: Message type
+        requestId:
+          type: string
+          description: Unique request identifier for correlation
+          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        instanceId:
+          type: string
+          description: Instance ID to retrieve process history for
+          example: "my-instance"
+        startTime:
+          type: integer
+          format: int64
+          description: Unix milliseconds timestamp to start from (defaults to 1 hour ago)
+          example: 1704470400000
+        endTime:
+          type: integer
+          format: int64
+          description: Unix milliseconds timestamp to end at (defaults to now)
+          example: 1704474000000
+
+    ProcessHistoryResponseMessage:
+      type: object
+      description: Response containing process history snapshots
+      required:
+        - kind
+        - requestId
+        - success
+      properties:
+        kind:
+          type: string
+          enum: [process_history_response]
+          description: Message type
+        requestId:
+          type: string
+          description: Echoed request identifier for correlation
+          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        success:
+          type: boolean
+          description: Whether the request succeeded
+          example: true
+        data:
+          type: object
+          description: Process history data
+          properties:
+            snapshots:
+              type: array
+              description: Array of process snapshots in chronological order
+              items:
+                type: object
+                properties:
+                  seq:
+                    type: integer
+                    description: Sequence number from agent update
+                    example: 100
+                  timestamp:
+                    type: integer
+                    format: int64
+                    description: Unix milliseconds when snapshot was taken
+                    example: 1704470400000
+                  data:
+                    type: object
+                    description: Process snapshot data (processes, summary, etc.)
+                    additionalProperties: true
+        error:
+          type: object
+          description: Error details if request failed
+          properties:
+            code:
+              type: string
+              description: Error code
+              enum: [MISSING_FIELD, UNAUTHORIZED, NOT_FOUND, PERMISSION_DENIED, INTERNAL_ERROR]
+            message:
+              type: string
+              description: Error message
+
     ProxyStatusResponseMessage:
       type: object
       description: Response to proxy_status request

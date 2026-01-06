@@ -84,6 +84,9 @@ export const MessageKind = {
   PROXY_ADD: "proxy_add",
   PROXY_REMOVE: "proxy_remove",
 
+  // Process history
+  PROCESS_HISTORY: "process_history",
+
   // Server -> Client
   TASK: "task",
   ERROR: "error",
@@ -391,6 +394,14 @@ export interface ProxyRemoveMessage extends BaseRequestMessage {
   clusterId: string;
   serviceName: string;
 }
+
+export interface ProcessHistoryMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.PROCESS_HISTORY;
+  instanceId: string;
+  startTime?: number;  // Unix ms, defaults to 1h ago
+  endTime?: number;    // Unix ms, defaults to now
+}
+
 /**
  * Instance operation response messages
  */
@@ -553,6 +564,20 @@ export interface ProxyRemoveResponseMessage extends BaseMessage {
   };
 }
 
+export interface ProcessHistoryResponseMessage extends BaseMessage {
+  kind: "process_history_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    snapshots: Array<{
+      seq: number;
+      timestamp: number;
+      data: Record<string, unknown>;
+    }>;
+  };
+  error?: { code: WSErrorCode; message: string };
+}
+
 export type InstanceOperationResponse =
   | InstanceListResponseMessage
   | InstanceCreateResponseMessage
@@ -589,6 +614,7 @@ export type ClientMessage =
   | ProxyRestartMessage
   | ProxyAddMessage
   | ProxyRemoveMessage
+  | ProcessHistoryMessage
   | AckMessage;
 
 /**
@@ -820,6 +846,12 @@ export function isProxyAddMessage(msg: BaseMessage): msg is ProxyAddMessage {
 
 export function isProxyRemoveMessage(msg: BaseMessage): msg is ProxyRemoveMessage {
   return msg.kind === MessageKind.PROXY_REMOVE;
+}
+
+export function isProcessHistoryMessage(msg: BaseMessage): msg is ProcessHistoryMessage {
+  console.log("> process history >", msg)
+  
+  return msg.kind === MessageKind.PROCESS_HISTORY;
 }
 
 /**
