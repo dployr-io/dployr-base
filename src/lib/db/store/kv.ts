@@ -478,7 +478,7 @@ export class KVStore {
     const timestamp = Date.now();
     const key = `process:${instanceId}:snapshot:${timestamp}`;
     await this.kv.put(key, JSON.stringify({ seq, timestamp, data: snapshot }), {
-      ttl: 60 * 60 * 24, // 24 hours
+      ttl: 60 * 60 * 2, // 120 minutes
     });
   }
 
