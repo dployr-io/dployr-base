@@ -1,3 +1,10 @@
+## [0.1.45] - 2026-01-06
+
+### 🚜 Refactor
+
+- *(agent)* Add support for v1.1 agent update schema
+- *(websocket)* Add process history retrieval handler with time-range filtering
+- *(kv)* Reduce process snapshot TTL from 24 hours to 2 hours
 ## [0.1.44] - 2026-01-05
 
 ### 🚜 Refactor
