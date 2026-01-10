@@ -29,19 +29,15 @@ export class AgentMessageHandler {
    * Process a message from an agent
    */
   async handleMessage(conn: ClusterConnection, message: BaseMessage): Promise<void> {
-    // Update activity timestamp
     this.connectionManager.updateActivity(conn.ws);
 
-    // Handle task responses - route directly to requesting client
     if (isTaskResponseMessage(message)) {
       await this.handleTaskResponse(message);
       return;
     }
 
-    // Handle status updates - broadcast to all clients
     if (isAgentBroadcastMessage(message)) {
       const update = (message as any).update as AgentUpdate;
-      
       if (update?.instance_id) {
         await this.updateProcessor.processUpdate(update.instance_id, update);
       }
@@ -50,13 +46,11 @@ export class AgentMessageHandler {
       return;
     }
 
-    // Handle log chunks - route to specific subscription
     if (isLogChunkMessage(message)) {
       this.handleLogChunk(message);
       return;
     }
 
-    // Handle file system updates - broadcast to subscribed clients
     if (isFileUpdateMessage(message)) {
       this.handleFileUpdate(conn.clusterId, message);
       return;

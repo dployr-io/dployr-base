@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { BaseMessage } from "@/lib/websocket/message-types.js";
+import type { BaseMessage, UpdateMessage } from "@/lib/websocket/message-types.js";
 import { MessageKind } from "@/lib/websocket/message-types.js";
 import { ConnectionManager } from "@/lib/websocket/connection-manager.js";
 import { KVStore } from "@/lib/db/store/kv.js";
@@ -20,17 +20,9 @@ export class ClientNotifier {
   ) {}
 
   /**
-   * Broadcast status updates to all client connections in a cluster.
-   * 
-   * This should ONLY be used for:
-   * - System status updates
-   * - Deployment status changes
-   * - Other cluster-wide notifications
-   * 
-   * For request-response patterns (file ops, deploys), use 
-   * ConnectionManager.routeResponseToClient() instead.
+   * Broadcast status updates to all client connections in a cluster. 
    */
-  async broadcast(clusterId: string, message: BaseMessage): Promise<void> {
+  async broadcast(clusterId: string, message: UpdateMessage): Promise<void> {
     const clients = this.conn.getClientConnections(clusterId);
     if (clients.length === 0) return;
 
