@@ -849,8 +849,6 @@ export function isProxyRemoveMessage(msg: BaseMessage): msg is ProxyRemoveMessag
 }
 
 export function isProcessHistoryMessage(msg: BaseMessage): msg is ProcessHistoryMessage {
-  console.log("> process history >", msg)
-  
   return msg.kind === MessageKind.PROCESS_HISTORY;
 }
 

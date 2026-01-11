@@ -125,9 +125,6 @@ export class WebSocketHandler {
     if (conn.role === "agent") {
       this.dployrdHandler.handleAgentDisconnect(conn.clusterId);
     }
-
-    // Don't immediately remove session mapping for clients (allow reconnection)
-    // Session mapping will be overwritten on reconnect
   }
 
   /**
