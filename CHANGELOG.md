@@ -1,3 +1,9 @@
+## [0.1.46] - 2026-01-11
+
+### 🚜 Refactor
+
+- *(websocket)* Simplify agent handler and update broadcast signature
+- *(websocket)* Remove debug logging and obsolete comment
 ## [0.1.45] - 2026-01-06
 
 ### 🚜 Refactor
