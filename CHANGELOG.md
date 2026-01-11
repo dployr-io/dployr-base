@@ -1,3 +1,8 @@
+## [0.1.47] - 2026-01-11
+
+### 🚜 Refactor
+
+- *(websocket)* Replay only last unacked message instead of all messages
 ## [0.1.46] - 2026-01-11
 
 ### 🚜 Refactor
