@@ -74,8 +74,8 @@ export class ClientNotifier {
     const messages = this.conn.getUnackedMessages();
     let replayed = 0;
 
-    for (const { messageId, message } of messages) {
-      // Only replay messages for this cluster
+    if (messages.length > 0) {
+      const { messageId, message } = messages[messages.length - 1];
       if (messageId.startsWith(`${clusterId}:`)) {
         const sent = await this.sendToClient(clusterId, connectionId, message as BaseMessage);
         if (sent) replayed++;
