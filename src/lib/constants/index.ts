@@ -26,6 +26,7 @@ export const ERROR = {
         MISSING_PARAMS: { code: "request.missing_params", status: 400, message: "Missing required parameters" },
         BAD_REQUEST: { code: "request.bad_request", status: 400, message: "Bad request" },
         INVALID_OTP: { code: "request.invalid_otp", status: 400, message: "Invalid OTP" },
+        UNPROCESSABLE_ENTITY: { code: "request.unprocessable_entity", status: 422, message: "Unprocessable entity" },
         TOO_MANY_REQUESTS: { code: "request.too_many_requests", status: 429, message: "Too many requests" }
     },
     VALIDATION: {
