@@ -196,8 +196,6 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
     domainRecord = await db.domains.create(instanceId, normalizedDomain, token, provider);
   }
 
-  // Build records from stored data (never regenerate token)
-  // Use instance.address for A record target
   const { record, verification } = dns.buildRecordsFromStored(
     normalizedDomain,
     instance.address,
@@ -273,7 +271,13 @@ domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (
       );
     }
 
-    await dns.checkTxtRecord(domain, record.verificationToken);
+    const verified = await dns.checkTxtRecord(domain, record.verificationToken);
+    if (!verified) {
+      return c.json(
+        createErrorResponse({ message: "TXT record not found", code: ERROR.REQUEST.UNPROCESSABLE_ENTITY.code }),
+        422
+      );
+    }
 
     await db.domains.activate(domain);
     return new Response(null, { status: 204 });

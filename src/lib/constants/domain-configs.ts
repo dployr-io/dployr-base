@@ -24,12 +24,12 @@ export const OAUTH_CONFIGS: Partial<Record<DNSProvider, OAuthConfig>> = {
 };
 
 export const MANUAL_GUIDES: Record<DNSProvider, string> = {
-  cloudflare: "https://docs.dployr.io/domains/cloudflare",
-  godaddy: "https://docs.dployr.io/domains/godaddy",
-  digitalocean: "https://docs.dployr.io/domains/digitalocean",
-  route53: "https://docs.dployr.io/domains/route53",
-  namecheap: "https://docs.dployr.io/domains/namecheap",
-  google: "https://docs.dployr.io/domains/google",
+  cloudflare: "https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/",
+  godaddy: "https://www.godaddy.com/en-ph/help/manage-dns-records-680",
+  digitalocean: "https://docs.digitalocean.com/products/networking/dns/how-to/manage-records/",
+  route53: "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-creating.html",
+  namecheap: "https://www.namecheap.com/support/knowledgebase/article.aspx/9646/2237/how-do-i-add-or-edit-dns-records/",
+  google: "https://cloud.google.com/dns/docs/records",
   unknown: "https://docs.dployr.io/domains/manual",
 };
 
