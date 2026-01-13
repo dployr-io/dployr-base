@@ -1,3 +1,9 @@
+## [0.1.48] - 2026-01-13
+
+### 🚜 Refactor
+
+- *(constants)* Add UNPROCESSABLE_ENTITY error constant with 422 status code
+- *(domains)* Update manual DNS guides to use official docs
 ## [0.1.47] - 2026-01-11
 
 ### 🚜 Refactor
