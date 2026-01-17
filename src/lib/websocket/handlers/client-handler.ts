@@ -531,7 +531,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(service.instanceId);
+    const instance = await this.db.instances.get(service.instanceId);
     if (!instance) {
       this.connectionManager.removePendingRequest(taskId);
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -1512,8 +1512,8 @@ export class ClientMessageHandler {
   ): Promise<void> {
     const { instanceId, startTime, endTime, requestId } = message;
 
-    if (!instanceId) {
-      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId is required");
+    if (!requestId) {
+      console.warn("[WS] Process history request missing requestId");
       return;
     }
 
