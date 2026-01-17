@@ -1,3 +1,8 @@
+## [0.1.50] - 2026-01-17
+
+### 🚜 Refactor
+
+- *(websocket)* Fix instance lookup and requestId validation in client handler
 ## [0.1.49] - 2026-01-17
 
 ### 🚀 Features
