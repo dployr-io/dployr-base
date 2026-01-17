@@ -1,3 +1,8 @@
+## [0.1.49] - 2026-01-17
+
+### 🚀 Features
+
+- *(terminal)* Add interactive terminal session support via WebSocket relay to dployrd
 ## [0.1.48] - 2026-01-13
 
 ### 🚜 Refactor
