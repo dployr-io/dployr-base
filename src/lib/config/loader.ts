@@ -203,6 +203,6 @@ function loadConfigFromEnv(): Config {
       base_domain: process.env.PROXY_BASE_DOMAIN || 'dployr.io',
       timeout_ms: process.env.PROXY_TIMEOUT_MS ? parseInt(process.env.PROXY_TIMEOUT_MS) : 30000,
       cache_ttl_seconds: process.env.PROXY_CACHE_TTL_SECONDS ? parseInt(process.env.PROXY_CACHE_TTL_SECONDS) : 30,
-    },
+    }
   });
 }

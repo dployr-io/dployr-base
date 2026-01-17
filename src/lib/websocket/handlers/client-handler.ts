@@ -30,6 +30,8 @@ import type {
   ProxyRemoveMessage,
   ProcessHistoryMessage,
   ProcessHistoryResponseMessage,
+  TerminalMessage,
+  TerminalOpenMessage,
 } from "../message-types.js";
 import {
   isClientSubscribeMessage,
@@ -60,11 +62,15 @@ import {
   isProxyAddMessage,
   isProxyRemoveMessage,
   isProcessHistoryMessage,
+  isTerminalMessage,
+  isTerminalOpenMessage,
 } from "../message-types.js";
 import { AgentService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/index.js";
+import { TerminalManager } from "../terminal-manager.js";
+import { loadConfig } from "@/lib/config/loader.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -72,6 +78,7 @@ export interface ClientHandlerDependencies {
   db: DatabaseStore;
   jwtService: JWTService;
   dployrdService: AgentService;
+  terminalManager: TerminalManager;
   sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
 }
 
@@ -84,7 +91,9 @@ export class ClientMessageHandler {
   private db: DatabaseStore;
   private jwtService: JWTService;
   private dployrdService: AgentService;
+  private terminalManager: TerminalManager;
   private sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
+  private config = loadConfig();
 
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
@@ -92,6 +101,7 @@ export class ClientMessageHandler {
     this.db = deps.db;
     this.jwtService = deps.jwtService;
     this.dployrdService = deps.dployrdService;
+    this.terminalManager = deps.terminalManager;
     this.sendTaskToCluster = deps.sendTaskToCluster;
   }
 
@@ -241,6 +251,16 @@ export class ClientMessageHandler {
 
     if (isProcessHistoryMessage(message)) {
       await this.handleProcessHistory(conn, message);
+      return;
+    }
+
+    if (isTerminalOpenMessage(message)) {
+      await this.handleTerminalOpen(conn, message);
+      return;
+    }
+
+    if (isTerminalMessage(message)) {
+      await this.handleTerminal(conn, message);
       return;
     }
   }
@@ -511,7 +531,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.get(service.instanceId);
+    const instance = await this.db.instances.getByName(service.instanceId);
     if (!instance) {
       this.connectionManager.removePendingRequest(taskId);
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -611,7 +631,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.get(instanceId);
+    const instance = await this.db.instances.getByName(instanceId);
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -665,7 +685,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.get(instanceId);
+    const instance = await this.db.instances.getByName(instanceId);
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -719,7 +739,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.get(instanceId);
+    const instance = await this.db.instances.getByName(instanceId);
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -773,7 +793,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.get(instanceId);
+    const instance = await this.db.instances.getByName(instanceId);
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -827,7 +847,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.get(instanceId);
+    const instance = await this.db.instances.getByName(instanceId);
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -1060,7 +1080,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.get(instanceId);
+    const instance = await this.db.instances.getByName(instanceId);
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -1111,7 +1131,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.get(instanceId);
+    const instance = await this.db.instances.getByName(instanceId);
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -1143,6 +1163,59 @@ export class ClientMessageHandler {
       success: true,
       data: { path },
     }));
+  }
+
+  /**
+   * Handle terminal open request - sends task to agent to initiate outbound WebSocket
+   */
+  private async handleTerminalOpen(conn: ClusterConnection, message: TerminalOpenMessage): Promise<void> {
+    const { instanceId, requestId, cols, rows } = message;
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    const instance = await this.db.instances.getByName(instanceId);
+    if (!instance) {
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      return;
+    }
+
+    const userClusters = conn.session.clusters.map(c => c.id);
+    if (!userClusters.includes(instance.clusterId)) {
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+      return;
+    }
+
+    const sessionId = `${instanceId}:${ulid()}`;
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, instance.clusterId);
+
+    this.terminalManager.expectSession(sessionId, conn.ws, instanceId);
+
+    const taskId = ulid();
+    const task = this.dployrdService.createTerminalOpen(taskId, sessionId, cols, rows, token);
+
+    const sent = this.sendTaskToCluster(instance.clusterId, task);
+    if (!sent) {
+      this.terminalManager.removeExpectedSession(sessionId);
+      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agent available");
+      return;
+    }
+  }
+
+  /**
+   * Handle terminal I/O messages - relay through established session
+   */
+  private async handleTerminal(conn: ClusterConnection, message: TerminalMessage): Promise<void> {
+    const { requestId } = message;
+
+    if (!conn.session) {
+      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      return;
+    }
+
+    this.terminalManager.handleClientMessage(conn.ws, message);
   }
 
   /**

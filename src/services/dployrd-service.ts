@@ -206,6 +206,22 @@ export class AgentService {
     };
   }
 
+  // Create a terminal open task
+  createTerminalOpen(
+    taskId: string,
+    sessionId: string,
+    cols: number,
+    rows: number,
+    token?: string
+  ): AgentTask {
+    return {
+      ID: taskId,
+      Type: "terminal/open:post",
+      Payload: { sessionId, token, cols, rows },
+      Status: "pending",
+    }
+  }
+
   // Create a proxy status task
   createProxyStatusTask(
     taskId: string,

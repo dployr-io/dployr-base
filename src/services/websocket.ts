@@ -115,6 +115,40 @@ export class WebSocketService {
     this.server.on('upgrade', async (message: IncomingMessage, socket: Socket, head: Buffer) => {
       const url = new URL(message.url || '', `http://${message.headers.host}`);
       
+      // Handle terminal relay endpoint - agent outbound connections
+      // Matches: /v1/terminal/ws?sessionId=...
+      if (url.pathname === '/v1/terminal/ws') {
+        const sessionId = url.searchParams.get('sessionId');
+        
+        if (!sessionId) {
+          socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+        
+        const authHeader = message.headers['authorization'] || message.headers['Authorization'];
+        const auth = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+        if (!auth || !auth.startsWith('Bearer ')) {
+          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+
+        if (!this.adapters?.ws) {
+          socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+
+        this.wss.handleUpgrade(message, socket, head, (ws: WebSocket) => {
+          const accepted = this.adapters!.ws.acceptTerminalConnection(sessionId!, ws);
+          if (!accepted) {
+            ws.close(1008, 'Session not found or expired');
+          }
+        });
+        return;
+      }
+      
       // Handle cluster WebSocket streams
       // Matches: /v1/instances/stream OR /v1/agent/ws
       if (url.pathname.match(/\/v1\/(instances\/stream|agent\/ws)$/)) {

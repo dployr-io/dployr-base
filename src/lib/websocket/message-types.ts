@@ -71,6 +71,10 @@ export const MessageKind = {
   FILE_WATCH: "file_watch",
   FILE_UNWATCH: "file_unwatch",
   FILE_UPDATE: "file_update",
+
+  // Terminal operations
+  TERMINAL: "terminal",
+  TERMINAL_OPEN: "terminal_open",
   
   // Instance operations
   INSTANCE_TOKEN_ROTATE: "instance_token_rotate",
@@ -256,6 +260,24 @@ export interface FileUpdateMessage extends BaseMessage {
   event: FileUpdateEvent;
 }
 
+export interface TerminalMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.TERMINAL;
+  sessionId?: string;
+  instanceId: string;
+  action: "input" | "resize" | "close" | "output" | "error";
+  data?: string;
+  cols?: number;
+  rows?: number;
+  error?: string;
+}
+
+export interface TerminalOpenMessage extends BaseRequestMessage {
+  kind: typeof MessageKind.TERMINAL_OPEN;
+  instanceId: string;
+  cols: number;
+  rows: number;
+}
+
 /**
  * File operation response messages
  */
@@ -311,6 +333,20 @@ export interface FileTreeResponseMessage extends BaseMessage {
   taskId: string;
   success: boolean;
   root?: FileNode;
+  error?: {
+    code: WSErrorCode;
+    message: string;
+  };
+}
+
+export interface TerminalOpenResponseMessage extends BaseMessage {
+  kind: "terminal_open_response";
+  requestId: string;
+  success: boolean;
+  data?: {
+    sessionId: string;
+    message: string;
+  };
   error?: {
     code: WSErrorCode;
     message: string;
@@ -615,6 +651,7 @@ export type ClientMessage =
   | ProxyAddMessage
   | ProxyRemoveMessage
   | ProcessHistoryMessage
+  | TerminalOpenMessage
   | AckMessage;
 
 /**
@@ -850,6 +887,14 @@ export function isProxyRemoveMessage(msg: BaseMessage): msg is ProxyRemoveMessag
 
 export function isProcessHistoryMessage(msg: BaseMessage): msg is ProcessHistoryMessage {
   return msg.kind === MessageKind.PROCESS_HISTORY;
+}
+
+export function isTerminalMessage(msg: BaseMessage): msg is TerminalMessage {
+  return msg.kind === MessageKind.TERMINAL;
+}
+
+export function isTerminalOpenMessage(msg: BaseMessage): msg is TerminalOpenMessage {
+  return msg.kind === MessageKind.TERMINAL_OPEN;
 }
 
 /**

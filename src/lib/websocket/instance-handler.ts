@@ -14,7 +14,9 @@ import { ConnectionManager, ConnectionManagerConfig } from "./connection-manager
 import { AgentMessageHandler } from "./handlers/agent-handler.js";
 import { ClientMessageHandler } from "./handlers/client-handler.js";
 import { ClientNotifier } from "./handlers/client-notifier.js";
+import { TerminalManager } from "./terminal-manager.js";
 import { parseMessage, MessageKind, type ClusterConnection, isAckMessage } from "./message-types.js";
+import { loadConfig } from "@/lib/config/loader.js";
 
 export interface WebSocketHandlerConfig {
   connectionManager?: Partial<ConnectionManagerConfig>;
@@ -29,38 +31,40 @@ export class WebSocketHandler {
   private dployrdHandler: AgentMessageHandler;
   private clientHandler: ClientMessageHandler;
   private clientNotifier: ClientNotifier;
+  private terminalManager: TerminalManager;
   private sessionConnections = new Map<string, string>();
+  private dbStore: DatabaseStore;
+  private config = loadConfig();
 
   constructor(private kv: IKVAdapter, private db: PostgresAdapter, config?: WebSocketHandlerConfig) {
     this.connectionManager = new ConnectionManager(config?.connectionManager);
 
     const kvStore = new KVStore(this.kv);
-    const dbStore = new DatabaseStore(this.db, kvStore);
+    this.dbStore = new DatabaseStore(this.db, kvStore);
 
     this.clientNotifier = new ClientNotifier(this.connectionManager, kvStore);
 
     // Initialize handlers with dependencies
-    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, this.clientNotifier, dbStore, kvStore);
+    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, kvStore);
 
     const jwtService = new JWTService(kvStore);
     const dployrdService = new AgentService();
 
+    // Initialize terminal manager with agent URL resolver
+    this.terminalManager = new TerminalManager(300000); // 5 minute session timeout
     this.clientHandler = new ClientMessageHandler({
       connectionManager: this.connectionManager,
       kv: kvStore,
-      db: dbStore,
+      db: this.dbStore,
       jwtService,
       dployrdService,
+      terminalManager: this.terminalManager,
       sendTaskToCluster: this.sendTaskToCluster.bind(this),
     });
   }
 
   /**
    * Register a new WebSocket connection for a cluster.
-   * @param clusterId - The cluster to connect to
-   * @param ws - The WebSocket connection
-   * @param role - Whether this is an agent or client connection
-   * @param session - Optional session (for client connections)
    */
   acceptWebSocket(
     clusterId: string,
@@ -74,7 +78,6 @@ export class WebSocketHandler {
     if (role === "client" && session) {
       const previousConnectionId = this.sessionConnections.get(session.userId);
       if (previousConnectionId) {
-        // Replay unacked messages
         this.clientNotifier.replayUnackedMessages(clusterId, conn.connectionId);
       }
       this.sessionConnections.set(session.userId, conn.connectionId);
@@ -191,10 +194,18 @@ export class WebSocketHandler {
   }
 
   /**
+   * Accept terminal relay connection from agent
+   */
+  public acceptTerminalConnection(sessionId: string, ws: WebSocket): boolean {
+    return this.terminalManager.acceptAgentConnection(sessionId, ws);
+  }
+
+  /**
    * Graceful shutdown
    */
   public shutdown(): void {
     this.connectionManager.stopCleanupLoop();
+    this.terminalManager.destroy();
     console.log("[WS] WebSocket handler shutdown complete");
   }
 }

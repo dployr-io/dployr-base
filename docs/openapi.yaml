@@ -4151,6 +4151,164 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/instances/{instanceId}/terminal/open:
+    post:
+      operationId: openTerminalSession
+      tags:
+        - Instances
+      summary: Open terminal session
+      description: |
+        Initiate an interactive terminal session via task execution.
+        
+        **Limits**:
+        - Max concurrent sessions: 10 per instance
+        - Session timeout: 30 minutes of inactivity
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: instanceId
+          required: true
+          schema:
+            type: string
+          description: Instance ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - cols
+                - rows
+              properties:
+                cols:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  example: 80
+                  description: Terminal width in columns
+                rows:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  example: 24
+                  description: Terminal height in rows
+      responses:
+        '200':
+          description: Terminal session initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      sessionId:
+                        type: string
+                        description: Unique terminal session identifier
+                      message:
+                        type: string
+                        example: "terminal session initiated"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: Session limit reached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/terminal/ws:
+    get:
+      operationId: terminalRelayWebSocket
+      tags:
+        - Instances
+      summary: Terminal relay WebSocket endpoint
+      x-requiredRole: public
+      description: |
+        WebSocket endpoint for agent outbound terminal connections.
+        
+        **WebSocket Messages**:
+        
+        ### From Agent to Base:
+        ```json
+        {
+          "action": "output",
+          "data": "terminal output text"
+        }
+        ```
+        
+        ### From Base to Agent:
+        ```json
+        {
+          "action": "input",
+          "data": "user input"
+        }
+        ```
+        
+        ```json
+        {
+          "action": "resize",
+          "cols": 80,
+          "rows": 24
+        }
+        ```
+        
+        ```json
+        {
+          "action": "close"
+        }
+        ```        
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: sessionId
+          required: true
+          schema:
+            type: string
+          description: Terminal session ID (from terminal/open response)
+      responses:
+        '101':
+          description: WebSocket protocol upgrade successful
+        '400':
+          description: Missing or invalid sessionId parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v1/proxy/resolve:
     get:
       operationId: resolveProxyRoute
