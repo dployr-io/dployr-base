@@ -6,14 +6,28 @@ import { ulid } from "ulid";
 import { CryptoKey, importPKCS8 } from "jose";
 import { generateKeyPair } from "@/lib/crypto/keystore.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { FAILED_WORKFLOW_EVENT_TTL, OTP_TTL, SESSION_TTL, STATE_TTL, EVENT_TTL, AGENT_UPDATE_TTL, RELEASE_CACHE_TTL, DEDUP_TTL, PENDING_GITHUB_INSTALL_TTL, INSTANCE_STATUS_TTL } from "@/lib/constants/index.js";
+import {
+  FAILED_WORKFLOW_EVENT_TTL,
+  OTP_TTL,
+  SESSION_TTL,
+  STATE_TTL,
+  EVENT_TTL,
+  NODE_UPDATE_TTL,
+  RELEASE_CACHE_TTL,
+  DEDUP_TTL,
+  PENDING_GITHUB_INSTALL_TTL,
+  INSTANCE_STATUS_TTL,
+} from "@/lib/constants/index.js";
 import { JsonWebKey } from "crypto";
 
 export class KVStore {
-  constructor(public kv: IKVAdapter, private githubToken?: string) { }
+  constructor(
+    public kv: IKVAdapter,
+    private githubToken?: string,
+  ) {}
 
   // Session management
-  async createSession(sessionId: string, user: Omit<User, "createdAt" | "updatedAt">, clusters: { id: string, name: string, owner: string, role: string }[]): Promise<Session> {
+  async createSession(sessionId: string, user: Omit<User, "createdAt" | "updatedAt">, clusters: { id: string; name: string; owner: string; role: string }[]): Promise<Session> {
     const session: Session = {
       userId: user.id,
       email: user.email,
@@ -87,39 +101,29 @@ export class KVStore {
   }
 
   // Event management
-  async logEvent({
-    type,
-    actor,
-    targets,
-    request
-  }: {
-    type: string;
-    actor: { id: string; type: ActorType };
-    targets?: { id: string }[];
-    request: Request;
-  }): Promise<void> {
+  async logEvent({ type, actor, targets, request }: { type: string; actor: { id: string; type: ActorType }; targets?: { id: string }[]; request: Request }): Promise<void> {
     const headers = request.headers;
 
-    const timezone =
-      headers.get('x-timezone') ||
-      'UTC';
+    const timezone = headers.get("x-timezone") || "UTC";
 
     const baseEvent = {
       type,
       actor,
       timestamp: Date.now(),
       timezone,
-      timezoneOffset: new Date().toLocaleString('en-US', {
+      timezoneOffset: new Date().toLocaleString("en-US", {
         timeZone: timezone,
-        timeZoneName: 'shortOffset',
-      })
+        timeZoneName: "shortOffset",
+      }),
     };
 
-    const ray =
-      headers.get('x-ray-id') ||
-      headers.get('x-request-id') ||
-      '';
-    const targetScope = Array.isArray(targets) ? targets.map(t => t.id).sort().join(",") : "";
+    const ray = headers.get("x-ray-id") || headers.get("x-request-id") || "";
+    const targetScope = Array.isArray(targets)
+      ? targets
+          .map((t) => t.id)
+          .sort()
+          .join(",")
+      : "";
     const idemKey = `event:idem:${type}:${actor.id}:${ray}:${targetScope}`;
     if (ray) {
       const exists = await this.kv.get(idemKey);
@@ -139,9 +143,7 @@ export class KVStore {
       };
 
       const actorKey = `actor:${actor.id}:event:${id}`;
-      const writes: Promise<any>[] = [
-        this.kv.put(actorKey, JSON.stringify(actorEvent), { ttl: EVENT_TTL })
-      ];
+      const writes: Promise<any>[] = [this.kv.put(actorKey, JSON.stringify(actorEvent), { ttl: EVENT_TTL })];
 
       for (const target of targets) {
         const event = {
@@ -158,7 +160,7 @@ export class KVStore {
       // No targets, create single event
       const event = {
         ...baseEvent,
-        id: ulid()
+        id: ulid(),
       };
 
       const actorKey = `actor:${actor.id}:event:${event.id}`;
@@ -178,9 +180,9 @@ export class KVStore {
           console.warn("[KV] Skipping invalid event JSON", { key: key.name, err });
           return null;
         }
-      })
+      }),
     );
-    return events.filter(e => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
+    return events.filter((e) => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
   }
 
   async getClusterEvents(clusterId: string): Promise<any[]> {
@@ -202,9 +204,9 @@ export class KVStore {
         } catch (err) {
           return null;
         }
-      })
+      }),
     );
-    return events.filter(e => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
+    return events.filter((e) => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
   }
 
   async createWorkflowFailedEvent(id: string, data: Record<string, unknown>): Promise<void> {
@@ -215,13 +217,17 @@ export class KVStore {
 
   // OAuth state management (CSRF protection)
   async createState(state: string, redirectUrl: string): Promise<void> {
-    await this.kv.put(`state:${state}`, JSON.stringify({
-      state,
-      redirectUrl,
-      createdAt: Date.now()
-    }), {
-      ttl: STATE_TTL,
-    });
+    await this.kv.put(
+      `state:${state}`,
+      JSON.stringify({
+        state,
+        redirectUrl,
+        createdAt: Date.now(),
+      }),
+      {
+        ttl: STATE_TTL,
+      },
+    );
   }
 
   async validateState(state: string): Promise<string | null> {
@@ -258,7 +264,7 @@ export class KVStore {
         createdAt: Date.now(),
         attempts: 0,
       }),
-      { ttl: OTP_TTL }
+      { ttl: OTP_TTL },
     );
 
     return code;
@@ -312,22 +318,22 @@ export class KVStore {
     return data;
   }
 
-  // Agent update management
-  async saveAgentUpdate(instanceId: string, update: Record<string, unknown>): Promise<void> {
+  // Node update management
+  async saveNodeUpdate(instanceId: string, update: Record<string, unknown>): Promise<void> {
     const now = Date.now();
     const data = {
       ...update,
       lastUpdated: now,
     };
-    
+
     // Save latest update with TTL
-    await this.kv.put(`agent:${instanceId}:update`, JSON.stringify(data), {
-      ttl: AGENT_UPDATE_TTL,
+    await this.kv.put(`node:${instanceId}:update`, JSON.stringify(data), {
+      ttl: NODE_UPDATE_TTL,
     });
   }
 
-  async getAgentUpdate(instanceId: string): Promise<Record<string, unknown> | null> {
-    const data = await this.kv.get(`agent:${instanceId}:update`);
+  async getNodeUpdate(instanceId: string): Promise<Record<string, unknown> | null> {
+    const data = await this.kv.get(`node:${instanceId}:update`);
     if (!data) return null;
     return JSON.parse(data);
   }
@@ -399,7 +405,7 @@ export class KVStore {
   async cacheInstance(instance: { id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number }): Promise<void> {
     const data = JSON.stringify(instance);
     const ttl = INSTANCE_STATUS_TTL;
-    
+
     // Cache by ID, clusterId+tag, and tag-only for triple lookup support
     await Promise.all([
       this.kv.put(`instance:id:${instance.id}`, data, { ttl }),
@@ -439,18 +445,16 @@ export class KVStore {
   }
 
   async invalidateInstanceCache(instanceId: string, clusterId?: string, tag?: string): Promise<void> {
-    const deletes: Promise<void>[] = [
-      this.kv.delete(`instance:id:${instanceId}`),
-    ];
-    
+    const deletes: Promise<void>[] = [this.kv.delete(`instance:id:${instanceId}`)];
+
     if (clusterId && tag) {
       deletes.push(this.kv.delete(`instance:name:${clusterId}:${tag}`));
     }
-    
+
     if (tag) {
       deletes.push(this.kv.delete(`instance:tag:${tag}`));
     }
-    
+
     await Promise.all(deletes);
   }
 
@@ -494,7 +498,7 @@ export class KVStore {
     const prefix = `process:${instanceId}:snapshot:`;
     const maxLimit = Math.min(limit, 1000); // Cap at 1000 snapshots max
     const result = await this.kv.list({ prefix, limit: maxLimit });
-    
+
     const snapshots = await Promise.all(
       result.map(async (key) => {
         const data = await this.kv.get(key.name);
@@ -511,7 +515,7 @@ export class KVStore {
         } catch {
           return null;
         }
-      })
+      }),
     );
 
     return snapshots
@@ -520,18 +524,14 @@ export class KVStore {
       .slice(0, maxLimit);
   }
 
-  async getProcessSnapshotsByTimeRange(
-    instanceId: string,
-    startTime: number,
-    endTime: number
-  ): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
+  async getProcessSnapshotsByTimeRange(instanceId: string, startTime: number, endTime: number): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
     // Cap at 1 hour max range
     const maxRange = 60 * 60 * 1000; // 1 hour in milliseconds
     const cappedEndTime = Math.min(endTime, startTime + maxRange);
 
     const prefix = `process:${instanceId}:snapshot:`;
     const result = await this.kv.list({ prefix, limit: 10000 });
-    
+
     const snapshots = await Promise.all(
       result.map(async (key) => {
         const data = await this.kv.get(key.name);
@@ -539,10 +539,10 @@ export class KVStore {
         const timestampMatch = key.name.match(/:snapshot:(\d+)$/);
         if (!timestampMatch) return null;
         const timestamp = parseInt(timestampMatch[1], 10);
-        
+
         // Filter by time range
         if (timestamp < startTime || timestamp > cappedEndTime) return null;
-        
+
         try {
           const parsed = JSON.parse(data);
           return {
@@ -553,11 +553,9 @@ export class KVStore {
         } catch {
           return null;
         }
-      })
+      }),
     );
 
-    return snapshots
-      .filter((s): s is { seq: number; timestamp: number; data: Record<string, unknown> } => s !== null)
-      .sort((a, b) => a.timestamp - b.timestamp); // Ascending order for timeline
+    return snapshots.filter((s): s is { seq: number; timestamp: number; data: Record<string, unknown> } => s !== null).sort((a, b) => a.timestamp - b.timestamp); // Ascending order for timeline
   }
 }

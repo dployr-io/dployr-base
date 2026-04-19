@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse, SystemStatus } from "@/types/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { DatabaseStore } from "@/lib/db/store/index.js";
-import { AgentService } from "@/services/dployrd-service.js";
+import { NodeService } from "@/services/dployrd-service.js";
 import { InstanceService } from "@/services/instances.js";
 import { InstanceConflictError } from "@/lib/db/store/instances.js";
 import z from "zod";
@@ -380,9 +380,9 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
     }
 
     const ws = getWS(c);
-    if (!ws.hasAgentConnection(clusterId)) {
+    if (!ws.hasNodeConnection(clusterId)) {
       return c.json(createErrorResponse({
-        message: "No agents connected to cluster",
+        message: "No nodes connected to cluster",
         code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code,
       }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
@@ -392,7 +392,7 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
     const jwtService = new JWTService(kv);
 
     const taskId = ulid();
-    const dployrd = new AgentService();
+    const dployrd = new NodeService();
     const token = await jwtService.createInstanceAccessToken(
       session,
       instanceId,
@@ -407,7 +407,7 @@ instances.post("/:instanceId/system/install", requireClusterOwner, async (c) => 
     const sent = ws.sendTaskToCluster(clusterId, task);
     if (!sent) {
       return c.json(createErrorResponse({
-        message: "Failed to send install task to agent",
+        message: "Failed to send install task to node",
         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
       }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
     }
@@ -467,9 +467,9 @@ instances.post("/:instanceId/system/reboot", requireClusterAdmin, async (c) => {
     }
 
     const ws = getWS(c);
-    if (!ws.hasAgentConnection(clusterId)) {
+    if (!ws.hasNodeConnection(clusterId)) {
       return c.json(createErrorResponse({
-        message: "No agents connected to cluster",
+        message: "No nodes connected to cluster",
         code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code,
       }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
@@ -478,7 +478,7 @@ instances.post("/:instanceId/system/reboot", requireClusterAdmin, async (c) => {
     const jwtService = new JWTService(kv);
 
     const taskId = ulid();
-    const dployrd = new AgentService();
+    const dployrd = new NodeService();
     const session = c.get("session")!;
     const token = await jwtService.createInstanceAccessToken(
       session,
@@ -494,7 +494,7 @@ instances.post("/:instanceId/system/reboot", requireClusterAdmin, async (c) => {
     const sent = ws.sendTaskToCluster(clusterId, task);
     if (!sent) {
       return c.json(createErrorResponse({
-        message: "Failed to send reboot task to agent",
+        message: "Failed to send reboot task to node",
         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
       }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
     }
@@ -554,9 +554,9 @@ instances.post("/:instanceId/system/restart", requireClusterDeveloper, async (c)
     }
 
     const ws = getWS(c);
-    if (!ws.hasAgentConnection(clusterId)) {
+    if (!ws.hasNodeConnection(clusterId)) {
       return c.json(createErrorResponse({
-        message: "No agents connected to cluster",
+        message: "No nodes connected to cluster",
         code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code,
       }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
@@ -565,7 +565,7 @@ instances.post("/:instanceId/system/restart", requireClusterDeveloper, async (c)
     const jwtService = new JWTService(kv);
 
     const taskId = ulid();
-    const dployrd = new AgentService();
+    const dployrd = new NodeService();
     const session = c.get("session")!;
     const token = await jwtService.createInstanceAccessToken(
       session,
@@ -581,7 +581,7 @@ instances.post("/:instanceId/system/restart", requireClusterDeveloper, async (c)
     const sent = ws.sendTaskToCluster(clusterId, task);
     if (!sent) {
       return c.json(createErrorResponse({
-        message: "Failed to send restart task to agent",
+        message: "Failed to send restart task to node",
         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
       }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
     }

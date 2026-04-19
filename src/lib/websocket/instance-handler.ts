@@ -3,15 +3,15 @@
 
 import type { WebSocket } from "ws";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import type { AgentTask } from "@/lib/tasks/types.js";
+import type { NodeTask } from "@/lib/tasks/types.js";
 import type { Session } from "@/types/index.js";
-import { AgentService } from "@/services/dployrd-service.js";
+import { NodeService } from "@/services/dployrd-service.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { DatabaseStore } from "@/lib/db/store/index.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { JWTService } from "@/services/jwt.js";
 import { ConnectionManager, ConnectionManagerConfig } from "./connection-manager.js";
-import { AgentMessageHandler } from "./handlers/agent-handler.js";
+import { NodeMessageHandler } from "./handlers/node-handler.js";
 import { ClientMessageHandler } from "./handlers/client-handler.js";
 import { ClientNotifier } from "./handlers/client-notifier.js";
 import { TerminalManager } from "./terminal-manager.js";
@@ -24,11 +24,11 @@ export interface WebSocketHandlerConfig {
 
 /**
  * WebSocket handler for cluster streams.
- * Coordinates connection management and message routing between agents and clients.
+ * Coordinates connection management and message routing between nodes and clients.
  */
 export class WebSocketHandler {
   private connectionManager: ConnectionManager;
-  private dployrdHandler: AgentMessageHandler;
+  private dployrdHandler: NodeMessageHandler;
   private clientHandler: ClientMessageHandler;
   private clientNotifier: ClientNotifier;
   private terminalManager: TerminalManager;
@@ -36,7 +36,11 @@ export class WebSocketHandler {
   private dbStore: DatabaseStore;
   private config = loadConfig();
 
-  constructor(private kv: IKVAdapter, private db: PostgresAdapter, config?: WebSocketHandlerConfig) {
+  constructor(
+    private kv: IKVAdapter,
+    private db: PostgresAdapter,
+    config?: WebSocketHandlerConfig,
+  ) {
     this.connectionManager = new ConnectionManager(config?.connectionManager);
 
     const kvStore = new KVStore(this.kv);
@@ -45,12 +49,12 @@ export class WebSocketHandler {
     this.clientNotifier = new ClientNotifier(this.connectionManager, kvStore);
 
     // Initialize handlers with dependencies
-    this.dployrdHandler = new AgentMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, kvStore);
+    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, kvStore);
 
     const jwtService = new JWTService(kvStore);
-    const dployrdService = new AgentService();
+    const dployrdService = new NodeService();
 
-    // Initialize terminal manager with agent URL resolver
+    // Initialize terminal manager with node URL resolver
     this.terminalManager = new TerminalManager(300000); // 5 minute session timeout
     this.clientHandler = new ClientMessageHandler({
       connectionManager: this.connectionManager,
@@ -66,12 +70,7 @@ export class WebSocketHandler {
   /**
    * Register a new WebSocket connection for a cluster.
    */
-  acceptWebSocket(
-    clusterId: string,
-    ws: WebSocket,
-    role: "agent" | "client",
-    session?: Session
-  ): void {
+  acceptWebSocket(clusterId: string, ws: WebSocket, role: "node" | "client", session?: Session): void {
     const conn = this.connectionManager.addConnection(clusterId, ws, role, session);
 
     // Handle reconnection for clients
@@ -98,22 +97,24 @@ export class WebSocketHandler {
       this.handleDisconnect(conn);
     });
 
-    // Send hello message for agents
-    if (role === "agent") {
+    // Send hello message for nodes
+    if (role === "node") {
       this.sendHello(ws);
     }
   }
 
   /**
-   * Send hello message to agent on connect
+   * Send hello message to node on connect
    */
   private sendHello(ws: WebSocket): void {
     try {
-      ws.send(JSON.stringify({
-        kind: "hello",
-        status: "accepted",
-        timestamp: Date.now(),
-      }));
+      ws.send(
+        JSON.stringify({
+          kind: "hello",
+          status: "accepted",
+          timestamp: Date.now(),
+        }),
+      );
     } catch (err) {
       console.error(`[WS] Failed to send hello:`, err);
     }
@@ -125,8 +126,8 @@ export class WebSocketHandler {
   private handleDisconnect(conn: ClusterConnection): void {
     this.connectionManager.removeConnection(conn);
 
-    if (conn.role === "agent") {
-      this.dployrdHandler.handleAgentDisconnect(conn.clusterId);
+    if (conn.role === "node") {
+      this.dployrdHandler.handleNodeDisconnect(conn.clusterId);
     }
   }
 
@@ -140,7 +141,7 @@ export class WebSocketHandler {
       return;
     }
 
-    if (conn.role === "agent") {  
+    if (conn.role === "node") {
       await this.dployrdHandler.handleMessage(conn, message);
     } else {
       await this.clientHandler.handleMessage(conn, message);
@@ -148,13 +149,13 @@ export class WebSocketHandler {
   }
 
   /**
-   * Send a task to all agents in a cluster.
-   * Returns true if the task was sent to at least one agent.
+   * Send a task to all nodes in a cluster.
+   * Returns true if the task was sent to at least one node.
    */
-  public sendTaskToCluster(clusterId: string, task: AgentTask): boolean {
-    const agentConns = this.connectionManager.getAgentConnections(clusterId);
-    if (agentConns.length === 0) {
-      console.warn(`[WS] No agent connections for cluster ${clusterId}`);
+  public sendTaskToCluster(clusterId: string, task: NodeTask): boolean {
+    const nodeConns = this.connectionManager.getNodeConnections(clusterId);
+    if (nodeConns.length === 0) {
+      console.warn(`[WS] No node connections for cluster ${clusterId}`);
       return false;
     }
 
@@ -166,24 +167,24 @@ export class WebSocketHandler {
     const payload = JSON.stringify(message);
     let sentCount = 0;
 
-    for (const agentConn of agentConns) {
+    for (const nodeConn of nodeConns) {
       try {
-        agentConn.ws.send(payload);
+        nodeConn.ws.send(payload);
         sentCount++;
       } catch (err) {
-        console.error(`[WS] Failed to send task to agent:`, err);
+        console.error(`[WS] Failed to send task to node:`, err);
       }
     }
 
-    console.log(`[WS] Sent task ${task.ID} to ${sentCount}/${agentConns.length} agents in cluster ${clusterId}`);
+    console.log(`[WS] Sent task ${task.ID} to ${sentCount}/${nodeConns.length} nodes in cluster ${clusterId}`);
     return sentCount > 0;
   }
 
   /**
-   * Check if any agent is connected for the given cluster.
+   * Check if any node is connected for the given cluster.
    */
-  public hasAgentConnection(clusterId: string): boolean {
-    return this.connectionManager.hasAgentConnection(clusterId);
+  public hasNodeConnection(clusterId: string): boolean {
+    return this.connectionManager.hasNodeConnection(clusterId);
   }
 
   /**
@@ -194,10 +195,10 @@ export class WebSocketHandler {
   }
 
   /**
-   * Accept terminal relay connection from agent
+   * Accept terminal relay connection from node
    */
   public acceptTerminalConnection(sessionId: string, ws: WebSocket): boolean {
-    return this.terminalManager.acceptAgentConnection(sessionId, ws);
+    return this.terminalManager.acceptNodeConnection(sessionId, ws);
   }
 
   /**

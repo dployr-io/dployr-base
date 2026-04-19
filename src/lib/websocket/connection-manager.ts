@@ -50,7 +50,7 @@ export class ConnectionManager {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
     }
-    
+
     this.cleanupTimer = setInterval(() => {
       this.cleanupTimedOutRequests();
       this.cleanupDeadConnections();
@@ -77,15 +77,15 @@ export class ConnectionManager {
     }
 
     const connectionId = ulid();
-    const conn: ClusterConnection = { 
-      ws, 
-      role, 
-      clusterId, 
+    const conn: ClusterConnection = {
+      ws,
+      role,
+      clusterId,
       session,
       connectionId,
       connectedAt: Date.now(),
     };
-    
+
     this.connections.get(clusterId)!.add(conn);
     this.lastActivityMap.set(ws, Date.now());
     this.requestsByClient.set(ws, new Set());
@@ -105,14 +105,14 @@ export class ConnectionManager {
         this.connections.delete(conn.clusterId);
       }
     }
-    
+
     this.cleanupRequestsForClient(conn.ws);
-    
+
     if (conn.role === "client") {
       this.removeLogStreamsForClient(conn.ws);
       this.removeFileWatchesForConnection(conn.connectionId);
     }
-    
+
     this.lastActivityMap.delete(conn.ws);
     this.requestsByClient.delete(conn.ws);
 
@@ -134,12 +134,12 @@ export class ConnectionManager {
   }
 
   /**
-   * Get all agent connections for a cluster
+   * Get all node connections for a cluster
    */
-  getAgentConnections(instanceId: string): ClusterConnection[] {
+  getNodeConnections(instanceId: string): ClusterConnection[] {
     const conns = this.connections.get(instanceId);
     if (!conns) return [];
-    return Array.from(conns).filter((c) => c.role === "agent");
+    return Array.from(conns).filter((c) => c.role === "node");
   }
 
   /**
@@ -152,10 +152,10 @@ export class ConnectionManager {
   }
 
   /**
-   * Check if any agent is connected for a cluster
+   * Check if any node is connected for a cluster
    */
-  hasAgentConnection(instanceId: string): boolean {
-    return this.getAgentConnections(instanceId).length > 0;
+  hasNodeConnection(instanceId: string): boolean {
+    return this.getNodeConnections(instanceId).length > 0;
   }
 
   // ==================== Pending Request Management ====================
@@ -179,14 +179,7 @@ export class ConnectionManager {
   /**
    * Add a pending request
    */
-  addPendingRequest(
-    taskId: string,
-    requestId: string,
-    ws: WebSocket,
-    clusterId: string,
-    kind: string,
-    timeoutMs?: number
-  ): boolean {
+  addPendingRequest(taskId: string, requestId: string, ws: WebSocket, clusterId: string, kind: string, timeoutMs?: number): boolean {
     if (!this.canAcceptRequest(ws)) {
       return false;
     }
@@ -202,7 +195,7 @@ export class ConnectionManager {
     };
 
     this.pendingRequests.set(taskId, request);
-    
+
     let clientRequests = this.requestsByClient.get(ws);
     if (!clientRequests) {
       clientRequests = new Set();
@@ -246,7 +239,7 @@ export class ConnectionManager {
 
     try {
       const response = {
-        ...message as object,
+        ...(message as object),
         requestId: request.requestId,
         taskId,
       };
@@ -293,7 +286,7 @@ export class ConnectionManager {
 
     for (const taskId of timedOut) {
       console.log(`[WS] Request timed out: ${taskId}`);
-      this.sendErrorToClient(taskId, WSErrorCode.AGENT_TIMEOUT, "Request timed out");
+      this.sendErrorToClient(taskId, WSErrorCode.NODE_TIMEOUT, "Request timed out");
     }
 
     if (timedOut.length > 0) {
@@ -452,12 +445,12 @@ export class ConnectionManager {
   removeFileWatch(watchKey: string, connectionId: string): boolean {
     const subscribers = this.fileWatchSubscriptions.get(watchKey);
     if (!subscribers) return false;
-    
+
     const removed = subscribers.delete(connectionId);
     if (subscribers.size === 0) {
       this.fileWatchSubscriptions.delete(watchKey);
     }
-    
+
     if (removed) {
       console.log(`[WS] Removed file watch: ${watchKey} for connection ${connectionId}`);
     }

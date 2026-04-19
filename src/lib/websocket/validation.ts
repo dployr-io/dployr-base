@@ -53,7 +53,7 @@ export const FileTreeMessageSchema = z.object({
   path: z.string().optional(),
 });
 
-// Agent response schemas
+// Node response schemas
 export const TaskResponseSchema = z.object({
   kind: z.literal("task_response"),
   taskId: z.string().min(1),

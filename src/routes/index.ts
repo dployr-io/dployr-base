@@ -13,7 +13,7 @@ import users from "./users.js";
 import runtime from "./runtime.js";
 import jwks from "./jwks.js";
 import domains from "./domains.js";
-import agent from "./agent.js";
+import node from "./node.js";
 import notifications from "./notifications.js";
 import proxy from "./proxy.js";
 import { getWS } from "@/lib/context.js";
@@ -35,7 +35,7 @@ export function registerRoutes(app: Hono<{ Bindings: Bindings; Variables: Variab
   app.route("/v1/runtime", runtime);
   app.route("/v1/jwks", jwks);
   app.route("/v1/domains", domains);
-  app.route("/v1/agent", agent);
+  app.route("/v1/node", node);
   app.route("/v1/proxy", proxy);
 
   // Health check endpoint

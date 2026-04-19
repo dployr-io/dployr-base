@@ -5,15 +5,15 @@ import { DatabaseStore } from "@/lib/db/store/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import type { ConnectionManager } from "../connection-manager.js";
 import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "../message-types.js";
-import { isAgentBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind, WSErrorCode, createWSError } from "../message-types.js";
+import { isNodeBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind, WSErrorCode, createWSError } from "../message-types.js";
 import { ClientNotifier } from "./client-notifier.js";
-import { UpdateProcessor } from "@/lib/agent/update-processor.js";
-import { AgentUpdate } from "@/types/agent.js";
+import { UpdateProcessor } from "@/lib/node/update-processor.js";
+import { NodeUpdate } from "@/types/node.js";
 
 /**
  * Handles messages from dployrd connections.
  */
-export class AgentMessageHandler {
+export class NodeMessageHandler {
   private updateProcessor: UpdateProcessor;
 
   constructor(
@@ -26,7 +26,7 @@ export class AgentMessageHandler {
   }
 
   /**
-   * Process a message from an agent
+   * Process a message from an node
    */
   async handleMessage(conn: ClusterConnection, message: BaseMessage): Promise<void> {
     this.connectionManager.updateActivity(conn.ws);
@@ -36,8 +36,8 @@ export class AgentMessageHandler {
       return;
     }
 
-    if (isAgentBroadcastMessage(message)) {
-      const update = (message as any).update as AgentUpdate;
+    if (isNodeBroadcastMessage(message)) {
+      const update = (message as any).update as NodeUpdate;
       if (update?.instance_id) {
         await this.updateProcessor.processUpdate(update.instance_id, update);
       }
@@ -58,7 +58,7 @@ export class AgentMessageHandler {
   }
 
   /**
-   * Handle task response messages from agent - route to specific client
+   * Handle task response messages from node - route to specific client
    */
   private async handleTaskResponse(message: TaskResponseMessage): Promise<void> {
     const { taskId, success, data, error } = message;
@@ -74,7 +74,7 @@ export class AgentMessageHandler {
       if (request) {
         let errorCode = error.code || WSErrorCode.INTERNAL_ERROR;
         let errorMessage = error.message || "Task failed";
-        
+
         if (errorMessage.includes('{"error":')) {
           try {
             const jsonMatch = errorMessage.match(/\{.*?\}/);
@@ -117,13 +117,9 @@ export class AgentMessageHandler {
             // Keep original error if parsing fails
           }
         }
-        
-        const errorResponse = createWSError(
-          request.requestId,
-          errorCode,
-          errorMessage
-        );
-        
+
+        const errorResponse = createWSError(request.requestId, errorCode, errorMessage);
+
         request.ws.send(JSON.stringify(errorResponse));
         this.connectionManager.removePendingRequest(taskId);
         console.warn(`[WS] Task ${taskId} failed: ${errorMessage}`);
@@ -140,11 +136,11 @@ export class AgentMessageHandler {
     });
 
     if (success && data && this.getResponseKind(message) === "deploy_response") {
-      this.db.services.save(data['instance_id'], data['name']);
+      this.db.services.save(data["instance_id"], data["name"]);
     }
 
     if (success && data && this.getResponseKind(message) === "service_remove_response") {
-      this.db.services.deleteByName(data['name']);
+      this.db.services.deleteByName(data["name"]);
     }
 
     if (!routed) {
@@ -159,18 +155,30 @@ export class AgentMessageHandler {
     const request = this.connectionManager.getPendingRequest(message.taskId);
     if (request) {
       switch (request.kind) {
-        case MessageKind.FILE_READ: return "file_read_response";
-        case MessageKind.FILE_WRITE: return "file_write_response";
-        case MessageKind.FILE_CREATE: return "file_create_response";
-        case MessageKind.FILE_DELETE: return "file_delete_response";
-        case MessageKind.FILE_TREE: return "file_tree_response";
-        case MessageKind.DEPLOY: return "deploy_response";
-        case MessageKind.SERVICE_REMOVE: return "service_remove_response";
-        case MessageKind.PROXY_STATUS: return "proxy_status_response";
-        case MessageKind.PROXY_RESTART: return "proxy_restart_response";
-        case MessageKind.PROXY_ADD: return "proxy_add_response";
-        case MessageKind.PROXY_REMOVE: return "proxy_remove_response";
-        default: return "task_response";
+        case MessageKind.FILE_READ:
+          return "file_read_response";
+        case MessageKind.FILE_WRITE:
+          return "file_write_response";
+        case MessageKind.FILE_CREATE:
+          return "file_create_response";
+        case MessageKind.FILE_DELETE:
+          return "file_delete_response";
+        case MessageKind.FILE_TREE:
+          return "file_tree_response";
+        case MessageKind.DEPLOY:
+          return "deploy_response";
+        case MessageKind.SERVICE_REMOVE:
+          return "service_remove_response";
+        case MessageKind.PROXY_STATUS:
+          return "proxy_status_response";
+        case MessageKind.PROXY_RESTART:
+          return "proxy_restart_response";
+        case MessageKind.PROXY_ADD:
+          return "proxy_add_response";
+        case MessageKind.PROXY_REMOVE:
+          return "proxy_remove_response";
+        default:
+          return "task_response";
       }
     }
     return "task_response";
@@ -201,7 +209,7 @@ export class AgentMessageHandler {
   }
 
   /**
-   * Handle filesystem update messages from agent
+   * Handle filesystem update messages from node
    */
   private handleFileUpdate(clusterId: string, message: FileUpdateMessage): void {
     const { instanceId, event } = message;
@@ -219,7 +227,7 @@ export class AgentMessageHandler {
     if (!allConnections) return;
 
     for (const connectionId of subscribers) {
-      const conn = Array.from(allConnections).find(c => c.connectionId === connectionId);
+      const conn = Array.from(allConnections).find((c) => c.connectionId === connectionId);
       if (conn && conn.ws.readyState === 1) {
         try {
           conn.ws.send(payload);
@@ -234,11 +242,11 @@ export class AgentMessageHandler {
   }
 
   /**
-   * Handle agent disconnection - fail pending requests
+   * Handle node disconnection - fail pending requests
    */
-  handleAgentDisconnect(clusterId: string): void {
+  handleNodeDisconnect(clusterId: string): void {
     // This is handled by connection cleanup in ConnectionManager
     // Pending requests will timeout and send errors to clients
-    console.log(`[WS] Agent disconnected from cluster ${clusterId}`);
+    console.log(`[WS] Node disconnected from cluster ${clusterId}`);
   }
 }

@@ -10,14 +10,14 @@ import type { TerminalMessage } from "./message-types.js";
 interface TerminalSession {
   sessionId: string;
   clientWs: WebSocket;
-  agentWs: WebSocket | null;
+  nodeWs: WebSocket | null;
   instanceId: string;
   createdAt: number;
   lastActivity: number;
 }
 
 /**
- * Expected session - waiting for agent to connect
+ * Expected session - waiting for node to connect
  */
 interface ExpectedSession {
   sessionId: string;
@@ -27,13 +27,13 @@ interface ExpectedSession {
 }
 
 /**
- * Manages bidirectional terminal WebSocket relay between clients and agents
+ * Manages bidirectional terminal WebSocket relay between clients and nodes
  */
 export class TerminalManager {
   private sessions = new Map<string, TerminalSession>();
   private expectedSessions = new Map<string, ExpectedSession>();
   private clientToSession = new Map<WebSocket, string>();
-  private agentToSession = new Map<WebSocket, string>();
+  private nodeToSession = new Map<WebSocket, string>();
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(private sessionTimeoutMs: number = 300000) {
@@ -41,7 +41,7 @@ export class TerminalManager {
   }
 
   /**
-   * Register expectation for agent to connect with this session ID
+   * Register expectation for node to connect with this session ID
    */
   expectSession(sessionId: string, clientWs: WebSocket, instanceId: string): void {
     this.expectedSessions.set(sessionId, {
@@ -50,7 +50,7 @@ export class TerminalManager {
       instanceId,
       createdAt: Date.now(),
     });
-    console.log(`[Terminal] Expecting agent connection for session ${sessionId}`);
+    console.log(`[Terminal] Expecting node connection for session ${sessionId}`);
   }
 
   /**
@@ -61,12 +61,12 @@ export class TerminalManager {
   }
 
   /**
-   * Accept inbound agent WebSocket connection for a session
+   * Accept inbound node WebSocket connection for a session
    */
-  acceptAgentConnection(sessionId: string, agentWs: WebSocket): boolean {
+  acceptNodeConnection(sessionId: string, nodeWs: WebSocket): boolean {
     const expected = this.expectedSessions.get(sessionId);
     if (!expected) {
-      console.warn(`[Terminal] Unexpected agent connection for session ${sessionId}`);
+      console.warn(`[Terminal] Unexpected node connection for session ${sessionId}`);
       return false;
     }
 
@@ -74,7 +74,7 @@ export class TerminalManager {
     const session: TerminalSession = {
       sessionId,
       clientWs: expected.clientWs,
-      agentWs,
+      nodeWs,
       instanceId: expected.instanceId,
       createdAt: Date.now(),
       lastActivity: Date.now(),
@@ -82,11 +82,11 @@ export class TerminalManager {
 
     this.sessions.set(sessionId, session);
     this.clientToSession.set(expected.clientWs, sessionId);
-    this.agentToSession.set(agentWs, sessionId);
+    this.nodeToSession.set(nodeWs, sessionId);
     this.expectedSessions.delete(sessionId);
 
-    // Setup agent WebSocket handlers
-    agentWs.on("message", (data: Buffer) => {
+    // Setup node WebSocket handlers
+    nodeWs.on("message", (data: Buffer) => {
       session.lastActivity = Date.now();
       
       if (session.clientWs.readyState === WebSocket.OPEN) {
@@ -98,27 +98,27 @@ export class TerminalManager {
             ...message,
           }));
         } catch (err) {
-          console.error(`[Terminal] Failed to parse agent message:`, err);
+          console.error(`[Terminal] Failed to parse node message:`, err);
         }
       }
     });
 
-    agentWs.on("close", () => {
-      console.log(`[Terminal] Agent disconnected from session ${sessionId}`);
+    nodeWs.on("close", () => {
+      console.log(`[Terminal] Node disconnected from session ${sessionId}`);
       this.closeSession(sessionId);
     });
 
-    agentWs.on("error", (err) => {
-      console.error(`[Terminal] Agent WebSocket error for session ${sessionId}:`, err);
+    nodeWs.on("error", (err) => {
+      console.error(`[Terminal] Node WebSocket error for session ${sessionId}:`, err);
       this.closeSession(sessionId);
     });
 
-    console.log(`[Terminal] Agent connected for session ${sessionId}`);
+    console.log(`[Terminal] Node connected for session ${sessionId}`);
     return true;
   }
 
   /**
-   * Handle client terminal message - relay to agent
+   * Handle client terminal message - relay to node
    */
   handleClientMessage(clientWs: WebSocket, message: TerminalMessage): void {
     const sessionId = this.clientToSession.get(clientWs);
@@ -128,21 +128,21 @@ export class TerminalManager {
     }
 
     const session = this.sessions.get(sessionId);
-    if (!session || !session.agentWs) {
+    if (!session || !session.nodeWs) {
       console.warn(`[Terminal] Session ${sessionId} not ready`);
       return;
     }
 
     session.lastActivity = Date.now();
 
-    if (session.agentWs.readyState === WebSocket.OPEN) {
+    if (session.nodeWs.readyState === WebSocket.OPEN) {
       try {
-        session.agentWs.send(JSON.stringify({
+        session.nodeWs.send(JSON.stringify({
           ...message,
           sessionId,
         }));
       } catch (err) {
-        console.error(`[Terminal] Failed to send message to agent:`, err);
+        console.error(`[Terminal] Failed to send message to node:`, err);
       }
     }
   }
@@ -154,12 +154,12 @@ export class TerminalManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    if (session.agentWs && session.agentWs.readyState === WebSocket.OPEN) {
+    if (session.nodeWs && session.nodeWs.readyState === WebSocket.OPEN) {
       try {
-        session.agentWs.send(JSON.stringify({ action: "close" }));
-        session.agentWs.close();
+        session.nodeWs.send(JSON.stringify({ action: "close" }));
+        session.nodeWs.close();
       } catch (err) {
-        console.error(`[Terminal] Error closing agent WebSocket:`, err);
+        console.error(`[Terminal] Error closing node WebSocket:`, err);
       }
     }
 
@@ -176,8 +176,8 @@ export class TerminalManager {
     }
 
     this.clientToSession.delete(session.clientWs);
-    if (session.agentWs) {
-      this.agentToSession.delete(session.agentWs);
+    if (session.nodeWs) {
+      this.nodeToSession.delete(session.nodeWs);
     }
     this.sessions.delete(sessionId);
 
@@ -199,7 +199,7 @@ export class TerminalManager {
         }
       }
 
-      // Cleanup stale expected sessions (agent never connected)
+      // Cleanup stale expected sessions (node never connected)
       for (const [sessionId, expected] of this.expectedSessions.entries()) {
         if (now - expected.createdAt > 60000) { // 1 minute timeout
           console.log(`[Terminal] Expected session ${sessionId} timed out`);

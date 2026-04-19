@@ -13,21 +13,21 @@ export enum WSErrorCode {
   VALIDATION_ERROR = 1000,
   MISSING_FIELD = 1001,
   INVALID_FORMAT = 1002,
-  
+
   // Permission errors (2xxx)
   PERMISSION_DENIED = 2000,
   NOT_FOUND = 2001,
   UNAUTHORIZED = 2002,
-  
-  // Agent errors (3xxx)
-  AGENT_TIMEOUT = 3000,
-  AGENT_DISCONNECTED = 3001,
-  AGENT_ERROR = 3002,
-  
+
+  // Node errors (3xxx)
+  NODE_TIMEOUT = 3000,
+  NODE_DISCONNECTED = 3001,
+  NODE_ERROR = 3002,
+
   // Rate limiting (4xxx)
   RATE_LIMITED = 4000,
   TOO_MANY_PENDING = 4001,
-  
+
   // Internal errors (5xxx)
   INTERNAL_ERROR = 5000,
   TASK_FAILED = 5001,
@@ -49,7 +49,7 @@ export interface WSErrorResponse {
  * Message kind constants
  */
 export const MessageKind = {
-  // Agent -> Server
+  // Node -> Server
   UPDATE: "update",
   LOG_CHUNK: "log_chunk",
   TASK_RESPONSE: "task_response",
@@ -75,7 +75,7 @@ export const MessageKind = {
   // Terminal operations
   TERMINAL: "terminal",
   TERMINAL_OPEN: "terminal_open",
-  
+
   // Instance operations
   INSTANCE_TOKEN_ROTATE: "instance_token_rotate",
   INSTANCE_SYSTEM_INSTALL: "instance_system_install",
@@ -94,7 +94,7 @@ export const MessageKind = {
   // Server -> Client
   TASK: "task",
   ERROR: "error",
-  
+
   // Acknowledgments
   ACK: "ack",
 } as const;
@@ -117,7 +117,7 @@ export interface BaseRequestMessage extends BaseMessage {
 }
 
 /**
- * Agent messages
+ * Node messages
  */
 export interface UpdateMessage extends BaseMessage {
   kind: typeof MessageKind.UPDATE;
@@ -143,7 +143,7 @@ export interface TaskResponseMessage extends BaseMessage {
   };
 }
 
-export type AgentMessage = UpdateMessage | LogChunkMessage | TaskResponseMessage;
+export type NodeMessage = UpdateMessage | LogChunkMessage | TaskResponseMessage;
 
 /**
  * Acknowledgment message
@@ -361,12 +361,7 @@ export interface FileUpdateEvent {
   oldPath?: string;
 }
 
-export type FileOperationResponse = 
-  | FileReadResponseMessage 
-  | FileWriteResponseMessage 
-  | FileCreateResponseMessage 
-  | FileDeleteResponseMessage 
-  | FileTreeResponseMessage;
+export type FileOperationResponse = FileReadResponseMessage | FileWriteResponseMessage | FileCreateResponseMessage | FileDeleteResponseMessage | FileTreeResponseMessage;
 
 /**
  * Instance operation messages
@@ -434,8 +429,8 @@ export interface ProxyRemoveMessage extends BaseRequestMessage {
 export interface ProcessHistoryMessage extends BaseRequestMessage {
   kind: typeof MessageKind.PROCESS_HISTORY;
   instanceId: string;
-  startTime?: number;  // Unix ms, defaults to 1h ago
-  endTime?: number;    // Unix ms, defaults to now
+  startTime?: number; // Unix ms, defaults to 1h ago
+  endTime?: number; // Unix ms, defaults to now
 }
 
 /**
@@ -623,22 +618,18 @@ export type InstanceOperationResponse =
   | InstanceSystemRebootResponseMessage
   | InstanceSystemRestartResponseMessage;
 
-export type ProxyOperationResponse =
-  | ProxyStatusResponseMessage
-  | ProxyRestartResponseMessage
-  | ProxyAddResponseMessage
-  | ProxyRemoveResponseMessage;
+export type ProxyOperationResponse = ProxyStatusResponseMessage | ProxyRestartResponseMessage | ProxyAddResponseMessage | ProxyRemoveResponseMessage;
 
-export type ClientMessage = 
-  | ClientSubscribeMessage 
-  | LogSubscribeMessage 
-  | LogUnsubscribeMessage 
-  | DeployMessage 
-  | LogStreamMessage 
-  | FileReadMessage 
-  | FileWriteMessage 
-  | FileCreateMessage 
-  | FileDeleteMessage 
+export type ClientMessage =
+  | ClientSubscribeMessage
+  | LogSubscribeMessage
+  | LogUnsubscribeMessage
+  | DeployMessage
+  | LogStreamMessage
+  | FileReadMessage
+  | FileWriteMessage
+  | FileCreateMessage
+  | FileDeleteMessage
   | FileTreeMessage
   | FileWatchMessage
   | FileUnwatchMessage
@@ -657,12 +648,12 @@ export type ClientMessage =
 /**
  * All inbound messages
  */
-export type InboundMessage = AgentMessage | ClientMessage;
+export type InboundMessage = NodeMessage | ClientMessage;
 
 /**
  * Connection types
  */
-export type ConnectionRole = "agent" | "client";
+export type ConnectionRole = "node" | "client";
 
 export interface ClusterConnection {
   ws: WebSocket;
@@ -732,12 +723,7 @@ export interface PendingRequest {
 /**
  * Create error response helper
  */
-export function createWSError(
-  requestId: string,
-  code: WSErrorCode,
-  message: string,
-  details?: Record<string, unknown>
-): WSErrorResponse {
+export function createWSError(requestId: string, code: WSErrorCode, message: string, details?: Record<string, unknown>): WSErrorResponse {
   return {
     kind: "error",
     requestId,
@@ -773,7 +759,7 @@ export function validateRequestMessage(msg: BaseMessage): msg is BaseRequestMess
 /**
  * Type guards for message types
  */
-export function isAgentBroadcastMessage(msg: BaseMessage): msg is UpdateMessage {
+export function isNodeBroadcastMessage(msg: BaseMessage): msg is UpdateMessage {
   return msg.kind === MessageKind.UPDATE;
 }
 
@@ -906,7 +892,15 @@ export function isFileReadRequest(msg: unknown): msg is FileReadRequest {
 
 export function isFileWriteRequest(msg: unknown): msg is FileWriteRequest {
   const m = msg as FileWriteRequest;
-  return typeof msg === "object" && msg !== null && "path" in msg && "content" in msg && typeof m.path === "string" && typeof m.content === "string" && (!m.encoding || m.encoding === "utf8" || m.encoding === "base64");
+  return (
+    typeof msg === "object" &&
+    msg !== null &&
+    "path" in msg &&
+    "content" in msg &&
+    typeof m.path === "string" &&
+    typeof m.content === "string" &&
+    (!m.encoding || m.encoding === "utf8" || m.encoding === "base64")
+  );
 }
 
 export function isFileCreateRequest(msg: unknown): msg is FileCreateRequest {
@@ -924,7 +918,20 @@ export function isFileTreeResponse(msg: unknown): msg is FileTreeResponse {
 
 export function isFileNode(msg: unknown): msg is FileNode {
   const m = msg as FileNode;
-  return typeof msg === "object" && msg !== null && "path" in msg && "name" in msg && "type" in msg && "readable" in msg && "writable" in msg && typeof m.path === "string" && typeof m.name === "string" && (m.type === "file" || m.type === "directory") && typeof m.readable === "boolean" && typeof m.writable === "boolean";
+  return (
+    typeof msg === "object" &&
+    msg !== null &&
+    "path" in msg &&
+    "name" in msg &&
+    "type" in msg &&
+    "readable" in msg &&
+    "writable" in msg &&
+    typeof m.path === "string" &&
+    typeof m.name === "string" &&
+    (m.type === "file" || m.type === "directory") &&
+    typeof m.readable === "boolean" &&
+    typeof m.writable === "boolean"
+  );
 }
 
 export function canRead(node: FileNode): boolean {
@@ -955,4 +962,3 @@ export function getFileOperationPermissions(node: FileNode, parentNode?: FileNod
     canCreateChildren: canCreateInDirectory(node),
   };
 }
-

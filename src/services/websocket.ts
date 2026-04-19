@@ -77,7 +77,7 @@ export class WebSocketService {
       }
 
       // Collect request body for non-GET/HEAD requests
-      let body: Uint8Array | undefined;
+      let body;
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         const chunks: Uint8Array[] = [];
         for await (const chunk of req) {
@@ -115,7 +115,7 @@ export class WebSocketService {
     this.server.on('upgrade', async (message: IncomingMessage, socket: Socket, head: Buffer) => {
       const url = new URL(message.url || '', `http://${message.headers.host}`);
       
-      // Handle terminal relay endpoint - agent outbound connections
+      // Handle terminal relay endpoint - node outbound connections
       // Matches: /v1/terminal/ws?sessionId=...
       if (url.pathname === '/v1/terminal/ws') {
         const sessionId = url.searchParams.get('sessionId');
@@ -150,13 +150,13 @@ export class WebSocketService {
       }
       
       // Handle cluster WebSocket streams
-      // Matches: /v1/instances/stream OR /v1/agent/ws
-      if (url.pathname.match(/\/v1\/(instances\/stream|agent\/ws)$/)) {
-        const role = url.pathname.includes('/agent/ws') ? 'agent' : 'client';
+      // Matches: /v1/instances/stream OR /v1/node/ws
+      if (url.pathname.match(/\/v1\/(instances\/stream|node\/ws)$/)) {
+        const role = url.pathname.includes('/node/ws') ? 'node' : 'client';
         
         let clusterId: string | null = null;
         
-        if (role === 'agent') {
+        if (role === 'node') {
           const instanceId = url.searchParams.get('instanceId');
           const instanceName = url.searchParams.get('instanceName');
           
@@ -188,8 +188,8 @@ export class WebSocketService {
           return;
         }
 
-        // Validate auth token for agent endpoint
-        if (role === 'agent') {
+        // Validate auth token for node endpoint
+        if (role === 'node') {
           const authHeader = message.headers['authorization'] || message.headers['Authorization'];
           const auth = Array.isArray(authHeader) ? authHeader[0] : authHeader;
           if (!auth || !auth.startsWith('Bearer ')) {

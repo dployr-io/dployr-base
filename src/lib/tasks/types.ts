@@ -20,7 +20,7 @@ export type TaskAddress = `${string}:${HttpMethod}`;
 export type TaskStatus = "pending" | "in_progress" | "done" | "failed";
 
 // Base Task structure that daemon expects
-export interface AgentTask {
+export interface NodeTask {
   ID: string;
   Type: TaskAddress;
   Payload: any;
@@ -55,8 +55,8 @@ export const DeploymentSchema = z.object({
   domain: z.string().optional(),
 });
 
-// WebSocket message types for agent communication
-export const AgentTaskSchema = z.object({
+// WebSocket message types for node communication
+export const NodeTaskSchema = z.object({
   kind: z.literal("task"),
   items: z.array(z.object({
     ID: z.string(),
@@ -66,20 +66,20 @@ export const AgentTaskSchema = z.object({
   })),
 });
 
-export const AgentPullSchema = z.object({
+export const NodePullSchema = z.object({
   kind: z.literal("pull"),
 });
 
-export const AgentAckSchema = z.object({
+export const NodeAckSchema = z.object({
   kind: z.literal("ack"),
   ids: z.array(z.string()),
 });
 
 export type LogStreamPayload = z.infer<typeof LogStreamSchema>;
 export type DeploymentPayload = z.infer<typeof DeploymentSchema>;
-export type AgentTaskMessage = z.infer<typeof AgentTaskSchema>;
-export type AgentPullMessage = z.infer<typeof AgentPullSchema>;
-export type AgentAckMessage = z.infer<typeof AgentAckSchema>;
+export type NodeTaskMessage = z.infer<typeof NodeTaskSchema>;
+export type NodePullMessage = z.infer<typeof NodePullSchema>;
+export type NodeAckMessage = z.infer<typeof NodeAckSchema>;
 
 // System install task payload
 export const SystemInstallSchema = z.object({

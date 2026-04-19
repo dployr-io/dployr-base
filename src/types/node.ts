@@ -13,18 +13,18 @@ export const CompletedTaskSchema = z.object({
   error: z.string().optional(),
 });
 
-export const AgentStatusReportSchema = z.object({
+export const NodeStatusReportSchema = z.object({
   version: z.string(),
   compatibility_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   system: z.record(z.string(), z.unknown()),
   completed_tasks: z.array(CompletedTaskSchema).default([]),
 });
 
-export type AgentStatusReport = z.infer<typeof AgentStatusReportSchema>;
+export type NodeStatusReport = z.infer<typeof NodeStatusReportSchema>;
 export type CompletedTask = z.infer<typeof CompletedTaskSchema>;
 
 // WebSocket message schemas
-export const AgentUpdateV1Schema = z.object({
+export const NodeUpdateV1Schema = z.object({
   schema: z.literal("v1"),
   seq: z.number(),
   epoch: z.string(),
@@ -54,10 +54,10 @@ export const AgentUpdateV1Schema = z.object({
   top: z.record(z.string(), z.unknown()).optional(),
 });
 
-export type AgentUpdateV1 = z.infer<typeof AgentUpdateV1Schema>;
+export type NodeUpdateV1 = z.infer<typeof NodeUpdateV1Schema>;
 
 // v1.1 Schema - Restructured and comprehensive
-export const AgentUpdateV1_1Schema = z.object({
+export const NodeUpdateV1_1Schema = z.object({
   schema: z.literal("v1.1"),
   sequence: z.number(),
   epoch: z.string(),
@@ -65,7 +65,7 @@ export const AgentUpdateV1_1Schema = z.object({
   timestamp: z.string(),
   is_full_sync: z.boolean(),
 
-  agent: z.object({
+  node: z.object({
     version: z.string(),
     commit: z.string(),
     build_date: z.string(),
@@ -222,15 +222,15 @@ export const AgentUpdateV1_1Schema = z.object({
   }).optional(),
 });
 
-export type AgentUpdateV1_1 = z.infer<typeof AgentUpdateV1_1Schema>;
+export type NodeUpdateV1_1 = z.infer<typeof NodeUpdateV1_1Schema>;
 
-// Union type for all agent update versions
-export const AgentUpdateSchema = z.discriminatedUnion("schema", [
-  AgentUpdateV1Schema,
-  AgentUpdateV1_1Schema,
+// Union type for all node update versions
+export const NodeUpdateSchema = z.discriminatedUnion("schema", [
+  NodeUpdateV1Schema,
+  NodeUpdateV1_1Schema,
 ]);
 
-export type AgentUpdate = z.infer<typeof AgentUpdateSchema>;
+export type NodeUpdate = z.infer<typeof NodeUpdateSchema>;
 
 export type WSHandshakeResponse = 
   | { kind: "hello"; status: "accepted"; upgrade_available?: { level: "major" | "minor"; latest: string } }

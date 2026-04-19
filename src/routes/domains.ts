@@ -93,7 +93,7 @@ domains.post("/register", async (c) => {
       c,
     });
 
-    // Get instance to include ID in response for agent compatibility
+    // Get instance to include ID in response for Dployrd version compatibility
     const db = new DatabaseStore(getDB(c));
     const instance = await db.instances.getByName(result.instanceName);
     if (!instance) {

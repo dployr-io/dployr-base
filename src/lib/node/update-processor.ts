@@ -3,15 +3,15 @@
 
 import { DatabaseStore } from "@/lib/db/store/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
-import { AgentUpdate, AgentUpdateV1, AgentUpdateV1_1 } from "@/types/agent.js";
+import { NodeUpdate, NodeUpdateV1, NodeUpdateV1_1 } from "@/types/node.js";
 
 export class UpdateProcessor {
-  constructor(private db: DatabaseStore, private kv: KVStore) {}
+  constructor(
+    private db: DatabaseStore,
+    private kv: KVStore,
+  ) {}
 
-  async processUpdate(
-    instanceId: string,
-    message: AgentUpdate
-  ): Promise<void> {
+  async processUpdate(instanceId: string, message: NodeUpdate): Promise<void> {
     if (!message.instance_id) {
       console.warn(`[UpdateProcessor] Update missing instance_id`);
       return;
@@ -21,7 +21,7 @@ export class UpdateProcessor {
 
     // Handle v1 schema
     if (message.schema === "v1") {
-      const v1Message = message as AgentUpdateV1;
+      const v1Message = message as NodeUpdateV1;
       if (v1Message.top && v1Message.seq) {
         tasks.push(this.saveProcessSnapshot(instanceId, v1Message.seq, v1Message.top));
       }
@@ -29,10 +29,10 @@ export class UpdateProcessor {
         tasks.push(this.syncServices(instanceId, v1Message.services));
       }
     }
-    
+
     // Handle v1.1 schema
     if (message.schema === "v1.1") {
-      const v1_1Message = message as AgentUpdateV1_1;
+      const v1_1Message = message as NodeUpdateV1_1;
       if (v1_1Message.processes?.list && v1_1Message.sequence) {
         tasks.push(this.saveProcessSnapshot(instanceId, v1_1Message.sequence, { list: v1_1Message.processes.list }));
       }
@@ -44,25 +44,15 @@ export class UpdateProcessor {
     await Promise.all(tasks);
   }
 
-  private async saveProcessSnapshot(
-    instanceId: string,
-    seq: number,
-    top: Record<string, unknown>
-  ): Promise<void> {
+  private async saveProcessSnapshot(instanceId: string, seq: number, top: Record<string, unknown>): Promise<void> {
     try {
       await this.kv.saveProcessSnapshot(instanceId, seq, top);
     } catch (error) {
-      console.error(
-        `[UpdateProcessor] Failed to save process snapshot:`,
-        error
-      );
+      console.error(`[UpdateProcessor] Failed to save process snapshot:`, error);
     }
   }
 
-  private async syncServices(
-    instanceName: string,
-    services: Record<string, unknown>[]
-  ): Promise<void> {
+  private async syncServices(instanceName: string, services: Record<string, unknown>[]): Promise<void> {
     if (!Array.isArray(services)) {
       return;
     }
@@ -75,19 +65,13 @@ export class UpdateProcessor {
         return;
       }
 
-      const incomingServiceNames = new Set(
-        services.map((s) => s.name as string)
-      );
+      const incomingServiceNames = new Set(services.map((s) => s.name as string));
 
       // Use instance.id (database ID) to query services
       const existingServices = await this.db.services.getByInstance(instance.id);
       const existingServiceNames = new Set(existingServices.map((s) => s.name));
 
-      const hasChanges =
-        existingServiceNames.size !== incomingServiceNames.size ||
-        Array.from(incomingServiceNames).some(
-          (name) => !existingServiceNames.has(name)
-        );
+      const hasChanges = existingServiceNames.size !== incomingServiceNames.size || Array.from(incomingServiceNames).some((name) => !existingServiceNames.has(name));
 
       if (!hasChanges) {
         // No changes, skip sync
@@ -95,12 +79,8 @@ export class UpdateProcessor {
       }
 
       const instanceTag = instance.tag;
-      const toCreate = services.filter(
-        (s) => !existingServiceNames.has(s.name as string)
-      );
-      const toDelete = existingServices.filter(
-        (s) => !incomingServiceNames.has(s.name)
-      );
+      const toCreate = services.filter((s) => !existingServiceNames.has(s.name as string));
+      const toDelete = existingServices.filter((s) => !incomingServiceNames.has(s.name));
 
       for (const service of toCreate) {
         try {
@@ -109,10 +89,7 @@ export class UpdateProcessor {
           console.log(`[UpdateProcessor] Created service: ${svc.name}`);
         } catch (error) {
           const svc = service as { name: string };
-          console.error(
-            `[UpdateProcessor] Failed to create service ${svc.name}:`,
-            error
-          );
+          console.error(`[UpdateProcessor] Failed to create service ${svc.name}:`, error);
         }
       }
 
@@ -121,10 +98,7 @@ export class UpdateProcessor {
           await this.db.services.deleteByName(service.name);
           console.log(`[UpdateProcessor] Deleted service: ${service.name}`);
         } catch (error) {
-          console.error(
-            `[UpdateProcessor] Failed to delete service ${service.name}:`,
-            error
-          );
+          console.error(`[UpdateProcessor] Failed to delete service ${service.name}:`, error);
         }
       }
     } catch (error) {

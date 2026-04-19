@@ -105,10 +105,10 @@ export class JWTService {
   }
 
   /**
-   * Creates a short-lived access token for an instance agent to call
-   * /v1/agent endpoints. This does not depend on a user session.
+   * Creates a short-lived access token for an instance node to call
+   * /v1/node endpoints. This does not depend on a user session.
    */
-  async createAgentAccessToken(
+  async createNodeAccessToken(
     instanceName: string,
     options?: { issuer?: string; audience?: string },
   ): Promise<string> {
@@ -117,9 +117,9 @@ export class JWTService {
 
     let jwt = new SignJWT({
       instance_id: instanceName,
-      token_type: 'agent',
-      perm: 'agent',
-      scopes: ['agent.status', 'agent.tasks'],
+      token_type: 'node',
+      perm: 'node',
+      scopes: ['node.status', 'node.tasks'],
     })
       .setProtectedHeader({
         alg: 'RS256',

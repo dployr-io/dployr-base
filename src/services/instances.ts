@@ -140,9 +140,9 @@ export class InstanceService {
 
     const token = await this.getOrCreateInstanceUserToken(kv, session, instance.id, db);
     
-    // Task queuing removed - agents connect via WebSocket and receive tasks directly
+    // Task queuing removed - nodes connect via WebSocket and receive tasks directly
     // TODO: Implement task queue if async task delivery is needed
-    // For now, tasks are sent when agent is connected via WS
+    // For now, tasks are sent when node is connected via WS
     return "enqueued";
   }
 

@@ -73,7 +73,7 @@ tags:
     description: GitHub App webhooks.
   - name: Runtime
     description: Runtime events and activity.
-  - name: Agents
+  - name: Nodes
     description: Instance reporting status and polling for tasks.
 
 components:
@@ -159,7 +159,7 @@ components:
           format: int64
           description: Milliseconds since Unix epoch.
         system:
-          $ref: '#/components/schemas/AgentUpdateMessage'
+          $ref: '#/components/schemas/NodeUpdateMessage'
       required:
         - kind
         - timestamp
@@ -182,9 +182,9 @@ components:
             mode: ready
             uptime_s: 3605
 
-    AgentUpdateMessage:
+    NodeUpdateMessage:
       type: object
-      description: Message sent by an agent to update its status and metadata.
+      description: Message sent by a node to update its status and metadata.
       properties:
         schema:
           type: string
@@ -195,7 +195,7 @@ components:
           example: 42
         epoch:
           type: string
-          description: Unique epoch identifier for this agent session.
+          description: Unique epoch identifier for this node session.
           example: instance-abc123-1732620000
         full:
           type: boolean
@@ -205,9 +205,9 @@ components:
           type: string
           description: Unique identifier of the instance.
           example: instance-abc123
-        agent_version:
+        node_version:
           type: string
-          description: Version of the agent software.
+          description: Dployrd version running on this node.
           example: v0.4.2
         platform:
           type: object
@@ -229,7 +229,7 @@ components:
           properties:
             mode:
               type: string
-              description: Agent mode.
+              description: Node's current mode.
               example: ready
             uptime_s:
               type: integer
@@ -259,10 +259,10 @@ components:
           mode: ready
           uptime_s: 3605
 
-    AgentUpdateV1_1Message:
+    NodeUpdateV1_1Message:
       type: object
       description: |
-        Agent update message for v1.1 with restructured format and expanded metrics.
+        Node update message for v1.1 with restructured format and expanded metrics.
         Supports both complete synchronization (is_full_sync: true) and incremental updates.
       properties:
         schema:
@@ -275,7 +275,7 @@ components:
           example: 100
         epoch:
           type: string
-          description: Unique epoch identifier for this agent session.
+          description: Unique epoch identifier for this node session.
           example: my-instance-1767603302
         instance_id:
           type: string
@@ -290,9 +290,9 @@ components:
           type: boolean
           description: True if this is a full status snapshot, false for partial updates.
           example: true
-        agent:
+        node:
           type: object
-          description: Agent build and platform information (full sync only).
+          description: Dployrd build and platform information (full sync only).
           properties:
             version:
               type: string
@@ -314,7 +314,7 @@ components:
               example: amd64
         status:
           type: object
-          description: Current agent status.
+          description: Current node status.
           properties:
             state:
               type: string
@@ -835,7 +835,7 @@ components:
         - source
         - runtime
 
-    AgentTaskMessage:
+    NodeTaskMessage:
       type: object
       description: WebSocket message delivering tasks from base to daemon.
       properties:
@@ -862,7 +862,7 @@ components:
               startOffset: 0
             Status: pending
 
-    AgentPullMessage:
+    NodePullMessage:
       type: object
       description: WebSocket message from daemon requesting pending tasks.
       properties:
@@ -873,7 +873,7 @@ components:
       required:
         - kind
 
-    AgentAckMessage:
+    NodeAckMessage:
       type: object
       description: WebSocket message from daemon acknowledging completed tasks.
       properties:
@@ -1277,9 +1277,9 @@ components:
           type: integer
           description: Total number of active WebSocket connections.
           example: 42
-        agentConnections:
+        nodeConnections:
           type: integer
-          description: Number of active agent connections.
+          description: Number of active node connections.
           example: 5
         clientConnections:
           type: integer
@@ -1504,7 +1504,7 @@ components:
                 properties:
                   seq:
                     type: integer
-                    description: Sequence number from agent update
+                    description: Sequence number from node update
                     example: 100
                   timestamp:
                     type: integer
@@ -3090,25 +3090,25 @@ paths:
         '404':
           description: Instance not found
 
-  /v1/agent/token:
+  /v1/node/token:
     post:
-      operationId: agentRefreshToken
+      operationId: nodeRefreshToken
       tags:
-        - Agents
-      summary: Issue a short-lived access token for an instance agent
+        - Nodes
+      summary: Issue a short-lived access token for an instance node
       x-requiredRole: public
       description: |
         Called by the dployr instance daemon to refresh its access token
-        for calling other /v1/agent endpoints.
+        for calling other /v1/node endpoints.
 
         The daemon must present a valid Bearer token that includes an
         `instance_id` claim. Base verifies the token and returns a new
-        short-lived agent access token.
+        short-lived node access token.
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: New agent access token issued
+          description: New node access token issued
           content:
             application/json:
               schema:
@@ -3128,11 +3128,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/agent/cert:
+  /v1/node/cert:
     post:
-      operationId: createAgentCert
+      operationId: createNodeCert
       tags:
-        - Agents
+        - Nodes
       summary: Register instance client certificate
       x-requiredRole: public
       description: |
@@ -3187,9 +3187,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
     put:
-      operationId: updateAgentCert
+      operationId: updateNodeCert
       tags:
-        - Agents
+        - Nodes
       summary: Update instance client certificate
       x-requiredRole: public
       description: |
@@ -4087,30 +4087,30 @@ paths:
                         e:
                           type: string
 
-  /v1/agent/ws:
+  /v1/node/ws:
     get:
-      operationId: agentTasksWebSocket
+      operationId: nodeTasksWebSocket
       tags:
-        - Agents
+        - Nodes
       summary: Open WebSocket for instance tasks
       x-requiredRole: public
       description: |
         Upgrades to a WebSocket used by the dployr instance daemon to
         sync tasks between base and instance in real time.
 
-        The daemon must include a Bearer agent access token in the
+        The daemon must include a Bearer node access token in the
         `Authorization` header. On successful authentication and
         instance lookup, the connection is upgraded.
 
         ## WebSocket Message Types
 
         ### From Daemon to Base:
-        - **AgentPullMessage**: `{"kind":"pull"}` - Daemon requests pending tasks.
-        - **AgentAckMessage**: `{"kind":"ack","ids":["..."]}` - Daemon acknowledges completed task IDs.
+        - **NodePullMessage**: `{"kind":"pull"}` - Daemon requests pending tasks.
+        - **NodeAckMessage**: `{"kind":"ack","ids":["..."]}` - Daemon acknowledges completed task IDs.
         - **LogChunkMessage**: `{"kind":"log_chunk","streamId":"...","lines":[...]}` - Daemon sends log data.
 
         ### From Base to Daemon:
-        - **AgentTaskMessage**: `{"kind":"task","items":[...]}` - Base delivers tasks to execute.
+        - **NodeTaskMessage**: `{"kind":"task","items":[...]}` - Base delivers tasks to execute.
 
         ## Task Structure
 
@@ -4120,7 +4120,7 @@ paths:
         - **Payload**: Task-specific data (e.g., LogStreamPayload for log streaming)
         - **Status**: One of `pending`, `in_progress`, `done`, `failed`
 
-        See the schema definitions for AgentTaskMessage, DaemonTask, and LogStreamPayload
+        See the schema definitions for NodeTaskMessage, DaemonTask, and LogStreamPayload
         for complete type information.
       parameters:
         - in: query
@@ -4239,11 +4239,11 @@ paths:
       summary: Terminal relay WebSocket endpoint
       x-requiredRole: public
       description: |
-        WebSocket endpoint for agent outbound terminal connections.
+        WebSocket endpoint for node outbound terminal connections.
         
         **WebSocket Messages**:
         
-        ### From Agent to Base:
+        ### From Node to Base:
         ```json
         {
           "action": "output",
@@ -4251,7 +4251,7 @@ paths:
         }
         ```
         
-        ### From Base to Agent:
+        ### From Base to Node:
         ```json
         {
           "action": "input",

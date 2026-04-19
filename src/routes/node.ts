@@ -9,10 +9,10 @@ import { ERROR } from "@/lib/constants/index.js";
 import { JWTService } from "@/services/jwt.js";
 import { getDB, getKV, getWS, type AppVariables } from "@/lib/context.js";
 
-const agent = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const node = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
-// Instance exchanges a valid agent token for a fresh short-lived token
-agent.post("/token", async (c) => {
+// Instance exchanges a valid node token for a fresh short-lived token
+node.post("/token", async (c) => {
   const kv = new KVStore(getKV(c));
   const jwtService = new JWTService(kv);
 
@@ -33,7 +33,7 @@ agent.post("/token", async (c) => {
   try {
     payload = await jwtService.verifyTokenIgnoringExpiry(rawToken);
   } catch (error) {
-    console.error("Invalid agent token on /v1/agent/token", error);
+    console.error("Invalid node token on /v1/node/token", error);
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -58,7 +58,7 @@ agent.post("/token", async (c) => {
     );
   }
 
-  if (tokenType === "agent" && exp !== undefined && exp < nowSeconds) {
+  if (tokenType === "node" && exp !== undefined && exp < nowSeconds) {
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -80,7 +80,7 @@ agent.post("/token", async (c) => {
     );
   }
 
-  const token = await jwtService.createAgentAccessToken(instance.tag, {
+  const token = await jwtService.createNodeAccessToken(instance.tag, {
     issuer: c.env.BASE_URL,
     audience: "dployr-instance",
   });
@@ -88,7 +88,7 @@ agent.post("/token", async (c) => {
   return c.json(createSuccessResponse({ token }), 200);
 });
 
-agent.post("/cert", async (c) => {
+node.post("/cert", async (c) => {
   const instanceId = c.req.query("instanceId");
   const instanceName = c.req.query("instanceName");
   const db = new DatabaseStore(getDB(c));
@@ -112,7 +112,7 @@ agent.post("/cert", async (c) => {
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("Invalid agent token", err);
+    console.error("Invalid node token", err);
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -206,7 +206,7 @@ agent.post("/cert", async (c) => {
   return new Response(null, { status: 204 });
 });
 
-agent.put("/cert", async (c) => {
+node.put("/cert", async (c) => {
   const instanceId = c.req.query("instanceId");
   const instanceName = c.req.query("instanceName");
   const db = new DatabaseStore(getDB(c));
@@ -230,7 +230,7 @@ agent.put("/cert", async (c) => {
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("Invalid agent token", err);
+    console.error("Invalid node token", err);
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -316,7 +316,7 @@ agent.put("/cert", async (c) => {
 });
 
 // Instance WebSocket endpoint for tasks
-agent.get("/ws", async (c) => {
+node.get("/ws", async (c) => {
   const instanceId = c.req.query("instanceId");
   const instanceName = c.req.query("instanceName");
   const db = new DatabaseStore(getDB(c));
@@ -340,7 +340,7 @@ agent.get("/ws", async (c) => {
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("Invalid agent token", err);
+    console.error("Invalid node token", err);
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -387,4 +387,4 @@ agent.get("/ws", async (c) => {
   return c.text("WebSocket upgrade required", 426);
 });
 
-export default agent;
+export default node;

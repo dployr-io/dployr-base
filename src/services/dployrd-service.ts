@@ -1,15 +1,15 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { AgentTask, DeploymentPayload } from "@/lib/tasks/types.js";
+import type { NodeTask, DeploymentPayload } from "@/lib/tasks/types.js";
 
-export class AgentService {
+export class NodeService {
   // Create a system install task
   createSystemInstallTask(
     taskId: string,
     version?: string,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "system/install:post",
@@ -23,7 +23,7 @@ export class AgentService {
     taskId: string,
     force: boolean = false,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "system/restart:post",
@@ -37,7 +37,7 @@ export class AgentService {
     taskId: string,
     force: boolean = false,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "system/reboot:post",
@@ -54,7 +54,7 @@ export class AgentService {
     limit?: number;
     duration?: string;
     token?: string;
-  }): AgentTask {
+  }): NodeTask {
     return {
       ID: options.streamId,
       Type: "logs/stream:post",
@@ -74,7 +74,7 @@ export class AgentService {
     taskId: string,
     payload: DeploymentPayload,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "deployments:post",
@@ -86,7 +86,7 @@ export class AgentService {
   createDeploymentListTask(
     taskId: string,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "deployments:get",
@@ -99,7 +99,7 @@ export class AgentService {
     taskId: string,
     serviceId: string,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: `services/${serviceId}:delete`,
@@ -109,7 +109,7 @@ export class AgentService {
   }
 
   // Create a file read task
-  createFileReadTask(taskId: string, path: string, token?: string): AgentTask {
+  createFileReadTask(taskId: string, path: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/read:get",
@@ -125,7 +125,7 @@ export class AgentService {
     content: string,
     encoding?: "utf8" | "base64",
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/write:put",
@@ -140,7 +140,7 @@ export class AgentService {
     path: string,
     type: "file" | "directory",
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/create:post",
@@ -154,7 +154,7 @@ export class AgentService {
     taskId: string,
     path: string,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/delete:delete",
@@ -164,7 +164,7 @@ export class AgentService {
   }
 
   // Create a file tree task
-  createFileTreeTask(taskId: string, path?: string, token?: string): AgentTask {
+  createFileTreeTask(taskId: string, path?: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs:get",
@@ -181,7 +181,7 @@ export class AgentService {
     recursive: boolean,
     requestId: string,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/watch:post",
@@ -197,7 +197,7 @@ export class AgentService {
     path: string,
     requestId: string,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/unwatch:post",
@@ -213,7 +213,7 @@ export class AgentService {
     cols: number,
     rows: number,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "terminal/open:post",
@@ -226,7 +226,7 @@ export class AgentService {
   createProxyStatusTask(
     taskId: string,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "proxy/status:get",
@@ -240,7 +240,7 @@ export class AgentService {
     taskId: string,
     force: boolean = false,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "proxy/restart:post",
@@ -257,7 +257,7 @@ export class AgentService {
     domain?: string,
     template?: string,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "proxy/add:post",
@@ -271,7 +271,7 @@ export class AgentService {
     taskId: string,
     serviceName: string,
     token?: string
-  ): AgentTask {
+  ): NodeTask {
     return {
       ID: taskId,
       Type: "proxy/remove:delete",

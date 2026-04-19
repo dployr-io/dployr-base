@@ -4,9 +4,7 @@
 /**
  * Helper type to make specific properties required while keeping others optional
  */
-export type RequiredOnly<T, K extends keyof T> =
-  Required<Pick<T, K>> &
-  Partial<Omit<T, K>>;
+export type RequiredOnly<T, K extends keyof T> = Required<Pick<T, K>> & Partial<Omit<T, K>>;
 
 export type Bindings = {
   ZEPTO_API_KEY: string;
@@ -65,7 +63,7 @@ export interface Session {
   userId: string;
   email: string;
   provider: OAuthProvider;
-  clusters: { id: string, name: string, owner: string, role: string }[];
+  clusters: { id: string; name: string; owner: string; role: string }[];
   createdAt: number;
   expiresAt: number;
 }
@@ -79,7 +77,7 @@ export type Variables = {
   wsHandler?: any;
 };
 
-export type ActorType = 'user' | 'headless'
+export type ActorType = "user" | "headless";
 
 export type SystemStatus = {
   status: "healthy" | "degraded" | "unhealthy";
@@ -154,13 +152,13 @@ export interface RemoteListResult {
   error?: string;
 }
 
-export interface ResendMailIntegration { }
+export interface ResendMailIntegration {}
 
-export interface ZohoMailIntegration { }
+export interface ZohoMailIntegration {}
 
-export interface MailerSendIntegration { }
+export interface MailerSendIntegration {}
 
-export interface MailChimpIntegration { }
+export interface MailChimpIntegration {}
 
 export interface DiscordIntegration {
   webhookUrl: string;
@@ -187,28 +185,28 @@ export interface EmailNotificationIntegration {
 
 export interface Integrations {
   email: {
-    resendMail: ResendMailIntegration,
-    zohoMail: ZohoMailIntegration,
-    mailerSend: MailerSendIntegration,
-    mailChimp: MailChimpIntegration,
-  },
+    resendMail: ResendMailIntegration;
+    zohoMail: ZohoMailIntegration;
+    mailerSend: MailerSendIntegration;
+    mailChimp: MailChimpIntegration;
+  };
   remote: {
-    gitHub: GitHubIntegration,
-    gitLab: GitLabIntegration,
-    bitBucket: BitBucketIntegration,
-  },
+    gitHub: GitHubIntegration;
+    gitLab: GitLabIntegration;
+    bitBucket: BitBucketIntegration;
+  };
   notification: {
-    discord: DiscordIntegration,
-    slack: SlackIntegration,
-    customWebhook: CustomWebhookIntegration,
-    email: EmailNotificationIntegration,
-  }
+    discord: DiscordIntegration;
+    slack: SlackIntegration;
+    customWebhook: CustomWebhookIntegration;
+    email: EmailNotificationIntegration;
+  };
 }
 
 // Export response types
 export * from "./responses.js";
 
-// Export agent types
-export * from "./agent.js";
+// Export node types
+export * from "./node.js";
 
 import type { NotificationEvent } from "@/services/notifier.js";

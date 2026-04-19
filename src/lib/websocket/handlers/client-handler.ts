@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { AgentTask } from "@/lib/tasks/types.js";
+import type { NodeTask } from "@/lib/tasks/types.js";
 import type { ConnectionManager } from "../connection-manager.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import type {
@@ -65,7 +65,7 @@ import {
   isTerminalMessage,
   isTerminalOpenMessage,
 } from "../message-types.js";
-import { AgentService } from "@/services/dployrd-service.js";
+import { NodeService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/index.js";
@@ -77,9 +77,9 @@ export interface ClientHandlerDependencies {
   kv: KVStore;
   db: DatabaseStore;
   jwtService: JWTService;
-  dployrdService: AgentService;
+  dployrdService: NodeService;
   terminalManager: TerminalManager;
-  sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
+  sendTaskToCluster: (clusterId: string, task: NodeTask) => boolean;
 }
 
 /**
@@ -90,9 +90,9 @@ export class ClientMessageHandler {
   private kv: KVStore;
   private db: DatabaseStore;
   private jwtService: JWTService;
-  private dployrdService: AgentService;
+  private dployrdService: NodeService;
   private terminalManager: TerminalManager;
-  private sendTaskToCluster: (clusterId: string, task: AgentTask) => boolean;
+  private sendTaskToCluster: (clusterId: string, task: NodeTask) => boolean;
   private config = loadConfig();
 
   constructor(deps: ClientHandlerDependencies) {
@@ -108,10 +108,7 @@ export class ClientMessageHandler {
   /**
    * Process a message from a client
    */
-  async handleMessage(
-    conn: ClusterConnection,
-    message: BaseMessage
-  ): Promise<void> {
+  async handleMessage(conn: ClusterConnection, message: BaseMessage): Promise<void> {
     // Update activity timestamp
     this.connectionManager.updateActivity(conn.ws);
 
@@ -135,12 +132,7 @@ export class ClientMessageHandler {
 
     // Check rate limiting
     if (!this.connectionManager.canAcceptRequest(conn.ws)) {
-      this.sendError(
-        conn,
-        message.requestId!,
-        WSErrorCode.RATE_LIMITED,
-        `Too many pending requests (max: ${this.connectionManager.getPendingCountForClient(conn.ws)})`
-      );
+      this.sendError(conn, message.requestId!, WSErrorCode.RATE_LIMITED, `Too many pending requests (max: ${this.connectionManager.getPendingCountForClient(conn.ws)})`);
       return;
     }
 
@@ -268,13 +260,7 @@ export class ClientMessageHandler {
   /**
    * Send error response to client
    */
-  private sendError(
-    conn: ClusterConnection,
-    requestId: string,
-    code: WSErrorCode,
-    message: string,
-    details?: Record<string, unknown>
-  ): void {
+  private sendError(conn: ClusterConnection, requestId: string, code: WSErrorCode, message: string, details?: Record<string, unknown>): void {
     try {
       const error = createWSError(requestId, code, message, details);
       conn.ws.send(JSON.stringify(error));
@@ -314,10 +300,7 @@ export class ClientMessageHandler {
   /**
    * Handle log stream subscription
    */
-  private async handleLogSubscribe(
-    conn: ClusterConnection,
-    message: LogSubscribeMessage
-  ): Promise<void> {
+  private async handleLogSubscribe(conn: ClusterConnection, message: LogSubscribeMessage): Promise<void> {
     const { instanceName, path, startOffset, limit, duration, requestId } = message;
 
     if (!instanceName || !path) {
@@ -331,13 +314,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const streamId = this.buildStreamId(
-      conn.clusterId,
-      path,
-      startOffset,
-      limit,
-      duration
-    );
+    const streamId = this.buildStreamId(conn.clusterId, path, startOffset, limit, duration);
 
     // Check for existing stream
     if (this.connectionManager.updateLogStreamClient(streamId, conn.ws)) {
@@ -354,8 +331,8 @@ export class ClientMessageHandler {
       duration,
     });
 
-    // Create and send task to agents in cluster
-    const token = await this.jwtService.createAgentAccessToken(instance.tag);
+    // Create and send task to nodes in cluster
+    const token = await this.jwtService.createNodeAccessToken(instance.tag);
     const task = this.dployrdService.createLogStreamTask({
       streamId,
       path,
@@ -366,11 +343,9 @@ export class ClientMessageHandler {
     });
     this.sendTaskToCluster(conn.clusterId, task);
 
-    console.log("Token", token)
+    console.log("Token", token);
 
-    console.log(
-      `[WS] Created log stream task ${streamId} for cluster ${conn.clusterId}`
-    );
+    console.log(`[WS] Created log stream task ${streamId} for cluster ${conn.clusterId}`);
   }
 
   /**
@@ -383,7 +358,7 @@ export class ClientMessageHandler {
     // Send acknowledgment
     try {
       conn.ws.send(JSON.stringify({ kind: "log_unsubscribe_response", requestId, success: true }));
-    } catch { }
+    } catch {}
   }
 
   /**
@@ -405,13 +380,7 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      conn.clusterId,
-      MessageKind.DEPLOY,
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MessageKind.DEPLOY);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -426,17 +395,13 @@ export class ClientMessageHandler {
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(
-      conn.session,
-      instanceName,
-      conn.clusterId
-    );
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
     const task = this.dployrdService.createDeployTask(taskId, payload, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -444,7 +409,7 @@ export class ClientMessageHandler {
   }
 
   /**
-   * Handle deployment list request 
+   * Handle deployment list request
    */
   private async handleDeploymentList(conn: ClusterConnection, message: DeploymentListMessage): Promise<void> {
     const { instanceName, requestId } = message;
@@ -461,30 +426,20 @@ export class ClientMessageHandler {
 
     const taskId = ulid();
 
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      conn.clusterId,
-      MessageKind.DEPLOYMENT_LIST,
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MessageKind.DEPLOYMENT_LIST);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(
-      conn.session,
-      instanceName,
-      conn.clusterId
-    );
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
     const task = this.dployrdService.createDeploymentListTask(taskId, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -510,13 +465,7 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      conn.clusterId,
-      MessageKind.SERVICE_REMOVE,
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MessageKind.SERVICE_REMOVE);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -524,7 +473,7 @@ export class ClientMessageHandler {
     }
 
     const service = await this.db.services.getByName(name);
-    
+
     if (!service) {
       this.connectionManager.removePendingRequest(taskId);
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, `Service '${name}' not found`);
@@ -538,33 +487,26 @@ export class ClientMessageHandler {
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(
-      conn.session,
-      instance.tag,
-      conn.clusterId
-    );
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createServiceRemoveTask(taskId, service.name, token);
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
-    console.log(`[WS] Created service remove task ${taskId} (requestId: ${requestId})`);  
+    console.log(`[WS] Created service remove task ${taskId} (requestId: ${requestId})`);
   }
-  
+
   /**
    * Handle log stream for deployments and services
    * path formats:
    *   - "<deployment-id>" for deployment logs
    *   - "service:<service-name>" for service logs
    */
-  private async handleLogStream(
-    conn: ClusterConnection,
-    message: LogStreamMessage
-  ): Promise<void> {
+  private async handleLogStream(conn: ClusterConnection, message: LogStreamMessage): Promise<void> {
     const { token, path, streamId, duration, startFrom, requestId } = message;
 
     if (!token || !path || !streamId || !duration) {
@@ -593,32 +535,27 @@ export class ClientMessageHandler {
       path,
       ws: conn.ws,
       startOffset,
-      duration
+      duration,
     });
 
-    // Create and send task to agents in cluster
-    const agentToken = await this.jwtService.createAgentAccessToken(conn.clusterId);
+    // Create and send task to nodes in cluster
+    const nodeToken = await this.jwtService.createNodeAccessToken(conn.clusterId);
     const task = this.dployrdService.createLogStreamTask({
       streamId,
       path,
       startOffset,
       duration,
-      token: agentToken,
+      token: nodeToken,
     });
     this.sendTaskToCluster(conn.clusterId, task);
 
-    console.log(
-      `[WS] Created log stream ${streamId} for path ${path} in cluster ${conn.clusterId}`
-    );
+    console.log(`[WS] Created log stream ${streamId} for path ${path} in cluster ${conn.clusterId}`);
   }
 
   /**
    * Handle file read request
    */
-  private async handleFileRead(
-    conn: ClusterConnection,
-    message: FileReadMessage
-  ): Promise<void> {
+  private async handleFileRead(conn: ClusterConnection, message: FileReadMessage): Promise<void> {
     const { instanceId, path, requestId } = message;
 
     if (!instanceId || !path) {
@@ -640,13 +577,7 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      conn.clusterId,
-      "file_read"
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_read");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -659,7 +590,7 @@ export class ClientMessageHandler {
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -669,10 +600,7 @@ export class ClientMessageHandler {
   /**
    * Handle file write request
    */
-  private async handleFileWrite(
-    conn: ClusterConnection,
-    message: FileWriteMessage
-  ): Promise<void> {
+  private async handleFileWrite(conn: ClusterConnection, message: FileWriteMessage): Promise<void> {
     const { instanceId, path, content, encoding, requestId } = message;
 
     if (!instanceId || !path || content === undefined) {
@@ -694,13 +622,7 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      conn.clusterId,
-      "file_write"
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_write");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -713,7 +635,7 @@ export class ClientMessageHandler {
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -723,10 +645,7 @@ export class ClientMessageHandler {
   /**
    * Handle file create request
    */
-  private async handleFileCreate(
-    conn: ClusterConnection,
-    message: FileCreateMessage
-  ): Promise<void> {
+  private async handleFileCreate(conn: ClusterConnection, message: FileCreateMessage): Promise<void> {
     const { instanceId, path, type, requestId } = message;
 
     if (!instanceId || !path || !type) {
@@ -748,13 +667,7 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      conn.clusterId,
-      "file_create"
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_create");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -767,7 +680,7 @@ export class ClientMessageHandler {
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -777,10 +690,7 @@ export class ClientMessageHandler {
   /**
    * Handle file delete request
    */
-  private async handleFileDelete(
-    conn: ClusterConnection,
-    message: FileDeleteMessage
-  ): Promise<void> {
+  private async handleFileDelete(conn: ClusterConnection, message: FileDeleteMessage): Promise<void> {
     const { instanceId, path, requestId } = message;
 
     if (!instanceId || !path) {
@@ -802,13 +712,7 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      conn.clusterId,
-      "file_delete"
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_delete");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -821,7 +725,7 @@ export class ClientMessageHandler {
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -831,10 +735,7 @@ export class ClientMessageHandler {
   /**
    * Handle file tree request
    */
-  private async handleFileTree(
-    conn: ClusterConnection,
-    message: FileTreeMessage
-  ): Promise<void> {
+  private async handleFileTree(conn: ClusterConnection, message: FileTreeMessage): Promise<void> {
     const { instanceId, path, requestId } = message;
 
     if (!instanceId) {
@@ -856,13 +757,7 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      conn.clusterId,
-      "file_tree"
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_tree");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -875,7 +770,7 @@ export class ClientMessageHandler {
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -885,13 +780,7 @@ export class ClientMessageHandler {
   /**
    * Build a unique stream ID
    */
-  private buildStreamId(
-    clusterId: string,
-    path: string,
-    startOffset?: number,
-    limit?: number,
-    duration?: string,
-  ): string {
+  private buildStreamId(clusterId: string, path: string, startOffset?: number, limit?: number, duration?: string): string {
     const offsetKey = startOffset ?? 0;
     const limitKey = limit ?? -1;
     return `${clusterId}:${path}:${offsetKey}:${limitKey}:${duration}`;
@@ -900,10 +789,7 @@ export class ClientMessageHandler {
   /**
    * Handle instance token rotate request
    */
-  private async handleInstanceTokenRotate(
-    conn: ClusterConnection,
-    message: InstanceTokenRotateMessage
-  ): Promise<void> {
+  private async handleInstanceTokenRotate(conn: ClusterConnection, message: InstanceTokenRotateMessage): Promise<void> {
     const { instanceName, token, requestId } = message;
 
     try {
@@ -934,14 +820,16 @@ export class ClientMessageHandler {
 
       const rotated = await this.jwtService.rotateBootstrapToken(instance.id, nonce, "5m");
 
-      conn.ws.send(JSON.stringify({
-        kind: "instance_token_rotate_response",
-        requestId,
-        success: true,
-        data: {
-          token: rotated,
-        },
-      }));
+      conn.ws.send(
+        JSON.stringify({
+          kind: "instance_token_rotate_response",
+          requestId,
+          success: true,
+          data: {
+            token: rotated,
+          },
+        }),
+      );
     } catch (error) {
       console.error("[WS] Failed to rotate token:", error);
       this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to rotate token");
@@ -951,10 +839,7 @@ export class ClientMessageHandler {
   /**
    * Handle instance system install request
    */
-  private async handleInstanceSystemInstall(
-    conn: ClusterConnection,
-    message: InstanceSystemInstallMessage
-  ): Promise<void> {
+  private async handleInstanceSystemInstall(conn: ClusterConnection, message: InstanceSystemInstallMessage): Promise<void> {
     const { instanceName, clusterId, version, requestId } = message;
 
     if (!conn.session) {
@@ -976,31 +861,27 @@ export class ClientMessageHandler {
       }
 
       const taskId = ulid();
-      const token = await this.jwtService.createInstanceAccessToken(
-        conn.session,
-        instanceName,
-        clusterId
-      );
+      const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
       const task = this.dployrdService.createSystemInstallTask(taskId, version, token);
 
       const sent = this.sendTaskToCluster(clusterId, task);
       if (!sent) {
-        this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+        this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
         return;
       }
 
-      conn.ws.send(JSON.stringify({
-        kind: "instance_system_install_response",
-        requestId,
-        success: true,
-        data: {
-          status: "accepted",
-          taskId,
-          message: version
-            ? `Install task sent for version ${version}`
-            : "Install task sent for latest version",
-        },
-      }));
+      conn.ws.send(
+        JSON.stringify({
+          kind: "instance_system_install_response",
+          requestId,
+          success: true,
+          data: {
+            status: "accepted",
+            taskId,
+            message: version ? `Install task sent for version ${version}` : "Install task sent for latest version",
+          },
+        }),
+      );
     } catch (error) {
       console.error("[WS] Failed to send system install task:", error);
       this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system install task");
@@ -1010,10 +891,7 @@ export class ClientMessageHandler {
   /**
    * Handle instance system reboot request
    */
-  private async handleInstanceSystemReboot(
-    conn: ClusterConnection,
-    message: InstanceSystemRebootMessage
-  ): Promise<void> {
+  private async handleInstanceSystemReboot(conn: ClusterConnection, message: InstanceSystemRebootMessage): Promise<void> {
     const { instanceName, clusterId, force = false, requestId } = message;
 
     if (!conn.session) {
@@ -1035,31 +913,27 @@ export class ClientMessageHandler {
       }
 
       const taskId = ulid();
-      const token = await this.jwtService.createInstanceAccessToken(
-        conn.session,
-        instanceName,
-        clusterId
-      );
+      const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
       const task = this.dployrdService.createSystemRebootTask(taskId, force, token);
 
       const sent = this.sendTaskToCluster(clusterId, task);
       if (!sent) {
-        this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+        this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
         return;
       }
 
-      conn.ws.send(JSON.stringify({
-        kind: "instance_system_reboot_response",
-        requestId,
-        success: true,
-        data: {
-          status: "accepted",
-          taskId,
-          message: force
-            ? "Reboot task sent (force mode - bypassing pending tasks check)"
-            : "Reboot task sent (will wait for pending tasks to complete)",
-        },
-      }));
+      conn.ws.send(
+        JSON.stringify({
+          kind: "instance_system_reboot_response",
+          requestId,
+          success: true,
+          data: {
+            status: "accepted",
+            taskId,
+            message: force ? "Reboot task sent (force mode - bypassing pending tasks check)" : "Reboot task sent (will wait for pending tasks to complete)",
+          },
+        }),
+      );
     } catch (error) {
       console.error("[WS] Failed to send system reboot task:", error);
       this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system reboot task");
@@ -1069,10 +943,7 @@ export class ClientMessageHandler {
   /**
    * Handle file watch request
    */
-  private async handleFileWatch(
-    conn: ClusterConnection,
-    message: FileWatchMessage
-  ): Promise<void> {
+  private async handleFileWatch(conn: ClusterConnection, message: FileWatchMessage): Promise<void> {
     const { instanceId, path, recursive = false, requestId } = message;
 
     if (!conn.session) {
@@ -1092,38 +963,30 @@ export class ClientMessageHandler {
     const taskId = ulid();
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
 
-    const task = this.dployrdService.createFileWatchTask(
-      taskId,
-      instanceId,
-      path,
-      recursive,
-      requestId,
-      token
-    );
+    const task = this.dployrdService.createFileWatchTask(taskId, instanceId, path, recursive, requestId, token);
 
     const sent = this.sendTaskToCluster(conn.clusterId, task);
     if (!sent) {
       this.connectionManager.removeFileWatch(watchKey, conn.connectionId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
-    conn.ws.send(JSON.stringify({
-      kind: "file_watch_response",
-      requestId,
-      taskId,
-      success: true,
-      data: { path, recursive },
-    }));
+    conn.ws.send(
+      JSON.stringify({
+        kind: "file_watch_response",
+        requestId,
+        taskId,
+        success: true,
+        data: { path, recursive },
+      }),
+    );
   }
 
   /**
    * Handle file unwatch request
    */
-  private async handleFileUnwatch(
-    conn: ClusterConnection,
-    message: FileUnwatchMessage
-  ): Promise<void> {
+  private async handleFileUnwatch(conn: ClusterConnection, message: FileUnwatchMessage): Promise<void> {
     const { instanceId, path, requestId } = message;
 
     if (!conn.session) {
@@ -1140,33 +1003,29 @@ export class ClientMessageHandler {
     const watchKey = `${instanceId}:${path}`;
     this.connectionManager.removeFileWatch(watchKey, conn.connectionId);
 
-    // Only send unwatch task to agent if no more subscribers
+    // Only send unwatch task to node if no more subscribers
     if (!this.connectionManager.hasFileWatchSubscribers(watchKey)) {
       const taskId = ulid();
       const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
 
-      const task = this.dployrdService.createFileUnwatchTask(
-        taskId,
-        instanceId,
-        path,
-        requestId,
-        token
-      );
+      const task = this.dployrdService.createFileUnwatchTask(taskId, instanceId, path, requestId, token);
 
       this.sendTaskToCluster(conn.clusterId, task);
     }
 
-    conn.ws.send(JSON.stringify({
-      kind: "file_unwatch_response",
-      requestId,
-      taskId: ulid(),
-      success: true,
-      data: { path },
-    }));
+    conn.ws.send(
+      JSON.stringify({
+        kind: "file_unwatch_response",
+        requestId,
+        taskId: ulid(),
+        success: true,
+        data: { path },
+      }),
+    );
   }
 
   /**
-   * Handle terminal open request - sends task to agent to initiate outbound WebSocket
+   * Handle terminal open request - sends task to node to initiate outbound WebSocket
    */
   private async handleTerminalOpen(conn: ClusterConnection, message: TerminalOpenMessage): Promise<void> {
     const { instanceId, requestId, cols, rows } = message;
@@ -1182,7 +1041,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const userClusters = conn.session.clusters.map(c => c.id);
+    const userClusters = conn.session.clusters.map((c) => c.id);
     if (!userClusters.includes(instance.clusterId)) {
       this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
       return;
@@ -1199,7 +1058,7 @@ export class ClientMessageHandler {
     const sent = this.sendTaskToCluster(instance.clusterId, task);
     if (!sent) {
       this.terminalManager.removeExpectedSession(sessionId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agent available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No node available");
       return;
     }
   }
@@ -1221,10 +1080,7 @@ export class ClientMessageHandler {
   /**
    * Handle instance system restart request
    */
-  private async handleInstanceSystemRestart(
-    conn: ClusterConnection,
-    message: InstanceSystemRestartMessage
-  ): Promise<void> {
+  private async handleInstanceSystemRestart(conn: ClusterConnection, message: InstanceSystemRestartMessage): Promise<void> {
     const { instanceName, clusterId, force = false, requestId } = message;
 
     if (!conn.session) {
@@ -1246,31 +1102,27 @@ export class ClientMessageHandler {
       }
 
       const taskId = ulid();
-      const token = await this.jwtService.createInstanceAccessToken(
-        conn.session,
-        instanceName,
-        clusterId
-      );
+      const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
       const task = this.dployrdService.createDaemonRestartTask(taskId, force, token);
 
       const sent = this.sendTaskToCluster(clusterId, task);
       if (!sent) {
-        this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+        this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
         return;
       }
 
-      conn.ws.send(JSON.stringify({
-        kind: "instance_system_restart_response",
-        requestId,
-        success: true,
-        data: {
-          status: "accepted",
-          taskId,
-          message: force
-            ? "Restart task sent (force mode - bypassing pending tasks check)"
-            : "Restart task sent (will wait for pending tasks to complete)",
-        },
-      }));
+      conn.ws.send(
+        JSON.stringify({
+          kind: "instance_system_restart_response",
+          requestId,
+          success: true,
+          data: {
+            status: "accepted",
+            taskId,
+            message: force ? "Restart task sent (force mode - bypassing pending tasks check)" : "Restart task sent (will wait for pending tasks to complete)",
+          },
+        }),
+      );
     } catch (error) {
       console.error("[WS] Failed to send system restart task:", error);
       this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system restart task");
@@ -1280,10 +1132,7 @@ export class ClientMessageHandler {
   /**
    * Handle proxy status request
    */
-  private async handleProxyStatus(
-    conn: ClusterConnection,
-    message: ProxyStatusMessage
-  ): Promise<void> {
+  private async handleProxyStatus(conn: ClusterConnection, message: ProxyStatusMessage): Promise<void> {
     const { instanceName, clusterId, requestId } = message;
 
     if (!conn.session) {
@@ -1305,13 +1154,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      clusterId,
-      MessageKind.PROXY_STATUS
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MessageKind.PROXY_STATUS);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -1324,7 +1167,7 @@ export class ClientMessageHandler {
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -1334,10 +1177,7 @@ export class ClientMessageHandler {
   /**
    * Handle proxy restart request
    */
-  private async handleProxyRestart(
-    conn: ClusterConnection,
-    message: ProxyRestartMessage
-  ): Promise<void> {
+  private async handleProxyRestart(conn: ClusterConnection, message: ProxyRestartMessage): Promise<void> {
     const { instanceName, clusterId, force = false, requestId } = message;
 
     if (!conn.session) {
@@ -1359,13 +1199,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      clusterId,
-      MessageKind.PROXY_RESTART
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MessageKind.PROXY_RESTART);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -1378,7 +1212,7 @@ export class ClientMessageHandler {
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -1388,10 +1222,7 @@ export class ClientMessageHandler {
   /**
    * Handle proxy add request
    */
-  private async handleProxyAdd(
-    conn: ClusterConnection,
-    message: ProxyAddMessage
-  ): Promise<void> {
+  private async handleProxyAdd(conn: ClusterConnection, message: ProxyAddMessage): Promise<void> {
     const { instanceName, clusterId, serviceName, upstream, domain, template, requestId } = message;
 
     if (!serviceName || !upstream) {
@@ -1418,13 +1249,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      clusterId,
-      MessageKind.PROXY_ADD
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MessageKind.PROXY_ADD);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -1437,7 +1262,7 @@ export class ClientMessageHandler {
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -1447,10 +1272,7 @@ export class ClientMessageHandler {
   /**
    * Handle proxy remove request
    */
-  private async handleProxyRemove(
-    conn: ClusterConnection,
-    message: ProxyRemoveMessage
-  ): Promise<void> {
+  private async handleProxyRemove(conn: ClusterConnection, message: ProxyRemoveMessage): Promise<void> {
     const { instanceName, clusterId, serviceName, requestId } = message;
 
     if (!serviceName) {
@@ -1477,13 +1299,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const added = this.connectionManager.addPendingRequest(
-      taskId,
-      requestId,
-      conn.ws,
-      clusterId,
-      MessageKind.PROXY_REMOVE
-    );
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MessageKind.PROXY_REMOVE);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -1496,7 +1312,7 @@ export class ClientMessageHandler {
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.AGENT_DISCONNECTED, "No agents available");
+      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
       return;
     }
 
@@ -1506,10 +1322,7 @@ export class ClientMessageHandler {
   /**
    * Handle process history request
    */
-  private async handleProcessHistory(
-    conn: ClusterConnection,
-    message: ProcessHistoryMessage
-  ): Promise<void> {
+  private async handleProcessHistory(conn: ClusterConnection, message: ProcessHistoryMessage): Promise<void> {
     const { instanceId, startTime, endTime, requestId } = message;
 
     if (!requestId) {
@@ -1531,7 +1344,7 @@ export class ClientMessageHandler {
       }
 
       // Verify user has access to this instance's cluster
-      const userClusters = conn.session.clusters.map(c => c.id);
+      const userClusters = conn.session.clusters.map((c) => c.id);
       if (!userClusters.includes(instance.clusterId)) {
         this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
         return;
@@ -1539,7 +1352,7 @@ export class ClientMessageHandler {
 
       // Calculate time range (default: last 1 hour)
       const now = Date.now();
-      const start = startTime || (now - 60 * 60 * 1000); // 1 hour ago
+      const start = startTime || now - 60 * 60 * 1000; // 1 hour ago
       const end = endTime || now;
 
       // Retrieve process snapshots for the time range
