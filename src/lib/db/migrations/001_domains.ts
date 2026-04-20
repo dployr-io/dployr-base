@@ -3,7 +3,7 @@
 
 export const domains = `
 CREATE TABLE IF NOT EXISTS domains (
-  id TEXT PRIMARY KEY,
+  id UUID PRIMARY KEY,
   instance_id TEXT NOT NULL,
   domain TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active')),

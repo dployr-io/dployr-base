@@ -3,7 +3,7 @@
 
 export const services = `
 CREATE TABLE IF NOT EXISTS services (
-  id TEXT PRIMARY KEY,
+  id UUID PRIMARY KEY,
   instance_id TEXT NOT NULL,
   name TEXT NOT NULL UNIQUE,
   created_at BIGINT NOT NULL,
