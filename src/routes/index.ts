@@ -3,7 +3,6 @@
 
 import type { Hono } from "hono";
 import type { Bindings, Variables } from "@/types/index.js";
-
 import auth from "./auth.js";
 import instances from "./instances.js";
 import integrations from "./integrations.js";

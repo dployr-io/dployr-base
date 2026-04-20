@@ -20,6 +20,8 @@ export const INSTANCE_STATUS_TTL = 60 * 15; // 15 minutes
 export const DEDUP_TTL = 60 * 60; // 1 hour
 export const RELEASE_CACHE_TTL = 60 * 10; // 10 minutes
 export const PENDING_GITHUB_INSTALL_TTL = 60 * 10; // 10 minutes
+export const ADMIN_JWT_TTL = 60 * 30; // 30 minutes
+export const ADMIN_JWT_REFRESH_THRESHOLD = 60 * 29.5; // 29.5 minutes
 
 export const ERROR = {
   REQUEST: {
@@ -40,6 +42,7 @@ export const ERROR = {
     BAD_OAUTH_STATE: { code: "auth.bad_oauth_state", status: 401, message: "Invalid OAuth state" },
   },
   PERMISSION: {
+    RESTRICTED_ENDPOINT: { code: "permission.restricted_endpoint", status: 403, message: "Denied access to restriced endpoint!" },
     OWNER_ROLE_REQUIRED: { code: "permission.owner_role_required", status: 403, message: "Owner role required" },
     ADMIN_ROLE_REQUIRED: { code: "permission.admin_role_required", status: 403, message: "Admin role required" },
     DEVELOPER_ROLE_REQUIRED: { code: "permission.developer_role_required", status: 403, message: "Developer role required" },

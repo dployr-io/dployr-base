@@ -8,6 +8,7 @@ import { bootstrapMiddleware, getCorsConfig } from "@/lib/bootstrap.js";
 import { createCorsMiddleware } from "@/middleware/cors.js";
 import { globalRateLimit } from "@/middleware/ratelimit.js";
 import { registerRoutes } from "@/routes/index.js";
+import admin from "@/routes/admin.js";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -15,6 +16,9 @@ const isNode = typeof process !== "undefined" && process.versions?.node;
 
 // Bootstrap middleware - initializes adapters and injects context
 app.use("*", bootstrapMiddleware);
+
+// Restricted admin API - for management
+app.route("/v1/admin", admin);
 
 // Global rate limiting
 app.use("/v1/*", globalRateLimit);

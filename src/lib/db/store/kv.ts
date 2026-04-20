@@ -3,7 +3,8 @@
 
 import { ActorType, Session, User } from "@/types/index.js";
 import { ulid } from "ulid";
-import { CryptoKey, importPKCS8 } from "jose";
+import { CryptoKey, importPKCS8, SignJWT } from "jose";
+import { ADMIN_JWT_TTL, ADMIN_JWT_REFRESH_THRESHOLD } from "@/lib/constants/index.js";
 import { generateKeyPair } from "@/lib/crypto/keystore.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import {
@@ -557,5 +558,43 @@ export class KVStore {
     );
 
     return snapshots.filter((s): s is { seq: number; timestamp: number; data: Record<string, unknown> } => s !== null).sort((a, b) => a.timestamp - b.timestamp); // Ascending order for timeline
+  }
+
+  async createAdminJWT(sessionId: string, ttl: number = ADMIN_JWT_TTL): Promise<string> {
+    const privateKey = await this.getPrivateKey();
+    const payload = {
+      sub: sessionId,
+      type: "admin",
+    };
+    return await new SignJWT(payload)
+      .setProtectedHeader({ alg: "RS256" })
+      .setIssuedAt()
+      .setExpirationTime("30m")
+      .sign(privateKey);
+  }
+
+  async getAdminJWT(sessionId: string): Promise<string | null> {
+    const data = await this.kv.get(`admin_jwt:${sessionId}`);
+    if (!data) return null;
+    try {
+      const parsed = JSON.parse(data);
+      const expiresAt = parsed.expiresAt;
+      const now = Date.now();
+      if (expiresAt - now < ADMIN_JWT_REFRESH_THRESHOLD * 1000) {
+        return null;
+      }
+      return parsed.token;
+    } catch {
+      return null;
+    }
+  }
+
+  async saveAdminJWT(sessionId: string, token: string, ttl: number = ADMIN_JWT_TTL): Promise<void> {
+    const expiresAt = Date.now() + ttl * 1000;
+    await this.kv.put(
+      `admin_jwt:${sessionId}`,
+      JSON.stringify({ token, expiresAt }),
+      { ttl }
+    );
   }
 }

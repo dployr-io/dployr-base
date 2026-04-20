@@ -74,6 +74,7 @@ export async function bootstrapMiddleware(
   const corsConfig = adapters!.config?.cors;
   const integrationsConfig = adapters!.config?.integrations;
   const authConfig = adapters!.config?.auth;
+  const adminConfig = adapters!.config?.admin;
 
   c.env = {
     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
@@ -91,6 +92,8 @@ export async function bootstrapMiddleware(
     MICROSOFT_CLIENT_ID: authConfig?.microsoft_client_id || process.env.MICROSOFT_CLIENT_ID || "",
     MICROSOFT_CLIENT_SECRET: authConfig?.microsoft_client_secret || process.env.MICROSOFT_CLIENT_SECRET || "",
     CORS_ALLOWED_ORIGINS: corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS || "",
+    ADMIN_API_KEY: adminConfig?.admin_api_key || process.env.ADMIN_API_KEY || "",
+    GRAFANA_URL: adminConfig?.grafana_url || process.env.GRAFANA_URL || "",
   } as unknown as Bindings;
 
   await next();
