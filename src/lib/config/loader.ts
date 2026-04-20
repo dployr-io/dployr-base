@@ -1,27 +1,9 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { readFileSync } from 'fs';
-import { parse as parseToml } from 'smol-toml';
-import { z } from 'zod';
-
-/**
- * Proxy configuration schema
- */
-const ProxyConfigSchema = z.object({
-  /** Enable the proxy server */
-  enabled: z.boolean().default(false),
-  /** Port for the proxy server */
-  port: z.number().default(8080),
-  /** Host to bind proxy server */
-  host: z.string().default("0.0.0.0"),
-  /** Base domain for routing (e.g., "dployr.io") */
-  base_domain: z.string().default("dployr.io"),
-  /** Request timeout in milliseconds */
-  timeout_ms: z.number().default(30000),
-  /** Cache TTL for route lookups in seconds */
-  cache_ttl_seconds: z.number().default(30),
-}).optional();
+import { readFileSync } from "fs";
+import { parse as parseToml } from "smol-toml";
+import { z } from "zod";
 
 /**
  * Type-safe configuration schema
@@ -29,7 +11,7 @@ const ProxyConfigSchema = z.object({
 const ConfigSchema = z.object({
   server: z.object({
     port: z.number().default(7878),
-    host: z.string().default('0.0.0.0'),
+    host: z.string().default("0.0.0.0"),
     base_url: z.url(),
     app_url: z.url(),
   }),
@@ -39,7 +21,7 @@ const ConfigSchema = z.object({
     auto_migrate: z.boolean().default(true),
   }),
   kv: z.object({
-    type: z.enum(['redis', 'upstash', 'memory']),
+    type: z.enum(["redis", "upstash", "memory"]),
     name: z.string().optional(),
     host: z.string().optional(),
     port: z.number().optional(),
@@ -49,7 +31,7 @@ const ConfigSchema = z.object({
     rest_token: z.string().optional(),
   }),
   storage: z.object({
-    type: z.enum(['s3', 'filesystem', 'azure', 'digitalocean']),
+    type: z.enum(["s3", "filesystem", "azure", "digitalocean"]),
     path: z.string().optional(),
     bucket: z.string().optional(),
     region: z.string().optional(),
@@ -64,43 +46,63 @@ const ConfigSchema = z.object({
     microsoft_client_id: z.string().optional(),
     microsoft_client_secret: z.string().optional(),
   }),
-  integrations: z.object({
-    github_app_id: z.string().optional(),
-    github_app_private_key: z.string().optional(),
-    github_webhook_secret: z.string().optional(),
-    github_token: z.string().optional(),
-    gitlab_app_id: z.string().optional(),
-    gitlab_app_secret: z.string().optional(),
-    bitbucket_app_id: z.string().optional(),
-    bitbucket_app_secret: z.string().optional(),
-  }).optional(),
-  email: z.object({
-    provider: z.enum(['zepto', 'resend', 'smtp']),
-    zepto_api_key: z.string().optional(),
-    from_address: z.email().optional(),
-    smtp_host: z.string().optional(),
-    smtp_port: z.number().optional(),
-    smtp_user: z.string().optional(),
-    smtp_pass: z.string().optional(),
-  }).superRefine((val, ctx) => {
-    if (val.provider === 'zepto' && val.zepto_api_key && !val.from_address) {
-      ctx.addIssue({
-        code: "custom",
-        path: ['from_address'],
-        message: 'email.from_address is required when using Zepto with a non-empty zepto_api_key',
-      });
-    }
+  admin: z.object({
+    admin_api_key: z.string(),
+    grafana_url: z.url(),
+    jwt_ttl_seconds: z.number().default(1800),
   }),
+  integrations: z
+    .object({
+      github_app_id: z.string().optional(),
+      github_app_private_key: z.string().optional(),
+      github_webhook_secret: z.string().optional(),
+      github_token: z.string().optional(),
+      gitlab_app_id: z.string().optional(),
+      gitlab_app_secret: z.string().optional(),
+      bitbucket_app_id: z.string().optional(),
+      bitbucket_app_secret: z.string().optional(),
+    })
+    .optional(),
+  email: z
+    .object({
+      provider: z.enum(["zepto", "resend", "smtp"]),
+      zepto_api_key: z.string().optional(),
+      from_address: z.email().optional(),
+      smtp_host: z.string().optional(),
+      smtp_port: z.number().optional(),
+      smtp_user: z.string().optional(),
+      smtp_pass: z.string().optional(),
+    })
+    .superRefine((val, ctx) => {
+      if (val.provider === "zepto" && val.zepto_api_key && !val.from_address) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["from_address"],
+          message: "email.from_address is required when using Zepto with a non-empty zepto_api_key",
+        });
+      }
+    }),
   security: z.object({
     session_ttl: z.number().default(86400),
-    jwt_algorithm: z.string().default('RS256'),
+    jwt_algorithm: z.string().default("RS256"),
     global_rate_limit: z.number().default(100),
     strict_rate_limit: z.number().default(10),
   }),
-  cors: z.object({
-    allowed_origins: z.string().optional(),
-  }).optional(),
-  proxy: ProxyConfigSchema,
+  cors: z
+    .object({
+      allowed_origins: z.string().optional(),
+    })
+    .optional(),
+  proxy: z
+    .object({
+      enabled: z.boolean().default(false),
+      port: z.number().default(8080),
+      host: z.string().default("0.0.0.0"),
+      base_domain: z.string().default("dployr.io"),
+      timeout_ms: z.number().default(30000),
+      cache_ttl_seconds: z.number().default(30),
+    })
+    .optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -115,16 +117,16 @@ export function loadConfig(path?: string): Config {
   }
 
   // Fall back to TOML file
-  const configPath = path || process.env.CONFIG_PATH || (process.env.NODE_ENV === 'development' ? './config.dev.toml' : './config.toml');
+  const configPath = path || process.env.CONFIG_PATH || (process.env.NODE_ENV === "development" ? "./config.dev.toml" : "./config.toml");
 
-  const content = readFileSync(configPath, 'utf-8');
+  const content = readFileSync(configPath, "utf-8");
   const raw = parseToml(content);
-  
+
   try {
     return ConfigSchema.parse(raw);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((e: any) => `  - ${e.path.join('.')}: ${e.message}`).join('\n');
+      const errors = err.issues.map((e: any) => `  - ${e.path.join(".")}: ${e.message}`).join("\n");
       throw new Error(`Invalid configuration:\n${errors}`);
     }
     throw err;
@@ -132,28 +134,28 @@ export function loadConfig(path?: string): Config {
 }
 
 /**
- * Load configuration from environment variables 
+ * Load configuration from environment variables
  */
 function loadConfigFromEnv(): Config {
   return ConfigSchema.parse({
     server: {
-      port: parseInt(process.env.PORT || '7878'),
-      host: process.env.HOST || '0.0.0.0',
-      base_url: process.env.BASE_URL || 'http://localhost:7878',
-      app_url: process.env.APP_URL || 'http://localhost:5173',
+      port: parseInt(process.env.PORT || "7878"),
+      host: process.env.HOST || "0.0.0.0",
+      base_url: process.env.BASE_URL || "http://localhost:7878",
+      app_url: process.env.APP_URL || "http://localhost:5173",
     },
     database: {
       url: process.env.DB_URL || process.env.DATABASE_URL,
       auto_migrate: true,
     },
     kv: {
-      type: process.env.KV_TYPE || 'redis',
+      type: process.env.KV_TYPE || "redis",
       url: process.env.KV_URL,
       rest_url: process.env.KV_REST_URL,
       rest_token: process.env.KV_REST_TOKEN,
     },
     storage: {
-      type: process.env.STORAGE_TYPE || 'filesystem',
+      type: process.env.STORAGE_TYPE || "filesystem",
       path: process.env.STORAGE_PATH,
       bucket: process.env.STORAGE_BUCKET,
       region: process.env.STORAGE_REGION,
@@ -168,6 +170,10 @@ function loadConfigFromEnv(): Config {
       microsoft_client_id: process.env.MICROSOFT_CLIENT_ID,
       microsoft_client_secret: process.env.MICROSOFT_CLIENT_SECRET,
     },
+    admin: {
+      admin_api_key: process.env.ADMIN_API_KEY,
+      grafana_url: process.env.GRAFANA_URL || "dployr.grafana.net",
+    },
     integrations: {
       github_app_id: process.env.GITHUB_APP_ID,
       github_app_private_key: process.env.GITHUB_APP_PRIVATE_KEY,
@@ -179,7 +185,7 @@ function loadConfigFromEnv(): Config {
       bitbucket_app_secret: process.env.BITBUCKET_APP_SECRET,
     },
     email: {
-      provider: process.env.EMAIL_PROVIDER || 'zepto',
+      provider: process.env.EMAIL_PROVIDER || "zepto",
       zepto_api_key: process.env.ZEPTO_API_KEY,
       from_address: process.env.EMAIL_FROM,
       smtp_host: process.env.SMTP_HOST,
@@ -189,7 +195,7 @@ function loadConfigFromEnv(): Config {
     },
     security: {
       session_ttl: 86400,
-      jwt_algorithm: 'RS256',
+      jwt_algorithm: "RS256",
       global_rate_limit: 100,
       strict_rate_limit: 10,
     },
@@ -197,12 +203,12 @@ function loadConfigFromEnv(): Config {
       allowed_origins: process.env.CORS_ALLOWED_ORIGINS,
     },
     proxy: {
-      enabled: process.env.PROXY_ENABLED === 'true',
+      enabled: process.env.PROXY_ENABLED === "true",
       port: process.env.PROXY_PORT ? parseInt(process.env.PROXY_PORT) : 8080,
-      host: process.env.PROXY_HOST || '0.0.0.0',
-      base_domain: process.env.PROXY_BASE_DOMAIN || 'dployr.io',
+      host: process.env.PROXY_HOST || "0.0.0.0",
+      base_domain: process.env.PROXY_BASE_DOMAIN || "dployr.io",
       timeout_ms: process.env.PROXY_TIMEOUT_MS ? parseInt(process.env.PROXY_TIMEOUT_MS) : 30000,
       cache_ttl_seconds: process.env.PROXY_CACHE_TTL_SECONDS ? parseInt(process.env.PROXY_CACHE_TTL_SECONDS) : 30,
-    }
+    },
   });
 }
