@@ -106,7 +106,7 @@ npm install --omit=dev
 
 echo "[INFO] Processing configuration..."
 
-node "scripts/process-config.cjs" "$temp_template" "$CONFIG_DIR/config.toml" "$SKIP_PROMPTS"
+node "$INSTALL_DIR/scripts/process-config.mjs" "$temp_template" "$CONFIG_DIR/config.toml" "$SKIP_PROMPTS"
 
 cat > /etc/systemd/system/dployr-base.service <<EOF
 [Unit]
