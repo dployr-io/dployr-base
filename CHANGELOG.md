@@ -1,3 +1,8 @@
+## [0.2.6] - 2026-04-21
+
+### 🐛 Bug Fixes
+
+- *(install)* Use smol-toml and run npm install before config processing
 ## [0.2.5] - 2026-04-21
 
 ### 🐛 Bug Fixes
