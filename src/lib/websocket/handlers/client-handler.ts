@@ -65,11 +65,11 @@ import {
   isTerminalMessage,
   isTerminalOpenMessage,
 } from "../message-types.js";
-import { NodeService } from "@/services/dployrd-service.js";
+import { DployrdService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/index.js";
-import { TerminalManager } from "../terminal-manager.js";
+import { TerminalManager } from "@/lib/websocket/terminal-manager.js";
 import { loadConfig } from "@/lib/config/loader.js";
 
 export interface ClientHandlerDependencies {
@@ -77,7 +77,7 @@ export interface ClientHandlerDependencies {
   kv: KVStore;
   db: DatabaseStore;
   jwtService: JWTService;
-  dployrdService: NodeService;
+  dployrdService: DployrdService;
   terminalManager: TerminalManager;
   sendTaskToCluster: (clusterId: string, task: NodeTask) => boolean;
 }
@@ -90,7 +90,7 @@ export class ClientMessageHandler {
   private kv: KVStore;
   private db: DatabaseStore;
   private jwtService: JWTService;
-  private dployrdService: NodeService;
+  private dployrdService: DployrdService;
   private terminalManager: TerminalManager;
   private sendTaskToCluster: (clusterId: string, task: NodeTask) => boolean;
   private config = loadConfig();

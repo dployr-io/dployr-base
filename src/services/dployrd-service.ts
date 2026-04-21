@@ -3,13 +3,9 @@
 
 import type { NodeTask, DeploymentPayload } from "@/lib/tasks/types.js";
 
-export class NodeService {
+export class DployrdService {
   // Create a system install task
-  createSystemInstallTask(
-    taskId: string,
-    version?: string,
-    token?: string
-  ): NodeTask {
+  createSystemInstallTask(taskId: string, version?: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/install:post",
@@ -19,11 +15,7 @@ export class NodeService {
   }
 
   // Create a dployrd restart task
-  createDaemonRestartTask(
-    taskId: string,
-    force: boolean = false,
-    token?: string
-  ): NodeTask {
+  createDaemonRestartTask(taskId: string, force: boolean = false, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/restart:post",
@@ -33,11 +25,7 @@ export class NodeService {
   }
 
   // Create a system reboot task
-  createSystemRebootTask(
-    taskId: string,
-    force: boolean = false,
-    token?: string
-  ): NodeTask {
+  createSystemRebootTask(taskId: string, force: boolean = false, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/reboot:post",
@@ -47,14 +35,7 @@ export class NodeService {
   }
 
   // Create a log streaming task
-  createLogStreamTask(options: {
-    streamId: string;
-    path: string;
-    startOffset?: number;
-    limit?: number;
-    duration?: string;
-    token?: string;
-  }): NodeTask {
+  createLogStreamTask(options: { streamId: string; path: string; startOffset?: number; limit?: number; duration?: string; token?: string }): NodeTask {
     return {
       ID: options.streamId,
       Type: "logs/stream:post",
@@ -70,11 +51,7 @@ export class NodeService {
     };
   }
 
-  createDeployTask(
-    taskId: string,
-    payload: DeploymentPayload,
-    token?: string
-  ): NodeTask {
+  createDeployTask(taskId: string, payload: DeploymentPayload, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "deployments:post",
@@ -83,10 +60,7 @@ export class NodeService {
     };
   }
 
-  createDeploymentListTask(
-    taskId: string,
-    token?: string
-  ): NodeTask {
+  createDeploymentListTask(taskId: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "deployments:get",
@@ -95,11 +69,7 @@ export class NodeService {
     };
   }
 
-  createServiceRemoveTask(
-    taskId: string,
-    serviceId: string,
-    token?: string
-  ): NodeTask {
+  createServiceRemoveTask(taskId: string, serviceId: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: `services/${serviceId}:delete`,
@@ -119,13 +89,7 @@ export class NodeService {
   }
 
   // Create a file write task
-  createFileWriteTask(
-    taskId: string,
-    path: string,
-    content: string,
-    encoding?: "utf8" | "base64",
-    token?: string
-  ): NodeTask {
+  createFileWriteTask(taskId: string, path: string, content: string, encoding?: "utf8" | "base64", token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/write:put",
@@ -135,12 +99,7 @@ export class NodeService {
   }
 
   // Create a file create task
-  createFileCreateTask(
-    taskId: string,
-    path: string,
-    type: "file" | "directory",
-    token?: string
-  ): NodeTask {
+  createFileCreateTask(taskId: string, path: string, type: "file" | "directory", token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/create:post",
@@ -150,11 +109,7 @@ export class NodeService {
   }
 
   // Create a file delete task
-  createFileDeleteTask(
-    taskId: string,
-    path: string,
-    token?: string
-  ): NodeTask {
+  createFileDeleteTask(taskId: string, path: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/delete:delete",
@@ -174,14 +129,7 @@ export class NodeService {
   }
 
   // Create a file watch task
-  createFileWatchTask(
-    taskId: string,
-    instanceId: string,
-    path: string,
-    recursive: boolean,
-    requestId: string,
-    token?: string
-  ): NodeTask {
+  createFileWatchTask(taskId: string, instanceId: string, path: string, recursive: boolean, requestId: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/watch:post",
@@ -191,13 +139,7 @@ export class NodeService {
   }
 
   // Create a file unwatch task
-  createFileUnwatchTask(
-    taskId: string,
-    instanceId: string,
-    path: string,
-    requestId: string,
-    token?: string
-  ): NodeTask {
+  createFileUnwatchTask(taskId: string, instanceId: string, path: string, requestId: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "system/fs/unwatch:post",
@@ -207,26 +149,17 @@ export class NodeService {
   }
 
   // Create a terminal open task
-  createTerminalOpen(
-    taskId: string,
-    sessionId: string,
-    cols: number,
-    rows: number,
-    token?: string
-  ): NodeTask {
+  createTerminalOpen(taskId: string, sessionId: string, cols: number, rows: number, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "terminal/open:post",
       Payload: { sessionId, token, cols, rows },
       Status: "pending",
-    }
+    };
   }
 
   // Create a proxy status task
-  createProxyStatusTask(
-    taskId: string,
-    token?: string
-  ): NodeTask {
+  createProxyStatusTask(taskId: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "proxy/status:get",
@@ -236,11 +169,7 @@ export class NodeService {
   }
 
   // Create a proxy restart task
-  createProxyRestartTask(
-    taskId: string,
-    force: boolean = false,
-    token?: string
-  ): NodeTask {
+  createProxyRestartTask(taskId: string, force: boolean = false, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "proxy/restart:post",
@@ -250,14 +179,7 @@ export class NodeService {
   }
 
   // Create a proxy add task
-  createProxyAddTask(
-    taskId: string,
-    serviceName: string,
-    upstream: string,
-    domain?: string,
-    template?: string,
-    token?: string
-  ): NodeTask {
+  createProxyAddTask(taskId: string, serviceName: string, upstream: string, domain?: string, template?: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "proxy/add:post",
@@ -267,11 +189,7 @@ export class NodeService {
   }
 
   // Create a proxy remove task
-  createProxyRemoveTask(
-    taskId: string,
-    serviceName: string,
-    token?: string
-  ): NodeTask {
+  createProxyRemoveTask(taskId: string, serviceName: string, token?: string): NodeTask {
     return {
       ID: taskId,
       Type: "proxy/remove:delete",
