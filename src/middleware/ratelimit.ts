@@ -7,9 +7,15 @@ import { createErrorResponse } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKV } from "@/lib/context.js";
 
+/**
+ * Configuration options for the rate limit middleware.
+ */
 interface RateLimitConfig {
+  /** Time window in milliseconds (e.g., 60_000 for 1 minute) */
   windowMs: number;
+  /** Maximum allowed requests within the window */
   maxRequests: number;
+  /** Prefix for the KV store key (e.g., "ratelimit:global") */
   keyPrefix: string;
 }
 
@@ -85,7 +91,8 @@ export function rateLimit(config: RateLimitConfig) {
 }
 
 /**
- * Per-user global rate limit (across all endpoints)
+ * Per-user global rate limit (across all endpoints).
+ * 100 requests per minute per user/IP. Uses key prefix "ratelimit:global".
  */
 export const globalRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
@@ -94,7 +101,8 @@ export const globalRateLimit = rateLimit({
 });
 
 /**
- * Strict rate limit for sensitive endpoints
+ * Strict rate limit for sensitive administrative endpoints.
+ * 10 requests per minute per user/IP. Uses key prefix "ratelimit:strict".
  */
 export const strictRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
@@ -103,7 +111,8 @@ export const strictRateLimit = rateLimit({
 });
 
 /**
- * Lenient rate limit for read-only endpoints
+ * Lenient rate limit for read-only or public endpoints.
+ * 200 requests per minute per user/IP. Uses key prefix "ratelimit:lenient".
  */
 export const lenientRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute

@@ -5,7 +5,13 @@ import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
 
 /**
- * Check if an origin is allowed based on configured patterns
+ * Checks if an origin is allowed based on configured patterns.
+ * Supports wildcard subdomains (e.g., "*.example.com") and exact host matches.
+ * Patterns can include or omit protocol (http/https) and path components.
+ *
+ * @param origin - The request origin to validate (e.g., "https://example.com")
+ * @param patterns - Array of allowed origin patterns
+ * @returns True if origin matches any allowed pattern, false otherwise
  */
 function isOriginAllowed(origin: string, patterns: string[]): boolean {
   const host = origin
@@ -26,7 +32,12 @@ function isOriginAllowed(origin: string, patterns: string[]): boolean {
 }
 
 /**
- * Parse CORS allowed origins from config string
+ * Parses the CORS allowed origins configuration string into an array of patterns.
+ * Always includes "*.dployr.io" as a default allowed origin if not explicitly configured.
+ * Origins are comma-separated; whitespace is trimmed.
+ *
+ * @param raw - Comma-separated origin patterns string
+ * @returns Array of normalized origin patterns (includes default if not present)
  */
 function parseAllowedOrigins(raw: string): string[] {
   const patterns = raw
@@ -43,7 +54,13 @@ function parseAllowedOrigins(raw: string): string[] {
 }
 
 /**
- * Create CORS middleware with dynamic origin validation
+ * Creates a CORS middleware with dynamic origin validation.
+ * Uses hono/cors under the hood. Config sources (in order): provided getConfig function,
+ * then CORS_ALLOWED_ORIGINS environment variable. Allows credentials, GET/POST/PUT/PATCH/DELETE/OPTIONS.
+ * If no origin is configured, rejects all cross-origin requests and logs an error.
+ *
+ * @param getConfig - Optional function returning config with allowed_origins string
+ * @returns Hono middleware handler for CORS
  */
 export function createCorsMiddleware(getConfig: () => { allowed_origins?: string } | undefined): MiddlewareHandler {
   return cors({
