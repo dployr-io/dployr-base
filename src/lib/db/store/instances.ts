@@ -4,89 +4,72 @@
 import { Instance } from "@/types/index.js";
 import { BaseStore } from "./base.js";
 import { KVStore } from "./kv.js";
-
-export class InstanceConflictError extends Error {
-    constructor(public field: "address" | "tag" | "instance") {
-        super("Instance conflict on " + field);
-        this.name = "InstanceConflictError";
-    }
-}
+import { InstanceConflictError } from "@/lib/errors/errors.js";
 
 export class InstanceStore extends BaseStore {
-    private kv?: KVStore;
+  private kv?: KVStore;
 
-    constructor(db: any, kv?: KVStore) {
-        super(db);
-        this.kv = kv;
-    }
+  constructor(db: any, kv?: KVStore) {
+    super(db);
+    this.kv = kv;
+  }
 
-    async create(
-        clusterId: string,
-        data: Omit<Instance, "id" | "createdAt" | "updatedAt">
-    ): Promise<Instance> {
-        const id = this.generateId();
-        const now = this.now();
+  async create(clusterId: string, data: Omit<Instance, "id" | "createdAt" | "updatedAt">): Promise<Instance> {
+    const id = this.generateId();
+    const now = this.now();
 
-        const stmt = this.db.prepare(`
+    const stmt = this.db.prepare(`
             INSERT INTO instances (id, cluster_id, address, tag, metadata, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
         `);
 
-        try {
-            await stmt
-                .bind(
-                    id,
-                    clusterId,
-                    data.address || null,
-                    data.tag,
-                    data.metadata || {},
-                    now,
-                    now,
-                )
-                .run();
-        } catch (error) {
-            if (error instanceof Error && error.message.includes("duplicate key value")) {
-                if (error.message.includes("instances_address")) {
-                    throw new InstanceConflictError("address");
-                }
-                if (error.message.includes("instances_tag")) {
-                    throw new InstanceConflictError("tag");
-                }
-                throw new InstanceConflictError("instance");
-            }
-            throw error;
+    try {
+      await stmt.bind(id, clusterId, data.address || null, data.tag, data.metadata || {}, now, now).run();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("duplicate key value")) {
+        if (error.message.includes("instances_address")) {
+          throw new InstanceConflictError("address");
         }
-
-        const instance = {
-            id,
-            ...data,
-            createdAt: now,
-            updatedAt: now,
-        };
-
-        // Cache the newly created instance
-        if (this.kv) {
-            await this.kv.cacheInstance({ 
-                ...instance, 
-                clusterId,
-                metadata: instance.metadata || {}
-            }).catch(() => {});
+        if (error.message.includes("instances_tag")) {
+          throw new InstanceConflictError("tag");
         }
-
-        return instance;
+        throw new InstanceConflictError("instance");
+      }
+      throw error;
     }
 
-    async get(id: string): Promise<(Instance & { clusterId: string }) | null> {
-        // Try cache first
-        if (this.kv) {
-            const cached = await this.kv.getCachedInstance(id).catch(() => null);
-            if (cached) {
-                return cached;
-            }
-        }
+    const instance = {
+      id,
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-        // Cache miss - fetch from DB
-        const stmt = this.db.prepare(`
+    // Cache the newly created instance
+    if (this.kv) {
+      await this.kv
+        .cacheInstance({
+          ...instance,
+          clusterId,
+          metadata: instance.metadata || {},
+        })
+        .catch(() => {});
+    }
+
+    return instance;
+  }
+
+  async get(id: string): Promise<(Instance & { clusterId: string }) | null> {
+    // Try cache first
+    if (this.kv) {
+      const cached = await this.kv.getCachedInstance(id).catch(() => null);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    // Cache miss - fetch from DB
+    const stmt = this.db.prepare(`
             SELECT instances.id, instances.address, instances.tag, instances.metadata, instances.created_at, instances.updated_at, instances.cluster_id as cluster_id
             FROM instances
             JOIN user_clusters ON user_clusters.cluster_id = instances.cluster_id
@@ -94,125 +77,140 @@ export class InstanceStore extends BaseStore {
             WHERE instances.id = $1
         `);
 
-        const result = await stmt.bind(id).first();
-        if (!result) return null;
+    const result = await stmt.bind(id).first();
+    if (!result) return null;
 
-        const instance = {
-            id: result.id as string,
-            address: result.address as string,
-            tag: result.tag as string,
-            metadata: (result as any).metadata || {},
-            createdAt: result.created_at as number,
-            updatedAt: result.updated_at as number,
-            clusterId: result.cluster_id as string,
-        };
+    const instance = {
+      id: result.id as string,
+      address: result.address as string,
+      tag: result.tag as string,
+      metadata: (result as any).metadata || {},
+      createdAt: result.created_at as number,
+      updatedAt: result.updated_at as number,
+      clusterId: result.cluster_id as string,
+    };
 
-        // Cache the result
-        if (this.kv) {
-            await this.kv.cacheInstance(instance).catch(() => {});
-        }
-
-        return instance;
+    // Cache the result
+    if (this.kv) {
+      await this.kv.cacheInstance(instance).catch(() => {});
     }
 
-    async getByName(tag: string): Promise<(Instance & { clusterId: string }) | null> {
-        // Try cache 
-        if (this.kv) {
-            const cached = await this.kv.getCachedInstanceByTag(tag).catch(() => null);
-            if (cached) {
-                return cached;
-            }
-        }
+    return instance;
+  }
 
-        // Cache miss - fetch from DB
-        const stmt = this.db.prepare(`
+  async getByName(tag: string): Promise<(Instance & { clusterId: string }) | null> {
+    // Try cache
+    if (this.kv) {
+      const cached = await this.kv.getCachedInstanceByTag(tag).catch(() => null);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    // Cache miss - fetch from DB
+    const stmt = this.db.prepare(`
             SELECT instances.id, instances.address, instances.tag, instances.metadata, instances.created_at, instances.updated_at, instances.cluster_id
             FROM instances
             WHERE instances.tag = $1
         `);
 
-        const result = await stmt.bind(tag).first();
-        if (!result) return null;
+    const result = await stmt.bind(tag).first();
+    if (!result) return null;
 
-        const instance = {
-            id: result.id as string,
-            address: result.address as string,
-            tag: result.tag as string,
-            metadata: (result as any).metadata || {},
-            createdAt: result.created_at as number,
-            updatedAt: result.updated_at as number,
-            clusterId: result.cluster_id as string,
-        };
+    const instance = {
+      id: result.id as string,
+      address: result.address as string,
+      tag: result.tag as string,
+      metadata: (result as any).metadata || {},
+      createdAt: result.created_at as number,
+      updatedAt: result.updated_at as number,
+      clusterId: result.cluster_id as string,
+    };
 
-        // Cache the result for future lookups
-        if (this.kv) {
-            await this.kv.cacheInstance(instance).catch(() => {});
-        }
-
-        return instance;
+    // Cache the result for future lookups
+    if (this.kv) {
+      await this.kv.cacheInstance(instance).catch(() => {});
     }
 
-    async updateMetadata(id: string, metadata: Record<string, any>): Promise<void> {
-        const now = this.now();
-        const stmt = this.db.prepare(`
+    return instance;
+  }
+
+  async updateMetadata(id: string, metadata: Record<string, any>): Promise<void> {
+    const now = this.now();
+    const stmt = this.db.prepare(`
             UPDATE instances
             SET metadata = $1::jsonb, updated_at = $2
             WHERE id = $3
         `);
 
-        await stmt.bind(metadata || {}, now, id).run();
+    await stmt.bind(metadata || {}, now, id).run();
 
-        // Invalidate cache after update
-        if (this.kv) {
-            await this.kv.invalidateInstanceCache(id).catch(() => {});
-        }
+    // Invalidate cache after update
+    if (this.kv) {
+      await this.kv.invalidateInstanceCache(id).catch(() => {});
+    }
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.db.prepare(`DELETE FROM instances WHERE id = $1`).bind(id).run();
+
+    // Invalidate cache after deletion
+    if (this.kv) {
+      await this.kv.invalidateInstanceCache(id).catch(() => {});
+    }
+  }
+
+  async list(params?: { clusterId?: string; limit?: number; offset?: number }): Promise<{ instances: Instance[]; total: number }> {
+    const { clusterId, limit, offset } = params || {};
+
+    const filters: string[] = [];
+    const bindings: any[] = [];
+
+    if (clusterId) {
+      bindings.push(clusterId);
+      filters.push(`cluster_id = $${bindings.length}`);
     }
 
-    async delete(id: string): Promise<void> {
-        await this.db.prepare(`DELETE FROM instances WHERE id = $1`).bind(id).run();
+    const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
 
-        // Invalidate cache after deletion
-        if (this.kv) {
-            await this.kv.invalidateInstanceCache(id).catch(() => {});
-        }
+    const countSql = `SELECT COUNT(*) as count FROM instances ${whereClause}`;
+    const countStmt = this.db.prepare(countSql);
+    const countResult = bindings.length ? await countStmt.bind(...bindings).first() : await countStmt.first();
+
+    const total = Number(countResult?.count || 0);
+
+    let dataSql = `
+    SELECT id, cluster_id, address, tag, metadata, created_at, updated_at
+    FROM instances
+    ${whereClause}
+    ORDER BY created_at DESC
+  `;
+
+    const dataBindings = [...bindings];
+
+    if (limit !== undefined) {
+      dataBindings.push(limit);
+      dataSql += ` LIMIT $${dataBindings.length}`;
     }
 
-    async getByCluster(
-        clusterId: string,
-        limit?: number,
-        offset?: number
-    ): Promise<{ instances: Instance[]; total: number }> {
-        if (clusterId.length === 0) return { instances: [], total: 0 };
-
-        // Get total count
-        const countStmt = this.db.prepare(`
-            SELECT COUNT(*) as count
-            FROM instances WHERE cluster_id = $1
-        `);
-        const countResult = await countStmt.bind(clusterId).first();
-        const total = (countResult?.count as number) || 0;
-        const limitClause = limit !== undefined ? `LIMIT ${limit}` : '';
-        const offsetClause = offset !== undefined ? `OFFSET ${offset}` : '';
-
-        const stmt = this.db.prepare(`
-            SELECT id, address, tag, metadata, created_at, updated_at
-            FROM instances WHERE cluster_id = $1
-            ORDER BY created_at DESC
-            ${limitClause} ${offsetClause}
-        `);
-
-        const results = await stmt.bind(clusterId).all();
-
-        const instances = results.results.map((row) => ({
-            id: row.id as string,
-            address: row.address as string,
-            tag: row.tag as string,
-            metadata: (row as any).metadata || {},
-
-            createdAt: row.created_at as number,
-            updatedAt: row.updated_at as number,
-        }));
-
-        return { instances, total };
+    if (offset !== undefined) {
+      dataBindings.push(offset);
+      dataSql += ` OFFSET $${dataBindings.length}`;
     }
+
+    const dataStmt = this.db.prepare(dataSql);
+    const results = dataBindings.length ? await dataStmt.bind(...dataBindings).all() : await dataStmt.all();
+
+    const instances = results.results.map((row) => ({
+      id: row.id as string,
+      clusterId: row.cluster_id as string,
+      address: row.address as string,
+      tag: row.tag as string,
+      metadata: (row as any).metadata || {},
+      createdAt: row.created_at as number,
+      updatedAt: row.updated_at as number,
+    }));
+
+    return { instances, total };
+  }
 }

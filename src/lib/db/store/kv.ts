@@ -7,6 +7,7 @@ import { CryptoKey, importPKCS8, SignJWT } from "jose";
 import { ADMIN_JWT_TTL, ADMIN_JWT_REFRESH_THRESHOLD } from "@/lib/constants/index.js";
 import { generateKeyPair } from "@/lib/crypto/keystore.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
+import { KV_KEYS } from "@/lib/constants/kv-keys.js";
 import {
   FAILED_WORKFLOW_EVENT_TTL,
   OTP_TTL,
@@ -38,7 +39,7 @@ export class KVStore {
       expiresAt: Date.now() + SESSION_TTL * 1000,
     };
 
-    await this.kv.put(`session:${sessionId}`, JSON.stringify(session), {
+    await this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(session), {
       ttl: SESSION_TTL,
     });
 
@@ -46,7 +47,7 @@ export class KVStore {
   }
 
   async getSession(sessionId: string): Promise<Session | null> {
-    const data = await this.kv.get(`session:${sessionId}`);
+    const data = await this.kv.get(KV_KEYS.SESSION(sessionId));
     if (!data) return null;
 
     const session = JSON.parse(data) as Session;
@@ -60,7 +61,7 @@ export class KVStore {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    await this.kv.delete(`session:${sessionId}`);
+    await this.kv.delete(KV_KEYS.SESSION(sessionId));
   }
 
   // Retrieves or creates the key pair.
@@ -68,7 +69,7 @@ export class KVStore {
     publicKeyJwk: JsonWebKey;
     privateKey: string;
   }> {
-    const data = await this.kv.get("jwt_keys");
+    const data = await this.kv.get(KV_KEYS.JWT_KEYS);
     let existing: { publicKeyJwk: JsonWebKey; privateKey: string } | null = null;
     if (data) {
       existing = JSON.parse(data);
@@ -77,7 +78,7 @@ export class KVStore {
     if (!existing) {
       const generated = await generateKeyPair();
       existing = generated;
-      await this.kv.put("jwt_keys", JSON.stringify(generated));
+      await this.kv.put(KV_KEYS.JWT_KEYS, JSON.stringify(generated));
     }
 
     return existing;
@@ -89,7 +90,7 @@ export class KVStore {
 
     if (!(keys.publicKeyJwk as any).kid) {
       (keys.publicKeyJwk as any).kid = "base-key";
-      await this.kv.put("jwt_keys", JSON.stringify(keys));
+      await this.kv.put(KV_KEYS.JWT_KEYS, JSON.stringify(keys));
     }
 
     return keys.publicKeyJwk;
@@ -125,7 +126,7 @@ export class KVStore {
           .sort()
           .join(",")
       : "";
-    const idemKey = `event:idem:${type}:${actor.id}:${ray}:${targetScope}`;
+    const idemKey = KV_KEYS.EVENT_IDEM(type, actor.id, ray, targetScope);
     if (ray) {
       const exists = await this.kv.get(idemKey);
       if (exists) {
@@ -143,7 +144,7 @@ export class KVStore {
         targets,
       };
 
-      const actorKey = `actor:${actor.id}:event:${id}`;
+      const actorKey = KV_KEYS.ACTOR_EVENT(actor.id, id);
       const writes: Promise<any>[] = [this.kv.put(actorKey, JSON.stringify(actorEvent), { ttl: EVENT_TTL })];
 
       for (const target of targets) {
@@ -152,7 +153,7 @@ export class KVStore {
           id,
           targets: [target],
         };
-        const targetKey = `target:${target.id}:event:${id}`;
+        const targetKey = KV_KEYS.TARGET_EVENT(target.id, id);
         writes.push(this.kv.put(targetKey, JSON.stringify(event), { ttl: EVENT_TTL }));
       }
 
@@ -164,13 +165,13 @@ export class KVStore {
         id: ulid(),
       };
 
-      const actorKey = `actor:${actor.id}:event:${event.id}`;
+      const actorKey = KV_KEYS.ACTOR_EVENT(actor.id, event.id);
       await this.kv.put(actorKey, JSON.stringify(event), { ttl: EVENT_TTL });
     }
   }
 
   async getEvents(userId: string): Promise<any[]> {
-    const result = await this.kv.list({ prefix: `actor:${userId}:event:` });
+    const result = await this.kv.list({ prefix: KV_KEYS.ACTOR_EVENT(userId, "") });
     const events = await Promise.all(
       result.map(async (key) => {
         const data = await this.kv.get(key.name);
@@ -187,7 +188,7 @@ export class KVStore {
   }
 
   async getClusterEvents(clusterId: string): Promise<any[]> {
-    const prefix = `target:${clusterId}:event:`;
+    const prefix = KV_KEYS.TARGET_EVENT(clusterId, "");
     const result = await this.kv.list({ prefix });
     const events = await Promise.all(
       result.map(async (key) => {
@@ -211,7 +212,7 @@ export class KVStore {
   }
 
   async createWorkflowFailedEvent(id: string, data: Record<string, unknown>): Promise<void> {
-    await this.kv.put(`workflow:${id}`, JSON.stringify(data), {
+    await this.kv.put(KV_KEYS.WORKFLOW(id), JSON.stringify(data), {
       ttl: FAILED_WORKFLOW_EVENT_TTL,
     });
   }
@@ -219,7 +220,7 @@ export class KVStore {
   // OAuth state management (CSRF protection)
   async createState(state: string, redirectUrl: string): Promise<void> {
     await this.kv.put(
-      `state:${state}`,
+      KV_KEYS.STATE(state),
       JSON.stringify({
         state,
         redirectUrl,
@@ -233,7 +234,7 @@ export class KVStore {
 
   async validateState(state: string): Promise<string | null> {
     try {
-      const data = await this.kv.get(`state:${state}`);
+      const data = await this.kv.get(KV_KEYS.STATE(state));
       if (!data) {
         console.error(`[OAuth] State validation failed: state not found in KV store (state: ${state})`);
         return null;
@@ -246,7 +247,7 @@ export class KVStore {
       };
 
       console.log(`[OAuth] State validated successfully (redirectUrl: ${stateData.redirectUrl})`);
-      await this.kv.delete(`state:${state}`);
+      await this.kv.delete(KV_KEYS.STATE(state));
       return stateData.redirectUrl;
     } catch (error) {
       console.error(`[OAuth] State validation error:`, error);
@@ -258,7 +259,7 @@ export class KVStore {
     const code = this.generateOTP();
 
     await this.kv.put(
-      `otp:${email}`,
+      KV_KEYS.OTP(email),
       JSON.stringify({
         code,
         email,
@@ -272,7 +273,7 @@ export class KVStore {
   }
 
   async validateOTP(email: string, code: string): Promise<boolean> {
-    const data = await this.kv.get(`otp:${email}`);
+    const data = await this.kv.get(KV_KEYS.OTP(email));
     if (!data) return false;
 
     const otpData = JSON.parse(data) as {
@@ -283,17 +284,17 @@ export class KVStore {
     };
 
     if (otpData.attempts >= 3) {
-      await this.kv.delete(`otp:${email}`);
+      await this.kv.delete(KV_KEYS.OTP(email));
       return false;
     }
 
     otpData.attempts++;
-    await this.kv.put(`otp:${email}`, JSON.stringify(otpData), {
+    await this.kv.put(KV_KEYS.OTP(email), JSON.stringify(otpData), {
       ttl: OTP_TTL,
     });
 
     if (otpData.code === code) {
-      await this.kv.delete(`otp:${email}`);
+      await this.kv.delete(KV_KEYS.OTP(email));
       return true;
     }
 
@@ -310,11 +311,11 @@ export class KVStore {
   }
 
   async saveDomain(domain: string, address: string): Promise<void> {
-    await this.kv.put(`domain:${domain}`, address);
+    await this.kv.put(KV_KEYS.DOMAIN(domain), address);
   }
 
   async getDomain(domain: string): Promise<string | null> {
-    const data = await this.kv.get(`domain:${domain}`);
+    const data = await this.kv.get(KV_KEYS.DOMAIN(domain));
     if (!data) return null;
     return data;
   }
@@ -328,13 +329,13 @@ export class KVStore {
     };
 
     // Save latest update with TTL
-    await this.kv.put(`node:${instanceId}:update`, JSON.stringify(data), {
+    await this.kv.put(KV_KEYS.NODE_UPDATE(instanceId), JSON.stringify(data), {
       ttl: NODE_UPDATE_TTL,
     });
   }
 
   async getNodeUpdate(instanceId: string): Promise<Record<string, unknown> | null> {
-    const data = await this.kv.get(`node:${instanceId}:update`);
+    const data = await this.kv.get(KV_KEYS.NODE_UPDATE(instanceId));
     if (!data) return null;
     return JSON.parse(data);
   }
@@ -342,7 +343,7 @@ export class KVStore {
   // Version cache for latest GitHub release
   private async getCachedLatestVersion(): Promise<string | null> {
     try {
-      const raw = await this.kv.get("version:latest");
+      const raw = await this.kv.get(KV_KEYS.VERSION_LATEST);
       if (!raw) return null;
       const data = JSON.parse(raw) as { tag?: string } | null;
       if (data && typeof data.tag === "string" && data.tag.length > 0) {
@@ -371,7 +372,7 @@ export class KVStore {
       const tag = (body as any).tag_name as string | undefined;
       if (!tag) return null;
 
-      await this.kv.put("version:latest", JSON.stringify({ tag }), {
+      await this.kv.put(KV_KEYS.VERSION_LATEST, JSON.stringify({ tag }), {
         ttl: RELEASE_CACHE_TTL,
       });
 
@@ -389,17 +390,17 @@ export class KVStore {
 
   // Pending GitHub installation
   async setPendingGitHubInstall(userId: string, clusterId: string): Promise<void> {
-    await this.kv.put(`pending_github_install:${userId}`, clusterId, {
+    await this.kv.put(KV_KEYS.PENDING_GITHUB_INSTALL(userId), clusterId, {
       ttl: PENDING_GITHUB_INSTALL_TTL,
     });
   }
 
   async getPendingGitHubInstall(userId: string): Promise<string | null> {
-    return this.kv.get(`pending_github_install:${userId}`);
+    return this.kv.get(KV_KEYS.PENDING_GITHUB_INSTALL(userId));
   }
 
   async deletePendingGitHubInstall(userId: string): Promise<void> {
-    await this.kv.delete(`pending_github_install:${userId}`);
+    await this.kv.delete(KV_KEYS.PENDING_GITHUB_INSTALL(userId));
   }
 
   // Instance caching
@@ -409,15 +410,15 @@ export class KVStore {
 
     // Cache by ID, clusterId+tag, and tag-only for triple lookup support
     await Promise.all([
-      this.kv.put(`instance:id:${instance.id}`, data, { ttl }),
-      this.kv.put(`instance:name:${instance.clusterId}:${instance.tag}`, data, { ttl }),
-      this.kv.put(`instance:tag:${instance.tag}`, data, { ttl }),
+      this.kv.put(KV_KEYS.INSTANCE_BY_ID(instance.id), data, { ttl }),
+      this.kv.put(KV_KEYS.INSTANCE_BY_NAME(instance.clusterId, instance.tag), data, { ttl }),
+      this.kv.put(KV_KEYS.INSTANCE_BY_TAG(instance.tag), data, { ttl }),
     ]);
   }
 
   async getCachedInstance(instanceId: string): Promise<{ id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number } | null> {
     try {
-      const data = await this.kv.get(`instance:id:${instanceId}`);
+      const data = await this.kv.get(KV_KEYS.INSTANCE_BY_ID(instanceId));
       if (!data) return null;
       return JSON.parse(data);
     } catch {
@@ -427,7 +428,7 @@ export class KVStore {
 
   async getCachedInstanceByName(clusterId: string, tag: string): Promise<{ id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number } | null> {
     try {
-      const data = await this.kv.get(`instance:name:${clusterId}:${tag}`);
+      const data = await this.kv.get(KV_KEYS.INSTANCE_BY_NAME(clusterId, tag));
       if (!data) return null;
       return JSON.parse(data);
     } catch {
@@ -437,7 +438,7 @@ export class KVStore {
 
   async getCachedInstanceByTag(tag: string): Promise<{ id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number } | null> {
     try {
-      const data = await this.kv.get(`instance:tag:${tag}`);
+      const data = await this.kv.get(KV_KEYS.INSTANCE_BY_TAG(tag));
       if (!data) return null;
       return JSON.parse(data);
     } catch {
@@ -446,28 +447,28 @@ export class KVStore {
   }
 
   async invalidateInstanceCache(instanceId: string, clusterId?: string, tag?: string): Promise<void> {
-    const deletes: Promise<void>[] = [this.kv.delete(`instance:id:${instanceId}`)];
+    const deletes: Promise<void>[] = [this.kv.delete(KV_KEYS.INSTANCE_BY_ID(instanceId))];
 
     if (clusterId && tag) {
-      deletes.push(this.kv.delete(`instance:name:${clusterId}:${tag}`));
+      deletes.push(this.kv.delete(KV_KEYS.INSTANCE_BY_NAME(clusterId, tag)));
     }
 
     if (tag) {
-      deletes.push(this.kv.delete(`instance:tag:${tag}`));
+      deletes.push(this.kv.delete(KV_KEYS.INSTANCE_BY_TAG(tag)));
     }
 
     await Promise.all(deletes);
   }
-
   // Service state caching
+
   async cacheServices(instanceId: string, services: Array<{ id: string; name: string; instanceId: string; createdAt: number; updatedAt: number }>): Promise<void> {
     const data = JSON.stringify(services);
-    await this.kv.put(`services:${instanceId}`, data, { ttl: 60 });
+    await this.kv.put(KV_KEYS.SERVICES(instanceId), data, { ttl: 60 });
   }
 
   async getCachedServices(instanceId: string): Promise<Array<{ id: string; name: string; instanceId: string; createdAt: number; updatedAt: number }> | null> {
     try {
-      const data = await this.kv.get(`services:${instanceId}`);
+      const data = await this.kv.get(KV_KEYS.SERVICES(instanceId));
       if (!data) return null;
       return JSON.parse(data);
     } catch {
@@ -476,19 +477,19 @@ export class KVStore {
   }
 
   async invalidateServiceCache(instanceId: string): Promise<void> {
-    await this.kv.delete(`services:${instanceId}`);
+    await this.kv.delete(KV_KEYS.SERVICES(instanceId));
   }
 
   async saveProcessSnapshot(instanceId: string, seq: number, snapshot: Record<string, unknown>): Promise<void> {
     const timestamp = Date.now();
-    const key = `process:${instanceId}:snapshot:${timestamp}`;
+    const key = KV_KEYS.PROCESS_SNAPSHOT(instanceId, timestamp);
     await this.kv.put(key, JSON.stringify({ seq, timestamp, data: snapshot }), {
       ttl: 60 * 60 * 2, // 120 minutes
     });
   }
 
   async getProcessSnapshot(instanceId: string, timestamp: number): Promise<Record<string, unknown> | null> {
-    const key = `process:${instanceId}:snapshot:${timestamp}`;
+    const key = KV_KEYS.PROCESS_SNAPSHOT(instanceId, timestamp);
     const data = await this.kv.get(key);
     if (!data) return null;
     const parsed = JSON.parse(data);
@@ -566,15 +567,11 @@ export class KVStore {
       sub: sessionId,
       type: "admin",
     };
-    return await new SignJWT(payload)
-      .setProtectedHeader({ alg: "RS256" })
-      .setIssuedAt()
-      .setExpirationTime("30m")
-      .sign(privateKey);
+    return await new SignJWT(payload).setProtectedHeader({ alg: "RS256" }).setIssuedAt().setExpirationTime("30m").sign(privateKey);
   }
 
   async getAdminJWT(sessionId: string): Promise<string | null> {
-    const data = await this.kv.get(`admin_jwt:${sessionId}`);
+    const data = await this.kv.get(KV_KEYS.ADMIN_JWT(sessionId));
     if (!data) return null;
     try {
       const parsed = JSON.parse(data);
@@ -591,10 +588,6 @@ export class KVStore {
 
   async saveAdminJWT(sessionId: string, token: string, ttl: number = ADMIN_JWT_TTL): Promise<void> {
     const expiresAt = Date.now() + ttl * 1000;
-    await this.kv.put(
-      `admin_jwt:${sessionId}`,
-      JSON.stringify({ token, expiresAt }),
-      { ttl }
-    );
+    await this.kv.put(`admin_jwt:${sessionId}`, JSON.stringify({ token, expiresAt }), { ttl });
   }
 }
