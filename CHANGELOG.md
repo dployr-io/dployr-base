@@ -1,3 +1,8 @@
+## [0.2.15] - 2026-04-21
+
+### 🚜 Refactor
+
+- *(admin)* Apply security middleware globally
 ## [0.2.12] - 2026-04-21
 
 ### 🐛 Bug Fixes
