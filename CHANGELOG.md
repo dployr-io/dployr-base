@@ -1,4 +1,4 @@
-## [0.3.0] - 2026-04-21
+## [0.2.1] - 2026-04-21
 
 ### 🚀 Features
 
@@ -23,6 +23,7 @@
 - *(websocket)* Rename NodeService to DployrdService
 - *(domains)* Integrate instance helper for service instantiation
 - *(admin)* Restructure admin routes into modular directory
+- *(constants)* Export DEFAULT_EVENTS from events module
 
 ### 📚 Documentation
 
