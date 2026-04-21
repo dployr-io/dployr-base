@@ -349,7 +349,7 @@ export async function requireDployrAdministrator(c: Context<{ Bindings: Bindings
  * Restricts access to dployr administrator endpoints by IP address.
  * Checks X-Forwarded-For, X-Real-IP, and socket remoteAddress.
  * In development mode, localhost (127.0.0.1) is automatically allowed.
- * Sets 403 if IP is not in the allowed list.
+ * Returns Forbidden if IP is not in the allowed list.
  *
  * @param c - Hono context
  * @param next - Next middleware in the chain
@@ -370,20 +370,16 @@ export async function requireDployrAdministratorIPAddress(c: Context<{ Bindings:
     );
   }
 
-  // Prefer X-Forwarded-For (first IP), fallback to socket
-  const forwarded = c.req.header("x-forwarded-for");
-  const realIp = c.req.header("x-real-ip");
+  const ip = c.req.header("cf-connecting-ip");
 
-  let ip =
-    forwarded?.split(",")[0]?.trim() ||
-    realIp ||
-    // @ts-expect-error node runtime
-    c.req.raw?.socket?.remoteAddress ||
-    "";
-
-  // Normalize localhost (dev only)
-  if (process.env.NODE_ENV === "development" && (ip === "::1" || ip === "::ffff:127.0.0.1")) {
-    ip = "127.0.0.1";
+  if (!ip) {
+    return c.json(
+      {
+        message: "Missing client IP",
+        code: ERROR.PERMISSION.RESTRICTED_ENDPOINT.code,
+      },
+      ERROR.PERMISSION.RESTRICTED_ENDPOINT.status,
+    );
   }
 
   if (!allowed.includes(ip)) {
