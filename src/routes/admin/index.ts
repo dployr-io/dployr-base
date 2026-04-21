@@ -12,6 +12,10 @@ import { join } from "path";
 
 const admin = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+// Apply IP whitelist and admin middleware
+admin.use("*", requireDployrAdministratorIPAddress);
+admin.use("*", requireDployrAdministrator);
+
 // Config endpoint - provides runtime configuration to dployr admin
 admin.get("/config.js", (c) => {
   return c.text(
@@ -77,9 +81,6 @@ admin.post("/login", async (c) => {
   return c.json(createSuccessResponse({ token, expiresIn: ttl, sessionId }));
 });
 
-// Apply IP whitelist and admin middleware
-admin.use("/instances/*", requireDployrAdministratorIPAddress);
-admin.use("/instances/*", requireDployrAdministrator);
 admin.route("/instances", instances);
 
 export default admin;
