@@ -3,36 +3,80 @@ import path from 'path';
 import { parse, stringify } from 'smol-toml';
 
 const [,, templatePath, configPath, skipPrompts] = process.argv;
-const interactive = skipPrompts !== 'true';
+const interactive = !['true', '1', 'yes'].includes(skipPrompts?.toLowerCase());
 
-function prompt(question, def) {
-  process.stdout.write(`\n[CONFIG] ${question}\nDefault: ${def}\nValue: `);
-  try {
-    const input = fs.readFileSync(0, 'utf-8').trim();
-    return input || def;
-  } catch {
-    return def;
+function parseValue(input, def) {
+  if (Array.isArray(def)) {
+    return input.split(',').map(v => {
+      const val = v.trim();
+      if (typeof def[0] === 'number') {
+        const num = Number(val);
+        if (isNaN(num)) throw new Error('Expected number');
+        return num;
+      }
+      if (typeof def[0] === 'boolean') {
+        if (['true', 'yes', '1'].includes(val.toLowerCase())) return true;
+        if (['false', 'no', '0'].includes(val.toLowerCase())) return false;
+        throw new Error('Expected boolean');
+      }
+      return val;
+    });
+  }
+
+  if (typeof def === 'number') {
+    const num = Number(input);
+    if (isNaN(num)) throw new Error('Expected a number');
+    return num;
+  }
+
+  if (typeof def === 'boolean') {
+    if (['true', 'yes', '1'].includes(input.toLowerCase())) return true;
+    if (['false', 'no', '0'].includes(input.toLowerCase())) return false;
+    throw new Error('Expected boolean (true/false)');
+  }
+
+  return input;
+}
+
+function promptTyped(key, def) {
+  while (true) {
+    let hint = '';
+    if (Array.isArray(def)) hint = '(comma-separated list)';
+    else if (typeof def === 'number') hint = '(number)';
+    else if (typeof def === 'boolean') hint = '(true/false)';
+    else hint = '(string)';
+
+    process.stdout.write(
+      `\n[CONFIG] ${key} ${hint}\nDefault: ${JSON.stringify(def)}\nValue: `
+    );
+
+    try {
+      const input = fs.readFileSync(0, 'utf-8').trim();
+      if (!input) return def;
+      return parseValue(input, def);
+    } catch (err) {
+      console.log(`[WARN] Invalid input: ${err.message}`);
+    }
   }
 }
 
 function merge(template, existing, prefix = '') {
   for (const key of Object.keys(template)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
+    const def = template[key];
 
     if (!(key in existing)) {
-      const def = template[key];
-
       if (typeof def === 'object' && def !== null && !Array.isArray(def)) {
         existing[key] = {};
         merge(def, existing[key], fullKey);
       } else {
-        existing[key] = interactive ? prompt(fullKey, def) : def;
+        existing[key] = interactive ? promptTyped(fullKey, def) : def;
       }
     } else if (
-      typeof template[key] === 'object' &&
+      typeof def === 'object' &&
       typeof existing[key] === 'object'
     ) {
-      merge(template[key], existing[key], fullKey);
+      merge(def, existing[key], fullKey);
     }
   }
 }
