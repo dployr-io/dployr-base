@@ -1,4 +1,14 @@
-## [0.2.2] - 2026-04-21
+## [0.2.5] - 2026-04-21
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Fix indentation in release workflow
+## [0.2.4] - 2026-04-21
+
+### 💼 Other
+
+- Include scripts and install.sh in release tarball
+## [0.2.3] - 2026-04-21
 
 ### 🐛 Bug Fixes
 
