@@ -1,11 +1,14 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import readline from 'readline';
 import { parse, stringify } from 'smol-toml';
 
 const [,, templatePath, configPath, skipPrompts] = process.argv;
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
-const interactive = isTTY && !['true', '1', 'yes'].includes(skipPrompts?.toLowerCase());
+const forceInteractive = ['true', '1', 'yes'].includes(skipPrompts?.toLowerCase());
+const canPrompt = forceInteractive || (isTTY && process.stdout.isTTY);
+const interactive = canPrompt && !forceInteractive;
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -81,29 +84,37 @@ async function merge(template, existing, prefix = '') {
   for (const key of Object.keys(template)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
     const def = template[key];
+    const existingVal = existing[key];
 
     if (!(key in existing)) {
-      if (typeof def === 'object' && def !== null && !Array.isArray(def)) {
+      if (!Array.isArray(def) && typeof def === 'object' && def !== null) {
         existing[key] = {};
         await merge(def, existing[key], fullKey);
       } else {
         existing[key] = interactive ? await promptTyped(fullKey, def) : def;
       }
     } else if (
+      existingVal !== null &&
+      !Array.isArray(def) &&
+      !Array.isArray(existingVal) &&
       typeof def === 'object' &&
-      typeof existing[key] === 'object'
+      typeof existingVal === 'object'
     ) {
-      await merge(def, existing[key], fullKey);
+      await merge(def, existingVal, fullKey);
     }
   }
 }
 
 async function main() {
-  if (!interactive && !isTTY) {
+  if (!canPrompt) {
     console.log('[WARN] Non-interactive mode (no TTY detected)');
   }
 
-  let template = parse(fs.readFileSync(templatePath, 'utf-8'));
+  const resolvedTemplatePath = path.isAbsolute(templatePath)
+    ? templatePath
+    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', templatePath);
+
+  let template = parse(fs.readFileSync(resolvedTemplatePath, 'utf-8'));
   let config = {};
 
   if (fs.existsSync(configPath)) {
