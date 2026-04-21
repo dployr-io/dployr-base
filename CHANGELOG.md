@@ -1,3 +1,13 @@
+## [0.2.9] - 2026-04-21
+
+### 🐛 Bug Fixes
+
+- *(install)* Improve TTY detection and interactive prompting
+## [0.2.8] - 2026-04-21
+
+### 🚜 Refactor
+
+- *(scripts)* Implement typed configuration prompting
 ## [0.2.7] - 2026-04-21
 
 ### 🐛 Bug Fixes
