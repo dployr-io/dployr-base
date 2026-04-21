@@ -1,3 +1,8 @@
+## [0.2.12] - 2026-04-21
+
+### 🐛 Bug Fixes
+
+- *(auth)* Use cf-connecting-ip for administrator IP restriction
 ## [0.2.11] - 2026-04-21
 
 ### 🚜 Refactor
