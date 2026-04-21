@@ -1,3 +1,8 @@
+## [0.2.8] - 2026-04-21
+
+### 🚜 Refactor
+
+- *(scripts)* Implement typed configuration prompting
 ## [0.2.7] - 2026-04-21
 
 ### 🐛 Bug Fixes
