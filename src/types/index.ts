@@ -28,7 +28,8 @@ export type Bindings = {
   CORS_ALLOWED_ORIGINS?: string;
 
   ADMIN_API_KEY: string;
-  GRAFANA_URL: string;
+  ALLOWED_DPLOYR_ADMINISTRATORS: string;
+  ADMIN_TOTP_SECRET: string;
 
   // DNS OAuth (optional)
   CLOUDFLARE_CLIENT_ID?: string;
