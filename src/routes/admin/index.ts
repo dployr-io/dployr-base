@@ -26,6 +26,10 @@ admin.get("/config.js", (c) => {
   );
 });
 
+// Apply IP whitelist and admin middleware
+admin.use("*", requireDployrAdministratorIPAddress);
+admin.use("*", requireDployrAdministrator);
+
 // Serve static admin page
 admin.get("/", async (c) => {
   const html = readFileSync(join(process.cwd(), "public/index.html"), "utf-8");
@@ -77,9 +81,6 @@ admin.post("/login", async (c) => {
   return c.json(createSuccessResponse({ token, expiresIn: ttl, sessionId }));
 });
 
-// Apply IP whitelist and admin middleware
-admin.use("/instances/*", requireDployrAdministratorIPAddress);
-admin.use("/instances/*", requireDployrAdministrator);
 admin.route("/instances", instances);
 
 export default admin;
