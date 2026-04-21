@@ -27,20 +27,17 @@ See [DOCKER.md](./DOCKER.md) for more examples.
 ### Option 2: Shell installer (no Docker)
 
 ```bash
-# Basic install
+# Basic install (interactive)
 curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh \
   | sudo bash -s --
 
-# Example with Upstash Redis
+# Non‑interactive install (accepts all defaults)
 curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh \
-  | sudo bash -s -- \
-  --kv-type upstash \
-  --kv-rest-url "https://your-db.upstash.io" \
-  --kv-rest-token "your-token"
+  | sudo bash -s -- --non-interactive
 
-# Or from a config file (remote script)
+# Install a specific version
 curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh \
-  | sudo bash -s -- --config /path/to/config.toml
+  | sudo bash -s -- --version v0.1.0
 
 # Start the service
 sudo systemctl start dployr-base
