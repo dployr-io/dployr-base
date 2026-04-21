@@ -12,7 +12,11 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/dployr-base}"
 CONFIG_DIR="/etc/dployr-base"
 SERVICE_USER="dployr"
 
-INTERACTIVE="${INTERACTIVE:-true}"
+if [ -t 0 ]; then
+  INTERACTIVE="${INTERACTIVE:-true}"
+else
+  INTERACTIVE="${INTERACTIVE:-false}"
+fi
 SKIP_PROMPTS="${SKIP_PROMPTS:-false}"
 
 while [[ $# -gt 0 ]]; do
@@ -53,6 +57,12 @@ echo "[INFO] Installing to $INSTALL_DIR"
 
 if [ "$EUID" -ne 0 ]; then
   echo "[ERROR] Run as root"
+  exit 1
+fi
+
+if [ "$INTERACTIVE" = "true" ] && [ ! -t 0 ]; then
+  echo "[ERROR] Interactive mode requires a terminal (TTY)"
+  echo "       Run without pipe, or use --non-interactive"
   exit 1
 fi
 
@@ -104,9 +114,7 @@ echo "[INFO] Installing dependencies..."
 cd "$INSTALL_DIR"
 npm install --omit=dev
 
-echo "[INFO] Processing configuration..."
-
-node "$INSTALL_DIR/scripts/process-config.mjs" "$temp_template" "$CONFIG_DIR/config.toml" "$SKIP_PROMPTS"
+echo "[INFO] Creating systemd service..."
 
 cat > /etc/systemd/system/dployr-base.service <<EOF
 [Unit]
@@ -129,6 +137,10 @@ StandardError=append:/var/log/dployr-base/output.log
 WantedBy=multi-user.target
 EOF
 
+echo "[INFO] Processing configuration..."
+
+node "$INSTALL_DIR/scripts/process-config.mjs" "$temp_template" "$CONFIG_DIR/config.toml" "$SKIP_PROMPTS"
+
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR" "$CONFIG_DIR" /var/log/dployr-base /var/lib/dployr-base
 chmod 600 "$CONFIG_DIR/config.toml"
 
@@ -138,3 +150,7 @@ systemctl restart dployr-base || systemctl start dployr-base
 
 echo ""
 echo "Installation completed"
+echo ""
+echo "For interactive re-configuration:"
+echo "  sudo node $INSTALL_DIR/scripts/process-config.mjs \\"
+echo "    $CONFIG_DIR/config.example.toml $CONFIG_DIR/config.toml"

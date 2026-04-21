@@ -1,9 +1,17 @@
 import fs from 'fs';
 import path from 'path';
+import readline from 'readline';
 import { parse, stringify } from 'smol-toml';
 
 const [,, templatePath, configPath, skipPrompts] = process.argv;
-const interactive = !['true', '1', 'yes'].includes(skipPrompts?.toLowerCase());
+const isTTY = process.stdin.isTTY && process.stdout.isTTY;
+const interactive = isTTY && !['true', '1', 'yes'].includes(skipPrompts?.toLowerCase());
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  terminal: true
+});
 
 function parseValue(input, def) {
   if (Array.isArray(def)) {
@@ -39,28 +47,37 @@ function parseValue(input, def) {
 }
 
 function promptTyped(key, def) {
-  while (true) {
-    let hint = '';
-    if (Array.isArray(def)) hint = '(comma-separated list)';
-    else if (typeof def === 'number') hint = '(number)';
-    else if (typeof def === 'boolean') hint = '(true/false)';
-    else hint = '(string)';
+  return new Promise((resolve) => {
+    const typeHint =
+      Array.isArray(def) ? '(comma-separated list)' :
+      typeof def === 'number' ? '(number)' :
+      typeof def === 'boolean' ? '(true/false)' :
+      '(string)';
 
-    process.stdout.write(
-      `\n[CONFIG] ${key} ${hint}\nDefault: ${JSON.stringify(def)}\nValue: `
-    );
+    const ask = () => {
+      rl.question(
+        `[CONFIG] ${key} ${typeHint}\nDefault: ${JSON.stringify(def)}\nValue: `,
+        (input) => {
+          const val = input.trim();
+          if (!val) {
+            resolve(def);
+            return;
+          }
+          try {
+            resolve(parseValue(val, def));
+          } catch (e) {
+            console.log(`[WARN] ${e.message}`);
+            ask();
+          }
+        }
+      );
+    };
 
-    try {
-      const input = fs.readFileSync(0, 'utf-8').trim();
-      if (!input) return def;
-      return parseValue(input, def);
-    } catch (err) {
-      console.log(`[WARN] Invalid input: ${err.message}`);
-    }
-  }
+    ask();
+  });
 }
 
-function merge(template, existing, prefix = '') {
+async function merge(template, existing, prefix = '') {
   for (const key of Object.keys(template)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
     const def = template[key];
@@ -68,39 +85,48 @@ function merge(template, existing, prefix = '') {
     if (!(key in existing)) {
       if (typeof def === 'object' && def !== null && !Array.isArray(def)) {
         existing[key] = {};
-        merge(def, existing[key], fullKey);
+        await merge(def, existing[key], fullKey);
       } else {
-        existing[key] = interactive ? promptTyped(fullKey, def) : def;
+        existing[key] = interactive ? await promptTyped(fullKey, def) : def;
       }
     } else if (
       typeof def === 'object' &&
       typeof existing[key] === 'object'
     ) {
-      merge(def, existing[key], fullKey);
+      await merge(def, existing[key], fullKey);
     }
   }
 }
 
-let template = parse(fs.readFileSync(templatePath, 'utf-8'));
-let config = {};
-
-if (fs.existsSync(configPath)) {
-  try {
-    config = parse(fs.readFileSync(configPath, 'utf-8'));
-  } catch {
-    console.error('[ERROR] Invalid existing config.toml');
-    process.exit(1);
+async function main() {
+  if (!interactive && !isTTY) {
+    console.log('[WARN] Non-interactive mode (no TTY detected)');
   }
-} else {
-  console.log('[INFO] Creating new config');
+
+  let template = parse(fs.readFileSync(templatePath, 'utf-8'));
+  let config = {};
+
+  if (fs.existsSync(configPath)) {
+    try {
+      config = parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch {
+      console.error('[ERROR] Invalid existing config.toml');
+      process.exit(1);
+    }
+  } else {
+    console.log('[INFO] Creating new config');
+  }
+
+  await merge(template, config);
+
+  const output = stringify(config).trim() + '\n';
+
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, output);
+
+  console.log('[INFO] Config ready');
+  rl.close();
+  process.exit(0);
 }
 
-merge(template, config);
-
-const output = stringify(config).trim() + '\n';
-
-fs.mkdirSync(path.dirname(configPath), { recursive: true });
-fs.writeFileSync(configPath, output);
-
-console.log('[INFO] Config ready');
-process.exit(0);
+main();
