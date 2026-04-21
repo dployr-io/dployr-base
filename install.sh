@@ -103,7 +103,7 @@ echo "[INFO] Processing configuration..."
 
 npm install -g toml >/dev/null 2>&1 || true
 
-node "$INSTALL_DIR/scripts/process-config.js" "$temp_template" "$CONFIG_DIR/config.toml" "$SKIP_PROMPTS"
+node "$INSTALL_DIR/scripts/process-config.cjs" "$temp_template" "$CONFIG_DIR/config.toml" "$SKIP_PROMPTS"
 
 rm -f "$temp_template"
 
