@@ -99,16 +99,14 @@ curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
 temp_template=$(mktemp)
 download_template "$VERSION" "$temp_template"
 
-echo "[INFO] Processing configuration..."
-
-npm install -g toml >/dev/null 2>&1 || true
-
-node "$INSTALL_DIR/scripts/process-config.cjs" "$temp_template" "$CONFIG_DIR/config.toml" "$SKIP_PROMPTS"
-
-rm -f "$temp_template"
+echo "[INFO] Installing dependencies..."
 
 cd "$INSTALL_DIR"
 npm install --omit=dev
+
+echo "[INFO] Processing configuration..."
+
+node "scripts/process-config.cjs" "$temp_template" "$CONFIG_DIR/config.toml" "$SKIP_PROMPTS"
 
 cat > /etc/systemd/system/dployr-base.service <<EOF
 [Unit]

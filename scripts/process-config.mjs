@@ -1,26 +1,9 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { parse, stringify } from 'smol-toml';
 
 const [,, templatePath, configPath, skipPrompts] = process.argv;
 const interactive = skipPrompts !== 'true';
-
-const toml = require('toml');
-
-function stringify(obj) {
-  let out = '';
-
-  for (const [key, value] of Object.entries(obj)) {
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      out += `\n[${key}]\n`;
-      out += stringify(value);
-    } else {
-      const v = typeof value === 'string' ? `"${value}"` : value;
-      out += `${key} = ${v}\n`;
-    }
-  }
-
-  return out;
-}
 
 function prompt(question, def) {
   process.stdout.write(`\n[CONFIG] ${question}\nDefault: ${def}\nValue: `);
@@ -54,12 +37,12 @@ function merge(template, existing, prefix = '') {
   }
 }
 
-let template = toml.parse(fs.readFileSync(templatePath, 'utf-8'));
+let template = parse(fs.readFileSync(templatePath, 'utf-8'));
 let config = {};
 
 if (fs.existsSync(configPath)) {
   try {
-    config = toml.parse(fs.readFileSync(configPath, 'utf-8'));
+    config = parse(fs.readFileSync(configPath, 'utf-8'));
   } catch {
     console.error('[ERROR] Invalid existing config.toml');
     process.exit(1);
