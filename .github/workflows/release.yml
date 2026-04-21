@@ -35,16 +35,19 @@ jobs:
         run: pnpm run build
 
       - name: Pack server bundle
-        run: |
-          TAG="${{ github.ref_name }}"
-          TARBALL="dployr-base-${TAG}.tar.gz"
-          mkdir -p artifacts
-          tar -czf "artifacts/${TARBALL}" \
-            package.json \
-            pnpm-lock.yaml \
-            tsconfig.json \
-            src
-          echo "TARBALL=artifacts/${TARBALL}" >> "$GITHUB_ENV"
+         run: |
+           TAG="${{ github.ref_name }}"
+           TARBALL="dployr-base-${TAG}.tar.gz"
+           mkdir -p artifacts
+           tar -czf "artifacts/${TARBALL}" \
+             install.sh \
+             package.json \
+             pnpm-lock.yaml \
+             tsconfig.json \
+             scripts \
+             src \
+             config.example.toml
+           echo "TARBALL=artifacts/${TARBALL}" >> "$GITHUB_ENV"
 
       - name: Generate changelog
         id: changelog
