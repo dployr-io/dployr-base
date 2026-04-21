@@ -1,3 +1,8 @@
+## [0.2.11] - 2026-04-21
+
+### 🚜 Refactor
+
+- *(scripts)* Improve configuration merging, path resolution and TTY input in installer script
 ## [0.2.10] - 2026-04-21
 
 ### 🐛 Bug Fixes
