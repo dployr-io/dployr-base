@@ -1,8 +1,12 @@
-## [0.2.9] - 2026-04-21
+## [0.2.10] - 2026-04-21
 
 ### 🐛 Bug Fixes
 
 - *(install)* Improve TTY detection and interactive prompting
+
+### 💼 Other
+
+- *(release)* Add public assets to distribution tarball
 ## [0.2.8] - 2026-04-21
 
 ### 🚜 Refactor
