@@ -4,8 +4,8 @@
 import { ERROR } from "./error.js";
 export { ERROR };
 
-import { EVENTS } from "./events.js";
-export { EVENTS };
+import { EVENTS, DEFAULT_EVENTS } from "./events.js";
+export { EVENTS, DEFAULT_EVENTS };
 
 export const WORKFLOW_NAME = "dployr-bootstrap";
 
