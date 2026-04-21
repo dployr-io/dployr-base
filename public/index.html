@@ -1,0 +1,1548 @@
+<!-- Copyright 2025 Emmanuel Madehin -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dployr Admin</title>
+  <link rel="icon" type="image/png" href="/icon.png" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%234f9cf9'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-weight='700' font-size='18' fill='white'%3ED%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0a0b0d;
+      --bg-1: #0f1114;
+      --bg-2: #161920;
+      --bg-3: #1d2129;
+      --border: #252932;
+      --border-hi: #333a47;
+      --text: #e2e6ef;
+      --text-dim: #6b7280;
+      --text-muted: #3d4451;
+      --accent: #4f9cf9;
+      --accent-dim: rgba(79, 156, 249, 0.12);
+      --green: #22c55e;
+      --green-dim: rgba(34, 197, 94, 0.12);
+      --red: #ef4444;
+      --red-dim: rgba(239, 68, 68, 0.12);
+      --yellow: #f59e0b;
+      --yellow-dim: rgba(245, 158, 11, 0.12);
+      --mono: 'IBM Plex Mono', monospace;
+      --radius: 4px;
+      --transition: 140ms ease;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      height: 52px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-1);
+      flex-shrink: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .logo-img {
+      width: 26px;
+      height: 26px;
+      border-radius: 3px;
+      object-fit: contain;
+    }
+
+    .logo-label {
+      color: var(--text);
+    }
+
+    .logo-sep {
+      color: var(--text-muted);
+      margin: 0 2px;
+    }
+
+    .logo-sub {
+      color: var(--text-dim);
+      font-weight: 300;
+      font-size: 12px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .session-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .session-pill .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    #session-id-display {
+      color: var(--text);
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .btn-logout {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 5px 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn-logout:hover {
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    aside {
+      width: 200px;
+      flex-shrink: 0;
+      background: var(--bg-1);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 16px 0;
+    }
+
+    .nav-section-label {
+      padding: 0 16px 8px;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 16px;
+      color: var(--text-dim);
+      font-size: 12px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-family: var(--mono);
+      transition: var(--transition);
+      border-left: 2px solid transparent;
+    }
+
+    .nav-item:hover {
+      color: var(--text);
+      background: var(--bg-2);
+    }
+
+    .nav-item.active {
+      color: var(--accent);
+      background: var(--accent-dim);
+      border-left-color: var(--accent);
+    }
+
+    .nav-item svg {
+      flex-shrink: 0;
+      opacity: 0.7;
+    }
+
+    .nav-item.active svg {
+      opacity: 1;
+    }
+
+    .nav-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 12px 16px;
+    }
+
+    #content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    .page-subtitle {
+      color: var(--text-dim);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+
+    .stat-value.green {
+      color: var(--green);
+    }
+
+    .stat-value.red {
+      color: var(--red);
+    }
+
+    .stat-value.yellow {
+      color: var(--yellow);
+    }
+
+    .panel {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 16px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition);
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background: var(--bg-2);
+    }
+
+    td {
+      padding: 11px 12px;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    td.mono {
+      font-family: var(--mono);
+    }
+
+    td.dim {
+      color: var(--text-dim);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .badge::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+    }
+
+    .badge.running {
+      background: var(--green-dim);
+      color: var(--green);
+    }
+
+    .badge.running::before {
+      background: var(--green);
+      box-shadow: 0 0 5px var(--green);
+    }
+
+    .badge.stopped {
+      background: var(--red-dim);
+      color: var(--red);
+    }
+
+    .badge.stopped::before {
+      background: var(--red);
+    }
+
+    .badge.pending {
+      background: var(--yellow-dim);
+      color: var(--yellow);
+    }
+
+    .badge.pending::before {
+      background: var(--yellow);
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .form-input,
+    .form-select {
+      width: 100%;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 9px 12px;
+      border-radius: var(--radius);
+      outline: none;
+      transition: border-color var(--transition);
+      appearance: none;
+    }
+
+    .form-input:focus,
+    .form-select:focus {
+      border-color: var(--accent);
+    }
+
+    .form-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .form-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: var(--transition);
+      text-align: center;
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      filter: brightness(1.1);
+    }
+
+    .btn-danger {
+      background: var(--red-dim);
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: var(--red);
+      color: #fff;
+    }
+
+    .btn-ghost {
+      background: none;
+      border-color: var(--border);
+      color: var(--text-dim);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+      border-color: var(--border-hi);
+      color: var(--text);
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 11px;
+    }
+
+    .btn-full {
+      width: 100%;
+      justify-content: center;
+    }
+
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 9999;
+    }
+
+    .toast {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      min-width: 280px;
+      max-width: 380px;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      animation: slideIn 200ms ease;
+    }
+
+    .toast.success {
+      border-left: 3px solid var(--green);
+    }
+
+    .toast.error {
+      border-left: 3px solid var(--red);
+    }
+
+    .toast.info {
+      border-left: 3px solid var(--accent);
+    }
+
+    .toast-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .toast-msg {
+      flex: 1;
+      line-height: 1.4;
+    }
+
+    .toast-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 2px;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    #dialog-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9998;
+    }
+
+    #dialog-overlay.open {
+      display: flex;
+    }
+
+    .dialog {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      width: 380px;
+    }
+
+    .dialog-title {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+
+    .dialog-body {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    .dialog-body strong {
+      color: var(--red);
+      font-family: var(--mono);
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    #login-screen {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9000;
+    }
+
+    .login-card {
+      width: 360px;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+    }
+
+    .login-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .login-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .login-subtitle {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 24px;
+    }
+
+    .login-error {
+      background: var(--red-dim);
+      border: 1px solid var(--red);
+      color: var(--red);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-size: 12px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .response-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 6px;
+    }
+
+    .response-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 11px;
+      color: var(--text-dim);
+      min-height: 56px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-family: var(--mono);
+      line-height: 1.7;
+    }
+
+    .response-box.success {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    .response-box.error {
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 12px;
+      gap: 8px;
+    }
+
+    .empty-state svg {
+      opacity: 0.3;
+    }
+
+    .otp-wrap {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .otp-input {
+      letter-spacing: 0.3em;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+    }
+
+    .otp-input::placeholder {
+      letter-spacing: 0.08em;
+      font-weight: 300;
+    }
+
+    .login-card .form-input,
+    .login-card .regen-btn {
+      height: 38px;
+    }
+
+    .login-card .form-input {
+      line-height: 38px;
+    }
+
+    .regen-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 0 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+
+    .regen-btn:hover {
+      border-color: var(--border-hi);
+      color: var(--text);
+    }
+
+    #expiry-bar-wrap {
+      height: 2px;
+      width: 100%;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    #expiry-bar {
+      height: 100%;
+      background: var(--green);
+      transition: width 1s linear, background 0.5s;
+      width: 100%;
+    }
+
+    #expiry-bar.warn {
+      background: var(--yellow);
+    }
+
+    #expiry-bar.urgent {
+      background: var(--red);
+    }
+
+    #expiry-pill {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+    }
+
+    #expiry-pill.warn {
+      color: var(--yellow);
+    }
+
+    #expiry-pill.urgent {
+      color: var(--red);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hi);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .text-dim {
+      color: var(--text-dim);
+    }
+
+    .text-muted {
+      color: var(--text-muted);
+    }
+
+    .mt-8 {
+      margin-top: 8px;
+    }
+
+    .mt-12 {
+      margin-top: 12px;
+    }
+
+    .flex {
+      display: flex;
+    }
+
+    .gap-8 {
+      gap: 8px;
+    }
+
+    .items-center {
+      align-items: center;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <img class="logo-img" src="/icon.png" alt="dployr" />
+        <span style="font-size:15px;font-weight:600;">dployr</span>
+        <span style="color:var(--text-muted);font-size:12px;">/ admin</span>
+      </div>
+      <div class="login-title">Sign in</div>
+      <div class="login-subtitle">Internal admin access only.</div>
+      <div class="login-error" id="login-error"></div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input type="password" class="form-input" id="login-key" placeholder="Enter admin API key" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Authenticator Code</label>
+        <div class="otp-wrap">
+          <input type="text" class="form-input otp-input" id="login-otp" placeholder="000000" maxlength="6"
+            inputmode="numeric" autocomplete="one-time-code" />
+        </div>
+        <div class="form-hint">6-digit code from your authenticator app.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Session ID <span
+            style="color:var(--accent);font-size:10px;letter-spacing:0.05em;">AUTO</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" class="form-input" id="login-session" readonly
+            style="color:var(--text-dim);cursor:default;flex:1;" />
+          <button type="button" class="regen-btn" onclick="regenerateSessionId()">↻ New</button>
+        </div>
+        <div class="form-hint">Auto-generated for this session.</div>
+      </div>
+      <button class="btn btn-primary btn-full mt-12" id="login-btn" onclick="login()">Sign in</button>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <header>
+      <div class="logo">
+        <img class="logo-img" src="/icon.png" alt="dployr" />
+        <span class="logo-label">dployr</span>
+        <span class="logo-sep">/</span>
+        <span class="logo-sub">admin console</span>
+      </div>
+      <div class="header-right">
+        <div class="session-pill">
+          <span class="dot"></span>
+          <span id="session-id-display">—</span>
+        </div>
+        <span id="expiry-pill"></span>
+        <button class="btn-logout" onclick="logout()">logout</button>
+      </div>
+    </header>
+    <div id="expiry-bar-wrap">
+      <div id="expiry-bar"></div>
+    </div>
+
+    <main>
+      <aside>
+        <div class="nav-section-label">Navigation</div>
+        <button class="nav-item active" data-view="instances" onclick="switchView('instances', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8M12 17v4" />
+          </svg>
+          Instances
+        </button>
+        <button class="nav-item" data-view="add" onclick="switchView('add', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="16" />
+            <line x1="8" y1="12" x2="16" y2="12" />
+          </svg>
+          Add Instance
+        </button>
+        <button class="nav-item" data-view="remove" onclick="switchView('remove', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14H6L5 6" />
+            <path d="M10 11v6M14 11v6" />
+          </svg>
+          Remove Instance
+        </button>
+        <div class="nav-divider"></div>
+        <div class="nav-section-label">System</div>
+        <button class="nav-item" data-view="token" onclick="switchView('token', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+          Auth / Token
+        </button>
+      </aside>
+
+      <div id="content">
+
+        <div id="view-instances">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Instances</div>
+              <div class="page-subtitle">All registered nodes on dployr-base</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadInstances()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-label">Total</div>
+              <div class="stat-value" id="stat-total">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Running</div>
+              <div class="stat-value green" id="stat-running">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Stopped</div>
+              <div class="stat-value red" id="stat-stopped">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Pending</div>
+              <div class="stat-value yellow" id="stat-pending">—</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Node Registry</span>
+              <span class="text-muted" style="font-size:11px;" id="instances-timestamp">—</span>
+            </div>
+            <div class="panel-body" style="padding:0;">
+              <div id="instances-loading" class="empty-state hidden">
+                <div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);"></div>
+                <span>Fetching instances…</span>
+              </div>
+              <div id="instances-empty" class="empty-state hidden">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="2" y="3" width="20" height="14" rx="2" />
+                  <path d="M8 21h8M12 17v4" />
+                </svg>
+                <span>No instances found</span>
+              </div>
+              <div class="table-wrap">
+                <table id="instances-table">
+                  <thead>
+                    <tr>
+                      <th>Instance ID</th>
+                      <th>Tag</th>
+                      <th>Address</th>
+                      <th>Region</th>
+                      <th>Cluster ID</th>
+                      <th>Created</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="instances-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="view-add" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Add Instance</div>
+              <div class="page-subtitle">Register a new node on dployr-base</div>
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="panel">
+              <div class="panel-header"><span class="panel-title">Instance Configuration</span></div>
+              <div class="panel-body">
+                <div class="form-group">
+                  <label class="form-label">Cluster ID <span class="text-muted">(ULID)</span></label>
+                  <input type="text" class="form-input" id="add-clusterId" placeholder="e.g. 01F8MECHZX3XBKS6GC0JNTYAYD"
+                    pattern="[0-9A-HJKMNP-TV-Z]{26}" required />
+                  <div class="form-hint">ULID of the cluster to add this instance to.</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Instance Tag</label>
+                  <input type="text" class="form-input" id="add-tag" placeholder="e.g. node-us-east-01" minlength="3"
+                    maxlength="15" required />
+                  <div class="form-hint">Unique name for this instance (3-15 characters).</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">IP Address</label>
+                  <input type="text" class="form-input" id="add-address" placeholder="e.g. 192.168.1.100"
+                    pattern="\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}" required title="IPv4 address (e.g. 192.168.1.100)" />
+                  <div class="form-hint">IPv4 address of the instance.</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Region <span class="text-muted">(optional)</span></label>
+                  <select class="form-select" id="add-region">
+                    <option value="">Select region…</option>
+                    <option value="us-east">us-east</option>
+                    <option value="us-west">us-west</option>
+                    <option value="us-central">us-central</option>
+                    <option value="eu-west">eu-west</option>
+                    <option value="eu-central">eu-central</option>
+                    <option value="eu-north">eu-north</option>
+                    <option value="ap-south">ap-south</option>
+                    <option value="ap-southeast">ap-southeast</option>
+                    <option value="ap-northeast">ap-northeast</option>
+                    <option value="af-south">af-south</option>
+                    <option value="me-central">me-central</option>
+                    <option value="sa-east">sa-east</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary btn-full mt-12" id="add-btn" onclick="addInstance()">Add
+                  Instance</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><span class="panel-title">Response</span></div>
+              <div class="panel-body">
+                <div class="response-label">API Response</div>
+                <div class="response-box" id="add-response">Waiting for submission…</div>
+                <div class="mt-12" style="font-size:11px;color:var(--text-muted);">POST /v1/admin/instances</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="view-remove" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Remove Instance</div>
+              <div class="page-subtitle">Permanently deregister a node from dployr-base</div>
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="panel">
+              <div class="panel-header"><span class="panel-title">Identify Instance</span></div>
+              <div class="panel-body">
+                <div class="form-group">
+                  <label class="form-label">Instance ID</label>
+                  <input type="text" class="form-input" id="remove-id" placeholder="e.g. 01F8MECHZX3XBKS6GC0JNTYAYD"
+                    required />
+                  <div class="form-hint">The unique ID of the instance to remove.</div>
+                </div>
+                <button class="btn btn-danger btn-full mt-12" id="remove-btn" onclick="confirmRemove()">Remove
+                  Instance</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><span class="panel-title">Response</span></div>
+              <div class="panel-body">
+                <div class="response-label">API Response</div>
+                <div class="response-box" id="remove-response">Waiting for submission…</div>
+                <div class="mt-12" style="font-size:11px;color:var(--text-muted);">DELETE /v1/admin/instances/:id</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="view-token" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Auth / Token</div>
+              <div class="page-subtitle">Current admin session details</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><span class="panel-title">Active Session</span></div>
+            <div class="panel-body">
+              <div class="form-group">
+                <label class="form-label">Session ID</label>
+                <input type="text" class="form-input" id="token-session-display" readonly />
+              </div>
+              <div class="form-group">
+                <label class="form-label">JWT Token</label>
+                <input type="text" class="form-input" id="token-display" readonly style="font-size:11px;" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Expires</label>
+                <input type="text" class="form-input" id="token-expires" readonly />
+              </div>
+              <div class="flex gap-8 mt-12">
+                <button class="btn btn-ghost btn-sm" onclick="copyToken()">Copy token</button>
+                <button class="btn btn-ghost btn-sm" onclick="logout()">Revoke &amp; logout</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <div id="dialog-overlay">
+    <div class="dialog">
+      <div class="dialog-title">Confirm Removal</div>
+      <div class="dialog-body" id="dialog-body">—</div>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Cancel</button>
+        <button class="btn btn-danger btn-sm" id="dialog-confirm-btn" onclick="removeInstance()">Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="/v1/admin/config.js"></script>
+  <script>
+    const CHARS = 'abcdefghijkmnpqrstuvwxyz23456789';
+
+    function genSessionId() {
+      return 'adm_' + Array.from(crypto.getRandomValues(new Uint8Array(6)))
+        .map(b => CHARS[b % CHARS.length]).join('');
+    }
+
+    function regenerateSessionId() {
+      document.getElementById('login-session').value = genSessionId();
+    }
+
+    regenerateSessionId();
+
+    const API_BASE = window.__CONFIG__.API_BASE;
+
+    const state = { jwt: null, sessionId: null, expiresAt: null, _expiryTimer: null };
+
+    function saveSession() {
+      sessionStorage.setItem('dployr_session', JSON.stringify({
+        jwt: state.jwt, sessionId: state.sessionId, expiresAt: state.expiresAt,
+      }));
+    }
+
+    function clearSession() {
+      sessionStorage.removeItem('dployr_session');
+    }
+
+    function restoreSession() {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('dployr_session') || 'null');
+        if (!saved?.jwt || !saved?.expiresAt) return false;
+        const remainingMs = saved.expiresAt - Date.now();
+        if (remainingMs <= 0) return false;
+        Object.assign(state, { jwt: saved.jwt, sessionId: saved.sessionId, expiresAt: saved.expiresAt });
+        return Math.ceil(remainingMs / 1000);
+      } catch { return false; }
+    }
+
+    function apiHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.jwt}` };
+    }
+
+    function setLoading(btnId, loading) {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      btn.disabled = loading;
+      if (loading) {
+        btn._orig = btn.innerHTML;
+        btn.innerHTML = '<div class="spinner"></div> Working…';
+      } else {
+        btn.innerHTML = btn._orig || btn.innerHTML;
+      }
+    }
+
+    function setResponse(elId, data, isError) {
+      const el = document.getElementById(elId);
+      el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      el.className = 'response-box ' + (isError ? 'error' : 'success');
+    }
+
+    function toast(msg, type = 'info') {
+      const icons = { success: '✓', error: '✕', info: 'ℹ' };
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.innerHTML = `<span class="toast-icon">${icons[type]}</span><span class="toast-msg">${msg}</span><button class="toast-close" onclick="this.closest('.toast').remove()">✕</button>`;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(() => el.remove(), 4500);
+    }
+
+    function openDialog(body) {
+      document.getElementById('dialog-body').innerHTML = body;
+      document.getElementById('dialog-overlay').classList.add('open');
+    }
+
+    function closeDialog() {
+      document.getElementById('dialog-overlay').classList.remove('open');
+    }
+
+    function switchView(name, navEl) {
+      document.querySelectorAll('[id^="view-"]').forEach(v => v.classList.add('hidden'));
+      document.getElementById(`view-${name}`).classList.remove('hidden');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      if (navEl) navEl.classList.add('active');
+      if (name === 'instances') loadInstances();
+      if (name === 'token') populateTokenView();
+    }
+
+    function startExpiryTimer(ttlSeconds) {
+      const bar = document.getElementById('expiry-bar');
+      const pill = document.getElementById('expiry-pill');
+      const total = ttlSeconds * 1000;
+      const start = Date.now();
+
+      function tick() {
+        const remaining = Math.max(0, total - (Date.now() - start));
+        const pct = (remaining / total) * 100;
+        const secs = Math.ceil(remaining / 1000);
+        bar.style.width = pct + '%';
+        pill.textContent = `expires ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+        const urgency = pct < 10 ? 'urgent' : pct < 25 ? 'warn' : '';
+        bar.className = urgency;
+        pill.className = urgency;
+        if (remaining <= 0) { clearInterval(state._expiryTimer); sessionExpired(); }
+      }
+
+      tick();
+      state._expiryTimer = setInterval(tick, 1000);
+    }
+
+    function stopExpiryTimer() {
+      clearInterval(state._expiryTimer);
+      state._expiryTimer = null;
+      document.getElementById('expiry-bar').style.width = '0%';
+      document.getElementById('expiry-pill').textContent = '';
+    }
+
+    function sessionExpired() {
+      toast('Session expired — please sign in again.', 'error');
+      setTimeout(() => logout(true), 1800);
+    }
+
+    async function login() {
+      const key = document.getElementById('login-key').value.trim();
+      const otp = document.getElementById('login-otp').value.trim();
+      const sessionId = document.getElementById('login-session').value.trim();
+      const errEl = document.getElementById('login-error');
+      const btn = document.getElementById('login-btn');
+
+      errEl.style.display = 'none';
+
+      if (!key || !otp || !sessionId) {
+        errEl.textContent = 'API key, authenticator code, and session ID are required.';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (!/^\d{6}$/.test(otp)) {
+        errEl.textContent = 'Authenticator code must be exactly 6 digits.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Verifying…';
+
+      try {
+        const res = await fetch(`${API_BASE}/v1/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: key, otp_code: otp, session_id: sessionId }),
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error?.message || body.error || `HTTP ${res.status}`);
+
+        const { token, expiresIn } = body.data || body;
+        Object.assign(state, { jwt: token, sessionId, expiresAt: Date.now() + expiresIn * 1000 });
+        saveSession();
+
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app').classList.remove('hidden');
+        document.getElementById('session-id-display').textContent = sessionId;
+        document.getElementById('login-key').value = '';
+        document.getElementById('login-otp').value = '';
+
+        startExpiryTimer(expiresIn);
+        loadInstances();
+        toast('Authenticated successfully', 'success');
+      } catch (err) {
+        errEl.textContent = err.message || 'Authentication failed.';
+        errEl.style.display = 'block';
+        document.getElementById('login-otp').value = '';
+        document.getElementById('login-otp').focus();
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Authenticate';
+      }
+    }
+
+    document.getElementById('login-otp').addEventListener('input', function () {
+      this.value = this.value.replace(/\D/g, '').slice(0, 6);
+      if (this.value.length === 6) login();
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') login();
+    });
+
+    function logout(expired = false) {
+      stopExpiryTimer();
+      Object.assign(state, { jwt: null, sessionId: null, expiresAt: null });
+      clearSession();
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app').classList.add('hidden');
+      document.getElementById('session-id-display').textContent = '—';
+      regenerateSessionId();
+      if (!expired) toast('Signed out.', 'info');
+    }
+
+    const REGION_FLAGS = {
+      'us-east': '🇺🇸', 'us-west': '🇺🇸', 'us-central': '🇺🇸',
+      'eu-west': '🇪🇺', 'eu-central': '🇪🇺',
+      'ap-south': '🇮🇳', 'ap-southeast': '🇸🇬', 'ap-northeast': '🇯🇵',
+      'af-south': '🇿🇦',
+    };
+
+    async function loadInstances() {
+      const tbody = document.getElementById('instances-tbody');
+      const loading = document.getElementById('instances-loading');
+      const empty = document.getElementById('instances-empty');
+      const table = document.getElementById('instances-table');
+
+      tbody.innerHTML = '';
+      loading.classList.remove('hidden');
+      empty.classList.add('hidden');
+      table.style.display = 'none';
+
+      try {
+        const url = new URL(`${API_BASE}/v1/admin/instances`);
+        url.searchParams.set('sessionId', state.sessionId);
+        const res = await fetch(url, { headers: apiHeaders() });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || err.error || `HTTP ${res.status}`);
+        }
+        const body = await res.json();
+        const instances = body.data?.items || body.data || body || [];
+
+        document.getElementById('stat-total').textContent = instances.length;
+        document.getElementById('stat-running').textContent = 0;
+        document.getElementById('stat-stopped').textContent = 0;
+        document.getElementById('stat-pending').textContent = 0;
+        document.getElementById('instances-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
+        loading.classList.add('hidden');
+
+        if (!instances.length) { empty.classList.remove('hidden'); return; }
+
+        table.style.display = '';
+        instances.forEach(inst => {
+          const region = inst.metadata?.region || inst.region || null;
+          const regionLabel = region ? `${REGION_FLAGS[region] ?? '🌐'} ${region}` : '—';
+          const createdMs = parseInt(inst.createdAt, 10);
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+          <td class="mono">${escHtml(inst.id || '—')}</td>
+          <td>${escHtml(inst.tag || '—')}</td>
+          <td class="dim">${escHtml(inst.address || '—')}</td>
+          <td class="dim">${escHtml(regionLabel)}</td>
+          <td class="mono dim" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escAttr(inst.clusterId || '')}">${escHtml((inst.clusterId || '—').slice(0, 16))}…</td>
+          <td class="dim">${escHtml(createdMs ? new Date(createdMs).toLocaleDateString() : '—')}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="prefillRemove('${escAttr(inst.id)}','${escAttr(inst.tag || inst.id)}')">Remove</button></td>
+        `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        loading.classList.add('hidden');
+        empty.classList.remove('hidden');
+        toast(`Failed to load instances: ${err.message}`, 'error');
+      }
+    }
+
+    function prefillRemove(id) {
+      switchView('remove', document.querySelector('[data-view="remove"]'));
+      document.getElementById('remove-id').value = id;
+    }
+
+    function confirmRemove() {
+      const id = document.getElementById('remove-id').value.trim();
+      if (!id) { toast('Instance ID is required.', 'error'); return; }
+      openDialog(`You are about to permanently remove instance <strong>${escHtml(id)}</strong>. This action cannot be undone.`);
+    }
+
+    async function addInstance() {
+      const clusterId = document.getElementById('add-clusterId').value.trim();
+      const tag = document.getElementById('add-tag').value.trim();
+      const address = document.getElementById('add-address').value.trim();
+      const region = document.getElementById('add-region').value;
+
+      if (!clusterId || !tag || !address) { toast('Cluster ID, tag, and address are required.', 'error'); return; }
+
+      setLoading('add-btn', true);
+      setResponse('add-response', 'Submitting…', false);
+
+      const payload = { clusterId, tag, address };
+      if (region) payload.region = region;
+
+      try {
+        const url = new URL(`${API_BASE}/v1/admin/instances`);
+        url.searchParams.set('sessionId', state.sessionId);
+        const res = await fetch(url, { method: 'POST', headers: apiHeaders(), body: JSON.stringify(payload) });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error?.message || body.error || `HTTP ${res.status}`);
+        setResponse('add-response', body, false);
+        toast(`Instance "${tag}" added successfully`, 'success');
+        ['add-clusterId', 'add-tag', 'add-address', 'add-region'].forEach(id => document.getElementById(id).value = '');
+      } catch (err) {
+        setResponse('add-response', { error: err.message }, true);
+        toast(`Failed: ${err.message}`, 'error');
+      } finally {
+        setLoading('add-btn', false);
+      }
+    }
+
+    async function removeInstance() {
+      const id = document.getElementById('remove-id').value.trim();
+      closeDialog();
+      setLoading('remove-btn', true);
+      setResponse('remove-response', 'Submitting…', false);
+
+      try {
+        const url = new URL(`${API_BASE}/v1/admin/instances/${encodeURIComponent(id)}`);
+        url.searchParams.set('sessionId', state.sessionId);
+        const res = await fetch(url, { method: 'DELETE', headers: apiHeaders() });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error?.message || body.error || `HTTP ${res.status}`);
+        setResponse('remove-response', body, false);
+        toast(`Instance ${id} removed`, 'success');
+        document.getElementById('remove-id').value = '';
+      } catch (err) {
+        setResponse('remove-response', { error: err.message }, true);
+        toast(`Failed: ${err.message}`, 'error');
+      } finally {
+        setLoading('remove-btn', false);
+      }
+    }
+
+    function populateTokenView() {
+      document.getElementById('token-session-display').value = state.sessionId || '—';
+      document.getElementById('token-display').value = state.jwt || '—';
+      document.getElementById('token-expires').value = state.expiresAt ? new Date(state.expiresAt).toLocaleString() : '—';
+    }
+
+    function copyToken() {
+      if (!state.jwt) return;
+      navigator.clipboard.writeText(state.jwt)
+        .then(() => toast('Token copied to clipboard', 'success'))
+        .catch(() => toast('Copy failed', 'error'));
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function escAttr(str) {
+      return String(str).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    (function () {
+      const remainingSecs = restoreSession();
+      if (remainingSecs) {
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app').classList.remove('hidden');
+        document.getElementById('session-id-display').textContent = state.sessionId;
+        startExpiryTimer(remainingSecs);
+        loadInstances();
+      }
+    })();
+  </script>
+</body>
+
+</html>
