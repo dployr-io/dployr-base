@@ -1,3 +1,8 @@
+## [0.2.2] - 2026-04-21
+
+### 🐛 Bug Fixes
+
+- *(install)* Use absolute path for config processor script
 ## [0.2.1] - 2026-04-21
 
 ### 🚀 Features
