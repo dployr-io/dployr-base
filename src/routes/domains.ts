@@ -3,12 +3,7 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import {
-  Bindings,
-  Variables,
-  createErrorResponse,
-  createSuccessResponse,
-} from "@/types/index.js";
+import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
 import type { DNSProvider } from "@/types/dns.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware, requireClusterDeveloper } from "@/middleware/auth.js";
@@ -16,7 +11,7 @@ import { DatabaseStore } from "@/lib/db/store/index.js";
 import { KVStore } from "@/lib/db/store/kv.js";
 import { getDB, getKV, type AppVariables } from "@/lib/context.js";
 import { DNSService } from "@/services/dns.js";
-import { InstanceService } from "@/services/instances.js";
+import { getInstanceService } from "@/lib/instances/instance-helpers.js";
 
 const domains = new Hono<{
   Bindings: Bindings;
@@ -28,7 +23,8 @@ const registerInstanceSchema = z.object({
 });
 
 const setupSchema = z.object({
-  domain: z.string()
+  domain: z
+    .string()
     .min(3, "Domain must be at least 3 characters")
     .max(253, "Domain must be at most 253 characters")
     .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i, "Invalid domain format"),
@@ -50,13 +46,12 @@ domains.post("/register", async (c) => {
           message: "Validation failed " + JSON.stringify(errors),
           code: ERROR.REQUEST.BAD_REQUEST.code,
         }),
-        ERROR.REQUEST.BAD_REQUEST.status
+        ERROR.REQUEST.BAD_REQUEST.status,
       );
     }
 
     const { token } = validation.data;
-    const service = new InstanceService(c.env);
-    const result = await service.registerInstance({ token, c });
+    const result = await getInstanceService(c).registerInstance({ token, c });
 
     if (!result.ok) {
       if (result.reason === "invalid_token") {
@@ -65,7 +60,7 @@ domains.post("/register", async (c) => {
             message: "Invalid or expired token",
             code: ERROR.AUTH.BAD_TOKEN.code,
           }),
-          ERROR.AUTH.BAD_TOKEN.status
+          ERROR.AUTH.BAD_TOKEN.status,
         );
       }
 
@@ -75,7 +70,7 @@ domains.post("/register", async (c) => {
             message: "Invalid token type",
             code: ERROR.AUTH.BAD_TOKEN.code,
           }),
-          ERROR.AUTH.BAD_TOKEN.status
+          ERROR.AUTH.BAD_TOKEN.status,
         );
       }
 
@@ -84,11 +79,11 @@ domains.post("/register", async (c) => {
           message: "Token already used",
           code: ERROR.AUTH.BAD_TOKEN.code,
         }),
-        ERROR.AUTH.BAD_TOKEN.status
+        ERROR.AUTH.BAD_TOKEN.status,
       );
     }
 
-    const domain = await service.saveDomain({
+    const domain = await getInstanceService(c).saveDomain({
       instanceName: result.instanceName,
       c,
     });
@@ -121,7 +116,7 @@ domains.post("/register", async (c) => {
         domain,
         issuer: c.env.BASE_URL,
         audience: "dployr-instance",
-      })
+      }),
     );
   } catch (error) {
     console.error("Failed to register instance", error);
@@ -130,7 +125,7 @@ domains.post("/register", async (c) => {
         message: "Instance registration failed",
         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
       }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
     );
   }
 });
@@ -146,15 +141,12 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json(
-      createErrorResponse({ message: "Invalid request body", code: ERROR.REQUEST.BAD_REQUEST.code }),
-      400
-    );
+    return c.json(createErrorResponse({ message: "Invalid request body", code: ERROR.REQUEST.BAD_REQUEST.code }), 400);
   }
 
   const validation = setupSchema.safeParse(body);
   if (!validation.success) {
-    const msg = validation.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join(", ");
+    const msg = validation.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
     return c.json(createErrorResponse({ message: msg, code: ERROR.REQUEST.BAD_REQUEST.code }), 400);
   }
 
@@ -164,27 +156,18 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   // Check instance exists and user has access
   const instance = await db.instances.get(instanceId);
   if (!instance) {
-    return c.json(
-      createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
-      404
-    );
+    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
   }
 
   const canWrite = await db.clusters.canWrite(session.userId, instance.clusterId);
   if (!canWrite) {
-    return c.json(
-      createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.code }),
-      403
-    );
+    return c.json(createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.code }), 403);
   }
 
   // Check domain not already claimed by another instance
   const existing = await db.domains.get(normalizedDomain);
   if (existing && existing.instanceId !== instanceId) {
-    return c.json(
-      createErrorResponse({ message: "Domain already registered to another instance", code: ERROR.RESOURCE.CONFLICT.code }),
-      409
-    );
+    return c.json(createErrorResponse({ message: "Domain already registered to another instance", code: ERROR.RESOURCE.CONFLICT.code }), 409);
   }
 
   const { provider, hasOAuth } = await dns.detectProvider(normalizedDomain);
@@ -196,11 +179,7 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
     domainRecord = await db.domains.create(instanceId, normalizedDomain, token, provider);
   }
 
-  const { record, verification } = dns.buildRecordsFromStored(
-    normalizedDomain,
-    instance.address,
-    domainRecord.verificationToken
-  );
+  const { record, verification } = dns.buildRecordsFromStored(normalizedDomain, instance.address, domainRecord.verificationToken);
 
   let autoSetupUrl: string | null = null;
   if (hasOAuth) {
@@ -209,15 +188,17 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
     autoSetupUrl = dns.buildOAuthUrl(provider, state, c.env.BASE_URL);
   }
 
-  return c.json(createSuccessResponse({
-    domain: normalizedDomain,
-    provider,
-    hasOAuth,
-    record,
-    verification,
-    autoSetupUrl,
-    manualGuideUrl: dns.getManualGuideUrl(provider),
-  }));
+  return c.json(
+    createSuccessResponse({
+      domain: normalizedDomain,
+      provider,
+      hasOAuth,
+      record,
+      verification,
+      autoSetupUrl,
+      manualGuideUrl: dns.getManualGuideUrl(provider),
+    }),
+  );
 });
 
 // Caddy verification endpoint (no auth - called by Caddy)
@@ -257,26 +238,17 @@ domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (
 
     const record = await db.domains.get(domain);
     if (!record) {
-      return c.json(
-        createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
-        404
-      );
+      return c.json(createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
     }
 
     const instance = await db.instances.get(record.instanceId);
     if (!instance) {
-      return c.json(
-        createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
-        404
-      );
+      return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
     }
 
     const verified = await dns.checkTxtRecord(domain, record.verificationToken);
     if (!verified) {
-      return c.json(
-        createErrorResponse({ message: "TXT record not found", code: ERROR.REQUEST.UNPROCESSABLE_ENTITY.code }),
-        422
-      );
+      return c.json(createErrorResponse({ message: "TXT record not found", code: ERROR.REQUEST.UNPROCESSABLE_ENTITY.code }), 422);
     }
 
     await db.domains.activate(domain);
@@ -302,27 +274,18 @@ domains.get("/:domain", authMiddleware, async (c) => {
 
   const domainRecord = await db.domains.get(domain);
   if (!domainRecord) {
-    return c.json(
-      createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
-      404
-    );
+    return c.json(createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
   }
 
   const instance = await db.instances.get(domainRecord.instanceId);
   if (!instance) {
-    return c.json(
-      createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
-      404
-    );
+    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
   }
 
   // Permission check
   const canRead = await db.clusters.canRead(session.userId, instance.clusterId);
   if (!canRead) {
-    return c.json(
-      createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.code }),
-      403
-    );
+    return c.json(createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.code }), 403);
   }
 
   const response: any = {
@@ -337,11 +300,7 @@ domains.get("/:domain", authMiddleware, async (c) => {
   // For pending domains, include verification records
   // Use instance.address for A record target
   if (domainRecord.status === "pending") {
-    const { record, verification } = dns.buildRecordsFromStored(
-      domain,
-      instance.address,
-      domainRecord.verificationToken
-    );
+    const { record, verification } = dns.buildRecordsFromStored(domain, instance.address, domainRecord.verificationToken);
     response.record = record;
     response.verification = verification;
 
@@ -369,18 +328,12 @@ domains.get("/instance/:instanceId", authMiddleware, async (c) => {
 
   const instance = await db.instances.get(instanceId);
   if (!instance) {
-    return c.json(
-      createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
-      404
-    );
+    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
   }
 
   const canRead = await db.clusters.canRead(session.userId, instance.clusterId);
   if (!canRead) {
-    return c.json(
-      createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.code }),
-      403
-    );
+    return c.json(createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.code }), 403);
   }
 
   const domainsList = await db.domains.listByInstance(instanceId);
@@ -395,26 +348,17 @@ domains.delete("/:domain", authMiddleware, requireClusterDeveloper, async (c) =>
 
   const record = await db.domains.get(domain);
   if (!record) {
-    return c.json(
-      createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
-      404
-    );
+    return c.json(createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
   }
 
   const instance = await db.instances.get(record.instanceId);
   if (!instance) {
-    return c.json(
-      createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
-      404
-    );
+    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
   }
 
   const canWrite = await db.clusters.canWrite(session.userId, instance.clusterId);
   if (!canWrite) {
-    return c.json(
-      createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.code }),
-      403
-    );
+    return c.json(createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.code }), 403);
   }
 
   await db.domains.delete(domain);
@@ -492,14 +436,18 @@ domains.get("/callback/:provider", async (c) => {
     }
 
     const oauthKey = `dns:oauth:${domain}:${provider}`;
-    await kv.kv.put(oauthKey, JSON.stringify({
-      code,
-      provider,
-      domain,
-      createdAt: Date.now(),
-    }), {
-      ttl: 3600, // 1 hour
-    });
+    await kv.kv.put(
+      oauthKey,
+      JSON.stringify({
+        code,
+        provider,
+        domain,
+        createdAt: Date.now(),
+      }),
+      {
+        ttl: 3600, // 1 hour
+      },
+    );
 
     const url = new URL(`${c.env.APP_URL}${redirectPath}`);
     url.searchParams.set("oauth", provider);
