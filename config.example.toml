@@ -39,6 +39,11 @@ google_client_secret = ""
 github_client_id = ""
 github_client_secret = ""
 
+[admin]
+admin_api_key = "12345"
+allowed_ips = ["192.168.100.20", "127.0.0.1"]
+totp_secret = "123456789"
+
 [integrations]
 github_token = ""
 

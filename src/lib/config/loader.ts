@@ -48,8 +48,8 @@ const ConfigSchema = z.object({
   }),
   admin: z.object({
     admin_api_key: z.string(),
-    grafana_url: z.url(),
-    jwt_ttl_seconds: z.number().default(1800),
+    allowed_ips: z.array(z.string()),
+    totp_secret: z.string(),
   }),
   integrations: z
     .object({
@@ -172,7 +172,8 @@ function loadConfigFromEnv(): Config {
     },
     admin: {
       admin_api_key: process.env.ADMIN_API_KEY,
-      grafana_url: process.env.GRAFANA_URL || "dployr.grafana.net",
+      allowed_ips: process.env.ALLOWED_DPLOYR_ADMINISTRATORS,
+      totp_secret: process.env.ADMIN_TOTP_SECRET,
     },
     integrations: {
       github_app_id: process.env.GITHUB_APP_ID,

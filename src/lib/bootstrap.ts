@@ -76,25 +76,28 @@ export async function bootstrapMiddleware(
   const authConfig = adapters!.config?.auth;
   const adminConfig = adapters!.config?.admin;
 
-  c.env = {
-    BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
-    APP_URL: serverConfig?.app_url || process.env.APP_URL || "",
-    EMAIL_FROM: emailConfig?.from_address || process.env.EMAIL_FROM || "",
-    ZEPTO_API_KEY: emailConfig?.zepto_api_key || process.env.ZEPTO_API_KEY || "",
-    GITHUB_APP_ID: integrationsConfig?.github_app_id || process.env.GITHUB_APP_ID || "",
-    GITHUB_APP_PRIVATE_KEY: integrationsConfig?.github_app_private_key || process.env.GITHUB_APP_PRIVATE_KEY || "",
-    GITHUB_WEBHOOK_SECRET: integrationsConfig?.github_webhook_secret || process.env.GITHUB_WEBHOOK_SECRET || "",
-    GITHUB_TOKEN: integrationsConfig?.github_token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "",
-    GOOGLE_CLIENT_ID: authConfig?.google_client_id || process.env.GOOGLE_CLIENT_ID || "",
-    GOOGLE_CLIENT_SECRET: authConfig?.google_client_secret || process.env.GOOGLE_CLIENT_SECRET || "",
-    GITHUB_CLIENT_ID: authConfig?.github_client_id || process.env.GITHUB_CLIENT_ID || "",
-    GITHUB_CLIENT_SECRET: authConfig?.github_client_secret || process.env.GITHUB_CLIENT_SECRET || "",
-    MICROSOFT_CLIENT_ID: authConfig?.microsoft_client_id || process.env.MICROSOFT_CLIENT_ID || "",
-    MICROSOFT_CLIENT_SECRET: authConfig?.microsoft_client_secret || process.env.MICROSOFT_CLIENT_SECRET || "",
-    CORS_ALLOWED_ORIGINS: corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS || "",
-    ADMIN_API_KEY: adminConfig?.admin_api_key || process.env.ADMIN_API_KEY || "",
-    GRAFANA_URL: adminConfig?.grafana_url || process.env.GRAFANA_URL || "",
-  } as unknown as Bindings;
+   c.env = {
+     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
+     APP_URL: serverConfig?.app_url || process.env.APP_URL || "",
+     EMAIL_FROM: emailConfig?.from_address || process.env.EMAIL_FROM || "",
+     ZEPTO_API_KEY: emailConfig?.zepto_api_key || process.env.ZEPTO_API_KEY || "",
+     GITHUB_APP_ID: integrationsConfig?.github_app_id || process.env.GITHUB_APP_ID || "",
+     GITHUB_APP_PRIVATE_KEY: integrationsConfig?.github_app_private_key || process.env.GITHUB_APP_PRIVATE_KEY || "",
+     GITHUB_WEBHOOK_SECRET: integrationsConfig?.github_webhook_secret || process.env.GITHUB_WEBHOOK_SECRET || "",
+     GITHUB_TOKEN: integrationsConfig?.github_token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "",
+     GOOGLE_CLIENT_ID: authConfig?.google_client_id || process.env.GOOGLE_CLIENT_ID || "",
+     GOOGLE_CLIENT_SECRET: authConfig?.google_client_secret || process.env.GOOGLE_CLIENT_SECRET || "",
+     GITHUB_CLIENT_ID: authConfig?.github_client_id || process.env.GITHUB_CLIENT_ID || "",
+     GITHUB_CLIENT_SECRET: authConfig?.github_client_secret || process.env.GITHUB_CLIENT_SECRET || "",
+     MICROSOFT_CLIENT_ID: authConfig?.microsoft_client_id || process.env.MICROSOFT_CLIENT_ID || "",
+     MICROSOFT_CLIENT_SECRET: authConfig?.microsoft_client_secret || process.env.MICROSOFT_CLIENT_SECRET || "",
+     CORS_ALLOWED_ORIGINS: corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS || "",
+     ADMIN_API_KEY: adminConfig?.admin_api_key || process.env.ADMIN_API_KEY || "",
+     ALLOWED_DPLOYR_ADMINISTRATORS: Array.isArray(adminConfig?.allowed_ips)
+       ? adminConfig.allowed_ips.join(",")
+       : (adminConfig?.allowed_ips || process.env.ALLOWED_DPLOYR_ADMINISTRATORS || ""),
+     ADMIN_TOTP_SECRET: adminConfig?.totp_secret || process.env.ADMIN_TOTP_SECRET || "",
+   } as unknown as Bindings;
 
   await next();
 }
