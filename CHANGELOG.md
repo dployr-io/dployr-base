@@ -1,3 +1,8 @@
+## [0.2.7] - 2026-04-21
+
+### 🐛 Bug Fixes
+
+- *(install)* Call process-config.mjs with correct extension
 ## [0.2.6] - 2026-04-21
 
 ### 🐛 Bug Fixes
