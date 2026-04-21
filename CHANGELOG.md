@@ -1,5 +1,9 @@
 ## [0.2.5] - 2026-04-21
 
+### 🐛 Bug Fixes
+
+- *(install)* Use .cjs extension for config processor to avoid ESM conflict
+
 ### ⚙️ Miscellaneous Tasks
 
 - *(release)* Fix indentation in release workflow
