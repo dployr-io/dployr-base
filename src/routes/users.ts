@@ -54,8 +54,6 @@ users.get("/me", async (c) => {
     }
 
     try {
-        await db.clusters.save(user.id);
-
         const clusters = await db.clusters.listUserClusters(user.id);
 
         return c.json(createSuccessResponse({ user, clusters }));

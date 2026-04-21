@@ -31,10 +31,13 @@ auth.get("/login/:provider", async (c) => {
   const provider = c.req.param("provider") as OAuthProvider;
 
   if (!["google", "github", "microsoft"].includes(provider)) {
-    return c.json(createErrorResponse({
-      message: "Invalid provider",
-      code: ERROR.REQUEST.BAD_REQUEST.code
-    }), ERROR.REQUEST.BAD_REQUEST.status);
+    return c.json(
+      createErrorResponse({
+        message: "Invalid provider",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
   }
 
   const oauth = new OAuthService(c.env);
@@ -43,7 +46,7 @@ auth.get("/login/:provider", async (c) => {
   const returnTo = c.req.query("redirect_to") || "/dashboard";
   const redirectUrl = sanitizeReturnTo(returnTo);
 
-  console.log(redirectUrl)
+  console.log(redirectUrl);
 
   await kv.createState(state, redirectUrl);
 
@@ -117,6 +120,8 @@ auth.get("/callback/:provider", async (c) => {
       );
     }
 
+    await db.clusters.save(savedUser.id);
+
     const sessionId = crypto.randomUUID();
     const clusters = await db.clusters.listUserClusters(savedUser.id);
     await kv.createSession(sessionId, savedUser, clusters);
@@ -148,21 +153,21 @@ auth.get("/callback/:provider", async (c) => {
     if (clusters.length > 0) {
       const notificationService = new NotificationService(c.env);
       runBackground(
-        notificationService.triggerEvent(EVENTS.AUTH.SESSION_CREATED.code, {
-          clusterId: clusters[0].id,
-          userEmail: savedUser.email,
-        }, db)
+        notificationService.triggerEvent(
+          EVENTS.AUTH.SESSION_CREATED.code,
+          {
+            clusterId: clusters[0].id,
+            userEmail: savedUser.email,
+          },
+          db,
+        ),
       );
     }
 
     return c.redirect(c.env.APP_URL);
   } catch (error) {
     console.error("OAuth error:", error);
-    return c.redirect(
-      `${c.env.APP_URL}/?authError=${encodeURIComponent(
-        `Failed to sign-in with ${provider}. Try email instead.`,
-      )}`,
-    );
+    return c.redirect(`${c.env.APP_URL}/?authError=${encodeURIComponent(`Failed to sign-in with ${provider}. Try email instead.`)}`);
   }
 });
 
@@ -177,10 +182,13 @@ auth.post("/login/email", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({
-        message: "Invalid email format " + errors,
-        code: ERROR.REQUEST.BAD_REQUEST.code
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "Invalid email format " + errors,
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     const kv = new KVStore(getKV(c));
@@ -198,29 +206,35 @@ auth.post("/login/email", async (c) => {
     }
 
     const code = await kv.createOTP(email);
-    const name = email.split('@')[0]
+    const name = email.split("@")[0];
     const emailService = new EmailService({
       env: c.env,
       to: email,
     });
 
     try {
-      await emailService.sendEmail("Verify your account", loginCodeTemplate(name, code))
+      await emailService.sendEmail("Verify your account", loginCodeTemplate(name, code));
     } catch (error) {
       console.error("Send OTP error:", error);
-      return c.json(createErrorResponse({
-        message: "Failed to send code. Wait a few moments and try again.",
-        code: ERROR.REQUEST.BAD_REQUEST.code
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "Failed to send code. Wait a few moments and try again.",
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     return c.json(createSuccessResponse({ email }, "OTP sent to your email"));
   } catch (error) {
     console.error("Send OTP error:", error);
-    return c.json(createErrorResponse({
-      message: "Failed to send code. Wait a few moments and try again.",
-      code: ERROR.REQUEST.BAD_REQUEST.code
-    }), ERROR.REQUEST.BAD_REQUEST.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to send code. Wait a few moments and try again.",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
   }
 });
 
@@ -236,10 +250,13 @@ auth.post("/login/email/verify", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({
-        message: "Invalid email or code format " + errors,
-        code: ERROR.REQUEST.BAD_REQUEST.code
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "Invalid email or code format " + errors,
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     const kv = new KVStore(getKV(c));
@@ -247,19 +264,27 @@ auth.post("/login/email/verify", async (c) => {
     const isValid = await kv.validateOTP(email, code.toUpperCase());
 
     if (!isValid) {
-      return c.json(createErrorResponse({
-        message: "Invalid or expired code",
-        code: ERROR.REQUEST.INVALID_OTP.code
-      }), ERROR.REQUEST.INVALID_OTP.status);
+      return c.json(
+        createErrorResponse({
+          message: "Invalid or expired code",
+          code: ERROR.REQUEST.INVALID_OTP.code,
+        }),
+        ERROR.REQUEST.INVALID_OTP.status,
+      );
     }
 
     let user = await db.users.get(email);
     if (!user) {
-      return c.json(createErrorResponse({
-        message: "User not found",
-        code: ERROR.RESOURCE.MISSING_RESOURCE.code
-      }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+      return c.json(
+        createErrorResponse({
+          message: "User not found",
+          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+        }),
+        ERROR.RESOURCE.MISSING_RESOURCE.status,
+      );
     }
+
+    await db.clusters.save(user.id);
 
     const sessionId = crypto.randomUUID();
     const clusters = await db.clusters.listUserClusters(user.id);
@@ -292,20 +317,27 @@ auth.post("/login/email/verify", async (c) => {
     if (clusters.length > 0) {
       const notificationService = new NotificationService(c.env);
       runBackground(
-        notificationService.triggerEvent(EVENTS.AUTH.SESSION_CREATED.code, {
-          clusterId: clusters[0].id,
-          userEmail: user.email,
-        }, db)
+        notificationService.triggerEvent(
+          EVENTS.AUTH.SESSION_CREATED.code,
+          {
+            clusterId: clusters[0].id,
+            userEmail: user.email,
+          },
+          db,
+        ),
       );
     }
 
     return c.json(createSuccessResponse({ email }, "Login successful"));
   } catch (error) {
     console.error("Verify OTP error:", error);
-    return c.json(createErrorResponse({
-      message: "Failed to verify code. Cross-check and try again.",
-      code: ERROR.REQUEST.BAD_REQUEST.code
-    }), ERROR.REQUEST.BAD_REQUEST.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to verify code. Cross-check and try again.",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
   }
 });
 
