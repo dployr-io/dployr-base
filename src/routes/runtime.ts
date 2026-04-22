@@ -4,9 +4,8 @@
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { authMiddleware, requireClusterViewer } from "@/middleware/auth.js";
-import { KVStore } from "@/lib/db/store/kv.js";
 import { ERROR, LATEST_COMPATIBILITY_DATE } from "@/lib/constants/index.js";
-import { getKV, type AppVariables } from "@/lib/context.js";
+import { getKVStore, type AppVariables } from "@/lib/context.js";
 import { isCompatible, getUpgradeLevel, compareSemver } from "@/lib/version.js";
 import { z } from "zod";
 
@@ -178,7 +177,7 @@ runtime.get("/versions", async (c) => {
 });
 
 runtime.get("/events", authMiddleware, requireClusterViewer, async (c) => {
-  const kv = new KVStore(getKV(c));
+  const kv = getKVStore(c);
   const clusterId = c.req.query("clusterId");
 
   if (!clusterId) {

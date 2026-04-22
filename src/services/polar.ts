@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Bindings } from "@/types/index.js";
+import type { BillingProvider, CheckoutParams, CustomerParams, RawWebhookEvent } from "./billing/provider.js";
+import { PLANS } from "@/lib/constants/billing.js";
 
-export class PolarService {
+export class PolarService implements BillingProvider {
   private baseUrl: string;
   private accessToken: string;
   private webhookSecret: string;
@@ -26,11 +28,7 @@ export class PolarService {
     };
   }
 
-  async getOrCreateCustomer(params: {
-    userId: string;
-    email: string;
-    name?: string;
-  }): Promise<{ id: string; email: string }> {
+  async getOrCreateCustomer(params: CustomerParams): Promise<{ id: string; email: string }> {
     const existing = await fetch(
       `${this.baseUrl}/customers/external/${encodeURIComponent(params.userId)}`,
       { headers: this.headers }
@@ -57,6 +55,29 @@ export class PolarService {
     }
 
     return created.json() as Promise<{ id: string; email: string }>;
+  }
+
+  async buildCheckoutUrl(params: CheckoutParams): Promise<string> {
+    const { plan, clusterId, userId, email, name, successUrl } = params;
+    
+    const customer = await this.getOrCreateCustomer({ userId, email, name });
+    
+    const planDef = PLANS.find((p) => p.id === plan);
+    if (!planDef) {
+      throw new Error(`Unknown plan: ${plan}`);
+    }
+    
+    const baseSuccessUrl = successUrl || `${this.env.APP_URL}/clusters/${clusterId}/settings/billing?success=1`;
+    const resolvedSuccessUrl = new URL(baseSuccessUrl);
+    resolvedSuccessUrl.searchParams.set("clusterId", clusterId);
+
+    const checkoutUrl = new URL(planDef.checkoutUrl as string);
+    checkoutUrl.searchParams.set("customer_email", email);
+    checkoutUrl.searchParams.set("success_url", resolvedSuccessUrl.toString());
+    checkoutUrl.searchParams.set("metadata[cluster_id]", clusterId);
+    checkoutUrl.searchParams.set("metadata[user_id]", userId);
+
+    return checkoutUrl.toString();
   }
 
   async createCheckoutSession(params: {
@@ -126,6 +147,18 @@ export class PolarService {
       return signatures.includes(computed);
     } catch {
       return false;
+    }
+  }
+
+  async parseWebhookEvent(rawBody: string): Promise<RawWebhookEvent> {
+    try {
+      const event = JSON.parse(rawBody);
+      if (!event.type || !event.data) {
+        throw new Error("Invalid webhook event format");
+      }
+      return event as RawWebhookEvent;
+    } catch {
+      throw new Error("Failed to parse webhook event");
     }
   }
 

@@ -92,13 +92,20 @@ export interface Session {
 }
 
 export type Variables = {
-  user?: User | undefined;
-  session?: Session | undefined;
-  kvAdapter?: any;
-  dbAdapter?: any;
-  storageAdapter?: any;
-  wsHandler?: any;
-};
+   user?: User | undefined;
+   session?: Session | undefined;
+   kvAdapter?: any;
+   dbAdapter?: any;
+   storageAdapter?: any;
+   wsHandler?: any;
+   billingProvider?: any;
+   _dbStore?: any;
+   _kvStore?: any;
+   _jwtService?: any;
+   _notificationService?: any;
+   _oauthService?: any;
+   _githubService?: any;
+ };
 
 export type ActorType = "user" | "headless";
 

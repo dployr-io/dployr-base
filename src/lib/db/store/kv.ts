@@ -39,9 +39,12 @@ export class KVStore {
       expiresAt: Date.now() + SESSION_TTL * 1000,
     };
 
-    await this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(session), {
-      ttl: SESSION_TTL,
-    });
+    const ttl = SESSION_TTL;
+
+    await Promise.all([
+      this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(session), { ttl }),
+      this.kv.put(KV_KEYS.SESSION_BY_USER(user.id), sessionId, { ttl }),
+    ]);
 
     return session;
   }
@@ -60,8 +63,38 @@ export class KVStore {
     return session;
   }
 
+  async getSessionIdByUserId(userId: string): Promise<string | null> {
+    return await this.kv.get(KV_KEYS.SESSION_BY_USER(userId));
+  }
+
+  async refreshSession({ sessionId, updates }: { sessionId: string; updates: { clusters: Session["clusters"] } }): Promise<void> {
+    const existing = await this.getSession(sessionId);
+    if (!existing) return;
+
+    const refreshed: Session = {
+      ...existing,
+      clusters: updates.clusters,
+    };
+
+    const remainingMs = existing.expiresAt - Date.now();
+    const ttl = Math.ceil(remainingMs / 1000);
+
+    await Promise.all([
+      this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(refreshed), { ttl }),
+      this.kv.put(KV_KEYS.SESSION_BY_USER(existing.userId), sessionId, { ttl }),
+    ]);
+  }
+
   async deleteSession(sessionId: string): Promise<void> {
-    await this.kv.delete(KV_KEYS.SESSION(sessionId));
+    const session = await this.getSession(sessionId);
+    if (session) {
+      await Promise.all([
+        this.kv.delete(KV_KEYS.SESSION(sessionId)),
+        this.kv.delete(KV_KEYS.SESSION_BY_USER(session.userId)),
+      ]);
+    } else {
+      await this.kv.delete(KV_KEYS.SESSION(sessionId));
+    }
   }
 
   // Retrieves or creates the key pair.
@@ -229,7 +262,7 @@ export class KVStore {
   }
 
   // OAuth state management (CSRF protection)
-  async createState(state: string, redirectUrl: string): Promise<void> {
+  async createState({ state, redirectUrl }: { state: string; redirectUrl: string }): Promise<void> {
     await this.kv.put(
       KV_KEYS.STATE(state),
       JSON.stringify({
@@ -283,7 +316,7 @@ export class KVStore {
     return code;
   }
 
-  async validateOTP(email: string, code: string): Promise<boolean> {
+  async validateOTP({ email, code }: { email: string; code: string }): Promise<boolean> {
     const data = await this.kv.get(KV_KEYS.OTP(email));
     if (!data) return false;
 
@@ -321,7 +354,7 @@ export class KVStore {
     return result;
   }
 
-  async saveDomain(domain: string, address: string): Promise<void> {
+  async saveDomain({ domain, address }: { domain: string; address: string }): Promise<void> {
     await this.kv.put(KV_KEYS.DOMAIN(domain), address);
   }
 
@@ -332,7 +365,7 @@ export class KVStore {
   }
 
   // Node update management
-  async saveNodeUpdate(instanceId: string, update: Record<string, unknown>): Promise<void> {
+  async saveNodeUpdate({ instanceId, update }: { instanceId: string; update: Record<string, unknown> }): Promise<void> {
     const now = Date.now();
     const data = {
       ...update,
@@ -437,7 +470,7 @@ export class KVStore {
     }
   }
 
-  async getCachedInstanceByName(clusterId: string, tag: string): Promise<{ id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number } | null> {
+  async getCachedInstanceByName({ clusterId, tag }: { clusterId: string; tag: string }): Promise<{ id: string; tag: string; address: string; clusterId: string; metadata: any; createdAt: number; updatedAt: number } | null> {
     try {
       const data = await this.kv.get(KV_KEYS.INSTANCE_BY_NAME(clusterId, tag));
       if (!data) return null;
@@ -457,7 +490,7 @@ export class KVStore {
     }
   }
 
-  async invalidateInstanceCache(instanceId: string, clusterId?: string, tag?: string): Promise<void> {
+  async invalidateInstanceCache({ instanceId, clusterId, tag }: { instanceId: string; clusterId?: string; tag?: string }): Promise<void> {
     const deletes: Promise<void>[] = [this.kv.delete(KV_KEYS.INSTANCE_BY_ID(instanceId))];
 
     if (clusterId && tag) {
@@ -491,7 +524,7 @@ export class KVStore {
     await this.kv.delete(KV_KEYS.SERVICES(instanceId));
   }
 
-  async saveProcessSnapshot(instanceId: string, seq: number, snapshot: Record<string, unknown>): Promise<void> {
+  async saveProcessSnapshot({ instanceId, seq, snapshot }: { instanceId: string; seq: number; snapshot: Record<string, unknown> }): Promise<void> {
     const timestamp = Date.now();
     const key = KV_KEYS.PROCESS_SNAPSHOT(instanceId, timestamp);
     await this.kv.put(key, JSON.stringify({ seq, timestamp, data: snapshot }), {
@@ -499,7 +532,7 @@ export class KVStore {
     });
   }
 
-  async getProcessSnapshot(instanceId: string, timestamp: number): Promise<Record<string, unknown> | null> {
+  async getProcessSnapshot({ instanceId, timestamp }: { instanceId: string; timestamp: number }): Promise<Record<string, unknown> | null> {
     const key = KV_KEYS.PROCESS_SNAPSHOT(instanceId, timestamp);
     const data = await this.kv.get(key);
     if (!data) return null;
@@ -507,7 +540,7 @@ export class KVStore {
     return parsed.data;
   }
 
-  async getLatestProcessSnapshots(instanceId: string, limit: number = 10): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
+  async getLatestProcessSnapshots({ instanceId, limit = 10 }: { instanceId: string; limit?: number }): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
     const prefix = `process:${instanceId}:snapshot:`;
     const maxLimit = Math.min(limit, 1000); // Cap at 1000 snapshots max
     const result = await this.kv.list({ prefix, limit: maxLimit });
@@ -537,7 +570,7 @@ export class KVStore {
       .slice(0, maxLimit);
   }
 
-  async getProcessSnapshotsByTimeRange(instanceId: string, startTime: number, endTime: number): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
+  async getProcessSnapshotsByTimeRange({ instanceId, startTime, endTime }: { instanceId: string; startTime: number; endTime: number }): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
     // Cap at 1 hour max range
     const maxRange = 60 * 60 * 1000; // 1 hour in milliseconds
     const cappedEndTime = Math.min(endTime, startTime + maxRange);
@@ -572,7 +605,7 @@ export class KVStore {
     return snapshots.filter((s): s is { seq: number; timestamp: number; data: Record<string, unknown> } => s !== null).sort((a, b) => a.timestamp - b.timestamp); // Ascending order for timeline
   }
 
-  async createAdminJWT(sessionId: string, ttl: number = ADMIN_JWT_TTL): Promise<string> {
+  async createAdminJWT({ sessionId, ttl }: { sessionId: string; ttl?: number }): Promise<string> {
     const privateKey = await this.getPrivateKey();
     const payload = {
       sub: sessionId,
@@ -597,7 +630,7 @@ export class KVStore {
     }
   }
 
-  async saveAdminJWT(sessionId: string, token: string, ttl: number = ADMIN_JWT_TTL): Promise<void> {
+  async saveAdminJWT({ sessionId, token, ttl = ADMIN_JWT_TTL }: { sessionId: string; token: string; ttl?: number }): Promise<void> {
     const expiresAt = Date.now() + ttl * 1000;
     await this.kv.put(`admin_jwt:${sessionId}`, JSON.stringify({ token, expiresAt }), { ttl });
   }

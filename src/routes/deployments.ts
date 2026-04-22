@@ -3,24 +3,26 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
 import { authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getKV, getDB, type AppVariables } from "@/lib/context.js";
+import { getDbStore, type AppVariables } from "@/lib/context.js";
 
 const deployments = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 deployments.use("*", authMiddleware);
 
 // List all deployments
 deployments.get("/", async (c) => {
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const session = c.get("session")!;
 
   if (!session) {
-    return c.json(createErrorResponse({
-      message: "Invalid or expired session",
-      code: ERROR.AUTH.BAD_SESSION.code
-    }), ERROR.AUTH.BAD_SESSION.status);
+    return c.json(
+      createErrorResponse({
+        message: "Invalid or expired session",
+        code: ERROR.AUTH.BAD_SESSION.code,
+      }),
+      ERROR.AUTH.BAD_SESSION.status,
+    );
   }
 
   // TODO: Implement proper deployment listing with multiple clusters

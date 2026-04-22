@@ -3,17 +3,13 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorResponse, Cluster } from "@/types/index.js";
-import { OAuthService } from "@/services/oauth.js";
-import { KVStore } from "@/lib/db/store/kv.js";
 import { setCookie, getCookie } from "hono/cookie";
-import { DatabaseStore } from "@/lib/db/store/index.js";
 import z from "zod";
 import { sanitizeReturnTo } from "@/services/utils.js";
 import { EmailService } from "@/services/email.js";
 import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
-import { NotificationService } from "@/services/notifications.js";
-import { getKV, getDB, runBackground, type AppVariables } from "@/lib/context.js";
+import { getKVStore, getOAuthService, getNotificationService, runBackground, type AppVariables, getDbStore } from "@/lib/context.js";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
@@ -40,15 +36,15 @@ auth.get("/login/:provider", async (c) => {
     );
   }
 
-  const oauth = new OAuthService(c.env);
-  const kv = new KVStore(getKV(c));
+  const oauth = getOAuthService(c);
+  const kv = getKVStore(c);
   const state = crypto.randomUUID();
   const returnTo = c.req.query("redirect_to") || "/dashboard";
   const redirectUrl = sanitizeReturnTo(returnTo);
 
   console.log(redirectUrl);
 
-  await kv.createState(state, redirectUrl);
+  await kv.createState({ state, redirectUrl });
 
   const authUrl = oauth.getAuthUrl(provider, state);
 
@@ -71,8 +67,8 @@ auth.get("/callback/:provider", async (c) => {
     );
   }
 
-  const kv = new KVStore(getKV(c));
-  const db = new DatabaseStore(getDB(c));
+  const kv = getKVStore(c);
+  const db = getDbStore(c);
 
   const redirectUrl = await kv.validateState(state);
 
@@ -86,8 +82,9 @@ auth.get("/callback/:provider", async (c) => {
     );
   }
 
+  let savedUser: any = null;
   try {
-    const oauth = new OAuthService(c.env);
+    const oauth = getOAuthService(c);
     const accessToken = await oauth.exchangeCode({ provider, code });
     const oAuthUser = await oauth.getUserInfo({ provider, accessToken });
 
@@ -108,7 +105,7 @@ auth.get("/callback/:provider", async (c) => {
           metadata: oAuthUser.metadata || {},
         };
 
-    const savedUser = await db.users.save(userToSave);
+    savedUser = await db.users.save(userToSave);
 
     if (!savedUser) {
       return c.json(
@@ -120,7 +117,11 @@ auth.get("/callback/:provider", async (c) => {
       );
     }
 
-    await db.clusters.upsert(savedUser.id);
+    try {
+      await db.clusters.upsert(savedUser.id);
+    } catch (clusterError) {
+      console.error("[AUTH] Failed to create cluster for user after OAuth save", clusterError);
+    }
 
     const sessionId = crypto.randomUUID();
     const clusters = await db.clusters.listUserClusters(savedUser.id);
@@ -151,7 +152,7 @@ auth.get("/callback/:provider", async (c) => {
 
     // Trigger notifications
     if (clusters.length > 0) {
-      const notificationService = new NotificationService(c.env);
+      const notificationService = getNotificationService(c);
       runBackground(
         notificationService.triggerEvent(
           EVENTS.AUTH.SESSION_CREATED.code,
@@ -191,8 +192,8 @@ auth.post("/login/email", async (c) => {
       );
     }
 
-    const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c));
+    const kv = getKVStore(c);
+    const db = getDbStore(c);
 
     let user = await db.users.get(email);
     if (!user) {
@@ -259,9 +260,9 @@ auth.post("/login/email/verify", async (c) => {
       );
     }
 
-    const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c));
-    const isValid = await kv.validateOTP(email, code.toUpperCase());
+    const kv = getKVStore(c);
+    const db = getDbStore(c);
+    const isValid = await kv.validateOTP({ email, code: code.toUpperCase() });
 
     if (!isValid) {
       return c.json(
@@ -284,7 +285,11 @@ auth.post("/login/email/verify", async (c) => {
       );
     }
 
-    await db.clusters.upsert(user.id);
+    try {
+      await db.clusters.upsert(user.id);
+    } catch (clusterError) {
+      console.error("[AUTH] Failed to create cluster for user after email OTP verification", clusterError);
+    }
 
     const sessionId = crypto.randomUUID();
     const clusters = await db.clusters.listUserClusters(user.id);
@@ -315,7 +320,7 @@ auth.post("/login/email/verify", async (c) => {
 
     // Trigger notifications
     if (clusters.length > 0) {
-      const notificationService = new NotificationService(c.env);
+      const notificationService = getNotificationService(c);
       runBackground(
         notificationService.triggerEvent(
           EVENTS.AUTH.SESSION_CREATED.code,
@@ -346,7 +351,7 @@ auth.get("/logout", async (c) => {
   const sessionId = getCookie(c, "session");
 
   if (sessionId) {
-    const kv = new KVStore(getKV(c));
+    const kv = getKVStore(c);
     await kv.deleteSession(sessionId);
   }
 

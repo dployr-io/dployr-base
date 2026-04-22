@@ -3,10 +3,9 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
 import { ERROR, DEFAULT_EVENTS } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
-import { getDB, type AppVariables } from "@/lib/context.js";
+import { getDbStore, type AppVariables } from "@/lib/context.js";
 
 const notifications = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
@@ -29,7 +28,7 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
         ERROR.AUTH.BAD_SESSION.status,
       );
     }
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const cluster = await db.clusters.get(clusterId);
 
     const metadata = (cluster?.metadata as Record<string, any>) || {};
@@ -75,26 +74,32 @@ notifications.post("/discord/setup", requireClusterDeveloper, async (c) => {
   try {
     const { webhookUrl, enabled, events } = await c.req.json();
     const clusterId = c.req.query("clusterId");
-    
+
     if (!clusterId) {
-      return c.json(createErrorResponse({ 
-        message: "Missing clusterId query parameter", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
+      return c.json(
+        createErrorResponse({
+          message: "Missing clusterId query parameter",
+          code: ERROR.AUTH.BAD_SESSION.code,
+        }),
+        ERROR.AUTH.BAD_SESSION.status,
+      );
     }
 
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     await db.clusters.update(clusterId, {
-      metadata: { discord: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
+      metadata: { discord: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } },
     });
 
     return c.json(createSuccessResponse({ webhookUrl, enabled, events: events || DEFAULT_EVENTS }, "Discord integration configured"));
   } catch (error) {
     console.error("Discord setup error:", error);
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -103,26 +108,32 @@ notifications.post("/slack/setup", requireClusterDeveloper, async (c) => {
   try {
     const { webhookUrl, enabled, events } = await c.req.json();
     const clusterId = c.req.query("clusterId");
-    
+
     if (!clusterId) {
-      return c.json(createErrorResponse({ 
-        message: "Missing clusterId query parameter", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
+      return c.json(
+        createErrorResponse({
+          message: "Missing clusterId query parameter",
+          code: ERROR.AUTH.BAD_SESSION.code,
+        }),
+        ERROR.AUTH.BAD_SESSION.status,
+      );
     }
 
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     await db.clusters.update(clusterId, {
-      metadata: { slack: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
+      metadata: { slack: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } },
     });
 
     return c.json(createSuccessResponse({ webhookUrl, enabled, events: events || DEFAULT_EVENTS }, "Slack integration configured"));
   } catch (error) {
     console.error("Slack setup error:", error);
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -131,26 +142,32 @@ notifications.post("/webhook/setup", requireClusterDeveloper, async (c) => {
   try {
     const { webhookUrl, enabled, events } = await c.req.json();
     const clusterId = c.req.query("clusterId");
-    
+
     if (!clusterId) {
-      return c.json(createErrorResponse({ 
-        message: "Missing clusterId query parameter", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
+      return c.json(
+        createErrorResponse({
+          message: "Missing clusterId query parameter",
+          code: ERROR.AUTH.BAD_SESSION.code,
+        }),
+        ERROR.AUTH.BAD_SESSION.status,
+      );
     }
 
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     await db.clusters.update(clusterId, {
-      metadata: { customWebhook: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } }
+      metadata: { customWebhook: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } },
     });
 
     return c.json(createSuccessResponse({ webhookUrl, enabled, events: events || DEFAULT_EVENTS }, "Custom webhook integration configured"));
   } catch (error) {
     console.error("Webhook setup error:", error);
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -159,26 +176,32 @@ notifications.post("/email/setup", requireClusterDeveloper, async (c) => {
   try {
     const { enabled, events } = await c.req.json();
     const clusterId = c.req.query("clusterId");
-    
+
     if (!clusterId) {
-      return c.json(createErrorResponse({ 
-        message: "Missing clusterId query parameter", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
+      return c.json(
+        createErrorResponse({
+          message: "Missing clusterId query parameter",
+          code: ERROR.AUTH.BAD_SESSION.code,
+        }),
+        ERROR.AUTH.BAD_SESSION.status,
+      );
     }
 
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     await db.clusters.update(clusterId, {
-      metadata: { emailNotification: { enabled, events } }
+      metadata: { emailNotification: { enabled, events } },
     });
 
     return c.json(createSuccessResponse({ enabled, events }, "Email notification configured"));
   } catch (error) {
     console.error("Email notification setup error:", error);
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 

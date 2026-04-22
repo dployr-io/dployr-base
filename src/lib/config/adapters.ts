@@ -5,6 +5,9 @@ import { Config } from "./loader.js";
 import { IKVAdapter, RedisKV, MemoryKV } from "@/lib/storage/kv.interface.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { WebSocketHandler } from "@/lib/websocket/instance-handler.js";
+import type { BillingProvider } from "@/services/billing/provider.js";
+import { PolarService } from "@/services/polar.js";
+import type { Bindings } from "@/types/index.js";
 
 /**
  * Create KV adapter from config
@@ -111,13 +114,26 @@ export async function createStorageFromConfig(
 }
 
 /**
+ * Create billing provider from config
+ */
+export function createBillingProvider(config: Config, env: Bindings): BillingProvider | null {
+  if (!config.billing?.polar_access_token) return null;
+  switch (config.billing?.provider ?? "polar") {
+    case "polar": return new PolarService(env);
+    default: throw new Error(`Unknown billing provider: ${config.billing?.provider}`);
+  }
+}
+
+/**
  * Initialize all adapters from config (one-liner setup)
  */
-export async function initializeFromConfig(config: Config) {
+export async function initializeFromConfig(config: Config, env?: Bindings) {
   const kv = await createKVFromConfig(config);
   const db = await createDatabaseFromConfig(config);
   const storage = await createStorageFromConfig(config);
+  
+  const billingProvider = env ? createBillingProvider(config, env) : null;
   const wsHandler = new WebSocketHandler(kv, db);
 
-  return { kv, db, storage, ws: wsHandler, config };
+  return { kv, db, storage, ws: wsHandler, config, billingProvider };
 }

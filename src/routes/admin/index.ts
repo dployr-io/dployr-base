@@ -1,8 +1,7 @@
 // routes/admin/admin.ts
 import { Hono } from "hono";
 import { Bindings, createErrorResponse, createSuccessResponse, Variables } from "@/types/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
-import { getKV } from "@/lib/context.js";
+import { getKVStore } from "@/lib/context.js";
 import { requireDployrAdministrator, requireDployrAdministratorIPAddress } from "@/middleware/auth.js";
 import instances from "./instances.js";
 import * as OTPAuth from "otpauth";
@@ -72,10 +71,10 @@ admin.post("/login", async (c) => {
   const sessionId = session_id ?? `adm_${crypto.randomUUID().slice(0, 8)}`;
   const ttl = ADMIN_JWT_TTL;
 
-  const kv = new KVStore(getKV(c));
-  const token = await kv.createAdminJWT(sessionId, ttl);
+   const kv = getKVStore(c);
+  const token = await kv.createAdminJWT({ sessionId, ttl });
 
-  await kv.saveAdminJWT(sessionId, token, ttl);
+  await kv.saveAdminJWT({ sessionId, token, ttl });
 
   return c.json(createSuccessResponse({ token, expiresIn: ttl, sessionId }));
 });

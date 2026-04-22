@@ -97,6 +97,21 @@ export class UserStore extends BaseStore {
         } as User;
     }
 
+    async getById(userId: string): Promise<User | null> {
+        const stmt = this.db.prepare(`
+            SELECT id, email, name, picture, provider, metadata, created_at, updated_at 
+            FROM users WHERE id = $1
+        `);
+
+        const result = await stmt.bind(userId).first();
+        if (!result) return null;
+
+        return {
+            ...result,
+            metadata: (result as any).metadata || {},
+        } as User;
+    }
+
     // By deliberate design, users cannot update their email addresses
     // To change a user's email, create a new user with the desired email,
     // assign the relevant roles, and then remove the previous user account

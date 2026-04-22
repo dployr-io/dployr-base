@@ -147,7 +147,7 @@ export class InstanceStore extends BaseStore {
 
     // Invalidate cache after update
     if (this.kv) {
-      await this.kv.invalidateInstanceCache(id).catch(() => {});
+      await this.kv.invalidateInstanceCache({ instanceId: id }).catch(() => {});
     }
   }
 
@@ -156,7 +156,7 @@ export class InstanceStore extends BaseStore {
 
     // Invalidate cache after deletion
     if (this.kv) {
-      await this.kv.invalidateInstanceCache(id).catch(() => {});
+      await this.kv.invalidateInstanceCache({ instanceId: id }).catch(() => {});
     }
   }
 

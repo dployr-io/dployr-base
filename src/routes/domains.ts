@@ -7,9 +7,7 @@ import { Bindings, Variables, createErrorResponse, createSuccessResponse } from 
 import type { DNSProvider } from "@/types/dns.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware, requireClusterDeveloper } from "@/middleware/auth.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
-import { getDB, getKV, type AppVariables } from "@/lib/context.js";
+import { getDbStore, getKVStore, type AppVariables } from "@/lib/context.js";
 import { DNSService } from "@/services/dns.js";
 import { getInstanceService } from "@/lib/instances/instance-helpers.js";
 
@@ -89,13 +87,13 @@ domains.post("/register", async (c) => {
     });
 
     // Get instance to include ID in response for Dployrd version compatibility
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const instance = await db.instances.getByName(result.instanceName);
     if (!instance) {
       throw new Error("Instance not found after domain save");
     }
 
-    const kv = new KVStore(getKV(c));
+    const kv = getKVStore(c);
     await kv.logEvent({
       actor: {
         id: result.instanceName,
@@ -133,8 +131,8 @@ domains.post("/register", async (c) => {
 // Create custom domain
 domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
-  const kv = new KVStore(getKV(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
   const dns = new DNSService(c.env);
 
   let body;
@@ -184,7 +182,7 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   let autoSetupUrl: string | null = null;
   if (hasOAuth) {
     const state = crypto.randomUUID();
-    await kv.createState(state, `/settings/domains?domain=${encodeURIComponent(normalizedDomain)}`);
+    await kv.createState({ state, redirectUrl: `/settings/domains?domain=${encodeURIComponent(normalizedDomain)}` });
     autoSetupUrl = dns.buildOAuthUrl(provider, state, c.env.BASE_URL);
   }
 
@@ -208,7 +206,7 @@ domains.get("/verify", async (c) => {
     return c.text("missing domain parameter", 400);
   }
 
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const dns = new DNSService(c.env);
   const record = await db.domains.get(domain);
 
@@ -233,7 +231,7 @@ domains.get("/verify", async (c) => {
 domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (c) => {
   try {
     const domain = c.req.param("domain").toLowerCase();
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const dns = new DNSService(c.env);
 
     const record = await db.domains.get(domain);
@@ -269,7 +267,7 @@ domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (
 domains.get("/:domain", authMiddleware, async (c) => {
   const domain = c.req.param("domain").toLowerCase();
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const dns = new DNSService(c.env);
 
   const domainRecord = await db.domains.get(domain);
@@ -307,8 +305,8 @@ domains.get("/:domain", authMiddleware, async (c) => {
     // Add setup URLs if available
     if (domainRecord.provider) {
       const state = crypto.randomUUID();
-      const kv = new KVStore(getKV(c));
-      await kv.createState(state, `/settings/domains?domain=${encodeURIComponent(domain)}`);
+      const kv = getKVStore(c);
+      await kv.createState({ state, redirectUrl: `/settings/domains?domain=${encodeURIComponent(domain)}` });
       const oauthUrl = dns.buildOAuthUrl(domainRecord.provider, state, c.env.BASE_URL);
       if (oauthUrl) {
         response.autoSetupUrl = oauthUrl;
@@ -324,7 +322,7 @@ domains.get("/:domain", authMiddleware, async (c) => {
 domains.get("/instance/:instanceId", authMiddleware, async (c) => {
   const instanceId = c.req.param("instanceId");
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
 
   const instance = await db.instances.get(instanceId);
   if (!instance) {
@@ -344,7 +342,7 @@ domains.get("/instance/:instanceId", authMiddleware, async (c) => {
 domains.delete("/:domain", authMiddleware, requireClusterDeveloper, async (c) => {
   const domain = c.req.param("domain").toLowerCase();
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
 
   const record = await db.domains.get(domain);
   if (!record) {
@@ -362,7 +360,7 @@ domains.delete("/:domain", authMiddleware, requireClusterDeveloper, async (c) =>
   }
 
   await db.domains.delete(domain);
-  const kv = new KVStore(getKV(c));
+  const kv = getKVStore(c);
   await kv.logEvent({
     actor: {
       id: session.userId,
@@ -396,8 +394,8 @@ domains.get("/callback/:provider", async (c) => {
     );
   }
 
-  const kv = new KVStore(getKV(c));
-  const db = new DatabaseStore(getDB(c));
+  const kv = getKVStore(c);
+  const db = getDbStore(c);
   const redirectPath = await kv.validateState(state);
 
   if (!redirectPath) {

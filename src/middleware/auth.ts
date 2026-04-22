@@ -5,10 +5,8 @@
 import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
 import { Bindings, Variables, Session } from "@/types/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getKV, getDB } from "@/lib/context.js";
+import { getDbStore, getKVStore } from "@/lib/context.js";
 import { jwtVerify } from "jose";
 
 /**
@@ -30,7 +28,7 @@ async function authenticate(c: Context<{ Bindings: Bindings; Variables: Variable
     return null;
   }
 
-  const kv = new KVStore(getKV(c));
+  const kv = getKVStore(c);
   const session = await kv.getSession(sessionId);
 
   if (session) {
@@ -115,7 +113,7 @@ export async function requireClusterViewer(c: Context<{ Bindings: Bindings; Vari
     );
   }
 
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const canRead = await db.clusters.canRead(session.userId, clusterId);
 
   if (!canRead) {
@@ -170,7 +168,7 @@ export async function requireClusterDeveloper(c: Context<{ Bindings: Bindings; V
     );
   }
 
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const canWrite = await db.clusters.canWrite(session.userId, clusterId);
 
   if (!canWrite) {
@@ -225,7 +223,7 @@ export async function requireClusterAdmin(c: Context<{ Bindings: Bindings; Varia
     );
   }
 
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const isAdmin = await db.clusters.isAdmin(session.userId, clusterId);
 
   if (!isAdmin) {
@@ -280,7 +278,7 @@ export async function requireClusterOwner(c: Context<{ Bindings: Bindings; Varia
     );
   }
 
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const isOwner = await db.clusters.isOwner(session.userId, clusterId);
 
   if (!isOwner) {
@@ -318,7 +316,7 @@ export async function requireDployrAdministrator(c: Context<{ Bindings: Bindings
   }
 
   try {
-    const kv = new KVStore(getKV(c));
+    const kv = getKVStore(c);
     const publicKey = await kv.getPublicKey();
 
     const { payload } = await jwtVerify(token, publicKey);

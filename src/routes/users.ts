@@ -3,122 +3,147 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, User, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
 import { getCookie } from "hono/cookie";
-import { DatabaseStore } from "@/lib/db/store/index.js";
 import z from "zod";
 import { authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getKV, getDB, type AppVariables } from "@/lib/context.js";
+import { getDbStore, getKVStore, type AppVariables } from "@/lib/context.js";
 
 const users = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 users.use("*", authMiddleware);
 
 const updateUserSchema = z.object({
-    name: z.string().min(3).max(30).regex(/^[a-zA-Z ]+$/, "Name must contain only letters and spaces").optional(),
-    picture: z.string().min(3).max(100).optional(),
-    provider: z.enum(["google", "github", "microsoft", "email"]).optional(),
-    metadata: z.object().optional(),
+  name: z
+    .string()
+    .min(3)
+    .max(30)
+    .regex(/^[a-zA-Z ]+$/, "Name must contain only letters and spaces")
+    .optional(),
+  picture: z.string().min(3).max(100).optional(),
+  provider: z.enum(["google", "github", "microsoft", "email"]).optional(),
+  metadata: z.object().optional(),
 });
 
 // Get current user
 users.get("/me", async (c) => {
-    const sessionId = getCookie(c, "session");
+  const sessionId = getCookie(c, "session");
 
-    if (!sessionId) {
-        return c.json(createErrorResponse({ 
-            message: "Not authenticated", 
-            code: ERROR.AUTH.BAD_SESSION.code 
-        }), ERROR.AUTH.BAD_SESSION.status);
-    }
+  if (!sessionId) {
+    return c.json(
+      createErrorResponse({
+        message: "Not authenticated",
+        code: ERROR.AUTH.BAD_SESSION.code,
+      }),
+      ERROR.AUTH.BAD_SESSION.status,
+    );
+  }
 
-    const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c));
+  const kv = getKVStore(c);
+  const db = getDbStore(c);
 
-    const session = await kv.getSession(sessionId);
+  const session = await kv.getSession(sessionId);
 
-    if (!session) {
-        return c.json(createErrorResponse({ 
-            message: "Invalid or expired session", 
-            code: ERROR.AUTH.BAD_SESSION.code 
-        }), ERROR.AUTH.BAD_SESSION.status);
-    }
+  if (!session) {
+    return c.json(
+      createErrorResponse({
+        message: "Invalid or expired session",
+        code: ERROR.AUTH.BAD_SESSION.code,
+      }),
+      ERROR.AUTH.BAD_SESSION.status,
+    );
+  }
 
-    const user = await db.users.get(session.email);
+  const user = await db.users.get(session.email);
 
-    if (!user) {
-        return c.json(createErrorResponse({ 
-            message: "User not found", 
-            code: ERROR.RESOURCE.MISSING_RESOURCE.code
-        }), ERROR.RESOURCE.MISSING_RESOURCE.status);
-    }
+  if (!user) {
+    return c.json(
+      createErrorResponse({
+        message: "User not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }),
+      ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
 
-    try {
-        const clusters = await db.clusters.listUserClusters(user.id);
+  try {
+    const clusters = await db.clusters.listUserClusters(user.id);
 
-        return c.json(createSuccessResponse({ user, clusters }));
-    } catch (error) {
-        const helpLink = "https://monitoring.dployr.io";
-        console.error(`Failed to save cluster for user ${user.id}:`, error);
-        return c.json(createErrorResponse({ 
-            message: "Failed to load user data", 
-            code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-            helpLink 
-        }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
-    }
+    return c.json(createSuccessResponse({ user, clusters }));
+  } catch (error) {
+    const helpLink = "https://monitoring.dployr.io";
+    console.error(`Failed to save cluster for user ${user.id}:`, error);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to load user data",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
 });
 
 users.patch("/me", async (c) => {
-    const sessionId = getCookie(c, "session");
+  const sessionId = getCookie(c, "session");
 
-    if (!sessionId) {
-        return c.json(createErrorResponse({ 
-            message: "Not authenticated", 
-            code: ERROR.AUTH.BAD_SESSION.code 
-        }), ERROR.AUTH.BAD_SESSION.status);
-    }
+  if (!sessionId) {
+    return c.json(
+      createErrorResponse({
+        message: "Not authenticated",
+        code: ERROR.AUTH.BAD_SESSION.code,
+      }),
+      ERROR.AUTH.BAD_SESSION.status,
+    );
+  }
 
-    const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c));
+  const kv = getKVStore(c);
+  const db = getDbStore(c);
 
-    const session = await kv.getSession(sessionId);
+  const session = await kv.getSession(sessionId);
 
-    if (!session) {
-        return c.json(createErrorResponse({ 
-            message: "Invalid or expired session", 
-            code: ERROR.AUTH.BAD_SESSION.code 
-        }), ERROR.AUTH.BAD_SESSION.status);
-    }
+  if (!session) {
+    return c.json(
+      createErrorResponse({
+        message: "Invalid or expired session",
+        code: ERROR.AUTH.BAD_SESSION.code,
+      }),
+      ERROR.AUTH.BAD_SESSION.status,
+    );
+  }
 
-    const data = await c.req.json();
-    const validation = updateUserSchema.safeParse(data);
-    if (!validation.success) {
-        const errors = validation.error.issues.map((err) => ({
-            field: err.path.join("."),
-            message: err.message,
-        }));
+  const data = await c.req.json();
+  const validation = updateUserSchema.safeParse(data);
+  if (!validation.success) {
+    const errors = validation.error.issues.map((err) => ({
+      field: err.path.join("."),
+      message: err.message,
+    }));
 
-        const errorMessage = errors
-            .map((e) => `${e.field}: ${e.message}`)
-            .join(", ");
+    const errorMessage = errors.map((e) => `${e.field}: ${e.message}`).join(", ");
 
-        return c.json(createErrorResponse({ 
-            message: "Invalid request body: " + errorMessage, 
-            code: ERROR.REQUEST.BAD_REQUEST.code 
-        }), ERROR.REQUEST.BAD_REQUEST.status);
-    }
+    return c.json(
+      createErrorResponse({
+        message: "Invalid request body: " + errorMessage,
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
+  }
 
-    const updates: Partial<Omit<User, "id" | "createdAt">> = validation.data;
-    const user = await db.users.update(session.email, updates);
+  const updates: Partial<Omit<User, "id" | "createdAt">> = validation.data;
+  const user = await db.users.update(session.email, updates);
 
-    if (!user) {
-        return c.json(createErrorResponse({ 
-            message: "User not found", 
-            code: ERROR.RESOURCE.MISSING_RESOURCE.code 
-        }), ERROR.RESOURCE.MISSING_RESOURCE.status);
-    }
+  if (!user) {
+    return c.json(
+      createErrorResponse({
+        message: "User not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }),
+      ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
 
-    return c.json(createSuccessResponse({ user }));
+  return c.json(createSuccessResponse({ user }));
 });
 
 export default users;

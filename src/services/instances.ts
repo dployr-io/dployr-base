@@ -2,13 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Bindings, Instance, Session } from "@/types/index.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
 import { EVENTS } from "@/lib/constants/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
 import { Context } from "hono";
-import { JWTService } from "@/services/jwt.js";
 import { ulid } from "ulid";
-import { getKV, getDB, getWS } from "@/lib/context.js";
+import { getKVStore, getJWTService, getWS, getDbStore } from "@/lib/context.js";
 import { InstanceConnectionFailureError, InstanceNotConnectedError, PermissionError, ResourceNotFoundError } from "@/lib/errors/errors.js";
 import { DployrdService } from "./dployrd-service.js";
 
@@ -16,7 +13,7 @@ import { DployrdService } from "./dployrd-service.js";
  * Service for managing dployr instances.
  *
  * Provides methods to create, register, and manage instances that connect
- * to the base server via WebSocket. 
+ * to the base server via WebSocket.
  */
 export class InstanceService {
   constructor(private env: Bindings) {}
@@ -50,8 +47,8 @@ export class InstanceService {
     c: Context;
     metadata?: Record<string, any> | undefined;
   }): Promise<{ instance: Instance; token: string }> {
-    const db = new DatabaseStore(getDB(c));
-    const kv = new KVStore(getKV(c));
+    const db = getDbStore(c);
+    const kv = getKVStore(c);
 
     const instance = await db.instances.create(clusterId, {
       tag,
@@ -73,7 +70,7 @@ export class InstanceService {
       request: c.req.raw,
     });
 
-    const jwt = new JWTService(kv);
+    const jwt = getJWTService(c);
     const token = await jwt.createBootstrapToken(instance.tag);
     const decoded = await jwt.verifyToken(token);
     await db.bootstrapTokens.create(instance.id, decoded.nonce as string);
@@ -94,8 +91,8 @@ export class InstanceService {
    * @returns JWT access token for the user to communicate with the instance
    */
   async getOrCreateInstanceUserToken({ session, instanceId, c }: { session: Session; instanceId: string; c: Context }): Promise<string> {
-    const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c));
+    const kv = getKVStore(c);
+    const db = getDbStore(c);
     const role = "viewer";
     const key = `inst:${instanceId}:user:${session.userId}:role:${role}:token`;
 
@@ -113,7 +110,7 @@ export class InstanceService {
       throw new Error("Instance not found");
     }
 
-    const jwt = new JWTService(kv);
+    const jwt = getJWTService(c);
     const token = await jwt.createInstanceAccessToken(session, instance.tag, role, { issuer: this.env.BASE_URL, audience: "dployr-daemon" });
 
     let ttl = 240;
@@ -149,9 +146,9 @@ export class InstanceService {
    * @returns New rotated bootstrap token
    */
   async rotateInstanceBootstrapToken({ token, instanceId, c }: { token: string; instanceId: string; c: Context }): Promise<string> {
-    const db = new DatabaseStore(getDB(c));
-    const kv = new KVStore(getKV(c));
-    const jwt = new JWTService(kv);
+    const db = getDbStore(c);
+    const kv = getKVStore(c);
+    const jwt = getJWTService(c);
     let payload: any;
 
     try {
@@ -193,8 +190,8 @@ export class InstanceService {
    * @returns "enqueued" indicating the ping was processed
    */
   async pingInstance({ instanceName, c }: { instanceName: string; c: Context }): Promise<"enqueued"> {
-    const db = new DatabaseStore(getDB(c));
-    const kv = new KVStore(getKV(c));
+    const db = getDbStore(c);
+    const kv = getKVStore(c);
     const instance = await db.instances.getByName(instanceName);
 
     if (!instance) {
@@ -225,9 +222,9 @@ export class InstanceService {
     token: string;
     c: Context;
   }): Promise<{ ok: true; instanceName: string; jwksUrl: string } | { ok: false; reason: "invalid_token" | "invalid_type" | "already_used" }> {
-    const kv = new KVStore(getKV(c));
-    const db = new DatabaseStore(getDB(c));
-    const jwt = new JWTService(kv);
+    const kv = getKVStore(c);
+    const db = getDbStore(c);
+    const jwt = getJWTService(c);
 
     let payload: any;
     try {
@@ -263,15 +260,15 @@ export class InstanceService {
    * @returns Full domain name (e.g., "my-instance.dployr.io")
    */
   async saveDomain({ instanceName, c }: { instanceName: string; c: Context }) {
-    const db = new DatabaseStore(getDB(c));
-    const kv = new KVStore(getKV(c));
+    const db = getDbStore(c);
+    const kv = getKVStore(c);
     const instance = await db.instances.getByName(instanceName);
 
     if (!instance) {
       throw new Error("Instance not found");
     }
 
-    await kv.saveDomain(instance.tag, instance.address);
+    await kv.saveDomain({ domain: instance.tag, address: instance.address });
 
     return `${instance.tag}.dployr.io`;
   }
@@ -289,7 +286,7 @@ export class InstanceService {
    * @returns Array of instances and total count
    */
   async listInstances({ c, clusterId, limit, offset }: { c: Context; clusterId?: string; limit?: number; offset?: number }): Promise<{ instances: any[]; total: number }> {
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     return db.instances.list({ clusterId, limit, offset });
   }
 
@@ -306,7 +303,7 @@ export class InstanceService {
       })
     | null
   > {
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const instance = await db.instances.get(instanceId);
     if (!instance) {
       throw new Error("Instance not found");
@@ -324,7 +321,7 @@ export class InstanceService {
    * @param params.c - Hono context with request bindings
    */
   async deleteInstance({ instanceId, c }: { instanceId: string; c: Context }): Promise<void> {
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const instance = await db.instances.get(instanceId);
     if (!instance) {
       throw new Error("Instance not found");
@@ -346,10 +343,10 @@ export class InstanceService {
    * @returns Task ID for the install operation
    */
   async installDployr({ instanceId, clusterId, version, c }: { instanceId: string; clusterId: string; version: string; c: Context }): Promise<string> {
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const session = c.get("session")!;
-    const kv = new KVStore(getKV(c));
-    const jwtService = new JWTService(kv);
+    const kv = getKVStore(c);
+    const jwtService = getJWTService(c);
 
     const instance = await db.instances.get(instanceId);
     if (!instance) {
@@ -395,10 +392,10 @@ export class InstanceService {
    * @returns Task ID for the reboot operation
    */
   async rebootInstance({ instanceId, clusterId, force, c }: { instanceId: string; clusterId: string; force: boolean; c: Context }): Promise<string> {
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const session = c.get("session")!;
-    const kv = new KVStore(getKV(c));
-    const jwtService = new JWTService(kv);
+    const kv = getKVStore(c);
+    const jwtService = getJWTService(c);
 
     const instance = await db.instances.get(instanceId);
     if (!instance) {
@@ -430,7 +427,7 @@ export class InstanceService {
     return task.ID;
   }
 
-   /**
+  /**
    * Restarts the dployr daemon on an instance.
    *
    * Sends a daemon restart task to the instance via WebSocket.
@@ -443,10 +440,10 @@ export class InstanceService {
    * @returns Task ID for the restart operation
    */
   async restartDaemon({ instanceId, clusterId, force, c }: { instanceId: string; clusterId: string; force: boolean; c: Context }): Promise<string> {
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const session = c.get("session")!;
-    const kv = new KVStore(getKV(c));
-    const jwtService = new JWTService(kv);
+    const kv = getKVStore(c);
+    const jwtService = getJWTService(c);
 
     const instance = await db.instances.get(instanceId);
     if (!instance) {

@@ -6,6 +6,7 @@ export const KV_KEYS = {
   VERSION_LATEST: "version:latest",
   JWT_KEYS: "jwt_keys",
   SESSION: (id: string) => `session:${id}`,
+  SESSION_BY_USER: (userId: string) => `session:user:${userId}`,
   EVENT_IDEM: (type: string, actorId: string, ray: string, targetScope: string) => `event:idem:${type}:${actorId}:${ray}:${targetScope}`,
   ACTOR_EVENT: (actorId: string, eventId: string) => `actor:${actorId}:event:${eventId}`,
   TARGET_EVENT: (targetId: string, eventId: string) => `target:${targetId}:event:${eventId}`,

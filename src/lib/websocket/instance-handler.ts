@@ -16,10 +16,13 @@ import { ClientMessageHandler } from "./handlers/client-handler.js";
 import { ClientNotifier } from "./handlers/client-notifier.js";
 import { TerminalManager } from "./terminal-manager.js";
 import { parseMessage, MessageKind, type ClusterConnection, isAckMessage } from "./message-types.js";
-import { loadConfig } from "@/lib/config/loader.js";
+import type { Config } from "@/lib/config/loader.js";
+import type { BillingProvider } from "@/services/billing/provider.js";
 
 export interface WebSocketHandlerConfig {
   connectionManager?: Partial<ConnectionManagerConfig>;
+  appConfig?: Config;
+  billingProvider?: BillingProvider | null;
 }
 
 /**
@@ -34,13 +37,15 @@ export class WebSocketHandler {
   private terminalManager: TerminalManager;
   private sessionConnections = new Map<string, string>();
   private dbStore: DatabaseStore;
-  private config = loadConfig();
+  private config?: Config;
 
   constructor(
     private kv: IKVAdapter,
     private db: PostgresAdapter,
     config?: WebSocketHandlerConfig,
+    appConfig?: Config,
   ) {
+    this.config = appConfig;
     this.connectionManager = new ConnectionManager(config?.connectionManager);
 
     const kvStore = new KVStore(this.kv);
@@ -48,14 +53,12 @@ export class WebSocketHandler {
 
     this.clientNotifier = new ClientNotifier(this.connectionManager, kvStore);
 
-    // Initialize handlers with dependencies
     this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, kvStore);
 
     const jwtService = new JWTService(kvStore);
     const dployrdService = new DployrdService();
 
-    // Initialize terminal manager with node URL resolver
-    this.terminalManager = new TerminalManager(300000); // 5 minute session timeout
+    this.terminalManager = new TerminalManager(300000);
     this.clientHandler = new ClientMessageHandler({
       connectionManager: this.connectionManager,
       kv: kvStore,
@@ -64,6 +67,7 @@ export class WebSocketHandler {
       dployrdService,
       terminalManager: this.terminalManager,
       sendTaskToCluster: this.sendTaskToCluster.bind(this),
+      appConfig: this.config,
     });
   }
 

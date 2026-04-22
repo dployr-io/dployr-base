@@ -10,14 +10,12 @@ import type { Hono } from 'hono';
 import { initializeAdapters, type Adapters } from '@/lib/bootstrap.js';
 import { DatabaseStore } from '@/lib/db/store/index.js';
 import { KVStore } from '@/lib/db/store/kv.js';
-import { loadConfig } from '@/lib/config/loader.js';
 import type { Session } from '@/types/index.js';
 
 export class WebSocketService {
   private server: Server;
   private wss: WebSocketServer;
   private adapters: Adapters | null = null;
-  private config = loadConfig();
 
   constructor(private app: Hono<any, any, any>) {
     this.server = this.createHttpServer();
@@ -30,8 +28,9 @@ export class WebSocketService {
    */
   async start(): Promise<void> {
     this.adapters = await initializeAdapters();
-    this.server.listen(this.config.server.port, this.config.server.host, () => {
-      console.log(`Dployr Base running on http://${this.config.server.host}:${this.config.server.port}`);
+    const config = this.adapters.config;
+    this.server.listen(config.server.port, config.server.host, () => {
+      console.log(`Dployr Base running on http://${config.server.host}:${config.server.port}`);
     });
     this.setupGracefulShutdown();
   }

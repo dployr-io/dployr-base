@@ -95,6 +95,7 @@ const ConfigSchema = z.object({
     .optional(),
   billing: z
     .object({
+      provider: z.enum(["polar"]).default("polar"),
       polar_access_token: z.string().optional(),
       polar_webhook_secret: z.string().optional(),
       environment: z.enum(["sandbox", "production"]).default("sandbox"),
@@ -211,6 +212,7 @@ function loadConfigFromEnv(): Config {
       allowed_origins: process.env.CORS_ALLOWED_ORIGINS,
     },
     billing: {
+      provider: (process.env.BILLING_PROVIDER as "polar") || "polar",
       polar_access_token: process.env.POLAR_ACCESS_TOKEN,
       polar_webhook_secret: process.env.POLAR_WEBHOOK_SECRET,
       environment: (process.env.POLAR_ENVIRONMENT as "sandbox" | "production") || 

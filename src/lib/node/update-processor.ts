@@ -23,7 +23,7 @@ export class UpdateProcessor {
     if (message.schema === "v1") {
       const v1Message = message as NodeUpdateV1;
       if (v1Message.top && v1Message.seq) {
-        tasks.push(this.saveProcessSnapshot(instanceId, v1Message.seq, v1Message.top));
+        tasks.push(this.saveProcessSnapshot({ instanceId, seq: v1Message.seq, snapshot: v1Message.top }));
       }
       if (v1Message.services) {
         tasks.push(this.syncServices(instanceId, v1Message.services));
@@ -34,7 +34,7 @@ export class UpdateProcessor {
     if (message.schema === "v1.1") {
       const v1_1Message = message as NodeUpdateV1_1;
       if (v1_1Message.processes?.list && v1_1Message.sequence) {
-        tasks.push(this.saveProcessSnapshot(instanceId, v1_1Message.sequence, { list: v1_1Message.processes.list }));
+        tasks.push(this.saveProcessSnapshot({ instanceId, seq: v1_1Message.sequence, snapshot: { list: v1_1Message.processes.list } }));
       }
       if (v1_1Message.workloads?.services) {
         tasks.push(this.syncServices(instanceId, v1_1Message.workloads.services));
@@ -44,9 +44,9 @@ export class UpdateProcessor {
     await Promise.all(tasks);
   }
 
-  private async saveProcessSnapshot(instanceId: string, seq: number, top: Record<string, unknown>): Promise<void> {
+  private async saveProcessSnapshot({ instanceId, seq, snapshot }: { instanceId: string; seq: number; snapshot: Record<string, unknown> }): Promise<void> {
     try {
-      await this.kv.saveProcessSnapshot(instanceId, seq, top);
+      await this.kv.saveProcessSnapshot({ instanceId, seq, snapshot });
     } catch (error) {
       console.error(`[UpdateProcessor] Failed to save process snapshot:`, error);
     }

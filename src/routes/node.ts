@@ -3,18 +3,15 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { JWTService } from "@/services/jwt.js";
-import { getDB, getKV, getWS, type AppVariables } from "@/lib/context.js";
+import { getKVStore, getJWTService, getWS, type AppVariables, getDbStore } from "@/lib/context.js";
 
 const node = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
 // Instance exchanges a valid node token for a fresh short-lived token
 node.post("/token", async (c) => {
-  const kv = new KVStore(getKV(c));
-  const jwtService = new JWTService(kv);
+  const kv = getKVStore(c);
+  const jwtService = getJWTService(c);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -68,7 +65,7 @@ node.post("/token", async (c) => {
     );
   }
 
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const instance = await db.instances.getByName(instanceName);
   if (!instance) {
     return c.json(
@@ -91,7 +88,7 @@ node.post("/token", async (c) => {
 node.post("/cert", async (c) => {
   const instanceId = c.req.query("instanceId");
   const instanceName = c.req.query("instanceName");
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -105,8 +102,8 @@ node.post("/cert", async (c) => {
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = new KVStore(getKV(c));
-  const jwtService = new JWTService(kv);
+  const kv = getKVStore(c);
+  const jwtService = getJWTService(c);
 
   let token: any;
   try {
@@ -132,9 +129,7 @@ node.post("/cert", async (c) => {
     );
   }
 
-  const instance = instanceId
-    ? await db.instances.get(instanceId)
-    : await db.instances.getByName(instanceName!);
+  const instance = instanceId ? await db.instances.get(instanceId) : await db.instances.getByName(instanceName!);
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -209,7 +204,7 @@ node.post("/cert", async (c) => {
 node.put("/cert", async (c) => {
   const instanceId = c.req.query("instanceId");
   const instanceName = c.req.query("instanceName");
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -223,8 +218,8 @@ node.put("/cert", async (c) => {
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = new KVStore(getKV(c));
-  const jwtService = new JWTService(kv);
+  const kv = getKVStore(c);
+  const jwtService = getJWTService(c);
 
   let token: any;
   try {
@@ -250,9 +245,7 @@ node.put("/cert", async (c) => {
     );
   }
 
-  const instance = instanceId
-    ? await db.instances.get(instanceId)
-    : await db.instances.getByName(instanceName!);
+  const instance = instanceId ? await db.instances.get(instanceId) : await db.instances.getByName(instanceName!);
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -319,7 +312,7 @@ node.put("/cert", async (c) => {
 node.get("/ws", async (c) => {
   const instanceId = c.req.query("instanceId");
   const instanceName = c.req.query("instanceName");
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -333,8 +326,8 @@ node.get("/ws", async (c) => {
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = new KVStore(getKV(c));
-  const jwtService = new JWTService(kv);
+  const kv = getKVStore(c);
+  const jwtService = getJWTService(c);
 
   let token: any;
   try {
@@ -360,9 +353,7 @@ node.get("/ws", async (c) => {
     );
   }
 
-  const instance = instanceId
-    ? await db.instances.get(instanceId)
-    : await db.instances.getByName(instanceName!);
+  const instance = instanceId ? await db.instances.get(instanceId) : await db.instances.getByName(instanceName!);
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -382,7 +373,7 @@ node.get("/ws", async (c) => {
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
-  
+
   // WebSocket upgrade is handled by the server-level upgrade handler
   return c.text("WebSocket upgrade required", 426);
 });

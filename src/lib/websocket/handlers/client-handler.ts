@@ -70,7 +70,7 @@ import { JWTService } from "@/services/jwt.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/index.js";
 import { TerminalManager } from "@/lib/websocket/terminal-manager.js";
-import { loadConfig } from "@/lib/config/loader.js";
+import type { Config } from "@/lib/config/loader.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -80,6 +80,7 @@ export interface ClientHandlerDependencies {
   dployrdService: DployrdService;
   terminalManager: TerminalManager;
   sendTaskToCluster: (clusterId: string, task: NodeTask) => boolean;
+  appConfig?: Config;
 }
 
 /**
@@ -93,7 +94,7 @@ export class ClientMessageHandler {
   private dployrdService: DployrdService;
   private terminalManager: TerminalManager;
   private sendTaskToCluster: (clusterId: string, task: NodeTask) => boolean;
-  private config = loadConfig();
+  private config?: Config;
 
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
@@ -103,6 +104,7 @@ export class ClientMessageHandler {
     this.dployrdService = deps.dployrdService;
     this.terminalManager = deps.terminalManager;
     this.sendTaskToCluster = deps.sendTaskToCluster;
+    this.config = deps.appConfig;
   }
 
   /**
@@ -1356,7 +1358,7 @@ export class ClientMessageHandler {
       const end = endTime || now;
 
       // Retrieve process snapshots for the time range
-      const snapshots = await this.kv.getProcessSnapshotsByTimeRange(instanceId, start, end);
+      const snapshots = await this.kv.getProcessSnapshotsByTimeRange({ instanceId, startTime: start, endTime: end });
 
       const response: ProcessHistoryResponseMessage = {
         kind: "process_history_response",

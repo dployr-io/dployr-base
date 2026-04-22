@@ -3,11 +3,9 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
 import { TrafficRouter } from "@/services/traffic-router.js";
 import { authMiddleware, requireClusterViewer } from "@/middleware/auth.js";
-import { getDB, getKV, type AppVariables } from "@/lib/context.js";
+import { getDbStore, getKVStore, type AppVariables } from "@/lib/context.js";
 import { ERROR } from "@/lib/constants/index.js";
 
 const proxy = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
@@ -32,8 +30,8 @@ proxy.get("/resolve", async (c) => {
     );
   }
 
-  const db = new DatabaseStore(getDB(c));
-  const kv = new KVStore(getKV(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
 
   // Get base domain from config or default
   const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
@@ -83,8 +81,8 @@ proxy.get("/resolve", async (c) => {
  * GET /v1/proxy/stats
  */
 proxy.get("/stats", async (c) => {
-  const db = new DatabaseStore(getDB(c));
-  const kv = new KVStore(getKV(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
 
   const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
   const router = new TrafficRouter(db, kv, { baseDomain });
@@ -114,7 +112,7 @@ proxy.get("/services", requireClusterViewer, async (c) => {
     );
   }
 
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
 
   // Get cluster
@@ -173,8 +171,8 @@ proxy.post("/invalidate", requireClusterViewer, async (c) => {
     all?: boolean;
   }>();
 
-  const db = new DatabaseStore(getDB(c));
-  const kv = new KVStore(getKV(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
 
   const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
   const router = new TrafficRouter(db, kv, { baseDomain });

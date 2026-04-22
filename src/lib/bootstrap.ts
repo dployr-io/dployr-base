@@ -6,6 +6,7 @@ import type { Bindings, Variables } from "@/types/index.js";
 import { initializeDatabase } from "@/lib/db/migrate.js";
 import { loadConfig, type Config } from "@/lib/config/loader.js";
 import { initializeFromConfig } from "@/lib/config/adapters.js";
+import type { BillingProvider } from "@/services/billing/provider.js";
 
 export interface Adapters {
   kv: any;
@@ -13,6 +14,7 @@ export interface Adapters {
   storage: any;
   ws: any;
   config: Config;
+  billingProvider: BillingProvider | null;
 }
 
 let adapters: Adapters | null = null;
@@ -40,7 +42,8 @@ export async function initializeAdapters(): Promise<Adapters> {
   }
 
   const config = loadConfig();
-  adapters = await initializeFromConfig(config);
+  
+  adapters = await initializeFromConfig(config, {} as Bindings);
 
   if (config.database.auto_migrate) {
     await initializeDatabase(adapters.db);
@@ -67,6 +70,7 @@ export async function bootstrapMiddleware(
   c.set("dbAdapter", adapters!.db);
   c.set("storageAdapter", adapters!.storage);
   c.set("wsHandler", adapters!.ws);
+  c.set("billingProvider", adapters!.billingProvider);
 
   // Build environment bindings from config
   const serverConfig = adapters!.config?.server;

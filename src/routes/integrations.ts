@@ -4,16 +4,13 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
 import { verifyGitHubWebhook } from "@/services/utils.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
-import { GitHubService } from "@/services/github.js";
 import { GitLabService } from "@/services/gitlab.js";
 import { BitBucketService } from "@/services/bitbucket.js";
 import { IntegrationsService } from "@/services/integrations.js";
-import { getKV, getDB, type AppVariables } from "@/lib/context.js";
+import { getKVStore, getGitHubService, type AppVariables, getDbStore } from "@/lib/context.js";
 
 const integrations = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
@@ -26,27 +23,33 @@ integrations.post("/github/webhook", async (c) => {
     const body = JSON.parse(payload);
 
     if (!signature) {
-      return c.json(createErrorResponse({ 
-        message: "Missing signature", 
-        code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code 
-      }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
+      return c.json(
+        createErrorResponse({
+          message: "Missing signature",
+          code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code,
+        }),
+        ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status,
+      );
     }
 
     const isValid = await verifyGitHubWebhook({
       payload,
       signature,
-      secret: c.env.GITHUB_WEBHOOK_SECRET
+      secret: c.env.GITHUB_WEBHOOK_SECRET,
     });
 
     if (!isValid) {
-      return c.json(createErrorResponse({ 
-        message: "Invalid signature", 
-        code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code 
-      }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
+      return c.json(
+        createErrorResponse({
+          message: "Invalid signature",
+          code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code,
+        }),
+        ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status,
+      );
     }
 
-    const db = new DatabaseStore(getDB(c));
-    const kv = new KVStore(getKV(c));
+    const db = getDbStore(c);
+    const kv = getKVStore(c);
     const integrationsService = new IntegrationsService(c.env, db, kv);
 
     // Handle installation events
@@ -73,44 +76,50 @@ integrations.post("/github/webhook", async (c) => {
   } catch (error) {
     console.error("Webhook error:", error);
     const helpLink = "https://monitoring.dployr.io";
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code, 
-      helpLink 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
-// GitHub install 
+// GitHub install
 integrations.get("/github/install", requireClusterDeveloper, async (c) => {
   const clusterId = c.req.query("clusterId");
   const session = c.get("session")!;
-  
+
   if (!clusterId) {
-    return c.json(createErrorResponse({ 
-      message: "Missing clusterId query parameter", 
-      code: ERROR.REQUEST.BAD_REQUEST.code 
-    }), ERROR.REQUEST.BAD_REQUEST.status);
+    return c.json(
+      createErrorResponse({
+        message: "Missing clusterId query parameter",
+        code: ERROR.REQUEST.BAD_REQUEST.code,
+      }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
   }
 
-  const kv = new KVStore(getKV(c));
+  const kv = getKVStore(c);
   await kv.setPendingGitHubInstall(session.userId, clusterId);
-    
+
   return c.redirect("https://github.com/apps/dployr-io/installations/new", 302);
 });
 
 // GitHub callback
 integrations.get("/github/callback", async (c) => {
   const appUrl = c.env.APP_URL;
-  
+
   try {
     const installationId = c.req.query("installation_id");
     const sessionId = getCookie(c, "session");
-    const kv = new KVStore(getKV(c));
-        
+    const kv = getKVStore(c);
+
     let clusterId: string | null = null;
     let userId: string | null = null;
-    
+
     if (sessionId) {
       const session = await kv.getSession(sessionId);
       if (session) {
@@ -118,7 +127,7 @@ integrations.get("/github/callback", async (c) => {
         clusterId = await kv.getPendingGitHubInstall(userId);
       }
     }
-    
+
     if (!installationId) {
       // No installation_id - user cancelled or error
       if (clusterId) {
@@ -129,9 +138,9 @@ integrations.get("/github/callback", async (c) => {
     }
 
     // Fetch installation details
-    const githubService = new GitHubService(c.env);
+    const githubService = getGitHubService(c);
     const installation = await githubService.getInstallation(parseInt(installationId));
-    
+
     if (!installation) {
       console.error("Failed to fetch GitHub installation:", installationId);
       if (clusterId) {
@@ -144,23 +153,26 @@ integrations.get("/github/callback", async (c) => {
     if (!clusterId) {
       return c.redirect(`${appUrl}?github_installed=true&installation_id=${installationId}`, 302);
     }
-    
+
     if (userId) await kv.deletePendingGitHubInstall(userId);
-    
-    const db = new DatabaseStore(getDB(c));
+
+    const db = getDbStore(c);
     await db.clusters.installGitHubIntegration(clusterId, {
       loginId: installation.account.login,
       installUrl: installation.htmlUrl,
       installationId: installation.id,
     });
-    
+
     return c.redirect(`${appUrl}/clusters/${clusterId}/settings/integrations?success=github`, 302);
   } catch (error) {
     console.error("GitHub callback error:", error);
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -169,30 +181,36 @@ integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
   try {
     const { accessToken, enabled } = await c.req.json();
     const clusterId = c.req.query("clusterId");
-    
+
     if (!clusterId) {
-      return c.json(createErrorResponse({ 
-        message: "Missing clusterId query parameter", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
+      return c.json(
+        createErrorResponse({
+          message: "Missing clusterId query parameter",
+          code: ERROR.AUTH.BAD_SESSION.code,
+        }),
+        ERROR.AUTH.BAD_SESSION.status,
+      );
     }
 
     const gitlabService = new GitLabService(c.env);
 
     await gitlabService.remoteCount({ accessToken });
 
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     await db.clusters.update(clusterId, {
-      metadata: { gitLab: { accessToken, enabled } }
+      metadata: { gitLab: { accessToken, enabled } },
     });
 
     return c.json(createSuccessResponse({ enabled }, "GitLab integration configured"));
   } catch (error) {
     console.error("GitLab setup error:", error);
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -201,12 +219,15 @@ integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
   try {
     const { accessToken, enabled } = await c.req.json();
     const clusterId = c.req.query("clusterId");
-    
+
     if (!clusterId) {
-      return c.json(createErrorResponse({ 
-        message: "Missing clusterId query parameter", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
+      return c.json(
+        createErrorResponse({
+          message: "Missing clusterId query parameter",
+          code: ERROR.AUTH.BAD_SESSION.code,
+        }),
+        ERROR.AUTH.BAD_SESSION.status,
+      );
     }
 
     const bitbucketService = new BitBucketService(c.env);
@@ -214,18 +235,21 @@ integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
     // Test access
     await bitbucketService.remoteCount({ accessToken });
 
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     await db.clusters.update(clusterId, {
-      metadata: { bitBucket: { accessToken, enabled } }
+      metadata: { bitBucket: { accessToken, enabled } },
     });
 
     return c.json(createSuccessResponse({ enabled }, "BitBucket integration configured"));
   } catch (error) {
     console.error("BitBucket setup error:", error);
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -233,24 +257,30 @@ integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
 integrations.get("/list", requireClusterDeveloper, async (c) => {
   try {
     const clusterId = c.req.query("clusterId");
-    
+
     if (!clusterId) {
-      return c.json(createErrorResponse({ 
-        message: "Missing clusterId query parameter", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
+      return c.json(
+        createErrorResponse({
+          message: "Missing clusterId query parameter",
+          code: ERROR.AUTH.BAD_SESSION.code,
+        }),
+        ERROR.AUTH.BAD_SESSION.status,
+      );
     }
 
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const integrations = await db.clusters.listClusterIntegrations(clusterId);
 
     return c.json(createSuccessResponse(integrations, "Integrations retrieved"));
   } catch (error) {
     console.error("List integrations error:", error);
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -258,15 +288,18 @@ integrations.get("/list", requireClusterDeveloper, async (c) => {
 integrations.get("/remotes", requireClusterDeveloper, async (c) => {
   try {
     const clusterId = c.req.query("clusterId");
-    
+
     if (!clusterId) {
-      return c.json(createErrorResponse({ 
-        message: "Missing clusterId query parameter", 
-        code: ERROR.AUTH.BAD_SESSION.code 
-      }), ERROR.AUTH.BAD_SESSION.status);
+      return c.json(
+        createErrorResponse({
+          message: "Missing clusterId query parameter",
+          code: ERROR.AUTH.BAD_SESSION.code,
+        }),
+        ERROR.AUTH.BAD_SESSION.status,
+      );
     }
 
-    const db = new DatabaseStore(getDB(c));
+    const db = getDbStore(c);
     const clusterIntegrations = await db.clusters.listClusterIntegrations(clusterId);
     const integrationsService = new IntegrationsService(c.env);
     const remotes = await integrationsService.listAllRemotes(clusterIntegrations);
@@ -274,10 +307,13 @@ integrations.get("/remotes", requireClusterDeveloper, async (c) => {
     return c.json(createSuccessResponse({ remotes }, "Remotes retrieved"));
   } catch (error) {
     console.error("List remotes error:", error);
-    return c.json(createErrorResponse({ 
-      message: "Internal server error", 
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code 
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 

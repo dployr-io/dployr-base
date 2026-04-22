@@ -3,24 +3,20 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
 import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth.js";
 import z from "zod";
-import { KVStore } from "@/lib/db/store/kv.js";
-import { GitHubService } from "@/services/github.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
-import { NotificationService } from "@/services/notifications.js";
-import { getKV, getDB, runBackground, type AppVariables } from "@/lib/context.js";
+import { getKVStore, getNotificationService, getGitHubService, runBackground, type AppVariables, getDbStore } from "@/lib/context.js";
 
 const clusters = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 clusters.use("*", authMiddleware);
 
 const addUsersSchema = z.object({
-  users: z.array(z.email())
+  users: z.array(z.email()),
 });
 
 const removeUsersSchema = z.object({
-  users: z.array(z.ulid())
+  users: z.array(z.ulid()),
 });
 
 const transferOwnerSchema = z.object({
@@ -41,7 +37,7 @@ const updateRolesSchema = z.object({
  */
 clusters.get("/", async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
 
   const _clusters = await db.clusters.listUserClusters(session.userId);
 
@@ -53,7 +49,7 @@ clusters.get("/", async (c) => {
  */
 clusters.get("/users/invites", async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
 
   try {
     const clusterIds = await db.clusters.listPendingInvites(session.userId);
@@ -61,10 +57,13 @@ clusters.get("/users/invites", async (c) => {
     return c.json(createSuccessResponse({ invites: clusterIds }));
   } catch (error) {
     console.error("Get invites error:", error);
-    return c.json(createErrorResponse({
-      message: "Failed to get invites",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to get invites",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -73,35 +72,52 @@ clusters.get("/users/invites", async (c) => {
  */
 clusters.get("/:id/users/invites/accept", async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
   const clusterId = c.req.param("id");
 
   try {
     if (!clusterId) {
-      return c.json(createErrorResponse({
-        message: "clusterId is required",
-        code: ERROR.REQUEST.BAD_REQUEST.code
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "clusterId is required",
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     await db.clusters.acceptInvite(session.userId, clusterId);
 
+    const sessionId = await kv.getSessionIdByUserId(session.userId);
+    if (sessionId) {
+      const clusters = await db.clusters.listUserClusters(session.userId);
+      await kv.refreshSession({ sessionId, updates: { clusters } });
+    }
+
     // Trigger notifications
-    const notificationService = new NotificationService(c.env);
+    const notificationService = getNotificationService(c);
     runBackground(
-      notificationService.triggerEvent(EVENTS.CLUSTER.INVITE_ACCEPTED.code, {
-        clusterId,
-        userEmail: session.email,
-      }, db)
+      notificationService.triggerEvent(
+        EVENTS.CLUSTER.INVITE_ACCEPTED.code,
+        {
+          clusterId,
+          userEmail: session.email,
+        },
+        db,
+      ),
     );
 
     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
   } catch (error) {
     console.error("Accept invite error:", error);
-    return c.json(createErrorResponse({
-      message: "Failed to accept invite",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to accept invite",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -110,48 +126,55 @@ clusters.get("/:id/users/invites/accept", async (c) => {
  */
 clusters.get("/:id/users/invites/decline", async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
   const clusterId = c.req.param("id");
 
   try {
-
     if (!clusterId) {
-      return c.json(createErrorResponse({
-        message: "clusterId is required",
-        code: ERROR.REQUEST.BAD_REQUEST.code
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "clusterId is required",
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     await db.clusters.declineInvite(session.userId, clusterId);
 
+    const sessionId = await kv.getSessionIdByUserId(session.userId);
+    if (sessionId) {
+      const clusters = await db.clusters.listUserClusters(session.userId);
+      await kv.refreshSession({ sessionId, updates: { clusters } });
+    }
+
     return c.json(createSuccessResponse({ clusterId }, "Invite declined"));
   } catch (error) {
     console.error("Decline invite error:", error);
-    return c.json(createErrorResponse({
-      message: "Failed to decline invite",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to decline invite",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
 /**
- * List all users in a cluster 
+ * List all users in a cluster
  */
 clusters.get("/:id/users", async (c) => {
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
 
   const clusterId = c.req.param("id");
 
-  const { page, pageSize, offset } = parsePaginationParams(
-    c.req.query("page"),
-    c.req.query("pageSize")
-  );
+  const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
 
   const showInvites = c.req.queries("showInvites");
 
-  const { users, total } = showInvites ?
-    await db.clusters.listClusterInvites(clusterId, pageSize, offset) :
-    await db.clusters.listClusterUsers(clusterId, pageSize, offset);
+  const { users, total } = showInvites ? await db.clusters.listClusterInvites(clusterId, pageSize, offset) : await db.clusters.listClusterUsers(clusterId, pageSize, offset);
 
   const paginatedData = createPaginatedResponse(users, page, pageSize, total);
 
@@ -163,8 +186,8 @@ clusters.get("/:id/users", async (c) => {
  */
 clusters.post("/:id/users", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
-  const kv = new KVStore(getKV(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
   const id = c.req.param("id");
 
   try {
@@ -177,10 +200,13 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({
-        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
-        code: ERROR.REQUEST.BAD_REQUEST.code
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "Validation failed " + errors.map((e) => `${e.field}: ${e.message}`).join(", "),
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     await db.clusters.addUsers(id, users);
@@ -209,9 +235,9 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
       createErrorResponse({
         message: "Something went wrong while adding users",
         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-        helpLink
+        helpLink,
       }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
     );
   }
 });
@@ -221,8 +247,8 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
  */
 clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
-  const kv = new KVStore(getKV(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
 
   try {
     const data = await c.req.json();
@@ -234,15 +260,25 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({
-        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
-        code: ERROR.REQUEST.BAD_REQUEST.code
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "Validation failed " + errors.map((e) => `${e.field}: ${e.message}`).join(", "),
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     const { users } = validation.data;
 
     await db.clusters.removeUsers(id, users);
+
+    for (const userId of users) {
+      const sessionId = await kv.getSessionIdByUserId(userId);
+      if (sessionId) {
+        await kv.refreshSession({ sessionId, updates: { clusters: await db.clusters.listUserClusters(userId) } });
+      }
+    }
 
     await kv.logEvent({
       actor: {
@@ -262,24 +298,27 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
   } catch (error) {
     console.error("Update roles error:", error);
     const helpLink = "https://monitoring.dployr.io";
-    return c.json(createErrorResponse({
-      message: "Failed to remove users",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      helpLink
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to remove users",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
 /**
  * Update cluster roles
- * 
+ *
  * Updates cluster users and permissions. Note that cluster ownership
  * cannot be changed through this endpoint - use the /owner endpoint instead.
  */
 clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
   const session = c.get("session")!;
-  const db = new DatabaseStore(getDB(c));
-  const kv = new KVStore(getKV(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
 
   try {
     const data = await c.req.json();
@@ -291,16 +330,19 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({
-        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
-        code: ERROR.REQUEST.BAD_REQUEST.code
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "Validation failed " + errors.map((e) => `${e.field}: ${e.message}`).join(", "),
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     const { roles } = validation.data;
 
     const updates = {
-      owner: [], // leave empty 
+      owner: [], // leave empty
       admin: roles.admin || [],
       developer: roles.developer || [],
       viewer: roles.viewer || [],
@@ -309,10 +351,13 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
     const cluster = await db.clusters.update(id, { roles: updates });
 
     if (!cluster) {
-      return c.json(createErrorResponse({
-        message: "Cluster not found",
-        code: ERROR.RESOURCE.MISSING_RESOURCE.code
-      }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+      return c.json(
+        createErrorResponse({
+          message: "Cluster not found",
+          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+        }),
+        ERROR.RESOURCE.MISSING_RESOURCE.status,
+      );
     }
 
     await kv.logEvent({
@@ -333,11 +378,14 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
   } catch (error) {
     console.error("Update roles error:", error);
     const helpLink = "https://monitoring.dployr.io";
-    return c.json(createErrorResponse({
-      message: "Failed to update roles",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      helpLink
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to update roles",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -345,7 +393,8 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
  * Transfer ownership of cluster to a new user
  */
 clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
 
   try {
     const data = await c.req.json();
@@ -357,40 +406,60 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({
-        message: "Validation failed " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
-        code: ERROR.REQUEST.BAD_REQUEST.code
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "Validation failed " + errors.map((e) => `${e.field}: ${e.message}`).join(", "),
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     const { newOwnerId, previousOwnerRole } = validation.data;
 
+    const previousOwner = await db.clusters.getOwner(id);
+
     await db.clusters.transferOwnership(id, newOwnerId, previousOwnerRole);
+
+    if (previousOwner) {
+      const sessionId = await kv.getSessionIdByUserId(previousOwner);
+      if (sessionId) {
+        await kv.refreshSession({ sessionId, updates: { clusters: await db.clusters.listUserClusters(previousOwner) } });
+      }
+    }
+
+    const newSessionId = await kv.getSessionIdByUserId(newOwnerId);
+    if (newSessionId) {
+      await kv.refreshSession({ sessionId: newSessionId, updates: { clusters: await db.clusters.listUserClusters(newOwnerId) } });
+    }
 
     return c.json(createSuccessResponse({ newOwnerId, previousOwnerRole }, "Ownership transferred successfully"));
   } catch (error) {
     console.error("Transfer ownership error:", error);
     const helpLink = "https://monitoring.dployr.io";
-    return c.json(createErrorResponse({
-      message: "Failed to transfer ownership",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      helpLink
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to transfer ownership",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
 /**
- * List available connected integrations 
+ * List available connected integrations
  */
 clusters.get("/:id/integrations", async (c) => {
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
   const clusterId = c.req.param("id");
 
   try {
     let integrations = await db.clusters.listClusterIntegrations(clusterId);
-    const gitHub = new GitHubService(c.env)
-    const installationId = integrations.remote.gitHub?.installationId
-    let remoteCount = 0
+    const gitHub = getGitHubService(c);
+    const installationId = integrations.remote.gitHub?.installationId;
+    let remoteCount = 0;
 
     if (installationId) {
       remoteCount = await gitHub.remoteCount({ installationId });
@@ -405,30 +474,30 @@ clusters.get("/:id/integrations", async (c) => {
   } catch (error) {
     console.error("List remotes error:", error);
     const helpLink = "https://monitoring.dployr.io";
-    return c.json(createErrorResponse({
-      message: "Failed to list remotes",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      helpLink
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to list remotes",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
-/** 
- * List available GitHub repositories 
+/**
+ * List available GitHub repositories
  * This list reposistories that are accessible to the GitHub installation
  */
 clusters.get("/:id/remotes", async (c) => {
   const clusterId = c.req.param("id");
-  const db = new DatabaseStore(getDB(c));
+  const db = getDbStore(c);
 
   try {
-    const gitHub = new GitHubService(c.env);
+    const gitHub = getGitHubService(c);
     const integrations = await db.clusters.listClusterIntegrations(clusterId);
     const remotes = await gitHub.listRemotes({ installationId: integrations.remote.gitHub?.installationId });
-    const { page, pageSize, offset } = parsePaginationParams(
-      c.req.query("page"),
-      c.req.query("pageSize")
-    );
+    const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
 
     const total = remotes.length;
     const paginatedRemotes = remotes.slice(offset, offset + pageSize);
@@ -438,13 +507,15 @@ clusters.get("/:id/remotes", async (c) => {
   } catch (error) {
     console.error("List remotes error:", error);
     const helpLink = "https://monitoring.dployr.io";
-    return c.json(createErrorResponse({
-      message: "Failed to list remotes",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      helpLink
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to list remotes",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
-
 
 export default clusters;
