@@ -40,6 +40,10 @@ export type Bindings = {
   DIGITALOCEAN_CLIENT_SECRET?: string;
   GOOGLE_DNS_CLIENT_ID?: string;
   GOOGLE_DNS_CLIENT_SECRET?: string;
+
+  POLAR_ACCESS_TOKEN?: string;
+  POLAR_WEBHOOK_SECRET?: string;
+  POLAR_ENVIRONMENT?: string;
 };
 
 export type OAuthProvider = "google" | "github" | "microsoft" | "email";
@@ -59,6 +63,21 @@ export interface User {
   name?: string | undefined;
   provider: OAuthProvider;
   metadata?: Record<string, any> | undefined;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type SubscriptionPlan = "hobby" | "indie" | "pro";
+export type SubscriptionStatus = "active" | "canceled" | "past_due";
+
+export interface ClusterSubscription {
+  clusterId: string;
+  plan: SubscriptionPlan;
+  polarCustomerId: string | null;
+  polarSubscriptionId: string | null;
+  status: SubscriptionStatus;
+  canceledAt: number | null;
+  periodEnd: number | null;
   createdAt: number;
   updatedAt: number;
 }

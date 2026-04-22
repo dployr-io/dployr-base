@@ -21,4 +21,5 @@ export const KV_KEYS = {
   SERVICES: (instanceId: string) => `services:${instanceId}`,
   PROCESS_SNAPSHOT: (instanceId: string, timestamp: number) => `process:${instanceId}:snapshot:${timestamp}`,
   ADMIN_JWT: (sessionId: string) => `admin_jwt:${sessionId}`,
+  BILLING_NOTIFICATION: (clusterId: string) => `billing_notification:${clusterId}`,
 } as const;

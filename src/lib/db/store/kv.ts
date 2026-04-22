@@ -4,7 +4,7 @@
 import { ActorType, Session, User } from "@/types/index.js";
 import { ulid } from "ulid";
 import { CryptoKey, importPKCS8, SignJWT } from "jose";
-import { ADMIN_JWT_TTL, ADMIN_JWT_REFRESH_THRESHOLD } from "@/lib/constants/index.js";
+import { ADMIN_JWT_TTL, ADMIN_JWT_REFRESH_THRESHOLD, BILLING_NOTIFICATION_TTL } from "@/lib/constants/index.js";
 import { generateKeyPair } from "@/lib/crypto/keystore.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv-keys.js";
@@ -214,6 +214,17 @@ export class KVStore {
   async createWorkflowFailedEvent(id: string, data: Record<string, unknown>): Promise<void> {
     await this.kv.put(KV_KEYS.WORKFLOW(id), JSON.stringify(data), {
       ttl: FAILED_WORKFLOW_EVENT_TTL,
+    });
+  }
+
+  // Billing
+  async getbillingNotification({ clusterId }: { clusterId: string }): Promise<String | null> {
+    return await this.kv.get(KV_KEYS.BILLING_NOTIFICATION(clusterId));
+  }
+
+  async setReminderNotification({ clusterId }: { clusterId: string }): Promise<void> {
+    await this.kv.put(KV_KEYS.BILLING_NOTIFICATION(clusterId), "1", {
+      ttl: BILLING_NOTIFICATION_TTL,
     });
   }
 

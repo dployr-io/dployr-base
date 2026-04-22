@@ -12,6 +12,13 @@ export const EVENTS = {
     USER_ROLE_CHANGED: { code: "cluster.user_role_changed", message: "User role changed" },
     OWNERSHIP_TRANSFERRED: { code: "cluster.ownership_transferred", message: "Cluster ownership transferred" },
   },
+  BILLING: {
+    PAYMENT_SUCCESSFUL: { code: "billing.payment_successful", message: "Payment successful" },
+    PAYMENT_FAILED: { code: "billing.payment_failed", message: "Payment failed" },
+    SUBSCRIPTION_RESUMED: { code: "billing.subscription_canceled", message: "Your subscription has been resumed" },
+    SUBSCRIPTION_CANCELLED: { code: "billing.subscription_canceled", message: "Your subscription has been cancelled" },
+    SUBSCRIPTION_EXPIRED: { code: "billing.subscription_expired", message: "Your subscription has expired" },
+  },
   INSTANCE: {
     CREATED: { code: "instance.created", message: "Instance created successfully" },
     MODIFIED: { code: "instance.modified", message: "Instance modified successfully" },

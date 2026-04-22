@@ -93,6 +93,13 @@ const ConfigSchema = z.object({
       allowed_origins: z.string().optional(),
     })
     .optional(),
+  billing: z
+    .object({
+      polar_access_token: z.string().optional(),
+      polar_webhook_secret: z.string().optional(),
+      environment: z.enum(["sandbox", "production"]).default("sandbox"),
+    })
+    .optional(),
   proxy: z
     .object({
       enabled: z.boolean().default(false),
@@ -202,6 +209,12 @@ function loadConfigFromEnv(): Config {
     },
     cors: {
       allowed_origins: process.env.CORS_ALLOWED_ORIGINS,
+    },
+    billing: {
+      polar_access_token: process.env.POLAR_ACCESS_TOKEN,
+      polar_webhook_secret: process.env.POLAR_WEBHOOK_SECRET,
+      environment: (process.env.POLAR_ENVIRONMENT as "sandbox" | "production") || 
+        (process.env.NODE_ENV === "production" ? "production" : "sandbox"),
     },
     proxy: {
       enabled: process.env.PROXY_ENABLED === "true",

@@ -9,6 +9,7 @@ import { BootstrapTokenStore } from "./bootstrap_tokens.js";
 import { DomainStore } from "./domains.js";
 import { ServiceStore } from "./services.js";
 import { KVStore } from "./kv.js";
+import { SubscriptionStore } from "./subscriptions.js";
 
 export class DatabaseStore {
     public users: UserStore;
@@ -17,6 +18,7 @@ export class DatabaseStore {
     public bootstrapTokens: BootstrapTokenStore;
     public domains: DomainStore;
     public services: ServiceStore;
+    public subscriptions: SubscriptionStore;
 
     constructor(db: PostgresAdapter, kv?: KVStore) {
         this.users = new UserStore(db);
@@ -25,9 +27,10 @@ export class DatabaseStore {
         this.bootstrapTokens = new BootstrapTokenStore(db);
         this.domains = new DomainStore(db);
         this.services = new ServiceStore(db, kv);
+        this.subscriptions = new SubscriptionStore(db);
     }
 }
 
 export const PostgresStore = DatabaseStore;
-export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore, DomainStore, ServiceStore };
+export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore, DomainStore, ServiceStore, SubscriptionStore };
 export * from "./base.js";

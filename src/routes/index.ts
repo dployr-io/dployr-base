@@ -15,6 +15,7 @@ import domains from "./domains.js";
 import node from "./node.js";
 import notifications from "./notifications.js";
 import proxy from "./proxy.js";
+import billing from "./billing.js";
 import { getWS } from "@/lib/context.js";
 
 const VERSION = process.env.BASE_VERSION || "unknown";
@@ -36,6 +37,7 @@ export function registerRoutes(app: Hono<{ Bindings: Bindings; Variables: Variab
   app.route("/v1/domains", domains);
   app.route("/v1/node", node);
   app.route("/v1/proxy", proxy);
+  app.route("/v1/billing", billing);
 
   // Health check endpoint
   app.get("/v1/health", (c) => {

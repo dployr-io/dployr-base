@@ -9,8 +9,9 @@ export { EVENTS };
 type AuthEvent = (typeof EVENTS)["AUTH"][keyof (typeof EVENTS)["AUTH"]]["code"];
 type ClusterEvent = (typeof EVENTS)["CLUSTER"][keyof (typeof EVENTS)["CLUSTER"]]["code"];
 type InstanceEvent = (typeof EVENTS)["INSTANCE"][keyof (typeof EVENTS)["INSTANCE"]]["code"];
+type BillingEvent = (typeof EVENTS)["BILLING"][keyof (typeof EVENTS)["BILLING"]]["code"];
 
-export type NotificationEvent = AuthEvent | ClusterEvent | InstanceEvent;
+export type NotificationEvent = AuthEvent | ClusterEvent | InstanceEvent | BillingEvent;
 
 export type EventSubscriptions = Record<NotificationEvent, boolean>;
 
@@ -18,7 +19,7 @@ export interface EventMetadata {
   title: string;
   description: (data: Record<string, any>) => string;
   color?: number;
-  category: "instance" | "cluster" | "user" | "auth";
+  category: "instance" | "cluster" | "user" | "auth" | "billing";
 }
 
 export type EventMetadataMap = Record<NotificationEvent, EventMetadata>;

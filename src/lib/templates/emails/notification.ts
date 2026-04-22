@@ -31,7 +31,19 @@ export const notificationTemplate = (event: string, data: Record<string, any>) =
   if (data.ipAddress) {
     detailItems.push(`<p><strong>IP Address:</strong> ${data.ipAddress}</p>`);
   }
+  if (data.plan) {
+    detailItems.push(`<p><strong>Plan:</strong> ${data.plan}</p>`);
+  }
+  if (data.periodEnd) {
+    detailItems.push(`<p><strong>Access Until:</strong> ${new Date(data.periodEnd).toLocaleDateString()}</p>`);
+  }
   detailItems.push(`<p><strong>Time:</strong> ${timestamp}</p>`);
+
+  const ctaButton = data.actionUrl
+    ? `<a href="${data.actionUrl}" style="display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; margin: 16px 0;">${data.actionLabel || "Update Payment Method"}</a>`
+    : data.clusterId
+    ? `<a href="https://app.dployr.io/clusters/${data.clusterId}/settings/billing" style="display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; margin: 16px 0;">Manage Subscription</a>`
+    : `<a href="https://app.dployr.io" style="display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; margin: 16px 0;">View Dashboard</a>`;
 
   return `
 <!DOCTYPE html>
@@ -44,6 +56,8 @@ export const notificationTemplate = (event: string, data: Record<string, any>) =
   <h2>${title}</h2>
   
   <p>${message.replace(/\*\*/g, "")}</p>
+
+  ${ctaButton}
 
   <hr />
 

@@ -27,6 +27,7 @@ export const DEDUP_TTL = 60 * 60; // 1 hour
 export const RELEASE_CACHE_TTL = 60 * 10; // 10 minutes
 export const PENDING_GITHUB_INSTALL_TTL = 60 * 10; // 10 minutes
 export const ADMIN_JWT_TTL = 60 * 30; // 30 minutes
+export const BILLING_NOTIFICATION_TTL = 60 * 60 * 24; // 24 hours
 
 // JWT
 export const ADMIN_JWT_REFRESH_THRESHOLD = 60 * 29.5; // 29.5 minutes

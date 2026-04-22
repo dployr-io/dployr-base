@@ -75,6 +75,7 @@ export async function bootstrapMiddleware(
   const integrationsConfig = adapters!.config?.integrations;
   const authConfig = adapters!.config?.auth;
   const adminConfig = adapters!.config?.admin;
+  const billingConfig = adapters!.config?.billing;
 
    c.env = {
      BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
@@ -96,8 +97,11 @@ export async function bootstrapMiddleware(
      ALLOWED_DPLOYR_ADMINISTRATORS: Array.isArray(adminConfig?.allowed_ips)
        ? adminConfig.allowed_ips.join(",")
        : (adminConfig?.allowed_ips || process.env.ALLOWED_DPLOYR_ADMINISTRATORS || ""),
-     ADMIN_TOTP_SECRET: adminConfig?.totp_secret || process.env.ADMIN_TOTP_SECRET || "",
-   } as unknown as Bindings;
+ADMIN_TOTP_SECRET: adminConfig?.totp_secret || process.env.ADMIN_TOTP_SECRET || "",
+      POLAR_ACCESS_TOKEN: billingConfig?.polar_access_token || process.env.POLAR_ACCESS_TOKEN || "",
+      POLAR_WEBHOOK_SECRET: billingConfig?.polar_webhook_secret || process.env.POLAR_WEBHOOK_SECRET || "",
+      POLAR_ENVIRONMENT: billingConfig?.environment || process.env.POLAR_ENVIRONMENT || (process.env.NODE_ENV === "production" ? "production" : "sandbox"),
+    } as unknown as Bindings;
 
   await next();
 }

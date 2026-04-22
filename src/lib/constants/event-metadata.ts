@@ -79,4 +79,30 @@ export const EVENT_METADATA: EventMetadataMap = {
     color: 0xe67e22,
     category: "cluster",
   },
+
+  // Billing envents
+  [EVENTS.BILLING.PAYMENT_SUCCESSFUL.code]: {
+    title: "💳 Payment Successful",
+    description: (data: any) => `Your **${data.plan}** subscription payment was processed successfully.`,
+    color: 0x00ff00,
+    category: "billing",
+  },
+  [EVENTS.BILLING.PAYMENT_FAILED.code]: {
+    title: "💳 Payment Failed",
+    description: (data: any) => `Your **${data.plan}** subscription payment failed. Please update your payment method within 7 days to avoid service interruption.`,
+    color: 0xff0000,
+    category: "billing",
+  },
+  [EVENTS.BILLING.SUBSCRIPTION_CANCELLED.code]: {
+    title: "⚠️ Subscription Canceled",
+    description: (data: any) => `Your **${data.plan}** subscription has been canceled. You'll have access until **${new Date(data.periodEnd).toLocaleDateString()}**.`,
+    color: 0xffa500,
+    category: "billing",
+  },
+  [EVENTS.BILLING.SUBSCRIPTION_EXPIRED.code]: {
+    title: "❌ Subscription Expired",
+    description: (data: any) => `Your subscription has expired. You've been moved to the free **hobby** plan.`,
+    color: 0xff0000,
+    category: "billing",
+  },
 };
