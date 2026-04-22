@@ -49,12 +49,17 @@ export class InstanceService {
   }): Promise<{ instance: Instance; token: string }> {
     const db = getDbStore(c);
     const kv = getKVStore(c);
+    const nonce = crypto.randomUUID();
 
-    const instance = await db.instances.create(clusterId, {
-      tag,
-      address,
-      metadata,
-    } as any);
+    const instance = await db.instances.create({
+      clusterId,
+      nonce,
+      data: {
+        tag,
+        address,
+        metadata,
+      } as any,
+    });
 
     await kv.logEvent({
       actor: {

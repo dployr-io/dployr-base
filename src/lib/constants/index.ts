@@ -7,6 +7,8 @@ export { ERROR };
 import { EVENTS, DEFAULT_EVENTS } from "./events.js";
 export { EVENTS, DEFAULT_EVENTS };
 
+export * from "./db.js";
+
 export const WORKFLOW_NAME = "dployr-bootstrap";
 
 // Versioning

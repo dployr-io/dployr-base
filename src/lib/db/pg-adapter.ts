@@ -23,7 +23,7 @@ export class PostgresAdapter {
    * Prepare a SQL statement for execution
    */
   prepare(sql: string): PreparedStatement {
-    return new PreparedStatement(this.pool, sql);
+    return new (PreparedStatement as any)(this.pool, sql);
   }
 
   /**
@@ -51,6 +51,24 @@ export class PostgresAdapter {
   }
 
   /**
+   * Execute a function within a transaction
+   */
+  async withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect()
+    try {
+      await client.query("BEGIN")
+      const result = await fn(client)
+      await client.query("COMMIT")
+      return result
+    } catch (error) {
+      await client.query("ROLLBACK")
+      throw error
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
    * Close the connection pool
    */
   async close(): Promise<void> {
@@ -64,19 +82,19 @@ export class PostgresAdapter {
 export class PreparedStatement {
   private pool: Pool;
   private sql: string;
-  private params: any[] = [];
+  params: any[] = [];
 
-  constructor(pool: Pool, sql: string) {
+  private constructor(pool: Pool, sql: string, params: any[] = []) {
     this.pool = pool;
     this.sql = sql;
+    this.params = params;
   }
 
   /**
    * Bind parameters to the statement
    */
-  bind(...params: any[]): this {
-    this.params = params;
-    return this;
+  bind(...params: any[]): PreparedStatement {
+    return new PreparedStatement(this.pool, this.sql, params);
   }
 
   /**

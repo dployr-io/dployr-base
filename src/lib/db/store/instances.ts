@@ -14,49 +14,44 @@ export class InstanceStore extends BaseStore {
     this.kv = kv;
   }
 
-  async create(clusterId: string, data: Omit<Instance, "id" | "createdAt" | "updatedAt">): Promise<Instance> {
-    const id = this.generateId();
-    const now = this.now();
+  async create({ clusterId, data, nonce }: { clusterId: string; data: Omit<Instance, "id" | "createdAt" | "updatedAt">; nonce: string }): Promise<Instance> {
+    return this.db.withTransaction(async (client) => {
+      const id = this.generateId();
+      const now = this.now();
 
-    const stmt = this.db.prepare(`
-            INSERT INTO instances (id, cluster_id, address, tag, metadata, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
-        `);
+      const result = await client.query(
+        `INSERT INTO instances (id, cluster_id, address, tag, metadata, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+         RETURNING id, cluster_id, address, tag, metadata, created_at, updated_at`,
+        [id, clusterId, data.address || null, data.tag, data.metadata || {}, now, now],
+      );
 
-    try {
-      await stmt.bind(id, clusterId, data.address || null, data.tag, data.metadata || {}, now, now).run();
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("duplicate key value")) {
-        if (error.message.includes("instances_address")) {
-          throw new InstanceConflictError("address");
-        }
-        if (error.message.includes("instances_tag")) {
-          throw new InstanceConflictError("tag");
-        }
-        throw new InstanceConflictError("instance");
+      const row = result.rows[0];
+
+      await client.query(`INSERT INTO bootstrap_tokens (instance_id, nonce) VALUES ($1, $2)`, [id, nonce]);
+
+      const instance = {
+        id: row.id,
+        address: row.address,
+        tag: row.tag,
+        metadata: row.metadata || {},
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+
+      // Cache the newly created instance
+      if (this.kv) {
+        await this.kv
+          .cacheInstance({
+            ...instance,
+            clusterId,
+            metadata: instance.metadata || {},
+          })
+          .catch(() => {});
       }
-      throw error;
-    }
 
-    const instance = {
-      id,
-      ...data,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    // Cache the newly created instance
-    if (this.kv) {
-      await this.kv
-        .cacheInstance({
-          ...instance,
-          clusterId,
-          metadata: instance.metadata || {},
-        })
-        .catch(() => {});
-    }
-
-    return instance;
+      return instance;
+    });
   }
 
   async get(id: string): Promise<(Instance & { clusterId: string }) | null> {

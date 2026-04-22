@@ -399,18 +399,23 @@ export class ClusterStore extends BaseStore {
    * await store.clusters.transferOwnership("cluster123", "newOwner456", null);
    * ```
    */
-  async transferOwnership(clusterId: string, newOwnerId: string, previousOwnerRole: Exclude<UserRole, "owner"> = "admin"): Promise<void> {
-    // Demote the previous owner
-    await this.db.prepare(`UPDATE user_clusters SET role = $1 WHERE cluster_id = $2 AND user_id != $3 AND role = 'owner'`).bind(previousOwnerRole, clusterId, newOwnerId).run();
+  async transferOwnership(
+    clusterId: string,
+    newOwnerId: string,
+    previousOwnerRole: Exclude<UserRole, "owner"> = "admin"
+  ): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(
+        `UPDATE user_clusters 
+         SET role = $1 
+         WHERE cluster_id = $2 AND user_id != $3 AND role = 'owner'`
+      ).bind(previousOwnerRole, clusterId, newOwnerId),
 
-    // Promote the new owner
-    await this.db
-      .prepare(
+      this.db.prepare(
         `INSERT INTO user_clusters (user_id, cluster_id, role) VALUES ($1, $2, 'owner')
-         ON CONFLICT (user_id, cluster_id) DO UPDATE SET role = 'owner'`,
-      )
-      .bind(newOwnerId, clusterId)
-      .run();
+         ON CONFLICT (user_id, cluster_id) DO UPDATE SET role = 'owner'`
+      ).bind(newOwnerId, clusterId),
+    ])
   }
 
   /**

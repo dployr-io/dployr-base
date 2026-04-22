@@ -3,6 +3,7 @@
 
 import { ulid } from "ulid";
 import type { PostgresAdapter } from "@/lib/db/pg-adapter.js";
+import { ALLOWED_TABLES, TABLE_ID_COLUMNS, type AllowedTable, type AllowedJsonField } from "@/lib/constants/index.js";
 
 /**
  * Base class for database stores providing common utilities and patterns.
@@ -28,6 +29,12 @@ import type { PostgresAdapter } from "@/lib/db/pg-adapter.js";
  * }
  * ```
  */
+function assertAllowedTable(table: string): asserts table is AllowedTable {
+  if (!(ALLOWED_TABLES as readonly string[]).includes(table)) {
+    throw new Error(`Disallowed table reference: ${table}`)
+  }
+}
+
 export abstract class BaseStore {
     /**
      * Creates a new BaseStore instance.
@@ -75,11 +82,13 @@ export abstract class BaseStore {
      * ```
      */
     protected async updateEntity(
-        table: string,
+        table: AllowedTable,
         id: string,
         updates: Record<string, any>,
-        idColumn: string = "id"
     ): Promise<void> {
+        assertAllowedTable(table)
+        const idColumn = TABLE_ID_COLUMNS[table]
+
         const fields: string[] = [];
         const values: any[] = [];
         let paramIndex = 1;
@@ -123,12 +132,14 @@ export abstract class BaseStore {
      * ```
      */
     protected async mergeJsonField(
-        table: string,
+        table: AllowedTable,
         id: string,
-        field: string,
+        field: AllowedJsonField,
         updates: any,
-        idColumn: string = "id"
     ): Promise<void> {
+        assertAllowedTable(table)
+        const idColumn = TABLE_ID_COLUMNS[table]
+
         const stmt = this.db.prepare(`
             UPDATE ${table} 
             SET ${field} = COALESCE(${field}, '{}'::jsonb) || $1::jsonb,

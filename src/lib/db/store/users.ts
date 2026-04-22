@@ -12,74 +12,51 @@ export class UserStore extends BaseStore {
         const now = this.now();
         const metadataJson = user.metadata || {};
 
-        const statements = [];
+        return this.db.withTransaction(async (client) => {
+            const userResult = await client.query(
+                `INSERT INTO users (id, email, name, picture, provider, metadata, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+                 ON CONFLICT(email) DO UPDATE SET
+                   name = COALESCE(excluded.name, users.name),
+                   picture = COALESCE(excluded.picture, users.picture),
+                   provider = excluded.provider,
+                   metadata = COALESCE(users.metadata, '{}'::jsonb) || excluded.metadata::jsonb,
+                   updated_at = excluded.updated_at
+                 RETURNING id, email, name, picture, provider, metadata, created_at, updated_at`,
+                [id, user.email, user.name || null, user.picture || null, user.provider, metadataJson, now, now]
+            )
 
-        // Insert or update user
-        const userStatement = this.db.prepare(`
-            INSERT INTO users (id, email, name, picture, provider, metadata, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
-            ON CONFLICT(email) DO UPDATE SET
-                name = COALESCE(excluded.name, users.name),
-                picture = COALESCE(excluded.picture, users.picture),
-                provider = excluded.provider,
-                metadata = COALESCE(users.metadata, '{}'::jsonb) || excluded.metadata::jsonb,
-                updated_at = excluded.updated_at
-            RETURNING id, email, name, picture, provider, metadata, created_at, updated_at
-        `).bind(
-            id,
-            user.email,
-            user.name || null,
-            user.picture || null,
-            user.provider,
-            metadataJson,
-            now,
-            now
-        );
-        
-        // Sync metadata to admin clusters
-        if (user.metadata && Object.keys(user.metadata).length > 0) {
-            statements.push(
-                this.db.prepare(`
-                    UPDATE clusters
-                    SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
-                        updated_at = $2
-                    WHERE id IN (
-                        SELECT uc.cluster_id 
-                        FROM user_clusters uc
-                        JOIN users u ON uc.user_id = u.id
-                        WHERE u.email = $3 AND uc.role IN ('owner', 'admin')
-                    )
-                `).bind(user.metadata, now, user.email)
-            );
-        }
+            const savedUser = userResult.rows[0]
+            if (!savedUser) {
+                return null
+            }
 
-        const savedUser = await userStatement.first<{
-            id: string;
-            email: string;
-            name: string | null;
-            picture: string | null;
-            provider: string;
-            metadata: Record<string, unknown>;
-            created_at: number;
-            updated_at: number;
-        }>();
+            if (user.metadata && Object.keys(user.metadata).length > 0) {
+                await client.query(
+                    `UPDATE clusters
+                     SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
+                         updated_at = $2
+                     WHERE id IN (
+                       SELECT uc.cluster_id
+                       FROM user_clusters uc
+                       JOIN users u ON uc.user_id = u.id
+                       WHERE u.email = $3 AND uc.role IN ('owner', 'admin')
+                     )`,
+                    [user.metadata, now, user.email]
+                )
+            }
 
-        if (statements.length > 0) {
-            await this.db.batch(statements);
-        }
-
-        if (!savedUser) return null;
-
-        return {
-            id: savedUser.id,
-            email: savedUser.email,
-            name: savedUser.name || "",
-            picture: savedUser.picture || "",
-            provider: savedUser.provider as OAuthProvider,
-            metadata: savedUser.metadata,
-            createdAt: savedUser.created_at,
-            updatedAt: savedUser.updated_at,
-        };
+            return {
+                id: savedUser.id,
+                email: savedUser.email,
+                name: savedUser.name || "",
+                picture: savedUser.picture || "",
+                provider: savedUser.provider as OAuthProvider,
+                metadata: savedUser.metadata,
+                createdAt: savedUser.created_at,
+                updatedAt: savedUser.updated_at,
+            }
+        })
     }
 
     async get(email: string): Promise<User | null> {
