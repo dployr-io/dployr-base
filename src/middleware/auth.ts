@@ -334,9 +334,9 @@ export async function requireDployrAdministrator(c: Context<{ Bindings: Bindings
     return c.json(
       {
         message: "Forbidden",
-        code: ERROR.PERMISSION.RESTRICTED_ENDPOINT.code,
+        code: ERROR.PERMISSION.FORBIDDEN.code,
       },
-      ERROR.PERMISSION.RESTRICTED_ENDPOINT.status,
+      ERROR.PERMISSION.FORBIDDEN.status,
     );
   }
 
@@ -361,10 +361,10 @@ export async function requireDployrAdministratorIPAddress(c: Context<{ Bindings:
   if (allowed.length === 0) {
     return c.json(
       {
-        message: "Access configuration error",
-        code: ERROR.ADMIN.DPLOYR_ADMINSTRATOR_IP_ADDRESS_REQUIRED.code,
+        message: "Access denied",
+        code: ERROR.PERMISSION.FORBIDDEN.code,
       },
-      ERROR.ADMIN.DPLOYR_ADMINSTRATOR_IP_ADDRESS_REQUIRED.status,
+      ERROR.PERMISSION.FORBIDDEN.status,
     );
   }
 
@@ -374,9 +374,9 @@ export async function requireDployrAdministratorIPAddress(c: Context<{ Bindings:
     return c.json(
       {
         message: "Missing client IP",
-        code: ERROR.PERMISSION.RESTRICTED_ENDPOINT.code,
+        code: ERROR.PERMISSION.FORBIDDEN.code,
       },
-      ERROR.PERMISSION.RESTRICTED_ENDPOINT.status,
+      ERROR.PERMISSION.FORBIDDEN.status,
     );
   }
 
@@ -384,9 +384,9 @@ export async function requireDployrAdministratorIPAddress(c: Context<{ Bindings:
     return c.json(
       {
         message: "Access denied",
-        code: ERROR.PERMISSION.RESTRICTED_ENDPOINT.code,
+        code: ERROR.PERMISSION.FORBIDDEN.code,
       },
-      ERROR.PERMISSION.RESTRICTED_ENDPOINT.status,
+      ERROR.PERMISSION.FORBIDDEN.status,
     );
   }
 

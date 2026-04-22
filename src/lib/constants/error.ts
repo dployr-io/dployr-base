@@ -18,7 +18,7 @@ export const ERROR = {
     BAD_OAUTH_STATE: { code: "auth.bad_oauth_state", status: 401, message: "Invalid OAuth state" },
   },
   PERMISSION: {
-    RESTRICTED_ENDPOINT: { code: "permission.restricted_endpoint", status: 403, message: "Denied access to restriced endpoint!" },
+    FORBIDDEN: { code: "permission.forbidden", status: 403, message: "Forbidden" },
     OWNER_ROLE_REQUIRED: { code: "permission.owner_role_required", status: 403, message: "Owner role required" },
     ADMIN_ROLE_REQUIRED: { code: "permission.admin_role_required", status: 403, message: "Admin role required" },
     DEVELOPER_ROLE_REQUIRED: { code: "permission.developer_role_required", status: 403, message: "Developer role required" },
@@ -36,8 +36,5 @@ export const ERROR = {
     BAD_WEBHOOK_SIGNATURE: { code: "runtime.bad_webhook_signature", status: 500, message: "Invalid webhook signature" },
     INTERNAL_SERVER_ERROR: { code: "runtime.internal_server_error", status: 500, message: "Internal server error" },
     INSTANCE_NOT_CONNECTED: { code: "runtime.node_not_connected", status: 503, message: "Instance is not connected or unresponsive to instance" },
-  },
-  ADMIN: {
-    DPLOYR_ADMINSTRATOR_IP_ADDRESS_REQUIRED: { code: "admin.dployr_adminstrator_ip_address_required", status: 501, message: "Whitelisted adminstrator ip addressess has not been configured" },
   },
 } as const;
