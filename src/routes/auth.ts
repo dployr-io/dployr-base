@@ -120,7 +120,7 @@ auth.get("/callback/:provider", async (c) => {
       );
     }
 
-    await db.clusters.save(savedUser.id);
+    await db.clusters.upsert(savedUser.id);
 
     const sessionId = crypto.randomUUID();
     const clusters = await db.clusters.listUserClusters(savedUser.id);
@@ -284,7 +284,7 @@ auth.post("/login/email/verify", async (c) => {
       );
     }
 
-    await db.clusters.save(user.id);
+    await db.clusters.upsert(user.id);
 
     const sessionId = crypto.randomUUID();
     const clusters = await db.clusters.listUserClusters(user.id);
