@@ -64,3 +64,8 @@ strict_rate_limit = 10
 
 [cors]
 allowed_origins = "*.dployr.io"
+
+[billing]
+polar_access_token = "polar_oat_yM..."
+polar_webhook_secret = "polar_whs_ov..."
+polar_environment = "sandbox"
