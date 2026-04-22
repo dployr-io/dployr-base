@@ -51,7 +51,7 @@ export class PolarService implements BillingProvider {
 
     if (!created.ok) {
       const err = await created.text();
-      throw new Error(`Polar: failed to create customer — ${err}`);
+      throw new Error(`[PolarService] Failed to create customer — ${err}`);
     }
 
     return created.json() as Promise<{ id: string; email: string }>;
@@ -64,10 +64,10 @@ export class PolarService implements BillingProvider {
     
     const planDef = PLANS.find((p) => p.id === plan);
     if (!planDef) {
-      throw new Error(`Unknown plan: ${plan}`);
+      throw new Error(`[PolarService] Unknown plan: ${plan}`);
     }
     
-    const baseSuccessUrl = successUrl || `${this.env.APP_URL}/clusters/${clusterId}/settings/billing?success=1`;
+    const baseSuccessUrl = successUrl || `${this.env.APP_URL}/clusters`;
     const resolvedSuccessUrl = new URL(baseSuccessUrl);
     resolvedSuccessUrl.searchParams.set("clusterId", clusterId);
 
@@ -106,7 +106,7 @@ export class PolarService implements BillingProvider {
 
     if (!res.ok) {
       const err = await res.text();
-      throw new Error(`Polar: failed to create checkout session — ${err}`);
+      throw new Error(`[PolarService] Failed to create checkout session — ${err}`);
     }
 
     const data = await res.json() as { id: string; url: string };
@@ -154,11 +154,11 @@ export class PolarService implements BillingProvider {
     try {
       const event = JSON.parse(rawBody);
       if (!event.type || !event.data) {
-        throw new Error("Invalid webhook event format");
+        throw new Error("[PolarService] Invalid webhook event format");
       }
       return event as RawWebhookEvent;
     } catch {
-      throw new Error("Failed to parse webhook event");
+      throw new Error("[PolarService] Failed to parse webhook event");
     }
   }
 
