@@ -10,6 +10,13 @@ import { requireClusterDeveloper } from "@/middleware/auth.js";
 import { GitLabService } from "@/services/gitlab.js";
 import { BitBucketService } from "@/services/bitbucket.js";
 import { IntegrationsService } from "@/services/integrations.js";
+import {
+  GitLabAuthenticationError,
+  GitLabPermissionError,
+  GitLabNotFoundError,
+  GitLabRateLimitError,
+  GitLabAPIError,
+} from "@/lib/errors/errors.js";
 import { getKVStore, getGitHubService, type AppVariables, getDbStore } from "@/lib/context.js";
 
 const integrations = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
@@ -74,7 +81,7 @@ integrations.post("/github/webhook", async (c) => {
 
     return c.json(createSuccessResponse({}, "Webhook processed"));
   } catch (error) {
-    console.error("Webhook error:", error);
+    console.error("[Integrations] Webhook error:", error);
     const helpLink = "https://monitoring.dployr.io";
     return c.json(
       createErrorResponse({
@@ -142,7 +149,7 @@ integrations.get("/github/callback", async (c) => {
     const installation = await githubService.getInstallation(parseInt(installationId));
 
     if (!installation) {
-      console.error("Failed to fetch GitHub installation:", installationId);
+      console.error("[Integrations] Failed to fetch GitHub installation:", installationId);
       if (clusterId) {
         if (userId) await kv.deletePendingGitHubInstall(userId);
         return c.redirect(`${appUrl}/clusters/${clusterId}/settings/integrations?error=installation_not_found`, 302);
@@ -165,7 +172,7 @@ integrations.get("/github/callback", async (c) => {
 
     return c.redirect(`${appUrl}/clusters/${clusterId}/settings/integrations?success=github`, 302);
   } catch (error) {
-    console.error("GitHub callback error:", error);
+    console.error("[Integrations] GitHub callback error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -202,16 +209,67 @@ integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
     });
 
     return c.json(createSuccessResponse({ enabled }, "GitLab integration configured"));
-  } catch (error) {
-    console.error("GitLab setup error:", error);
-    return c.json(
-      createErrorResponse({
-        message: "Internal server error",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
-  }
+   } catch (error) {
+     console.error("[Integrations] GitLab setup error:", error);
+
+     if (error instanceof GitLabAuthenticationError) {
+       return c.json(
+         createErrorResponse({
+           message: error.message,
+           code: ERROR.AUTH.BAD_TOKEN.code,
+         }),
+         ERROR.AUTH.BAD_TOKEN.status,
+       );
+     }
+
+     if (error instanceof GitLabPermissionError) {
+       return c.json(
+         createErrorResponse({
+           message: error.message,
+           code: ERROR.PERMISSION.FORBIDDEN.code,
+         }),
+         ERROR.PERMISSION.FORBIDDEN.status,
+       );
+     }
+
+     if (error instanceof GitLabNotFoundError) {
+       return c.json(
+         createErrorResponse({
+           message: error.message,
+           code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+         }),
+         ERROR.RESOURCE.MISSING_RESOURCE.status,
+       );
+     }
+
+     if (error instanceof GitLabRateLimitError) {
+       return c.json(
+         createErrorResponse({
+           message: error.message,
+           code: ERROR.REQUEST.TOO_MANY_REQUESTS.code,
+         }),
+         ERROR.REQUEST.TOO_MANY_REQUESTS.status,
+       );
+     }
+
+     if (error instanceof GitLabAPIError) {
+       return c.json(
+         createErrorResponse({
+           message: error.message,
+           code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+         }),
+         ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+       );
+     }
+
+     return c.json(
+       createErrorResponse({
+         message: "Internal server error",
+         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+       }),
+       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+     );
+   }
 });
 
 // BitBucket integration setup
@@ -242,7 +300,7 @@ integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ enabled }, "BitBucket integration configured"));
   } catch (error) {
-    console.error("BitBucket setup error:", error);
+    console.error("[Integrations] BitBucket setup error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -273,7 +331,7 @@ integrations.get("/list", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse(integrations, "Integrations retrieved"));
   } catch (error) {
-    console.error("List integrations error:", error);
+    console.error("[Integrations] List integrations error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -306,7 +364,7 @@ integrations.get("/remotes", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ remotes }, "Remotes retrieved"));
   } catch (error) {
-    console.error("List remotes error:", error);
+    console.error("[Integrations] List remotes error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",

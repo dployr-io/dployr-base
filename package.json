@@ -7,7 +7,7 @@
     "dev:app:test": "cross-env NODE_ENV=test node --import tsx src/index.ts",
     "dev:docs": "serve docs -l 9099",
     "build": "tsc --noEmit",
-    "test:api": "cross-env NODE_ENV=test node --import tsx --test tests/integration/api-test.ts",
+    "test:api": "cross-env NODE_ENV=test node --import tsx --test tests/integration/index.ts",
     "type": "module"
   },
   "dependencies": {

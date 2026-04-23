@@ -9,8 +9,7 @@ import { BillingService } from "@/services/billing.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
-import { InstanceConflictError, handleInstanceError } from "../errors/errors.js";
-import { getDbStore, getKVStore, getBillingProvider } from "@/lib/context.js";
+import { DatabaseConflictError, handleInstanceError } from "../errors/errors.js";
 
 const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
@@ -82,7 +81,7 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
 
       return c.json(createSuccessResponse({ data: instance }));
     } catch (error: any) {
-      if (error instanceof InstanceConflictError) {
+      if (error instanceof DatabaseConflictError) {
         return c.json(
           createErrorResponse({
             message: `An instance with this ${error.field} already exists`,
@@ -92,7 +91,7 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
         );
       }
 
-      console.error(`Failed to create instance for user ${sessionId ?? session.userId}:`, error);
+      console.error(`[Instances] Failed to create instance for user ${sessionId ?? session.userId}:`, error);
 
       return c.json(
         createErrorResponse({

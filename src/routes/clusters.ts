@@ -7,6 +7,7 @@ import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/midd
 import z from "zod";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { getKVStore, getNotificationService, getGitHubService, runBackground, type AppVariables, getDbStore } from "@/lib/context.js";
+import { ResourceNotFoundError, ValidationError } from "@/lib/errors/errors.js";
 
 const clusters = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 clusters.use("*", authMiddleware);
@@ -56,7 +57,7 @@ clusters.get("/users/invites", async (c) => {
 
     return c.json(createSuccessResponse({ invites: clusterIds }));
   } catch (error) {
-    console.error("Get invites error:", error);
+    console.error("[Clusters] Get invites error:", error);
     return c.json(
       createErrorResponse({
         message: "Failed to get invites",
@@ -108,17 +109,26 @@ clusters.get("/:id/users/invites/accept", async (c) => {
       ),
     );
 
-    return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
-  } catch (error) {
-    console.error("Accept invite error:", error);
-    return c.json(
-      createErrorResponse({
-        message: "Failed to accept invite",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
-  }
+     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
+   } catch (error) {
+     console.error("[Clusters] Accept invite error:", error);
+     if (error instanceof ResourceNotFoundError) {
+       return c.json(
+         createErrorResponse({
+           message: error.message,
+           code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+         }),
+         ERROR.RESOURCE.MISSING_RESOURCE.status,
+       );
+     }
+     return c.json(
+       createErrorResponse({
+         message: "Failed to accept invite",
+         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+       }),
+       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+     );
+   }
 });
 
 /**
@@ -149,17 +159,26 @@ clusters.get("/:id/users/invites/decline", async (c) => {
       await kv.refreshSession({ sessionId, updates: { clusters } });
     }
 
-    return c.json(createSuccessResponse({ clusterId }, "Invite declined"));
-  } catch (error) {
-    console.error("Decline invite error:", error);
-    return c.json(
-      createErrorResponse({
-        message: "Failed to decline invite",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
-  }
+     return c.json(createSuccessResponse({ clusterId }, "Invite declined"));
+   } catch (error) {
+     console.error("[Clusters] Decline invite error:", error);
+     if (error instanceof ResourceNotFoundError) {
+       return c.json(
+         createErrorResponse({
+           message: error.message,
+           code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+         }),
+         ERROR.RESOURCE.MISSING_RESOURCE.status,
+       );
+     }
+     return c.json(
+       createErrorResponse({
+         message: "Failed to decline invite",
+         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+       }),
+       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+     );
+   }
 });
 
 /**
@@ -227,7 +246,7 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
 
     return c.json(createSuccessResponse({ users }, "Invites sent successfully"));
   } catch (error) {
-    console.error("Add users error:", error);
+    console.error("[Clusters] Add users error:", error);
 
     const helpLink = "https://monitoring.dployr.io";
 
@@ -294,19 +313,28 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
       request: c.req.raw,
     });
 
-    return c.json(createSuccessResponse({ users }, "Users removed successfully"));
-  } catch (error) {
-    console.error("Update roles error:", error);
-    const helpLink = "https://monitoring.dployr.io";
-    return c.json(
-      createErrorResponse({
-        message: "Failed to remove users",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-        helpLink,
-      }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
-  }
+     return c.json(createSuccessResponse({ users }, "Users removed successfully"));
+   } catch (error) {
+     console.error("[Clusters] Remove users error:", error);
+     if (error instanceof ValidationError) {
+       return c.json(
+         createErrorResponse({
+           message: error.message,
+           code: ERROR.REQUEST.BAD_REQUEST.code,
+         }),
+         ERROR.REQUEST.BAD_REQUEST.status,
+       );
+     }
+     const helpLink = "https://monitoring.dployr.io";
+     return c.json(
+       createErrorResponse({
+         message: "Failed to remove users",
+         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+         helpLink,
+       }),
+       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+     );
+   }
 });
 
 /**
@@ -374,19 +402,28 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
       request: c.req.raw,
     });
 
-    return c.json(createSuccessResponse({ cluster }, "Roles updated successfully"));
-  } catch (error) {
-    console.error("Update roles error:", error);
-    const helpLink = "https://monitoring.dployr.io";
-    return c.json(
-      createErrorResponse({
-        message: "Failed to update roles",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-        helpLink,
-      }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
-  }
+     return c.json(createSuccessResponse({ cluster }, "Roles updated successfully"));
+   } catch (error) {
+     console.error("[Clusters] Update roles error:", error);
+     if (error instanceof ValidationError) {
+       return c.json(
+         createErrorResponse({
+           message: error.message,
+           code: ERROR.REQUEST.BAD_REQUEST.code,
+         }),
+         ERROR.REQUEST.BAD_REQUEST.status,
+       );
+     }
+     const helpLink = "https://monitoring.dployr.io";
+     return c.json(
+       createErrorResponse({
+         message: "Failed to update roles",
+         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+         helpLink,
+       }),
+       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+     );
+   }
 });
 
 /**
@@ -435,7 +472,7 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
 
     return c.json(createSuccessResponse({ newOwnerId, previousOwnerRole }, "Ownership transferred successfully"));
   } catch (error) {
-    console.error("Transfer ownership error:", error);
+    console.error("[Clusters] Transfer ownership error:", error);
     const helpLink = "https://monitoring.dployr.io";
     return c.json(
       createErrorResponse({
@@ -472,7 +509,7 @@ clusters.get("/:id/integrations", async (c) => {
 
     return c.json(createSuccessResponse(integrations));
   } catch (error) {
-    console.error("List remotes error:", error);
+    console.error("[Clusters] List remotes error:", error);
     const helpLink = "https://monitoring.dployr.io";
     return c.json(
       createErrorResponse({
@@ -505,7 +542,7 @@ clusters.get("/:id/remotes", async (c) => {
 
     return c.json(createSuccessResponse(paginatedData));
   } catch (error) {
-    console.error("List remotes error:", error);
+    console.error("[Clusters] List remotes error:", error);
     const helpLink = "https://monitoring.dployr.io";
     return c.json(
       createErrorResponse({

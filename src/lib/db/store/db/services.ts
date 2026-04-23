@@ -1,7 +1,6 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { ServiceConflictError } from "@/lib/errors/errors.js";
 import { BaseStore } from "./base.js";
 import { KVStore } from "../kv/index.js";
 import { Service } from "@/types/index.js";
@@ -35,13 +34,7 @@ export class ServiceStore extends BaseStore {
     try {
       await stmt.bind(id, instanceId, name, now, now).run();
     } catch (error) {
-      if (error instanceof Error && error.message.includes("duplicate key value")) {
-        if (error.message.includes("services_name")) {
-          throw new ServiceConflictError("name");
-        }
-        throw new ServiceConflictError("service");
-      }
-      throw error;
+      this.parsePostgresError({ error, table: "services" });
     }
 
     // Invalidate cache after write

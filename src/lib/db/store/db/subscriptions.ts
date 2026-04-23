@@ -87,9 +87,11 @@ export class SubscriptionStore extends BaseStore {
     periodEnd?: number | null;
   }): Promise<void> {
     const now = this.now();
-    await this.db
-      .prepare(
-        `INSERT INTO cluster_subscriptions (cluster_id, plan, polar_customer_id, polar_subscription_id, status, canceled_at, period_end, created_at, updated_at)
+
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO cluster_subscriptions (cluster_id, plan, polar_customer_id, polar_subscription_id, status, canceled_at, period_end, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (cluster_id) DO UPDATE SET
            plan = EXCLUDED.plan,
@@ -99,25 +101,18 @@ export class SubscriptionStore extends BaseStore {
            canceled_at = COALESCE(EXCLUDED.canceled_at, cluster_subscriptions.canceled_at),
            period_end = COALESCE(EXCLUDED.period_end, cluster_subscriptions.period_end),
            updated_at = EXCLUDED.updated_at`,
-      )
-      .bind(
-        params.clusterId,
-        params.plan,
-        params.polarCustomerId ?? null,
-        params.polarSubscriptionId ?? null,
-        params.status,
-        params.canceledAt ?? null,
-        params.periodEnd ?? null,
-        now,
-        now
-      )
-      .run();
+        )
+        .bind(params.clusterId, params.plan, params.polarCustomerId ?? null, params.polarSubscriptionId ?? null, params.status, params.canceledAt ?? null, params.periodEnd ?? null, now, now)
+        .run();
+    } catch (error) {
+      this.parsePostgresError({ error, table: "clusters" });
+    }
   }
 
   async getEffectivePlan(clusterId: string): Promise<SubscriptionPlan> {
     const sub = await this.get(clusterId);
     if (!sub) return "hobby";
-    
+
     // If canceled, check grace period
     if (sub.status === "canceled") {
       if (sub.periodEnd && Date.now() < sub.periodEnd) {
@@ -125,7 +120,7 @@ export class SubscriptionStore extends BaseStore {
       }
       return "hobby"; // Grace period over
     }
-    
+
     // Active or past_due - user has access to their plan
     return sub.plan;
   }

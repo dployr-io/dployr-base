@@ -18,16 +18,25 @@ export class InstanceStore extends BaseStore {
       const id = this.generateId();
       const now = this.now();
 
-      const result = await client.query(
-        `INSERT INTO instances (id, cluster_id, address, tag, metadata, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
-         RETURNING id, cluster_id, address, tag, metadata, created_at, updated_at`,
-        [id, clusterId, data.address || null, data.tag, data.metadata || {}, now, now],
-      );
+      let result;
+      try {
+        result = await client.query(
+          `INSERT INTO instances (id, cluster_id, address, tag, metadata, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+           RETURNING id, cluster_id, address, tag, metadata, created_at, updated_at`,
+          [id, clusterId, data.address || null, data.tag, data.metadata || {}, now, now],
+        );
+      } catch (error) {
+        this.parsePostgresError({ error, table: "instances" });
+      }
 
       const row = result.rows[0];
 
-      await client.query(`INSERT INTO bootstrap_tokens (instance_id, nonce) VALUES ($1, $2)`, [id, nonce]);
+      try {
+        await client.query(`INSERT INTO bootstrap_tokens (instance_id, nonce) VALUES ($1, $2)`, [id, nonce]);
+      } catch (error) {
+        this.parsePostgresError({ error, table: "bootstrap_tokens" });
+      }
 
       const instance = {
         id: row.id,

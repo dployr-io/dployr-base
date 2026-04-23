@@ -5,10 +5,13 @@ import { createErrorResponse } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
 import type { Context } from "hono";
 
-export class InstanceConflictError extends Error {
-  constructor(public field: "address" | "tag" | "instance") {
-    super("Instance conflict on " + field);
-    this.name = "InstanceConflictError";
+export class DatabaseConflictError extends Error {
+  constructor(
+    public field: string,
+    public table: string,
+  ) {
+    super(`Conflict on ${table}.${field}`);
+    this.name = "DatabaseConflictError";
   }
 }
 
@@ -61,6 +64,46 @@ export class PolarRequestValidationError extends Error {
   ) {
     super(`${details.map((d) => d.msg).join(", ")}`);
     this.name = "PolarRequestValidationError";
+  }
+}
+
+// GitLab API Errors
+export class GitLabAuthenticationError extends Error {
+  constructor(message: string = "GitLab authentication failed") {
+    super(message);
+    this.name = "GitLabAuthenticationError";
+  }
+}
+
+export class GitLabPermissionError extends Error {
+  constructor(message: string = "GitLab permission denied") {
+    super(message);
+    this.name = "GitLabPermissionError";
+  }
+}
+
+export class GitLabNotFoundError extends Error {
+  constructor(public resource: string) {
+    super(`${resource} not found in GitLab`);
+    this.name = "GitLabNotFoundError";
+  }
+}
+
+export class GitLabRateLimitError extends Error {
+  constructor(public retryAfter: number | null = null) {
+    super(`GitLab rate limit exceeded${retryAfter ? ` (retry after ${retryAfter}s)` : ""}`);
+    this.name = "GitLabRateLimitError";
+  }
+}
+
+export class GitLabAPIError extends Error {
+  constructor(
+    public status: number,
+    public message: string,
+    public details?: any
+  ) {
+    super(`GitLab API error (${status}): ${message}`);
+    this.name = "GitLabAPIError";
   }
 }
 

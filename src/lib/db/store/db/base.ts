@@ -4,6 +4,7 @@
 import { ulid } from "ulid";
 import type { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { ALLOWED_TABLES, TABLE_ID_COLUMNS, type AllowedTable, type AllowedJsonField } from "@/lib/constants/index.js";
+import { DatabaseConflictError, ResourceNotFoundError, ValidationError } from "@/lib/errors/errors.js";
 
 /**
  * Base class for database stores providing common utilities and patterns.
@@ -31,7 +32,7 @@ import { ALLOWED_TABLES, TABLE_ID_COLUMNS, type AllowedTable, type AllowedJsonFi
  */
 function assertAllowedTable(table: string): asserts table is AllowedTable {
   if (!(ALLOWED_TABLES as readonly string[]).includes(table)) {
-    throw new Error(`Disallowed table reference: ${table}`);
+    throw new ValidationError(`Disallowed table reference: ${table}`);
   }
 }
 
@@ -144,7 +145,7 @@ export abstract class BaseStore {
     const result = await stmt.bind(updates, this.now(), id).run();
 
     if (result.meta.changes === 0) {
-      throw new Error(`Record not found in ${table}`);
+      throw new ResourceNotFoundError(table);
     }
   }
 
@@ -176,5 +177,42 @@ export abstract class BaseStore {
    */
   protected now(): number {
     return Date.now();
+  }
+
+  /**
+   * Parses PostgreSQL error codes and throws appropriate DatabaseConflictError instances.
+   * Handles unique constraint violations (23505) and foreign key violations (23503).
+   *
+   * @param error - The error object to parse (typically from a database operation)
+   * @param table - The database table name for context in error messages
+   * @throws DatabaseConflictError - For constraint violations with field and table info
+   * @throws Error - For any other error types (re-thrown as-is)
+   *
+   * @example
+   * ```typescript
+   * try {
+   *   await this.db.insert(...);
+   * } catch (error) {
+   *   this.parsePostgresError(error, "users");
+   * }
+   * // Throws DatabaseConflictError with field="email", table="users"
+   * // for duplicate key violation
+   * ```
+   */
+  protected parsePostgresError({ error, table }: { error: unknown; table: AllowedTable }): never {
+    if (error instanceof Error) {
+      // Postgres unique violation
+      if ((error as any).code === "23505") {
+        // Extract constraint name from detail: Key (field)=(value) already exists
+        const match = error.message.match(/Key \(([^)]+)\)/);
+        const field = match?.[1] ?? "unknown";
+        throw new DatabaseConflictError(field, table);
+      }
+      // Postgres FK violation
+      if ((error as any).code === "23503") {
+        throw new DatabaseConflictError("foreign_key", table);
+      }
+    }
+    throw error;
   }
 }

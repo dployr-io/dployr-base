@@ -5,6 +5,7 @@ import { Cluster, OAuthProvider, Role as UserRole, User, Integrations, GitHubInt
 import { BaseStore } from "./base.js";
 import { EVENTS } from "@/lib/constants/index.js";
 import type { PreparedStatement } from "@/lib/db/pg-adapter.js";
+import { ResourceNotFoundError, ValidationError } from "@/lib/errors/errors.js";
 
 export class ClusterStore extends BaseStore {
   private readonly ROLE_HIERARCHY: Record<UserRole, number> = {
@@ -101,15 +102,19 @@ export class ClusterStore extends BaseStore {
     const user = await this.db.prepare(`SELECT email, metadata FROM users WHERE id = $1`).bind(userId).first();
 
     if (!user) {
-      throw new Error(`User ${userId} not found`);
+      throw new ResourceNotFoundError("user");
     }
 
     const name = (user.email as string).split("@")[0];
 
-    await this.db.batch([
-      this.db.prepare(`INSERT INTO clusters (id, name) VALUES ($1, $2)`).bind(id, name),
-      this.db.prepare(`INSERT INTO user_clusters (user_id, cluster_id, role) VALUES ($1, $2, 'owner')`).bind(userId, id),
-    ]);
+    try {
+      await this.db.batch([
+        this.db.prepare(`INSERT INTO clusters (id, name) VALUES ($1, $2)`).bind(id, name),
+        this.db.prepare(`INSERT INTO user_clusters (user_id, cluster_id, role) VALUES ($1, $2, 'owner')`).bind(userId, id),
+      ]);
+    } catch (error) {
+      this.parsePostgresError({ error, table: "clusters" });
+    }
 
     const clusterRow = await this.db.prepare(`SELECT id, name, metadata, created_at, updated_at FROM clusters WHERE id = $1`).bind(id).first();
 
@@ -140,7 +145,7 @@ export class ClusterStore extends BaseStore {
     }
 
     if (updates.roles?.owner && updates.roles.owner.length > 0) {
-      throw new Error("Cannot update owner role through update(). Use transferOwnership() instead.");
+      throw new ValidationError("Cannot update owner role through update(). Use transferOwnership() instead.");
     }
 
     // Prepare all statements for atomic execution
@@ -266,7 +271,11 @@ export class ClusterStore extends BaseStore {
       );
     }
 
-    await this.db.batch(statements);
+    try {
+      await this.db.batch(statements);
+    } catch (error) {
+      this.parsePostgresError({ error, table: "clusters" });
+    }
   }
 
   /**
@@ -283,7 +292,7 @@ export class ClusterStore extends BaseStore {
     for (const userId of userIds) {
       const userRole = await this.getUserRole(userId, clusterId);
       if (userRole === "owner") {
-        throw new Error("Cannot remove cluster owner. Transfer ownership using transferOwnership().");
+        throw new ValidationError("Cannot remove cluster owner. Transfer ownership using transferOwnership().");
       }
     }
 
@@ -322,15 +331,15 @@ export class ClusterStore extends BaseStore {
    */
   async acceptInvite(userId: string, clusterId: string): Promise<void> {
     const stmt = this.db.prepare(`
-      UPDATE user_clusters 
-      SET role = 'viewer', updated_at = $1
-      WHERE user_id = $2 AND cluster_id = $3 AND role = 'invited'
-    `);
+       UPDATE user_clusters 
+       SET role = 'viewer', updated_at = $1
+       WHERE user_id = $2 AND cluster_id = $3 AND role = 'invited'
+     `);
 
     const result = await stmt.bind(this.now(), userId, clusterId).run();
 
     if (result.meta.changes === 0) {
-      throw new Error("No invite found");
+      throw new ResourceNotFoundError("invite");
     }
   }
 
@@ -342,14 +351,14 @@ export class ClusterStore extends BaseStore {
    */
   async declineInvite(userId: string, clusterId: string): Promise<void> {
     const stmt = this.db.prepare(`
-      DELETE FROM user_clusters 
-      WHERE user_id = $1 AND cluster_id = $2 AND role = 'invited'
-    `);
+       DELETE FROM user_clusters 
+       WHERE user_id = $1 AND cluster_id = $2 AND role = 'invited'
+     `);
 
     const result = await stmt.bind(userId, clusterId).run();
 
     if (result.meta.changes === 0) {
-      throw new Error("No invite found");
+      throw new ResourceNotFoundError("invite");
     }
   }
 
@@ -399,23 +408,27 @@ export class ClusterStore extends BaseStore {
    * await store.clusters.transferOwnership("cluster123", "newOwner456", null);
    * ```
    */
-  async transferOwnership(
-    clusterId: string,
-    newOwnerId: string,
-    previousOwnerRole: Exclude<UserRole, "owner"> = "admin"
-  ): Promise<void> {
-    await this.db.batch([
-      this.db.prepare(
-        `UPDATE user_clusters 
+  async transferOwnership(clusterId: string, newOwnerId: string, previousOwnerRole: Exclude<UserRole, "owner"> = "admin"): Promise<void> {
+    try {
+      await this.db.batch([
+        this.db
+          .prepare(
+            `UPDATE user_clusters 
          SET role = $1 
-         WHERE cluster_id = $2 AND user_id != $3 AND role = 'owner'`
-      ).bind(previousOwnerRole, clusterId, newOwnerId),
+         WHERE cluster_id = $2 AND user_id != $3 AND role = 'owner'`,
+          )
+          .bind(previousOwnerRole, clusterId, newOwnerId),
 
-      this.db.prepare(
-        `INSERT INTO user_clusters (user_id, cluster_id, role) VALUES ($1, $2, 'owner')
-         ON CONFLICT (user_id, cluster_id) DO UPDATE SET role = 'owner'`
-      ).bind(newOwnerId, clusterId),
-    ])
+        this.db
+          .prepare(
+            `INSERT INTO user_clusters (user_id, cluster_id, role) VALUES ($1, $2, 'owner')
+         ON CONFLICT (user_id, cluster_id) DO UPDATE SET role = 'owner'`,
+          )
+          .bind(newOwnerId, clusterId),
+      ]);
+    } catch (error) {
+      this.parsePostgresError({ error, table: "clusters" });
+    }
   }
 
   /**

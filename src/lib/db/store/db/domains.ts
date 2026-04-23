@@ -5,37 +5,46 @@ import { BaseStore } from "./base.js";
 import type { CustomDomain, DNSProvider } from "@/types/dns.js";
 
 export class DomainStore extends BaseStore {
-  async create(
-    instanceId: string,
-    domain: string,
-    token: string,
-    provider: DNSProvider | null
-  ): Promise<CustomDomain> {
+  async create(instanceId: string, domain: string, token: string, provider: DNSProvider | null): Promise<CustomDomain> {
     const id = this.generateId();
     const now = this.now();
 
-    await this.db.prepare(`
+    try {
+      await this.db
+        .prepare(
+          `
       INSERT INTO domains (id, instance_id, domain, verification_token, provider, created_at)
       VALUES ($1, $2, $3, $4, $5, $6)
-    `).bind(id, instanceId, domain, token, provider, now).run();
+    `,
+        )
+        .bind(id, instanceId, domain, token, provider, now)
+        .run();
 
-    return {
-      id,
-      instanceId,
-      domain,
-      status: "pending",
-      verificationToken: token,
-      provider,
-      createdAt: now,
-      activatedAt: null,
-    };
+      return {
+        id,
+        instanceId,
+        domain,
+        status: "pending",
+        verificationToken: token,
+        provider,
+        createdAt: now,
+        activatedAt: null,
+      };
+    } catch (error) {
+      this.parsePostgresError({ error, table: "clusters" });
+    }
   }
 
   async get(domain: string): Promise<CustomDomain | null> {
-    const row = await this.db.prepare(`
+    const row = await this.db
+      .prepare(
+        `
       SELECT id, instance_id, domain, status, verification_token, provider, created_at, activated_at
       FROM domains WHERE domain = $1
-    `).bind(domain).first();
+    `,
+      )
+      .bind(domain)
+      .first();
 
     if (!row) return null;
 
@@ -52,18 +61,28 @@ export class DomainStore extends BaseStore {
   }
 
   async activate(domain: string): Promise<void> {
-    await this.db.prepare(`
+    await this.db
+      .prepare(
+        `
       UPDATE domains SET status = 'active', activated_at = $1 WHERE domain = $2
-    `).bind(this.now(), domain).run();
+    `,
+      )
+      .bind(this.now(), domain)
+      .run();
   }
 
   async listByInstance(instanceId: string): Promise<CustomDomain[]> {
-    const { results } = await this.db.prepare(`
+    const { results } = await this.db
+      .prepare(
+        `
       SELECT id, instance_id, domain, status, verification_token, provider, created_at, activated_at
       FROM domains WHERE instance_id = $1 ORDER BY created_at DESC
-    `).bind(instanceId).all();
+    `,
+      )
+      .bind(instanceId)
+      .all();
 
-    return results.map(row => ({
+    return results.map((row) => ({
       id: row.id as string,
       instanceId: row.instance_id as string,
       domain: row.domain as string,
