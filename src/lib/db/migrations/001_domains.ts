@@ -1,9 +1,9 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-export const domains = `
+export const _001_domains = `
 CREATE TABLE IF NOT EXISTS domains (
-  id UUID PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   instance_id TEXT NOT NULL,
   domain TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active')),

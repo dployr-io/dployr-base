@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-export const subscriptions = `
+export const _003_subscriptions = `
 CREATE TABLE IF NOT EXISTS cluster_subscriptions (
   cluster_id TEXT PRIMARY KEY,
   plan TEXT NOT NULL DEFAULT 'hobby' CHECK (plan IN ('hobby', 'indie', 'pro')),

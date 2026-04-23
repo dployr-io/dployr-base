@@ -1,9 +1,9 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-export const services = `
+export const _002_services = `
 CREATE TABLE IF NOT EXISTS services (
-  id UUID PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   instance_id TEXT NOT NULL,
   name TEXT NOT NULL UNIQUE,
   created_at BIGINT NOT NULL,

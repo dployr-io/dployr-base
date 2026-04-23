@@ -1,9 +1,9 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-export const init = `
+export const _000_init = `
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   provider TEXT NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS clusters (
-  id UUID PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS clusters (
 );
 
 CREATE TABLE IF NOT EXISTS user_clusters (
-  user_id UUID NOT NULL,
+  user_id TEXT NOT NULL,
   cluster_id TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('owner', 'admin', 'developer', 'viewer', 'invited')),
   created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS user_clusters (
 );
 
 CREATE TABLE IF NOT EXISTS instances (
-  id UUID PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   cluster_id TEXT NOT NULL,
   address TEXT NOT NULL UNIQUE,
   tag TEXT NOT NULL UNIQUE,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS instances (
 );
 
 CREATE TABLE IF NOT EXISTS bootstrap_tokens (
-  instance_id UUID PRIMARY KEY,
+  instance_id TEXT PRIMARY KEY,
   nonce TEXT UNIQUE NOT NULL,
   used_at BIGINT NULL,
   created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
