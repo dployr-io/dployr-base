@@ -36,20 +36,22 @@ jobs:
       BASE_URL: http://localhost:7878
 
     steps:
-      - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
-      - run: npm ci
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - run: pnpm install
 
       - name: Start server
-        run: npm run dev:app 
+        run: pnpm run dev:app:test & 
 
       - name: Wait for server
         run: npx wait-on http://localhost:7878/v1/health --timeout 30000
 
       - name: Run integration tests
-        run: npm test:api
+        run: pnpm test:api
