@@ -2306,7 +2306,7 @@ paths:
     post:
       operationId: addInstanceDomain
       tags: [Instances]
-      summary: Assign dployr.io subdomain to instance
+      summary: Assign free subdomain to instance
       security:
         - sessionCookie: []
       parameters:
