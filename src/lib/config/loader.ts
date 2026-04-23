@@ -99,6 +99,10 @@ const ConfigSchema = z.object({
       polar_access_token: z.string().optional(),
       polar_webhook_secret: z.string().optional(),
       environment: z.enum(["sandbox", "production"]).default("sandbox"),
+      checkout_urls: z.object({
+        indie: z.string().url().optional(),
+        pro: z.string().url().optional(),
+      }).optional(),
     })
     .optional(),
   proxy: z

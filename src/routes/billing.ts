@@ -163,7 +163,10 @@ billing.post("/checkout", authMiddleware, async (c) => {
 
 billing.post("/webhook", async (c) => {
   const signatureHeader = c.req.header("webhook-signature") || "";
-  const rawBody = await c.req.text();
+  const webhookId = c.req.header("webhook-id") || "";
+  const webhookTimestamp = c.req.header("webhook-timestamp") || "";
+  let rawBody = await c.req.text();
+  rawBody = rawBody.trim(); 
 
   if (!c.env.POLAR_WEBHOOK_SECRET) {
     console.error("[Billing] POLAR_WEBHOOK_SECRET not configured");
@@ -179,6 +182,8 @@ billing.post("/webhook", async (c) => {
   const isValid = await billingProvider.verifyWebhookSignature({
     rawBody,
     signatureHeader,
+    webhookId,
+    webhookTimestamp,
   });
 
   if (!isValid) {

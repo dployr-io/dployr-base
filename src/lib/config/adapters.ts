@@ -119,7 +119,16 @@ export async function createStorageFromConfig(
 export function createBillingProvider(config: Config, env: Bindings): BillingProvider | null {
   if (!config.billing?.polar_access_token) return null;
   switch (config.billing?.provider ?? "polar") {
-    case "polar": return new PolarService(env);
+    case "polar": {
+      const env: Partial<Bindings> = {
+        POLAR_ACCESS_TOKEN: config.billing.polar_access_token,
+        POLAR_WEBHOOK_SECRET: config.billing.polar_webhook_secret,
+        POLAR_ENVIRONMENT: config.billing.environment,
+        APP_URL: config.server.app_url,
+        BILLING_CHECKOUT_URLS: config.billing.checkout_urls,
+      };
+      return new PolarService(env as Bindings);
+    }
     default: throw new Error(`Unknown billing provider: ${config.billing?.provider}`);
   }
 }

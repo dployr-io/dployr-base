@@ -67,5 +67,9 @@ allowed_origins = "*.dployr.io"
 
 [billing]
 polar_access_token = "polar_oat_yM..."
-polar_webhook_secret = "polar_whs_ov..."
+polar_webhook_secret = "polar_whs_..."
 polar_environment = "sandbox"
+
+[billing.checkout_urls]
+indie = "https://sandbox.polar.sh/checkout/polar_cl_..."
+pro = "https://sandbox.polar.sh/checkout/polar_cl_..."

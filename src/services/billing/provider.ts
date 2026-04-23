@@ -26,6 +26,6 @@ export interface RawWebhookEvent {
 export interface BillingProvider {
   getOrCreateCustomer(params: CustomerParams): Promise<{ id: string; email: string }>
   buildCheckoutUrl(params: CheckoutParams): Promise<string>
-  verifyWebhookSignature(params: { rawBody: string; signatureHeader: string }): Promise<boolean>
+  verifyWebhookSignature(params: { rawBody: string; signatureHeader: string; webhookId: string; webhookTimestamp: string }): Promise<boolean>
   parseWebhookEvent(rawBody: string): Promise<RawWebhookEvent>
 }

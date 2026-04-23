@@ -105,6 +105,7 @@ ADMIN_TOTP_SECRET: adminConfig?.totp_secret || process.env.ADMIN_TOTP_SECRET || 
       POLAR_ACCESS_TOKEN: billingConfig?.polar_access_token || process.env.POLAR_ACCESS_TOKEN || "",
       POLAR_WEBHOOK_SECRET: billingConfig?.polar_webhook_secret || process.env.POLAR_WEBHOOK_SECRET || "",
       POLAR_ENVIRONMENT: billingConfig?.environment || process.env.POLAR_ENVIRONMENT || (process.env.NODE_ENV === "production" ? "production" : "sandbox"),
+      BILLING_CHECKOUT_URLS: billingConfig?.checkout_urls,
     } as unknown as Bindings;
 
   await next();

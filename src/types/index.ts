@@ -44,6 +44,7 @@ export type Bindings = {
   POLAR_ACCESS_TOKEN?: string;
   POLAR_WEBHOOK_SECRET?: string;
   POLAR_ENVIRONMENT?: string;
+  BILLING_CHECKOUT_URLS?: Record<string, string>;
 };
 
 export type OAuthProvider = "google" | "github" | "microsoft" | "email";

@@ -8,7 +8,6 @@ export const PLANS = [
     price: 0,
     currency: "USD",
     interval: null,
-    checkoutUrl: null,
   },
   {
     id: "indie" as SubscriptionPlan,
@@ -17,7 +16,6 @@ export const PLANS = [
     price: 5,
     currency: "USD",
     interval: "month",
-    checkoutUrl: "https://buy.polar.sh/polar_cl_9Gikkc1tuZuZn6u4Z39DBjalo9BFc87Nrvk5816rfHV",
   },
   {
     id: "pro" as SubscriptionPlan,
@@ -26,6 +24,5 @@ export const PLANS = [
     price: 20,
     currency: "USD",
     interval: "month",
-    checkoutUrl: "https://buy.polar.sh/polar_cl_kYgoJUbPggOug8KUA3yDT8cEWbfee4MP153bU2VAcu9",
   },
 ] as const;
