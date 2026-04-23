@@ -7,7 +7,7 @@ import { Context } from "hono";
 import { ulid } from "ulid";
 import { getKVStore, getJWTService, getWS, getDbStore, getBillingProvider } from "@/lib/context.js";
 import { InstanceConnectionFailureError, InstanceNotConnectedError, PermissionError, ResourceNotFoundError } from "@/lib/errors/errors.js";
-import { DployrdService } from "./dployrd-service.js";
+import { DployrdService } from "./dployrd.js";
 import { BillingService } from "./billing/index.js";
 
 /**

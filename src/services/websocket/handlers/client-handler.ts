@@ -63,7 +63,7 @@ import {
   isTerminalMessage,
   isTerminalOpenMessage,
 } from "../../../types/websocket-message.js";
-import { DployrdService } from "@/services/dployrd-service.js";
+import { DployrdService } from "@/services/dployrd.js";
 import { JWTService } from "@/services/auth/jwt.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";

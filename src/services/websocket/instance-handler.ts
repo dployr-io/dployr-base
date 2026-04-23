@@ -5,7 +5,7 @@ import type { WebSocket } from "ws";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import type { NodeTask } from "@/lib/tasks/types.js";
 import type { ConnectionManagerConfig, Session } from "@/types/index.js";
-import { DployrdService } from "@/services/dployrd-service.js";
+import { DployrdService } from "@/services/dployrd.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
