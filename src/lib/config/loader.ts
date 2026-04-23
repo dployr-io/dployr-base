@@ -140,7 +140,7 @@ export function loadConfig(path?: string): Config {
   }
 
   // Fall back to TOML file
-  const configPath = path || process.env.CONFIG_PATH || (process.env.NODE_ENV === "development" ? "./config.dev.toml" : "./config.toml");
+  const configPath = path || process.env.CONFIG_PATH || (process.env.NODE_ENV === "development" || process.env.NODE_ENV == "test" ? "./config.dev.toml" : "./config.toml");
 
   const content = readFileSync(configPath, "utf-8");
   const raw = parseToml(content);

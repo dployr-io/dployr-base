@@ -4,8 +4,11 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:app\" \"npm run dev:docs\"",
     "dev:app": "cross-env NODE_ENV=development node --import tsx src/index.ts",
+    "dev:app:test": "cross-env NODE_ENV=test node --import tsx src/index.ts",
     "dev:docs": "serve docs -l 9099",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "test:api": "cross-env NODE_ENV=test node --import tsx --test tests/integration/api-test.ts",
+    "type": "module"
   },
   "dependencies": {
     "@octokit/auth-app": "^8.1.2",

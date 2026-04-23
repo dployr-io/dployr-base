@@ -9,10 +9,9 @@
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
     "types": ["node"],
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "tests"]
 }
