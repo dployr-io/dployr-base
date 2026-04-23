@@ -73,3 +73,17 @@ polar_environment = "sandbox"
 [billing.checkout_urls]
 indie = "https://sandbox.polar.sh/checkout/polar_cl_..."
 pro = "https://sandbox.polar.sh/checkout/polar_cl_..."
+
+[[free_instances]]
+id = "fi_01"
+address = "192.168.1.10"
+tag = "free-us-east-1"
+capacity = 50
+region = "us-east"
+
+[[free_instances]]
+id = "fi_02"
+address = "192.168.1.11"
+tag = "free-eu-west-1"
+capacity = 50
+region = "eu-west"
