@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Bindings, SubscriptionPlan, SubscriptionStatus } from "@/types/index.js";
-import type { DatabaseStore } from "@/lib/db/store/index.js";
-import type { KVStore } from "@/lib/db/store/kv.js";
+import type { DatabaseStore } from "@/lib/db/store/db/index.js";
+import type { KVStore } from "@/lib/db/store/kv/index.js";
 import type { BillingProvider } from "./billing/provider.js";
 import { EmailService } from "@/services/email.js";
 import { notificationTemplate } from "@/lib/templates/emails/notification.js";

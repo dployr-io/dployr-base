@@ -1,8 +1,8 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { DatabaseStore } from "@/lib/db/store/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
 import { NodeUpdate, NodeUpdateV1, NodeUpdateV1_1 } from "@/types/node.js";
 
 export class UpdateProcessor {

@@ -57,6 +57,14 @@ export const integrationIds = ["resendMail", "mailChimp", "mailerSend", "discord
 
 export type IntegrationType = (typeof integrationIds)[number];
 
+export interface Service {
+    id: string;
+    instanceId: string;
+    name: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
 export interface User {
   id: string;
   email: string;

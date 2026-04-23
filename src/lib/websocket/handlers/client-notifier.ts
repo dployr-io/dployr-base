@@ -4,7 +4,7 @@
 import type { BaseMessage, UpdateMessage } from "@/lib/websocket/message-types.js";
 import { MessageKind } from "@/lib/websocket/message-types.js";
 import { ConnectionManager } from "@/lib/websocket/connection-manager.js";
-import { KVStore } from "@/lib/db/store/kv.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
 import { ulid } from "ulid";
 
 /**

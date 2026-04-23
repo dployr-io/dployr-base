@@ -3,8 +3,7 @@
 
 import { Instance } from "@/types/index.js";
 import { BaseStore } from "./base.js";
-import { KVStore } from "./kv.js";
-import { InstanceConflictError } from "@/lib/errors/errors.js";
+import { KVStore } from "../kv/index.js";
 
 export class InstanceStore extends BaseStore {
   private kv?: KVStore;

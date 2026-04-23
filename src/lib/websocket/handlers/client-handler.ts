@@ -3,7 +3,7 @@
 
 import type { NodeTask } from "@/lib/tasks/types.js";
 import type { ConnectionManager } from "../connection-manager.js";
-import { KVStore } from "@/lib/db/store/kv.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
 import type {
   ClusterConnection,
   BaseMessage,
@@ -68,7 +68,7 @@ import {
 import { DployrdService } from "@/services/dployrd-service.js";
 import { JWTService } from "@/services/jwt.js";
 import { ulid } from "ulid";
-import { DatabaseStore } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { TerminalManager } from "@/lib/websocket/terminal-manager.js";
 
 export interface ClientHandlerDependencies {
@@ -94,11 +94,7 @@ export class ClientMessageHandler {
   private sendTaskToCluster: (clusterId: string, task: NodeTask) => boolean;
 
   // Task kinds allowed on free instances
-  private readonly ALLOWED_FREE_INSTANCE_TASK_KINDS = new Set([
-    "deployments",
-    "services",
-    "logs",
-  ]);
+  private readonly ALLOWED_FREE_INSTANCE_TASK_KINDS = new Set(["deployments", "services", "logs"]);
 
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
@@ -120,7 +116,7 @@ export class ClientMessageHandler {
       return true;
     }
 
-    const taskKind = task.Type.split('/')[0];
+    const taskKind = task.Type.split("/")[0];
     return this.ALLOWED_FREE_INSTANCE_TASK_KINDS.has(taskKind);
   }
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { SignJWT, jwtVerify } from 'jose';
-import { KVStore } from "@/lib/db/store/kv.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
 import { Session } from "@/types/index.js";
 
 /**

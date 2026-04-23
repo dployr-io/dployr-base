@@ -5,8 +5,8 @@ import type { Bindings, Integrations, Remote, RemoteListResult } from "@/types/i
 import { GitHubService } from "./github.js";
 import { GitLabService } from "./gitlab.js";
 import { BitBucketService } from "./bitbucket.js";
-import type { DatabaseStore } from "@/lib/db/store/index.js";
-import type { KVStore } from "@/lib/db/store/kv.js";
+import type { DatabaseStore } from "@/lib/db/store/db/index.js";
+import type { KVStore } from "@/lib/db/store/kv/index.js";
 import { WORKFLOW_NAME } from "@/lib/constants/index.js";
 
 export interface RemoteRepository {
@@ -28,7 +28,7 @@ export class IntegrationsService {
   constructor(
     private env: Bindings,
     private db?: DatabaseStore,
-    private kv?: KVStore
+    private kv?: KVStore,
   ) {
     this.githubService = new GitHubService(env);
     this.gitlabService = new GitLabService(env);
@@ -48,7 +48,7 @@ export class IntegrationsService {
           })
           .catch((error) => {
             results.push({ provider: "github", remotes: [], error: error.message });
-          })
+          }),
       );
     }
 
@@ -61,7 +61,7 @@ export class IntegrationsService {
           })
           .catch((error) => {
             results.push({ provider: "gitlab", remotes: [], error: error.message });
-          })
+          }),
       );
     }
 
@@ -74,7 +74,7 @@ export class IntegrationsService {
           })
           .catch((error) => {
             results.push({ provider: "bitbucket", remotes: [], error: error.message });
-          })
+          }),
       );
     }
 
@@ -97,10 +97,7 @@ export class IntegrationsService {
     return repos.map((repo) => this.toRemote(repo, "bitbucket"));
   }
 
-  private toRemote(
-    repo: RemoteRepository,
-    provider: "github" | "gitlab" | "bitbucket"
-  ): Remote {
+  private toRemote(repo: RemoteRepository, provider: "github" | "gitlab" | "bitbucket"): Remote {
     return {
       url: repo.htmlUrl,
       branch: repo.defaultBranch ?? "main",
@@ -115,17 +112,12 @@ export class IntegrationsService {
     const account = installation.account;
 
     if (!installation.id || !account?.login) {
-      console.warn(
-        `GitHub installation webhook has a bad payload. Missing installation id or account login:`,
-        installation
-      );
+      console.warn(`GitHub installation webhook has a bad payload. Missing installation id or account login:`, installation);
       return;
     }
 
     // Log the installation event - actual linking happens via OAuth callback
-    console.log(
-      `GitHub app installation webhook received: ${installation.id} for ${account.login}`
-    );
+    console.log(`GitHub app installation webhook received: ${installation.id} for ${account.login}`);
   }
 
   async handleGitHubMeta(body: any): Promise<void> {
@@ -144,9 +136,7 @@ export class IntegrationsService {
       const status = workflow_run.conclusion;
       const runId = workflow_run.id;
 
-      console.log(
-        `Deployment workflow ${runId} ${status} in ${repository.full_name}`
-      );
+      console.log(`Deployment workflow ${runId} ${status} in ${repository.full_name}`);
 
       await this.kv.createWorkflowFailedEvent(runId, {
         repository: repository.full_name,
@@ -167,8 +157,6 @@ export class IntegrationsService {
   async handleGitHubPush(body: any): Promise<void> {
     const { repository, ref, pusher, commits } = body;
 
-    console.log(
-      `Auto-deploying ${repository.full_name} after push by ${pusher.name}`
-    );
+    console.log(`Auto-deploying ${repository.full_name} after push by ${pusher.name}`);
   }
 }

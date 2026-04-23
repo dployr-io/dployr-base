@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createServer, IncomingMessage, ServerResponse } from "http";
-import { DatabaseStore } from "@/lib/db/store/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
 import { TrafficRouter, ResolvedRoute } from "@/services/traffic-router.js";
 import { loadConfig } from "@/lib/config/loader.js";
 import { createDatabaseFromConfig, createKVFromConfig } from "@/lib/config/adapters.js";
@@ -31,7 +31,7 @@ const DEFAULT_PROXY_CONFIG: ProxyServerConfig = {
 
 /**
  * Standalone proxy server for routing traffic to services
- * 
+ *
  * This server handles wildcard domain routing:
  * service-name.cluster-name.dployr.io -> instance address
  */
@@ -43,7 +43,7 @@ export class ProxyServer {
   constructor(
     private db: DatabaseStore,
     private kv: KVStore,
-    config?: Partial<ProxyServerConfig>
+    config?: Partial<ProxyServerConfig>,
   ) {
     this.config = { ...DEFAULT_PROXY_CONFIG, ...config };
     this.router = new TrafficRouter(db, kv, {
@@ -59,12 +59,8 @@ export class ProxyServer {
 
     return new Promise((resolve, reject) => {
       this.server!.listen(this.config.port, this.config.host, () => {
-        console.log(
-          `[ProxyServer] Listening on ${this.config.host}:${this.config.port}`
-        );
-        console.log(
-          `[ProxyServer] Routing *.*.${this.config.baseDomain} traffic`
-        );
+        console.log(`[ProxyServer] Listening on ${this.config.host}:${this.config.port}`);
+        console.log(`[ProxyServer] Routing *.*.${this.config.baseDomain} traffic`);
         resolve();
       });
 
@@ -89,10 +85,7 @@ export class ProxyServer {
   /**
    * Handle incoming HTTP request
    */
-  private async handleRequest(
-    req: IncomingMessage,
-    res: ServerResponse
-  ): Promise<void> {
+  private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const startTime = Date.now();
     const hostname = req.headers.host ?? "";
 
@@ -112,9 +105,7 @@ export class ProxyServer {
       await this.proxyRequest(req, res, route);
 
       const duration = Date.now() - startTime;
-      console.log(
-        `[Proxy] ${req.method} ${hostname}${req.url} -> ${route.instanceAddress}:${route.instancePort} (${duration}ms)`
-      );
+      console.log(`[Proxy] ${req.method} ${hostname}${req.url} -> ${route.instanceAddress}:${route.instancePort} (${duration}ms)`);
     } catch (error) {
       console.error(`[Proxy] Error handling request: ${error}`);
       this.sendError(res, 502, "Proxy error", {
@@ -126,11 +117,7 @@ export class ProxyServer {
   /**
    * Proxy request to the target instance
    */
-  private async proxyRequest(
-    req: IncomingMessage,
-    res: ServerResponse,
-    route: ResolvedRoute
-  ): Promise<void> {
+  private async proxyRequest(req: IncomingMessage, res: ServerResponse, route: ResolvedRoute): Promise<void> {
     const targetUrl = `http://${route.instanceAddress}:${route.instancePort}${req.url}`;
 
     // Build headers
@@ -145,10 +132,7 @@ export class ProxyServer {
     headers["Host"] = `${route.instanceAddress}:${route.instancePort}`;
     headers["X-Forwarded-Host"] = req.headers.host ?? "";
     headers["X-Forwarded-Proto"] = "https";
-    headers["X-Forwarded-For"] =
-      req.headers["x-forwarded-for"]?.toString() ??
-      req.socket.remoteAddress ??
-      "";
+    headers["X-Forwarded-For"] = req.headers["x-forwarded-for"]?.toString() ?? req.socket.remoteAddress ?? "";
     headers["X-Dployr-Service"] = route.serviceName;
     headers["X-Dployr-Cluster"] = route.clusterName;
     headers["X-Dployr-Instance-Id"] = route.instanceId;
@@ -162,10 +146,7 @@ export class ProxyServer {
 
     // Make the proxied request
     const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      this.config.timeoutMs
-    );
+    const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
     try {
       const response = await fetch(targetUrl, {
@@ -176,9 +157,7 @@ export class ProxyServer {
       });
 
       // Write response status and headers
-      res.writeHead(response.status, response.statusText, 
-        Object.fromEntries(response.headers.entries())
-      );
+      res.writeHead(response.status, response.statusText, Object.fromEntries(response.headers.entries()));
 
       // Stream response body
       if (response.body) {
@@ -199,28 +178,14 @@ export class ProxyServer {
    * Check if header is hop-by-hop (should not be forwarded)
    */
   private isHopByHopHeader(header: string): boolean {
-    const hopByHop = [
-      "connection",
-      "keep-alive",
-      "proxy-authenticate",
-      "proxy-authorization",
-      "te",
-      "trailer",
-      "transfer-encoding",
-      "upgrade",
-    ];
+    const hopByHop = ["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"];
     return hopByHop.includes(header.toLowerCase());
   }
 
   /**
    * Send error response
    */
-  private sendError(
-    res: ServerResponse,
-    status: number,
-    message: string,
-    details?: Record<string, unknown>
-  ): void {
+  private sendError(res: ServerResponse, status: number, message: string, details?: Record<string, unknown>): void {
     res.writeHead(status, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
@@ -230,7 +195,7 @@ export class ProxyServer {
           code: status === 404 ? "SERVICE_NOT_FOUND" : "PROXY_ERROR",
           ...details,
         },
-      })
+      }),
     );
   }
 
@@ -249,15 +214,13 @@ export class ProxyServer {
 /**
  * Start the proxy server as a standalone process
  */
-export async function startProxyServer(
-  config?: Partial<ProxyServerConfig>
-): Promise<ProxyServer> {
+export async function startProxyServer(config?: Partial<ProxyServerConfig>): Promise<ProxyServer> {
   const appConfig = loadConfig();
-  
+
   // Initialize database and KV
   const dbAdapter = await createDatabaseFromConfig(appConfig);
   const kvAdapter = await createKVFromConfig(appConfig);
-  
+
   const db = new DatabaseStore(dbAdapter);
   const kv = new KVStore(kvAdapter, appConfig.integrations?.github_token);
 

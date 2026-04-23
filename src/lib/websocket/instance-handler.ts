@@ -6,8 +6,8 @@ import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import type { NodeTask } from "@/lib/tasks/types.js";
 import type { Session } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd-service.js";
-import { KVStore } from "@/lib/db/store/kv.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { JWTService } from "@/services/jwt.js";
 import { ConnectionManager, ConnectionManagerConfig } from "./connection-manager.js";
@@ -67,7 +67,6 @@ export class WebSocketHandler {
       dployrdService,
       terminalManager: this.terminalManager,
       sendTaskToCluster: this.sendTaskToCluster.bind(this),
-      appConfig: this.config,
     });
   }
 

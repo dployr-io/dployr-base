@@ -1,8 +1,8 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { DatabaseStore } from "@/lib/db/store/index.js";
-import { KVStore } from "@/lib/db/store/kv.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
 import type { ConnectionManager } from "../connection-manager.js";
 import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "../message-types.js";
 import { isNodeBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind, WSErrorCode, createWSError } from "../message-types.js";

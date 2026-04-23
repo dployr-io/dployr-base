@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Bindings } from "@/types/index.js";
-import { DatabaseStore } from "@/lib/db/store/index.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { DiscordService } from "./discord.js";
 import { SlackService } from "./slack.js";
 import { WebhookService } from "./webhook.js";
@@ -29,10 +29,7 @@ export class NotificationService {
     this.emailService = new EmailNotificationService(env);
   }
 
-  private isEventSubscribed(
-    integration: { enabled: boolean; events?: NotificationEvent[] },
-    event: NotificationEvent,
-  ): boolean {
+  private isEventSubscribed(integration: { enabled: boolean; events?: NotificationEvent[] }, event: NotificationEvent): boolean {
     if (!integration.enabled) return false;
     if (!integration.events) return true;
     return integration.events.includes(event);
@@ -48,33 +45,39 @@ export class NotificationService {
       // Discord notification
       if (integrations.notification?.discord?.webhookUrl && this.isEventSubscribed(integrations.notification.discord, event)) {
         promises.push(
-          this.discordService.sendNotification({
-            webhookUrl: integrations.notification.discord.webhookUrl,
-            event,
-            data,
-          }).catch(err => console.error(`Discord notification failed:`, err))
+          this.discordService
+            .sendNotification({
+              webhookUrl: integrations.notification.discord.webhookUrl,
+              event,
+              data,
+            })
+            .catch((err) => console.error(`Discord notification failed:`, err)),
         );
       }
 
       // Slack notification
       if (integrations.notification?.slack?.webhookUrl && this.isEventSubscribed(integrations.notification.slack, event)) {
         promises.push(
-          this.slackService.sendNotification({
-            webhookUrl: integrations.notification.slack.webhookUrl,
-            event,
-            data,
-          }).catch(err => console.error(`Slack notification failed:`, err))
+          this.slackService
+            .sendNotification({
+              webhookUrl: integrations.notification.slack.webhookUrl,
+              event,
+              data,
+            })
+            .catch((err) => console.error(`Slack notification failed:`, err)),
         );
       }
 
       // Custom webhook notification
       if (integrations.notification?.customWebhook?.webhookUrl && this.isEventSubscribed(integrations.notification.customWebhook, event)) {
         promises.push(
-          this.webhookService.sendNotification({
-            webhookUrl: integrations.notification.customWebhook.webhookUrl,
-            event,
-            data,
-          }).catch(err => console.error(`Custom webhook notification failed:`, err))
+          this.webhookService
+            .sendNotification({
+              webhookUrl: integrations.notification.customWebhook.webhookUrl,
+              event,
+              data,
+            })
+            .catch((err) => console.error(`Custom webhook notification failed:`, err)),
         );
       }
 
@@ -85,11 +88,13 @@ export class NotificationService {
           const owner = await d1.users.get(ownerUserId);
           if (owner?.email) {
             promises.push(
-              this.emailService.sendNotification({
-                event,
-                data,
-                to: owner.email,
-              }).catch(err => console.error(`Email notification failed:`, err))
+              this.emailService
+                .sendNotification({
+                  event,
+                  data,
+                  to: owner.email,
+                })
+                .catch((err) => console.error(`Email notification failed:`, err)),
             );
           }
         }

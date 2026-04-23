@@ -1,16 +1,16 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { createServer, Server } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
-import { Buffer } from 'buffer';
-import type { IncomingMessage } from 'http';
-import type { Socket } from 'net';
-import type { Hono } from 'hono';
-import { initializeAdapters, type Adapters } from '@/lib/bootstrap.js';
-import { DatabaseStore } from '@/lib/db/store/index.js';
-import { KVStore } from '@/lib/db/store/kv.js';
-import type { Session } from '@/types/index.js';
+import { createServer, Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
+import { Buffer } from "buffer";
+import type { IncomingMessage } from "http";
+import type { Socket } from "net";
+import type { Hono } from "hono";
+import { initializeAdapters, type Adapters } from "@/lib/bootstrap.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
+import type { Session } from "@/types/index.js";
 
 export class WebSocketService {
   private server: Server;
@@ -41,43 +41,43 @@ export class WebSocketService {
   private setupGracefulShutdown(): void {
     const shutdown = async (signal: string) => {
       console.log(`\n[Server] Received ${signal}, starting graceful shutdown...`);
-      
+
       // Stop accepting new connections
       this.wss.close();
-      
+
       // Shutdown WebSocket handler
       if (this.adapters?.ws) {
         this.adapters.ws.shutdown();
       }
-      
+
       // Close HTTP server
       this.server.close(() => {
-        console.log('[Server] HTTP server closed');
+        console.log("[Server] HTTP server closed");
         process.exit(0);
       });
 
       // Force exit after 10 seconds
       setTimeout(() => {
-        console.error('[Server] Forced shutdown after timeout');
+        console.error("[Server] Forced shutdown after timeout");
         process.exit(1);
       }, 10000);
     };
 
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
   }
 
   private createHttpServer(): Server {
     return createServer(async (req, res) => {
-      const upgradeHeader = req.headers['upgrade'];
-      if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
-        console.log('WebSocket upgrade request detected, deferring to upgrade handler');
+      const upgradeHeader = req.headers["upgrade"];
+      if (upgradeHeader && upgradeHeader.toLowerCase() === "websocket") {
+        console.log("WebSocket upgrade request detected, deferring to upgrade handler");
         return;
       }
 
       // Collect request body for non-GET/HEAD requests
       let body;
-      if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (req.method !== "GET" && req.method !== "HEAD") {
         const chunks: Uint8Array[] = [];
         for await (const chunk of req) {
           chunks.push(chunk);
@@ -90,7 +90,7 @@ export class WebSocketService {
           method: req.method,
           headers: req.headers as any,
           body: body,
-        })
+        }),
       );
 
       res.statusCode = response.status;
@@ -111,30 +111,30 @@ export class WebSocketService {
   }
 
   private setupUpgradeHandler(): void {
-    this.server.on('upgrade', async (message: IncomingMessage, socket: Socket, head: Buffer) => {
-      const url = new URL(message.url || '', `http://${message.headers.host}`);
-      
+    this.server.on("upgrade", async (message: IncomingMessage, socket: Socket, head: Buffer) => {
+      const url = new URL(message.url || "", `http://${message.headers.host}`);
+
       // Handle terminal relay endpoint - node outbound connections
       // Matches: /v1/terminal/ws?sessionId=...
-      if (url.pathname === '/v1/terminal/ws') {
-        const sessionId = url.searchParams.get('sessionId');
-        
+      if (url.pathname === "/v1/terminal/ws") {
+        const sessionId = url.searchParams.get("sessionId");
+
         if (!sessionId) {
-          socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+          socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
           socket.destroy();
           return;
         }
-        
-        const authHeader = message.headers['authorization'] || message.headers['Authorization'];
+
+        const authHeader = message.headers["authorization"] || message.headers["Authorization"];
         const auth = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-        if (!auth || !auth.startsWith('Bearer ')) {
-          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        if (!auth || !auth.startsWith("Bearer ")) {
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
           socket.destroy();
           return;
         }
 
         if (!this.adapters?.ws) {
-          socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n');
+          socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
           socket.destroy();
           return;
         }
@@ -142,57 +142,55 @@ export class WebSocketService {
         this.wss.handleUpgrade(message, socket, head, (ws: WebSocket) => {
           const accepted = this.adapters!.ws.acceptTerminalConnection(sessionId!, ws);
           if (!accepted) {
-            ws.close(1008, 'Session not found or expired');
+            ws.close(1008, "Session not found or expired");
           }
         });
         return;
       }
-      
+
       // Handle cluster WebSocket streams
       // Matches: /v1/instances/stream OR /v1/node/ws
       if (url.pathname.match(/\/v1\/(instances\/stream|node\/ws)$/)) {
-        const role = url.pathname.includes('/node/ws') ? 'node' : 'client';
-        
+        const role = url.pathname.includes("/node/ws") ? "node" : "client";
+
         let clusterId: string | null = null;
-        
-        if (role === 'node') {
-          const instanceId = url.searchParams.get('instanceId');
-          const instanceName = url.searchParams.get('instanceName');
-          
+
+        if (role === "node") {
+          const instanceId = url.searchParams.get("instanceId");
+          const instanceName = url.searchParams.get("instanceName");
+
           if ((!instanceId && !instanceName) || !this.adapters?.db) {
-            socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+            socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
             socket.destroy();
             return;
           }
-          
+
           const db = new DatabaseStore(this.adapters.db);
-          const instance = instanceId
-            ? await db.instances.get(instanceId)
-            : await db.instances.getByName(instanceName!);
-          
+          const instance = instanceId ? await db.instances.get(instanceId) : await db.instances.getByName(instanceName!);
+
           if (!instance) {
-            socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+            socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
             socket.destroy();
             return;
           }
-          
+
           clusterId = instance.clusterId;
         } else {
-          clusterId = url.searchParams.get('clusterId');
+          clusterId = url.searchParams.get("clusterId");
         }
-        
+
         if (!clusterId || !this.adapters?.ws) {
-          socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+          socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
           socket.destroy();
           return;
         }
 
         // Validate auth token for node endpoint
-        if (role === 'node') {
-          const authHeader = message.headers['authorization'] || message.headers['Authorization'];
+        if (role === "node") {
+          const authHeader = message.headers["authorization"] || message.headers["Authorization"];
           const auth = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-          if (!auth || !auth.startsWith('Bearer ')) {
-            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          if (!auth || !auth.startsWith("Bearer ")) {
+            socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
             socket.destroy();
             return;
           }
@@ -200,16 +198,17 @@ export class WebSocketService {
 
         // Get session for client connections
         let session: Session | undefined;
-        if (role === 'client' && this.adapters?.kv) {
-          const cookies = message.headers.cookie || '';
-          const sessionId = cookies.split(';')
-            .map(c => c.trim())
-            .find(c => c.startsWith('session='))
-            ?.split('=')[1];
-          
+        if (role === "client" && this.adapters?.kv) {
+          const cookies = message.headers.cookie || "";
+          const sessionId = cookies
+            .split(";")
+            .map((c) => c.trim())
+            .find((c) => c.startsWith("session="))
+            ?.split("=")[1];
+
           if (sessionId) {
             const kv = new KVStore(this.adapters.kv);
-            session = await kv.getSession(sessionId) || undefined;
+            session = (await kv.getSession(sessionId)) || undefined;
           }
         }
 
