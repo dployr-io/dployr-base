@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { authMiddleware } from "@/middleware/auth.js";
 import { BillingService } from "@/services/billing.js";
+import { PolarRequestValidationError } from "@/lib/errors/errors.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKVStore, getBillingProvider, type AppVariables, getDbStore } from "@/lib/context.js";
 import { PLANS } from "@/lib/constants/billing.js";
@@ -96,7 +97,6 @@ billing.post("/checkout", authMiddleware, async (c) => {
   }
 
   const { plan, clusterId, successUrl } = validation.data;
-
   const db = getDbStore(c);
 
   const isOwner = await db.clusters.isOwner(session.userId, clusterId);
@@ -123,7 +123,6 @@ billing.post("/checkout", authMiddleware, async (c) => {
   }
 
   const user = await db.users.get(session.email);
-
   if (!user) {
     return c.json(
       createErrorResponse({
@@ -150,6 +149,15 @@ billing.post("/checkout", authMiddleware, async (c) => {
 
     return c.json(createSuccessResponse(result));
   } catch (error) {
+    if (error instanceof PolarRequestValidationError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
     console.error("Billing checkout error:", error);
     return c.json(
       createErrorResponse({
@@ -165,8 +173,7 @@ billing.post("/webhook", async (c) => {
   const signatureHeader = c.req.header("webhook-signature") || "";
   const webhookId = c.req.header("webhook-id") || "";
   const webhookTimestamp = c.req.header("webhook-timestamp") || "";
-  let rawBody = await c.req.text();
-  rawBody = rawBody.trim();
+  const rawBody = (await c.req.text()).trim();
 
   if (!c.env.POLAR_WEBHOOK_SECRET) {
     console.error("[Billing] POLAR_WEBHOOK_SECRET not configured");

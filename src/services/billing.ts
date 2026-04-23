@@ -27,6 +27,16 @@ export class BillingService {
     private env: Bindings,
   ) {}
 
+  private toEpochMs(value: unknown): number | null {
+    if (!value) return null;
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const ms = new Date(value).getTime();
+      return isNaN(ms) ? null : ms;
+    }
+    return null;
+  }
+
   async getStatus({ clusterId, db }: { clusterId: string; db: DatabaseStore }): Promise<{
     plan: SubscriptionPlan | null;
     planDetails: (typeof PLANS)[number] | null;
@@ -56,14 +66,14 @@ export class BillingService {
   }
 
   async createCheckout(params: CheckoutParams, db: DatabaseStore): Promise<{ checkoutUrl: string; customerId: string }> {
-    const checkoutUrl = await this.provider.buildCheckoutUrl(params);
-
     const customer = await this.provider.getOrCreateCustomer({
       userId: params.userId,
       email: params.email,
       name: params.name,
       clusterId: params.clusterId,
     });
+
+    const checkoutUrl = await this.provider.buildCheckoutUrl(params);
 
     await db.subscriptions.upsert({
       clusterId: params.clusterId,
@@ -72,10 +82,7 @@ export class BillingService {
       status: "active",
     });
 
-    return {
-      checkoutUrl,
-      customerId: customer.id,
-    };
+    return { checkoutUrl, customerId: customer.id };
   }
 
   async handleWebhook(event: PolarWebhookEvent, db: DatabaseStore, kv: KVStore): Promise<void> {
@@ -88,27 +95,21 @@ export class BillingService {
       case "subscription.updated":
         await this.onSubscriptionCreatedOrUpdated(data, db, kv);
         break;
-
       case "subscription.canceled":
         await this.onSubscriptionCanceled(data, db, kv);
         break;
-
       case "subscription.revoked":
         await this.onSubscriptionRevoked(data, db, kv);
         break;
-
       case "subscription.uncanceled":
         await this.onSubscriptionUncanceled(data, db, kv);
         break;
-
       case "subscription.past_due":
         await this.onSubscriptionPastDue(data, db, kv);
         break;
-
       case "order.created":
         console.log(`[Billing] Order created: ${data.id}`);
         break;
-
       default:
         console.log(`[Billing] Unhandled Polar event: ${type}`);
     }
@@ -148,48 +149,35 @@ export class BillingService {
     const subject = event.includes("failed") ? "Payment Failed - Action Required" : event.includes("canceled") ? "Subscription Canceled" : "Subscription Update";
 
     await emailService.sendEmail(subject, html);
-
     await kv.setReminderNotification({ clusterId });
 
     console.log(`[Billing] Sent ${event} notification to ${user.email} for cluster ${clusterId}`);
   }
 
-  private getClusterId(data: Record<string, unknown>): string | null {
-    const metadata = data.metadata as Record<string, unknown> | undefined;
-    const sub = data.subscription as Record<string, unknown> | undefined;
-    const subMetadata = sub?.["metadata"] as Record<string, unknown> | undefined;
-    return (metadata?.["cluster_id"] as string | undefined) || (subMetadata?.["cluster_id"] as string | undefined) || null;
+  private getPolarReferencedClusterId(data: Record<string, unknown>): string | null {
+    const customer = data.customer as Record<string, unknown> | undefined;
+    return (customer?.["external_id"] as string | undefined) || null;
   }
 
   private getPolarCustomerId(data: Record<string, unknown>): string | null {
-    const sub = data.subscription as Record<string, unknown> | undefined;
-    return (data.customer_id as string) || (sub?.["customer_id"] as string) || null;
+    const customer = data.customer as Record<string, unknown> | undefined;
+    return (customer?.["id"] as string | undefined) || (data?.["customer_id"] as string | undefined) || null;
   }
 
   private getPolarSubscriptionId(data: Record<string, unknown>): string | null {
-    const sub = data.subscription as Record<string, unknown> | undefined;
-    return (data.id as string) || (sub?.["id"] as string) || null;
+    return (data?.["id"] as string | undefined) || null;
   }
 
   private resolvePlan(data: Record<string, unknown>): SubscriptionPlan {
     const product = data.product as Record<string, unknown> | undefined;
-    const sub = data.subscription as Record<string, unknown> | undefined;
-    const subProduct = sub?.["product"] as Record<string, unknown> | undefined;
-    const metadata = data.metadata as Record<string, unknown> | undefined;
-    const productName = (product?.["name"] || subProduct?.["name"] || "").toString().toLowerCase();
-
+    const productName = (product?.["name"] || "").toString().toLowerCase();
     if (productName.includes("pro")) return "pro";
     if (productName.includes("indie")) return "indie";
-
-    const metaPlan = (metadata?.["plan"] as string)?.toLowerCase() || "";
-    if (metaPlan === "pro") return "pro";
-    if (metaPlan === "indie") return "indie";
-
     return "indie";
   }
 
   private async onSubscriptionCreatedOrUpdated(data: Record<string, unknown>, db: DatabaseStore, kv: KVStore): Promise<void> {
-    const clusterId = this.getClusterId(data);
+    const clusterId = this.getPolarReferencedClusterId(data);
     const polarSubscriptionId = this.getPolarSubscriptionId(data);
     const polarCustomerId = this.getPolarCustomerId(data);
 
@@ -199,25 +187,12 @@ export class BillingService {
     }
 
     const polarStatus = (data.status as string) || "active";
-    let status: SubscriptionStatus = "active";
-    if (polarStatus === "past_due") {
-      status = "past_due";
-    }
-
+    const status: SubscriptionStatus = polarStatus === "past_due" ? "past_due" : "active";
     const plan = this.resolvePlan(data);
-    const canceledAt = (data.canceled_at as number) || null;
-    const periodEnd = (data.current_period_end as number) || null;
+    const canceledAt = this.toEpochMs(data.canceled_at);
+    const periodEnd = this.toEpochMs(data.current_period_end);
 
-    await db.subscriptions.upsert({
-      clusterId,
-      plan,
-      polarCustomerId,
-      polarSubscriptionId,
-      status,
-      canceledAt,
-      periodEnd,
-    });
-
+    await db.subscriptions.upsert({ clusterId, plan, polarCustomerId, polarSubscriptionId, status, canceledAt, periodEnd });
     await this.sendBillingNotification(polarStatus === "past_due" ? EVENTS.BILLING.PAYMENT_FAILED.code : EVENTS.BILLING.PAYMENT_SUCCESSFUL.code, clusterId, db, kv);
 
     console.log(`[Billing] Cluster ${clusterId} updated to plan=${plan} status=${status}`);
@@ -225,8 +200,8 @@ export class BillingService {
 
   private async onSubscriptionCanceled(data: Record<string, unknown>, db: DatabaseStore, kv: KVStore): Promise<void> {
     const polarSubscriptionId = this.getPolarSubscriptionId(data);
-    const clusterId = this.getClusterId(data);
-    const periodEnd = (data.current_period_end as number) || null;
+    const clusterId = this.getPolarReferencedClusterId(data);
+    const periodEnd = this.toEpochMs(data.current_period_end);
 
     if (polarSubscriptionId) {
       const existing = await db.subscriptions.getByPolarSubscriptionId(polarSubscriptionId);
@@ -241,8 +216,8 @@ export class BillingService {
         canceledAt: Date.now(),
         periodEnd,
       });
-      console.log(`[Billing] Cluster ${existing.clusterId} marked canceled, period ends at ${periodEnd ? new Date(periodEnd).toISOString() : "unknown"}`);
 
+      console.log(`[Billing] Cluster ${existing.clusterId} marked canceled`);
       await this.sendBillingNotification(EVENTS.BILLING.SUBSCRIPTION_CANCELLED.code, existing.clusterId, db, kv, { periodEnd });
     } else if (clusterId) {
       const existing = await db.subscriptions.get(clusterId);
@@ -258,7 +233,7 @@ export class BillingService {
         periodEnd,
       });
 
-      console.log(`[Billing] Cluster ${clusterId} marked canceled, period ends at ${periodEnd ? new Date(periodEnd).toISOString() : "unknown"}`);
+      console.log(`[Billing] Cluster ${clusterId} marked canceled`);
       await this.sendBillingNotification(EVENTS.BILLING.SUBSCRIPTION_CANCELLED.code, clusterId, db, kv, { periodEnd });
     }
   }
@@ -302,12 +277,11 @@ export class BillingService {
     });
 
     await this.sendBillingNotification(EVENTS.BILLING.SUBSCRIPTION_RESUMED.code, existing.clusterId, db, kv);
-
     console.log(`[Billing] Cluster ${existing.clusterId} uncanceled, restored to ${existing.plan}`);
   }
 
   private async onSubscriptionPastDue(data: Record<string, unknown>, db: DatabaseStore, kv: KVStore): Promise<void> {
-    const clusterId = this.getClusterId(data);
+    const clusterId = this.getPolarReferencedClusterId(data);
     if (!clusterId) return;
 
     const existing = await db.subscriptions.get(clusterId);
@@ -322,7 +296,6 @@ export class BillingService {
     });
 
     console.log(`[Billing] Cluster ${clusterId} payment past due`);
-
     await this.sendBillingNotification(EVENTS.BILLING.PAYMENT_FAILED.code, clusterId, db, kv);
   }
 }

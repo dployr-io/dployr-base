@@ -3,7 +3,7 @@
 
 import type { Bindings } from "@/types/index.js";
 import type { BillingProvider, CheckoutParams, CustomerParams, RawWebhookEvent } from "./billing/provider.js";
-import { PLANS } from "@/lib/constants/billing.js";
+import { PolarRequestValidationError } from "@/lib/errors/errors.js";
 
 export class PolarService implements BillingProvider {
   private baseUrl: string;
@@ -29,8 +29,7 @@ export class PolarService implements BillingProvider {
     const existing = await fetch(`${this.baseUrl}/customers/external/${encodeURIComponent(params.clusterId)}`, { headers: this.headers });
 
     if (existing.ok) {
-      const data = (await existing.json()) as { id: string; email: string };
-      return data;
+      return existing.json() as Promise<{ id: string; email: string }>;
     }
 
     const created = await fetch(`${this.baseUrl}/customers/`, {
@@ -45,6 +44,15 @@ export class PolarService implements BillingProvider {
 
     if (!created.ok) {
       const err = await created.text();
+      try {
+        const parsed = JSON.parse(err);
+        if (typeof parsed === "object" && parsed !== null && "detail" in parsed) {
+          const detail = Array.isArray(parsed.detail) ? parsed.detail : [];
+           throw new PolarRequestValidationError(parsed.error?.field, detail);
+        }
+      } catch (e) {
+        if (e instanceof PolarRequestValidationError) throw e;
+      }
       throw new Error(`[PolarService] Failed to create customer — ${err}`);
     }
 
@@ -52,14 +60,7 @@ export class PolarService implements BillingProvider {
   }
 
   async buildCheckoutUrl(params: CheckoutParams): Promise<string> {
-    const { plan, clusterId, userId, email, name, successUrl } = params;
-
-    const customer = await this.getOrCreateCustomer({ userId, email, name, clusterId });
-
-    const planDef = PLANS.find((p) => p.id === plan);
-    if (!planDef) {
-      throw new Error(`[PolarService] Unknown plan: ${plan}`);
-    }
+    const { plan, clusterId, userId, email, successUrl } = params;
 
     const checkoutBaseUrl = this.env.BILLING_CHECKOUT_URLS?.[plan];
     if (!checkoutBaseUrl) {
@@ -108,8 +109,7 @@ export class PolarService implements BillingProvider {
       throw new Error(`[PolarService] Failed to create checkout session — ${err}`);
     }
 
-    const data = (await res.json()) as { id: string; url: string };
-    return data;
+    return res.json() as Promise<{ id: string; url: string }>;
   }
 
   async verifyWebhookSignature(params: { rawBody: string; signatureHeader: string; webhookId: string; webhookTimestamp: string }): Promise<boolean> {
@@ -123,11 +123,9 @@ export class PolarService implements BillingProvider {
 
       const signatureBytes = await crypto.subtle.sign("HMAC", key, encoder.encode(signedPayload));
 
-      // Polar format: "v1,<base64>" — extract just the base64 part
       const receivedSig = params.signatureHeader.split(",")[1]?.trim();
       if (!receivedSig) return false;
 
-      // Compute base64 of our HMAC
       const computed = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)));
 
       return computed === receivedSig;
@@ -157,9 +155,7 @@ export class PolarService implements BillingProvider {
     metadata: Record<string, string>;
   } | null> {
     const res = await fetch(`${this.baseUrl}/subscriptions/${subscriptionId}`, { headers: this.headers });
-
     if (!res.ok) return null;
-
     return res.json() as Promise<{
       id: string;
       status: string;

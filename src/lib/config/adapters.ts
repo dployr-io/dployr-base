@@ -6,8 +6,8 @@ import { IKVAdapter, RedisKV, MemoryKV } from "@/lib/storage/kv.interface.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { WebSocketHandler } from "@/lib/websocket/instance-handler.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
-import { PolarService } from "@/services/polar.js";
 import type { Bindings } from "@/types/index.js";
+import { PolarService } from "@/services/polar.js";
 
 /**
  * Create KV adapter from config

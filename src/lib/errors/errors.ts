@@ -54,6 +54,16 @@ export class InstanceConnectionFailureError extends Error {
   }
 }
 
+export class PolarRequestValidationError extends Error {
+  constructor(
+    public field: string,
+    public details: any[],
+  ) {
+    super(`${details.map((d) => d.msg).join(", ")}`);
+    this.name = "PolarRequestValidationError";
+  }
+}
+
 export function handleInstanceError(c: Context, error: unknown, fallbackMessage: string) {
   if (error instanceof ResourceNotFoundError) {
     return c.json(
