@@ -4,12 +4,11 @@
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
-import { TrafficRouter, ResolvedRoute } from "@/services/traffic-router.js";
+import { TrafficRouter, ResolvedRoute } from "@/services/proxy/traffic-router.js";
 import { loadConfig } from "@/lib/config/loader.js";
 import { createDatabaseFromConfig, createKVFromConfig } from "@/lib/config/adapters.js";
 import { ProxyServerConfig } from "@/types/index.js";
 import { DEFAULT_PROXY_CONFIG } from "@/lib/constants/proxy.js";
-
 
 /**
  * Standalone proxy server for routing traffic to services

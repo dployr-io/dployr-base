@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { TrafficRouter } from "@/services/traffic-router.js";
+import { TrafficRouter } from "@/services/proxy/traffic-router.js";
 import { authMiddleware, requireClusterViewer } from "@/middleware/auth.js";
 import { getDbStore, getKVStore, type AppVariables } from "@/lib/context.js";
 import { ERROR } from "@/lib/constants/index.js";

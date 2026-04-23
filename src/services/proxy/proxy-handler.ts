@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import type { Context, HonoRequest } from "hono";
-import { TrafficRouter, ResolvedRoute } from "@/services/traffic-router.js";
+import { TrafficRouter, ResolvedRoute } from "@/services/proxy/traffic-router.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import type { Bindings, Variables } from "@/types/index.js";
