@@ -186,6 +186,8 @@ export class BillingService {
       return;
     }
 
+    const previousPlan = await db.subscriptions.getEffectivePlan(clusterId);
+
     const polarStatus = (data.status as string) || "active";
     const status: SubscriptionStatus = polarStatus === "past_due" ? "past_due" : "active";
     const plan = this.resolvePlan(data);
@@ -193,6 +195,23 @@ export class BillingService {
     const periodEnd = this.toEpochMs(data.current_period_end);
 
     await db.subscriptions.upsert({ clusterId, plan, polarCustomerId, polarSubscriptionId, status, canceledAt, periodEnd });
+
+    if (previousPlan === "hobby" && plan !== "hobby") {
+      try {
+        await kv.releaseFreeInstance(clusterId);
+        console.log(`[Billing] Released free instance for cluster ${clusterId} (upgraded from hobby to ${plan})`);
+      } catch (error) {
+        console.error(`[Billing] Failed to release free instance for cluster ${clusterId}:`, error);
+      }
+    } else if (previousPlan !== "hobby" && plan === "hobby") {
+      try {
+        await kv.assignFreeInstance(clusterId);
+        console.log(`[Billing] Assigned free instance for cluster ${clusterId} (downgraded back to hobby)`);
+      } catch (error) {
+        console.error(`[Billing] Failed to assign free instance for cluster ${clusterId}:`, error);
+      }
+    }
+
     await this.sendBillingNotification(polarStatus === "past_due" ? EVENTS.BILLING.PAYMENT_FAILED.code : EVENTS.BILLING.PAYMENT_SUCCESSFUL.code, clusterId, db, kv);
 
     console.log(`[Billing] Cluster ${clusterId} updated to plan=${plan} status=${status}`);
@@ -245,6 +264,8 @@ export class BillingService {
     const existing = await db.subscriptions.getByPolarSubscriptionId(polarSubscriptionId);
     if (!existing) return;
 
+    const previousPlan = await db.subscriptions.getEffectivePlan(existing.clusterId);
+
     await db.subscriptions.upsert({
       clusterId: existing.clusterId,
       plan: "hobby",
@@ -254,6 +275,15 @@ export class BillingService {
       canceledAt: null,
       periodEnd: null,
     });
+
+    if (previousPlan !== "hobby") {
+      try {
+        await kv.assignFreeInstance(existing.clusterId);
+        console.log(`[Billing] Assigned free instance for cluster ${existing.clusterId} (subscription revoked, downgraded to hobby)`);
+      } catch (error) {
+        console.error(`[Billing] Failed to assign free instance for cluster ${existing.clusterId}:`, error);
+      }
+    }
 
     await this.sendBillingNotification(EVENTS.BILLING.SUBSCRIPTION_EXPIRED.code, existing.clusterId, db, kv);
     console.log(`[Billing] Cluster ${existing.clusterId} downgraded to hobby (expired)`);
@@ -266,6 +296,8 @@ export class BillingService {
     const existing = await db.subscriptions.getByPolarSubscriptionId(polarSubscriptionId);
     if (!existing) return;
 
+    const previousPlan = await db.subscriptions.getEffectivePlan(existing.clusterId);
+
     await db.subscriptions.upsert({
       clusterId: existing.clusterId,
       plan: existing.plan,
@@ -275,6 +307,15 @@ export class BillingService {
       canceledAt: null,
       periodEnd: null,
     });
+
+    if (previousPlan === "hobby" && existing.plan !== "hobby") {
+      try {
+        await kv.releaseFreeInstance(existing.clusterId);
+        console.log(`[Billing] Released free instance for cluster ${existing.clusterId} (subscription uncanceled, upgraded back to ${existing.plan})`);
+      } catch (error) {
+        console.error(`[Billing] Failed to release free instance for cluster ${existing.clusterId}:`, error);
+      }
+    }
 
     await this.sendBillingNotification(EVENTS.BILLING.SUBSCRIPTION_RESUMED.code, existing.clusterId, db, kv);
     console.log(`[Billing] Cluster ${existing.clusterId} uncanceled, restored to ${existing.plan}`);

@@ -115,6 +115,17 @@ const ConfigSchema = z.object({
       cache_ttl_seconds: z.number().default(30),
     })
     .optional(),
+  free_instances: z
+    .array(
+      z.object({
+        id: z.string(),
+        address: z.string(),
+        tag: z.string(),
+        capacity: z.number(),
+        region: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

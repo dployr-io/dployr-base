@@ -117,10 +117,19 @@ auth.get("/callback/:provider", async (c) => {
       );
     }
 
+    let cluster;
     try {
-      await db.clusters.upsert(savedUser.id);
+      cluster = await db.clusters.upsert(savedUser.id);
     } catch (clusterError) {
       console.error("[AUTH] Failed to create cluster for user after OAuth save", clusterError);
+    }
+
+    if (cluster) {
+      try {
+        await kv.assignFreeInstance(cluster.id);
+      } catch (freeInstanceError) {
+        console.error("[AUTH] Failed to assign free instance for cluster", cluster.id, freeInstanceError);
+      }
     }
 
     const sessionId = crypto.randomUUID();
@@ -285,10 +294,19 @@ auth.post("/login/email/verify", async (c) => {
       );
     }
 
+    let cluster;
     try {
-      await db.clusters.upsert(user.id);
+      cluster = await db.clusters.upsert(user.id);
     } catch (clusterError) {
       console.error("[AUTH] Failed to create cluster for user after email OTP verification", clusterError);
+    }
+
+    if (cluster) {
+      try {
+        await kv.assignFreeInstance(cluster.id);
+      } catch (freeInstanceError) {
+        console.error("[AUTH] Failed to assign free instance for cluster", cluster.id, freeInstanceError);
+      }
     }
 
     const sessionId = crypto.randomUUID();

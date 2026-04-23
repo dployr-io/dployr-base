@@ -70,7 +70,6 @@ import { JWTService } from "@/services/jwt.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/index.js";
 import { TerminalManager } from "@/lib/websocket/terminal-manager.js";
-import type { Config } from "@/lib/config/loader.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -80,7 +79,6 @@ export interface ClientHandlerDependencies {
   dployrdService: DployrdService;
   terminalManager: TerminalManager;
   sendTaskToCluster: (clusterId: string, task: NodeTask) => boolean;
-  appConfig?: Config;
 }
 
 /**
@@ -94,7 +92,13 @@ export class ClientMessageHandler {
   private dployrdService: DployrdService;
   private terminalManager: TerminalManager;
   private sendTaskToCluster: (clusterId: string, task: NodeTask) => boolean;
-  private config?: Config;
+
+  // Task kinds allowed on free instances
+  private readonly ALLOWED_FREE_INSTANCE_TASK_KINDS = new Set([
+    "deployments",
+    "services",
+    "logs",
+  ]);
 
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
@@ -104,7 +108,20 @@ export class ClientMessageHandler {
     this.dployrdService = deps.dployrdService;
     this.terminalManager = deps.terminalManager;
     this.sendTaskToCluster = deps.sendTaskToCluster;
-    this.config = deps.appConfig;
+  }
+
+  /**
+   * Check if a task is allowed on a free instance
+   */
+  private async isTaskAllowedOnFreeInstance(clusterId: string, instanceId: string, task: NodeTask): Promise<boolean> {
+    const freeInstanceId = await this.kv.getClusterFreeInstance(clusterId);
+    if (!freeInstanceId || freeInstanceId !== instanceId) {
+      // Not targeting a free instance, allow the task
+      return true;
+    }
+
+    const taskKind = task.Type.split('/')[0];
+    return this.ALLOWED_FREE_INSTANCE_TASK_KINDS.has(taskKind);
   }
 
   /**
@@ -343,6 +360,12 @@ export class ClientMessageHandler {
       duration,
       token,
     });
+
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     this.sendTaskToCluster(conn.clusterId, task);
 
     console.log("Token", token);
@@ -399,6 +422,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
     const task = this.dployrdService.createDeployTask(taskId, payload, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
@@ -435,8 +465,23 @@ export class ClientMessageHandler {
       return;
     }
 
+    const instance = await this.db.instances.getByName(instanceName);
+
+    if (!instance) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "No instance with matching name was found!");
+      return;
+    }
+
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
     const task = this.dployrdService.createDeploymentListTask(taskId, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
@@ -491,6 +536,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createServiceRemoveTask(taskId, service.name, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
@@ -588,6 +640,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileReadTask(taskId, path, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
@@ -633,6 +692,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileWriteTask(taskId, path, content, encoding, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
@@ -678,6 +744,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileCreateTask(taskId, path, type, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
@@ -723,6 +796,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileDeleteTask(taskId, path, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
@@ -768,6 +848,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
     const task = this.dployrdService.createFileTreeTask(taskId, path, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(conn.clusterId, task);
 
     if (!sent) {
@@ -866,6 +953,11 @@ export class ClientMessageHandler {
       const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
       const task = this.dployrdService.createSystemInstallTask(taskId, version, token);
 
+      if (!(await this.isTaskAllowedOnFreeInstance(clusterId, instance.id, task))) {
+        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+        return;
+      }
+
       const sent = this.sendTaskToCluster(clusterId, task);
       if (!sent) {
         this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
@@ -918,6 +1010,11 @@ export class ClientMessageHandler {
       const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
       const task = this.dployrdService.createSystemRebootTask(taskId, force, token);
 
+      if (!(await this.isTaskAllowedOnFreeInstance(clusterId, instance.id, task))) {
+        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+        return;
+      }
+
       const sent = this.sendTaskToCluster(clusterId, task);
       if (!sent) {
         this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
@@ -967,6 +1064,12 @@ export class ClientMessageHandler {
 
     const task = this.dployrdService.createFileWatchTask(taskId, instanceId, path, recursive, requestId, token);
 
+    if (!(await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task))) {
+      this.connectionManager.removeFileWatch(watchKey, conn.connectionId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(conn.clusterId, task);
     if (!sent) {
       this.connectionManager.removeFileWatch(watchKey, conn.connectionId);
@@ -1009,10 +1112,11 @@ export class ClientMessageHandler {
     if (!this.connectionManager.hasFileWatchSubscribers(watchKey)) {
       const taskId = ulid();
       const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
-
       const task = this.dployrdService.createFileUnwatchTask(taskId, instanceId, path, requestId, token);
 
-      this.sendTaskToCluster(conn.clusterId, task);
+      if (await this.isTaskAllowedOnFreeInstance(conn.clusterId, instance.id, task)) {
+        this.sendTaskToCluster(conn.clusterId, task);
+      }
     }
 
     conn.ws.send(
@@ -1056,6 +1160,12 @@ export class ClientMessageHandler {
 
     const taskId = ulid();
     const task = this.dployrdService.createTerminalOpen(taskId, sessionId, cols, rows, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(instance.clusterId, instance.id, task))) {
+      this.terminalManager.removeExpectedSession(sessionId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
 
     const sent = this.sendTaskToCluster(instance.clusterId, task);
     if (!sent) {
@@ -1106,6 +1216,11 @@ export class ClientMessageHandler {
       const taskId = ulid();
       const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
       const task = this.dployrdService.createDaemonRestartTask(taskId, force, token);
+
+      if (!(await this.isTaskAllowedOnFreeInstance(clusterId, instance.id, task))) {
+        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+        return;
+      }
 
       const sent = this.sendTaskToCluster(clusterId, task);
       if (!sent) {
@@ -1165,6 +1280,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
     const task = this.dployrdService.createProxyStatusTask(taskId, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(clusterId, task);
 
     if (!sent) {
@@ -1210,6 +1332,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
     const task = this.dployrdService.createProxyRestartTask(taskId, force, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(clusterId, task);
 
     if (!sent) {
@@ -1260,6 +1389,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
     const task = this.dployrdService.createProxyAddTask(taskId, serviceName, upstream, domain, template, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(clusterId, task);
 
     if (!sent) {
@@ -1310,6 +1446,13 @@ export class ClientMessageHandler {
 
     const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
     const task = this.dployrdService.createProxyRemoveTask(taskId, serviceName, token);
+
+    if (!(await this.isTaskAllowedOnFreeInstance(clusterId, instance.id, task))) {
+      this.connectionManager.removePendingRequest(taskId);
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
+      return;
+    }
+
     const sent = this.sendTaskToCluster(clusterId, task);
 
     if (!sent) {

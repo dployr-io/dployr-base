@@ -33,3 +33,21 @@ export const BILLING_NOTIFICATION_TTL = 60 * 60 * 24; // 24 hours
 
 // JWT
 export const ADMIN_JWT_REFRESH_THRESHOLD = 60 * 29.5; // 29.5 minutes
+
+// Instance regions
+export const INSTANCE_REGIONS = [
+  "us-east",
+  "us-west",
+  "us-central",
+  "eu-west",
+  "eu-central",
+  "eu-north",
+  "ap-south",
+  "ap-southeast",
+  "ap-northeast",
+  "af-south",
+  "me-central",
+  "sa-east",
+] as const;
+
+export type InstanceRegion = typeof INSTANCE_REGIONS[number];

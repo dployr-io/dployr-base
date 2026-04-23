@@ -49,6 +49,11 @@ export async function initializeAdapters(): Promise<Adapters> {
     await initializeDatabase(adapters.db);
   }
 
+  if (config.free_instances && config.free_instances.length > 0) {
+    await adapters.kv.kv.put("free_instance:pool", JSON.stringify(config.free_instances));
+    console.log(`[Bootstrap] Seeded free_instance:pool with ${config.free_instances.length} instance(s)`);
+  }
+
   console.log("Dployr Base initialized");
   return adapters;
 }

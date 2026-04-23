@@ -2,19 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Context } from "hono";
-import { createErrorResponse, createPaginatedResponse, createSuccessResponse, Instance, parsePaginationParams } from "@/types/index.js";
-import { ERROR } from "@/lib/constants/index.js";
+import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
+import { ERROR, INSTANCE_REGIONS } from "@/lib/constants/index.js";
 import { InstanceService } from "@/services/instances.js";
+import { BillingService } from "@/services/billing.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
-import { ResourceNotFoundError, PermissionError, InstanceNotConnectedError, InstanceConnectionFailureError, InstanceConflictError, handleInstanceError } from "../errors/errors.js";
+import { InstanceConflictError, handleInstanceError } from "../errors/errors.js";
+import { getDbStore, getKVStore, getBillingProvider } from "@/lib/context.js";
 
 const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
   address: z.string().regex(/^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/, "Address must be a valid IPv4 address"),
   tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(15, "Tag must be a maximum of 15 characters"),
-  region: z.enum(["us-east", "us-west", "us-central", "eu-west", "eu-central", "eu-north", "ap-south", "ap-southeast", "ap-northeast", "af-south", "me-central", "sa-east"]).optional(),
+  region: z.enum(INSTANCE_REGIONS).optional(),
 });
 
 const rotateSchema = z.object({
@@ -107,13 +109,20 @@ export function attachListInstances(app: Hono<{ Bindings: Bindings; Variables: V
   app.get("/", async (c) => {
     const clusterId = c.req.query("clusterId");
     const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
-    const { instances, total } = await getInstanceService(c).listInstances({
-      c,
-      clusterId,
-      limit: pageSize,
-      offset,
-    });
-    const paginatedData = createPaginatedResponse(instances, page, pageSize, total);
+    const instanceService = getInstanceService(c);
+    const [{ instances, total }, freeInstance] = await Promise.all([
+      instanceService.listInstances({
+        c,
+        clusterId,
+        limit: pageSize,
+        offset,
+      }),
+      instanceService.resolveFreeInstance({ c, clusterId }),
+    ]);
+
+    const finalInstances = freeInstance ? [freeInstance, ...instances] : instances;
+    const finalTotal = freeInstance ? total + 1 : total;
+    const paginatedData = createPaginatedResponse(finalInstances, page, pageSize, finalTotal);
 
     return c.json(createSuccessResponse(paginatedData));
   });
@@ -158,7 +167,6 @@ export function attachDeleteInstance(app: Hono<{ Bindings: Bindings; Variables: 
 export function attachPingInstance(app: Hono<{ Bindings: Bindings; Variables: Variables }>) {
   app.post("/:name/ping", async (c) => {
     const instanceName = c.req.param("name");
-    const session = c.get("session");
 
     try {
       await getInstanceService(c).pingInstance({ instanceName, c });
