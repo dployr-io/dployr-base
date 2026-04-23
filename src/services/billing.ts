@@ -10,26 +10,26 @@ import { notificationTemplate } from "@/lib/templates/emails/notification.js";
 import { EVENTS } from "@/lib/constants/index.js";
 import { PLANS } from "@/lib/constants/billing.js";
 
-export type PolarWebhookEvent = { type: string; data: Record<string, unknown> }
+export type PolarWebhookEvent = { type: string; data: Record<string, unknown> };
 
 export interface CheckoutParams {
-  plan: SubscriptionPlan
-  clusterId: string
-  userId: string
-  email: string
-  name: string
-  successUrl?: string
+  plan: SubscriptionPlan;
+  clusterId: string;
+  userId: string;
+  email: string;
+  name: string;
+  successUrl?: string;
 }
 
 export class BillingService {
   constructor(
     private provider: BillingProvider,
-    private env: Bindings
+    private env: Bindings,
   ) {}
 
-  async getStatus(clusterId: string, userId: string, db: DatabaseStore): Promise<{
+  async getStatus({ clusterId, db }: { clusterId: string; db: DatabaseStore }): Promise<{
     plan: SubscriptionPlan | null;
-    planDetails: typeof PLANS[number] | null;
+    planDetails: (typeof PLANS)[number] | null;
     subscription: {
       status: SubscriptionStatus;
       polarSubscriptionId: string | null;
@@ -57,11 +57,12 @@ export class BillingService {
 
   async createCheckout(params: CheckoutParams, db: DatabaseStore): Promise<{ checkoutUrl: string; customerId: string }> {
     const checkoutUrl = await this.provider.buildCheckoutUrl(params);
-    
+
     const customer = await this.provider.getOrCreateCustomer({
       userId: params.userId,
       email: params.email,
       name: params.name,
+      clusterId: params.clusterId,
     });
 
     await db.subscriptions.upsert({
@@ -113,13 +114,7 @@ export class BillingService {
     }
   }
 
-  private async sendBillingNotification(
-    event: string,
-    clusterId: string,
-    db: DatabaseStore,
-    kv: KVStore,
-    extraData?: Record<string, unknown>
-  ): Promise<void> {
+  private async sendBillingNotification(event: string, clusterId: string, db: DatabaseStore, kv: KVStore, extraData?: Record<string, unknown>): Promise<void> {
     const recentReminder = await kv.getbillingNotification({ clusterId });
     if (recentReminder) {
       console.log(`[Billing] Skipping notification for ${clusterId} (reminder sent within 24h)`);

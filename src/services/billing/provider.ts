@@ -4,17 +4,14 @@
 import type { SubscriptionPlan } from "@/types/index.js";
 
 export interface CustomerParams {
+  clusterId: string
   userId: string
   email: string
   name?: string
 }
 
-export interface CheckoutParams {
+export interface CheckoutParams extends CustomerParams {
   plan: SubscriptionPlan
-  clusterId: string
-  userId: string
-  email: string
-  name: string
   successUrl?: string
 }
 

@@ -62,7 +62,7 @@ billing.get("/status", authMiddleware, async (c) => {
   }
 
   const billingService = new BillingService(billingProvider, c.env);
-  const result = await billingService.getStatus(clusterId, session.userId, db);
+  const result = await billingService.getStatus({ clusterId, db });
 
   return c.json(createSuccessResponse(result));
 });
@@ -166,7 +166,7 @@ billing.post("/webhook", async (c) => {
   const webhookId = c.req.header("webhook-id") || "";
   const webhookTimestamp = c.req.header("webhook-timestamp") || "";
   let rawBody = await c.req.text();
-  rawBody = rawBody.trim(); 
+  rawBody = rawBody.trim();
 
   if (!c.env.POLAR_WEBHOOK_SECRET) {
     console.error("[Billing] POLAR_WEBHOOK_SECRET not configured");
