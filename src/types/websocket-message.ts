@@ -4,34 +4,7 @@
 import type { WebSocket } from "ws";
 import type { DeploymentPayload } from "@/lib/tasks/types.js";
 import type { Session } from "@/types/index.js";
-
-/**
- * Error codes for WebSocket operations
- */
-export enum WSErrorCode {
-  // Validation errors (1xxx)
-  VALIDATION_ERROR = 1000,
-  MISSING_FIELD = 1001,
-  INVALID_FORMAT = 1002,
-
-  // Permission errors (2xxx)
-  PERMISSION_DENIED = 2000,
-  NOT_FOUND = 2001,
-  UNAUTHORIZED = 2002,
-
-  // Node errors (3xxx)
-  NODE_TIMEOUT = 3000,
-  NODE_DISCONNECTED = 3001,
-  NODE_ERROR = 3002,
-
-  // Rate limiting (4xxx)
-  RATE_LIMITED = 4000,
-  TOO_MANY_PENDING = 4001,
-
-  // Internal errors (5xxx)
-  INTERNAL_ERROR = 5000,
-  TASK_FAILED = 5001,
-}
+import { MESSAGE_KIND, WSErrorCode } from "../lib/constants/websocket.js";
 
 /**
  * Structured error response
@@ -45,61 +18,7 @@ export interface WSErrorResponse {
   timestamp: number;
 }
 
-/**
- * Message kind constants
- */
-export const MessageKind = {
-  // Node -> Server
-  UPDATE: "update",
-  LOG_CHUNK: "log_chunk",
-  TASK_RESPONSE: "task_response",
-
-  // Client -> Server
-  CLIENT_SUBSCRIBE: "client_subscribe",
-  LOG_SUBSCRIBE: "log_subscribe",
-  LOG_UNSUBSCRIBE: "log_unsubscribe",
-  LOG_STREAM: "log_stream",
-  DEPLOY: "deploy",
-  DEPLOYMENT_LIST: "deployment_list",
-  SERVICE_CREATE: "service_create",
-  SERVICE_REMOVE: "service_remove",
-  FILE_READ: "file_read",
-  FILE_WRITE: "file_write",
-  FILE_CREATE: "file_create",
-  FILE_DELETE: "file_delete",
-  FILE_TREE: "file_tree",
-  FILE_WATCH: "file_watch",
-  FILE_UNWATCH: "file_unwatch",
-  FILE_UPDATE: "file_update",
-
-  // Terminal operations
-  TERMINAL: "terminal",
-  TERMINAL_OPEN: "terminal_open",
-
-  // Instance operations
-  INSTANCE_TOKEN_ROTATE: "instance_token_rotate",
-  INSTANCE_SYSTEM_INSTALL: "instance_system_install",
-  INSTANCE_SYSTEM_REBOOT: "instance_system_reboot",
-  INSTANCE_SYSTEM_RESTART: "instance_system_restart",
-
-  // Proxy operations
-  PROXY_STATUS: "proxy_status",
-  PROXY_RESTART: "proxy_restart",
-  PROXY_ADD: "proxy_add",
-  PROXY_REMOVE: "proxy_remove",
-
-  // Process history
-  PROCESS_HISTORY: "process_history",
-
-  // Server -> Client
-  TASK: "task",
-  ERROR: "error",
-
-  // Acknowledgments
-  ACK: "ack",
-} as const;
-
-export type MessageKindType = (typeof MessageKind)[keyof typeof MessageKind];
+export type MessageKindType = (typeof MESSAGE_KIND)[keyof typeof MESSAGE_KIND];
 
 /**
  * Base message interface - all messages must have requestId for correlation
@@ -120,19 +39,19 @@ export interface BaseRequestMessage extends BaseMessage {
  * Node messages
  */
 export interface UpdateMessage extends BaseMessage {
-  kind: typeof MessageKind.UPDATE;
+  kind: typeof MESSAGE_KIND.UPDATE;
   [key: string]: unknown;
 }
 
 export interface LogChunkMessage extends BaseMessage {
-  kind: typeof MessageKind.LOG_CHUNK;
+  kind: typeof MESSAGE_KIND.LOG_CHUNK;
   streamId?: string;
   data?: string;
   [key: string]: unknown;
 }
 
 export interface TaskResponseMessage extends BaseMessage {
-  kind: typeof MessageKind.TASK_RESPONSE;
+  kind: typeof MESSAGE_KIND.TASK_RESPONSE;
   taskId: string;
   requestId: string;
   success: boolean;
@@ -149,7 +68,7 @@ export type NodeMessage = UpdateMessage | LogChunkMessage | TaskResponseMessage;
  * Acknowledgment message
  */
 export interface AckMessage extends BaseMessage {
-  kind: typeof MessageKind.ACK;
+  kind: typeof MESSAGE_KIND.ACK;
   messageId: string;
 }
 
@@ -157,11 +76,11 @@ export interface AckMessage extends BaseMessage {
  * Client messages - all require requestId
  */
 export interface ClientSubscribeMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.CLIENT_SUBSCRIBE;
+  kind: typeof MESSAGE_KIND.CLIENT_SUBSCRIBE;
 }
 
 export interface LogSubscribeMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.LOG_SUBSCRIBE;
+  kind: typeof MESSAGE_KIND.LOG_SUBSCRIBE;
   instanceName: string;
   path: string;
   startOffset?: number;
@@ -170,34 +89,34 @@ export interface LogSubscribeMessage extends BaseRequestMessage {
 }
 
 export interface LogUnsubscribeMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.LOG_UNSUBSCRIBE;
+  kind: typeof MESSAGE_KIND.LOG_UNSUBSCRIBE;
   path?: string;
 }
 
 export interface DeployMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.DEPLOY;
+  kind: typeof MESSAGE_KIND.DEPLOY;
   instanceName: string;
   payload: DeploymentPayload;
 }
 
 export interface ServiceCreateMessage extends BaseMessage {
-  kind: typeof MessageKind.SERVICE_CREATE;
+  kind: typeof MESSAGE_KIND.SERVICE_CREATE;
   instanceName: string;
   name: string;
 }
 
 export interface ServiceRemoveMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.SERVICE_REMOVE;
+  kind: typeof MESSAGE_KIND.SERVICE_REMOVE;
   name: string;
 }
 
 export interface DeploymentListMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.DEPLOYMENT_LIST;
+  kind: typeof MESSAGE_KIND.DEPLOYMENT_LIST;
   instanceName: string;
 }
 
 export interface LogStreamMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.LOG_STREAM;
+  kind: typeof MESSAGE_KIND.LOG_STREAM;
   token: string;
   path: string;
   streamId: string;
@@ -209,13 +128,13 @@ export interface LogStreamMessage extends BaseRequestMessage {
  * File operation messages - all require requestId
  */
 export interface FileReadMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.FILE_READ;
+  kind: typeof MESSAGE_KIND.FILE_READ;
   instanceId: string;
   path: string;
 }
 
 export interface FileWriteMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.FILE_WRITE;
+  kind: typeof MESSAGE_KIND.FILE_WRITE;
   instanceId: string;
   path: string;
   content: string;
@@ -223,45 +142,45 @@ export interface FileWriteMessage extends BaseRequestMessage {
 }
 
 export interface FileCreateMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.FILE_CREATE;
+  kind: typeof MESSAGE_KIND.FILE_CREATE;
   instanceId: string;
   path: string;
   type: "file" | "directory";
 }
 
 export interface FileDeleteMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.FILE_DELETE;
+  kind: typeof MESSAGE_KIND.FILE_DELETE;
   instanceId: string;
   path: string;
 }
 
 export interface FileTreeMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.FILE_TREE;
+  kind: typeof MESSAGE_KIND.FILE_TREE;
   instanceId: string;
   path?: string;
 }
 
 export interface FileWatchMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.FILE_WATCH;
+  kind: typeof MESSAGE_KIND.FILE_WATCH;
   instanceId: string;
   path: string;
   recursive?: boolean;
 }
 
 export interface FileUnwatchMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.FILE_UNWATCH;
+  kind: typeof MESSAGE_KIND.FILE_UNWATCH;
   instanceId: string;
   path: string;
 }
 
 export interface FileUpdateMessage extends BaseMessage {
-  kind: typeof MessageKind.FILE_UPDATE;
+  kind: typeof MESSAGE_KIND.FILE_UPDATE;
   instanceId: string;
   event: FileUpdateEvent;
 }
 
 export interface TerminalMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.TERMINAL;
+  kind: typeof MESSAGE_KIND.TERMINAL;
   sessionId?: string;
   instanceId: string;
   action: "input" | "resize" | "close" | "output" | "error";
@@ -272,7 +191,7 @@ export interface TerminalMessage extends BaseRequestMessage {
 }
 
 export interface TerminalOpenMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.TERMINAL_OPEN;
+  kind: typeof MESSAGE_KIND.TERMINAL_OPEN;
   instanceId: string;
   cols: number;
   rows: number;
@@ -367,27 +286,27 @@ export type FileOperationResponse = FileReadResponseMessage | FileWriteResponseM
  * Instance operation messages
  */
 export interface InstanceTokenRotateMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.INSTANCE_TOKEN_ROTATE;
+  kind: typeof MESSAGE_KIND.INSTANCE_TOKEN_ROTATE;
   instanceName: string;
   token: string;
 }
 
 export interface InstanceSystemInstallMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.INSTANCE_SYSTEM_INSTALL;
+  kind: typeof MESSAGE_KIND.INSTANCE_SYSTEM_INSTALL;
   instanceName: string;
   clusterId: string;
   version?: string;
 }
 
 export interface InstanceSystemRebootMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.INSTANCE_SYSTEM_REBOOT;
+  kind: typeof MESSAGE_KIND.INSTANCE_SYSTEM_REBOOT;
   instanceName: string;
   clusterId: string;
   force?: boolean;
 }
 
 export interface InstanceSystemRestartMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.INSTANCE_SYSTEM_RESTART;
+  kind: typeof MESSAGE_KIND.INSTANCE_SYSTEM_RESTART;
   instanceName: string;
   clusterId: string;
   force?: boolean;
@@ -397,20 +316,20 @@ export interface InstanceSystemRestartMessage extends BaseRequestMessage {
  * Proxy operation messages
  */
 export interface ProxyStatusMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.PROXY_STATUS;
+  kind: typeof MESSAGE_KIND.PROXY_STATUS;
   instanceName: string;
   clusterId: string;
 }
 
 export interface ProxyRestartMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.PROXY_RESTART;
+  kind: typeof MESSAGE_KIND.PROXY_RESTART;
   instanceName: string;
   clusterId: string;
   force?: boolean;
 }
 
 export interface ProxyAddMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.PROXY_ADD;
+  kind: typeof MESSAGE_KIND.PROXY_ADD;
   instanceName: string;
   clusterId: string;
   serviceName: string;
@@ -420,14 +339,14 @@ export interface ProxyAddMessage extends BaseRequestMessage {
 }
 
 export interface ProxyRemoveMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.PROXY_REMOVE;
+  kind: typeof MESSAGE_KIND.PROXY_REMOVE;
   instanceName: string;
   clusterId: string;
   serviceName: string;
 }
 
 export interface ProcessHistoryMessage extends BaseRequestMessage {
-  kind: typeof MessageKind.PROCESS_HISTORY;
+  kind: typeof MESSAGE_KIND.PROCESS_HISTORY;
   instanceId: string;
   startTime?: number; // Unix ms, defaults to 1h ago
   endTime?: number; // Unix ms, defaults to now
@@ -760,127 +679,127 @@ export function validateRequestMessage(msg: BaseMessage): msg is BaseRequestMess
  * Type guards for message types
  */
 export function isNodeBroadcastMessage(msg: BaseMessage): msg is UpdateMessage {
-  return msg.kind === MessageKind.UPDATE;
+  return msg.kind === MESSAGE_KIND.UPDATE;
 }
 
 export function isLogChunkMessage(msg: BaseMessage): msg is LogChunkMessage {
-  return msg.kind === MessageKind.LOG_CHUNK;
+  return msg.kind === MESSAGE_KIND.LOG_CHUNK;
 }
 
 export function isTaskResponseMessage(msg: BaseMessage): msg is TaskResponseMessage {
-  return msg.kind === MessageKind.TASK_RESPONSE;
+  return msg.kind === MESSAGE_KIND.TASK_RESPONSE;
 }
 
 export function isClientSubscribeMessage(msg: BaseMessage): msg is ClientSubscribeMessage {
-  return msg.kind === MessageKind.CLIENT_SUBSCRIBE;
+  return msg.kind === MESSAGE_KIND.CLIENT_SUBSCRIBE;
 }
 
 export function isLogSubscribeMessage(msg: BaseMessage): msg is LogSubscribeMessage {
-  return msg.kind === MessageKind.LOG_SUBSCRIBE;
+  return msg.kind === MESSAGE_KIND.LOG_SUBSCRIBE;
 }
 
 export function isLogUnsubscribeMessage(msg: BaseMessage): msg is LogUnsubscribeMessage {
-  return msg.kind === MessageKind.LOG_UNSUBSCRIBE;
+  return msg.kind === MESSAGE_KIND.LOG_UNSUBSCRIBE;
 }
 
 export function isDeployMessage(msg: BaseMessage): msg is DeployMessage {
-  return msg.kind === MessageKind.DEPLOY;
+  return msg.kind === MESSAGE_KIND.DEPLOY;
 }
 
 export function isServiceCreateMessage(msg: BaseMessage): msg is ServiceCreateMessage {
-  return msg.kind === MessageKind.SERVICE_CREATE;
+  return msg.kind === MESSAGE_KIND.SERVICE_CREATE;
 }
 
 export function isServiceRemoveMessage(msg: BaseMessage): msg is ServiceRemoveMessage {
-  return msg.kind === MessageKind.SERVICE_REMOVE;
+  return msg.kind === MESSAGE_KIND.SERVICE_REMOVE;
 }
 
 export function isDeploymentListMessage(msg: BaseMessage): msg is DeploymentListMessage {
-  return msg.kind === MessageKind.DEPLOYMENT_LIST;
+  return msg.kind === MESSAGE_KIND.DEPLOYMENT_LIST;
 }
 
 export function isLogStreamMessage(msg: BaseMessage): msg is LogStreamMessage {
-  return msg.kind === MessageKind.LOG_STREAM;
+  return msg.kind === MESSAGE_KIND.LOG_STREAM;
 }
 
 export function isFileReadMessage(msg: BaseMessage): msg is FileReadMessage {
-  return msg.kind === MessageKind.FILE_READ;
+  return msg.kind === MESSAGE_KIND.FILE_READ;
 }
 
 export function isFileWriteMessage(msg: BaseMessage): msg is FileWriteMessage {
-  return msg.kind === MessageKind.FILE_WRITE;
+  return msg.kind === MESSAGE_KIND.FILE_WRITE;
 }
 
 export function isFileCreateMessage(msg: BaseMessage): msg is FileCreateMessage {
-  return msg.kind === MessageKind.FILE_CREATE;
+  return msg.kind === MESSAGE_KIND.FILE_CREATE;
 }
 
 export function isFileDeleteMessage(msg: BaseMessage): msg is FileDeleteMessage {
-  return msg.kind === MessageKind.FILE_DELETE;
+  return msg.kind === MESSAGE_KIND.FILE_DELETE;
 }
 
 export function isFileTreeMessage(msg: BaseMessage): msg is FileTreeMessage {
-  return msg.kind === MessageKind.FILE_TREE;
+  return msg.kind === MESSAGE_KIND.FILE_TREE;
 }
 
 export function isFileWatchMessage(msg: BaseMessage): msg is FileWatchMessage {
-  return msg.kind === MessageKind.FILE_WATCH;
+  return msg.kind === MESSAGE_KIND.FILE_WATCH;
 }
 
 export function isFileUnwatchMessage(msg: BaseMessage): msg is FileUnwatchMessage {
-  return msg.kind === MessageKind.FILE_UNWATCH;
+  return msg.kind === MESSAGE_KIND.FILE_UNWATCH;
 }
 
 export function isFileUpdateMessage(msg: BaseMessage): msg is FileUpdateMessage {
-  return msg.kind === MessageKind.FILE_UPDATE;
+  return msg.kind === MESSAGE_KIND.FILE_UPDATE;
 }
 
 export function isAckMessage(msg: BaseMessage): msg is AckMessage {
-  return msg.kind === MessageKind.ACK;
+  return msg.kind === MESSAGE_KIND.ACK;
 }
 
 export function isInstanceTokenRotateMessage(msg: BaseMessage): msg is InstanceTokenRotateMessage {
-  return msg.kind === MessageKind.INSTANCE_TOKEN_ROTATE;
+  return msg.kind === MESSAGE_KIND.INSTANCE_TOKEN_ROTATE;
 }
 
 export function isInstanceSystemInstallMessage(msg: BaseMessage): msg is InstanceSystemInstallMessage {
-  return msg.kind === MessageKind.INSTANCE_SYSTEM_INSTALL;
+  return msg.kind === MESSAGE_KIND.INSTANCE_SYSTEM_INSTALL;
 }
 
 export function isInstanceSystemRebootMessage(msg: BaseMessage): msg is InstanceSystemRebootMessage {
-  return msg.kind === MessageKind.INSTANCE_SYSTEM_REBOOT;
+  return msg.kind === MESSAGE_KIND.INSTANCE_SYSTEM_REBOOT;
 }
 
 export function isInstanceSystemRestartMessage(msg: BaseMessage): msg is InstanceSystemRestartMessage {
-  return msg.kind === MessageKind.INSTANCE_SYSTEM_RESTART;
+  return msg.kind === MESSAGE_KIND.INSTANCE_SYSTEM_RESTART;
 }
 
 export function isProxyStatusMessage(msg: BaseMessage): msg is ProxyStatusMessage {
-  return msg.kind === MessageKind.PROXY_STATUS;
+  return msg.kind === MESSAGE_KIND.PROXY_STATUS;
 }
 
 export function isProxyRestartMessage(msg: BaseMessage): msg is ProxyRestartMessage {
-  return msg.kind === MessageKind.PROXY_RESTART;
+  return msg.kind === MESSAGE_KIND.PROXY_RESTART;
 }
 
 export function isProxyAddMessage(msg: BaseMessage): msg is ProxyAddMessage {
-  return msg.kind === MessageKind.PROXY_ADD;
+  return msg.kind === MESSAGE_KIND.PROXY_ADD;
 }
 
 export function isProxyRemoveMessage(msg: BaseMessage): msg is ProxyRemoveMessage {
-  return msg.kind === MessageKind.PROXY_REMOVE;
+  return msg.kind === MESSAGE_KIND.PROXY_REMOVE;
 }
 
 export function isProcessHistoryMessage(msg: BaseMessage): msg is ProcessHistoryMessage {
-  return msg.kind === MessageKind.PROCESS_HISTORY;
+  return msg.kind === MESSAGE_KIND.PROCESS_HISTORY;
 }
 
 export function isTerminalMessage(msg: BaseMessage): msg is TerminalMessage {
-  return msg.kind === MessageKind.TERMINAL;
+  return msg.kind === MESSAGE_KIND.TERMINAL;
 }
 
 export function isTerminalOpenMessage(msg: BaseMessage): msg is TerminalOpenMessage {
-  return msg.kind === MessageKind.TERMINAL_OPEN;
+  return msg.kind === MESSAGE_KIND.TERMINAL_OPEN;
 }
 
 /**

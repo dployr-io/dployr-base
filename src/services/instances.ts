@@ -8,7 +8,7 @@ import { ulid } from "ulid";
 import { getKVStore, getJWTService, getWS, getDbStore, getBillingProvider } from "@/lib/context.js";
 import { InstanceConnectionFailureError, InstanceNotConnectedError, PermissionError, ResourceNotFoundError } from "@/lib/errors/errors.js";
 import { DployrdService } from "./dployrd-service.js";
-import { BillingService } from "./billing.js";
+import { BillingService } from "./billing/index.js";
 
 /**
  * Service for managing dployr instances.
@@ -481,29 +481,28 @@ export class InstanceService {
     return task.ID;
   }
 
-  
   async resolveFreeInstance({ c, clusterId }: { c: any; clusterId?: string }) {
     if (!clusterId) return null;
-  
+
     const billingProvider = getBillingProvider(c);
     if (!billingProvider) return null;
-  
+
     const billingService = new BillingService(billingProvider, c.env);
     const db = getDbStore(c);
-  
+
     const status = await billingService.getStatus({ clusterId, db });
     if (status.plan !== "hobby") return null;
-  
+
     const kv = getKVStore(c);
     const [freeInstanceId, pool] = await Promise.all([kv.getClusterFreeInstance(clusterId), kv.getFreeInstancePool()]);
-  
+
     if (!freeInstanceId || !pool) return null;
-  
+
     const freeInstance = pool.find((inst) => inst.id === freeInstanceId);
     if (!freeInstance) return null;
-  
+
     const now = Date.now();
-  
+
     return {
       ...freeInstance,
       metadata: {

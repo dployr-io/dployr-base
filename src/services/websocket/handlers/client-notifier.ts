@@ -1,15 +1,16 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { BaseMessage, UpdateMessage } from "@/lib/websocket/message-types.js";
-import { MessageKind } from "@/lib/websocket/message-types.js";
-import { ConnectionManager } from "@/lib/websocket/connection-manager.js";
+import type { BaseMessage, UpdateMessage } from "@/types/websocket-message.js";
+import {} from "@/types/websocket-message.js";
+import { ConnectionManager } from "@/services/websocket/connection-manager.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { ulid } from "ulid";
+import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
 
 /**
  * Handles broadcasting messages to connected clients.
- * 
+ *
  * NOTE: This is now ONLY used for status broadcasts.
  * File operation responses are routed directly via ConnectionManager.
  */
@@ -20,7 +21,7 @@ export class ClientNotifier {
   ) {}
 
   /**
-   * Broadcast status updates to all client connections in a cluster. 
+   * Broadcast status updates to all client connections in a cluster.
    */
   async broadcast(clusterId: string, message: UpdateMessage): Promise<void> {
     const clients = this.conn.getClientConnections(clusterId);
@@ -51,8 +52,8 @@ export class ClientNotifier {
    */
   async sendToClient(clusterId: string, connectionId: string, message: BaseMessage): Promise<boolean> {
     const clients = this.conn.getClientConnections(clusterId);
-    const target = clients.find(c => c.connectionId === connectionId);
-    
+    const target = clients.find((c) => c.connectionId === connectionId);
+
     if (!target) {
       console.warn(`[WS] Client ${connectionId} not found in cluster ${clusterId}`);
       return false;
@@ -87,7 +88,7 @@ export class ClientNotifier {
   }
 
   private async cacheStatusIfNeeded(clusterId: string, message: BaseMessage, payload: string): Promise<void> {
-    if (message.kind === MessageKind.UPDATE) {
+    if (message.kind === MESSAGE_KIND.UPDATE) {
       try {
         await this.kv.kv.put(`cluster:${clusterId}:status`, payload, { ttl: 300 });
       } catch (err) {

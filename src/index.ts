@@ -3,7 +3,7 @@
 
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
-import { WebSocketService } from "@/services/websocket.js";
+import { WebSocketService } from "@/services/websocket/index.js";
 import { bootstrapMiddleware, getCorsConfig } from "@/lib/bootstrap.js";
 import { createCorsMiddleware } from "@/middleware/cors.js";
 import { globalRateLimit } from "@/middleware/ratelimit.js";

@@ -5,7 +5,7 @@ import { Context } from "hono";
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { ERROR, INSTANCE_REGIONS } from "@/lib/constants/index.js";
 import { InstanceService } from "@/services/instances.js";
-import { BillingService } from "@/services/billing.js";
+import { BillingService } from "@/services/billing/index.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";

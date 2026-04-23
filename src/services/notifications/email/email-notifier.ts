@@ -1,20 +1,16 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Notifier, NotificationPayload, NotificationEvent } from "./notifier.js";
-import { EmailService } from "./email.js";
+import { Notifier, NotificationPayload, NotificationEvent } from "../notifier.js";
+import { EmailService } from "./index.js";
 import { notificationTemplate } from "@/lib/templates/emails/notification.js";
-import { EVENT_METADATA } from "@/lib/constants/event-metadata.js";
+import { EVENT_METADATA } from "@/lib/constants/events.js";
 import type { Bindings } from "@/types/index.js";
 
-export class EmailNotificationService implements Notifier {
+export class EmailNotifierService implements Notifier {
   constructor(private env: Bindings) {}
 
-  async sendNotification({
-    event,
-    data,
-    to,
-  }: NotificationPayload): Promise<void> {
+  async sendNotification({ event, data, to }: NotificationPayload): Promise<void> {
     if (!to) {
       throw new Error("Email recipient (to) is required");
     }

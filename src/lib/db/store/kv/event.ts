@@ -1,12 +1,8 @@
 import { ActorType } from "@/types/index.js";
 import { ulid } from "ulid";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { KV_KEYS } from "@/lib/constants/kv-keys.js";
-import {
-  DEDUP_TTL,
-  EVENT_TTL,
-  FAILED_WORKFLOW_EVENT_TTL,
-} from "@/lib/constants/index.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
+import { DEDUP_TTL, EVENT_TTL, FAILED_WORKFLOW_EVENT_TTL } from "@/lib/constants/index.js";
 
 /**
  * Event logging and audit trail operations.
@@ -148,7 +144,6 @@ export class EventStore {
     );
     return events.filter((e) => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
   }
-
 
   // Workflow failure tracking
   async createWorkflowFailedEvent(id: string, data: Record<string, unknown>): Promise<void> {

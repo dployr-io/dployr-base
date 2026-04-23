@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { authMiddleware } from "@/middleware/auth.js";
-import { BillingService } from "@/services/billing.js";
+import { BillingService } from "@/services/billing/index.js";
 import { PolarRequestValidationError } from "@/lib/errors/errors.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKVStore, getBillingProvider, type AppVariables, getDbStore } from "@/lib/context.js";

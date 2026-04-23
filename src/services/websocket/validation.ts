@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { z } from "zod";
-import { WSErrorCode } from "./message-types.js";
+import {} from "../../types/websocket-message.js";
+import { WSErrorCode } from "../../lib/constants/websocket.js";
 
 /**
  * Runtime validation schemas for WebSocket messages
@@ -60,10 +61,12 @@ export const TaskResponseSchema = z.object({
   requestId: z.string().min(1),
   success: z.boolean(),
   data: z.unknown().optional(),
-  error: z.object({
-    code: z.enum(WSErrorCode),
-    message: z.string(),
-  }).optional(),
+  error: z
+    .object({
+      code: z.enum(WSErrorCode),
+      message: z.string(),
+    })
+    .optional(),
 });
 
 export const FileNodeSchema: z.ZodType<any> = z.lazy(() =>
@@ -76,7 +79,7 @@ export const FileNodeSchema: z.ZodType<any> = z.lazy(() =>
     size: z.number().optional(),
     modified: z.number().optional(),
     children: z.array(FileNodeSchema).optional(),
-  })
+  }),
 );
 
 export const FileReadResponseSchema = z.object({
@@ -86,10 +89,12 @@ export const FileReadResponseSchema = z.object({
   success: z.boolean(),
   content: z.string().optional(),
   encoding: z.enum(["utf8", "base64"]).optional(),
-  error: z.object({
-    code: z.enum(WSErrorCode),
-    message: z.string(),
-  }).optional(),
+  error: z
+    .object({
+      code: z.enum(WSErrorCode),
+      message: z.string(),
+    })
+    .optional(),
 });
 
 export const FileTreeResponseSchema = z.object({
@@ -98,10 +103,12 @@ export const FileTreeResponseSchema = z.object({
   taskId: z.string(),
   success: z.boolean(),
   root: FileNodeSchema.optional(),
-  error: z.object({
-    code: z.enum(WSErrorCode),
-    message: z.string(),
-  }).optional(),
+  error: z
+    .object({
+      code: z.enum(WSErrorCode),
+      message: z.string(),
+    })
+    .optional(),
 });
 
 // Instance operation schemas
@@ -117,10 +124,7 @@ export const InstanceCreateMessageSchema = z.object({
   kind: z.literal("instance_create"),
   requestId: z.string().min(1),
   clusterId: z.string().min(1),
-  address: z.string().regex(
-    /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/,
-    "Address must be a valid IPv4 address"
-  ),
+  address: z.string().regex(/^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/, "Address must be a valid IPv4 address"),
   tag: z.string().min(3).max(15),
 });
 
@@ -165,17 +169,12 @@ export const InstanceSystemRestartMessageSchema = z.object({
 /**
  * Validate and parse a message with proper error handling
  */
-export function validateMessage<T>(
-  schema: z.ZodType<T>,
-  data: unknown
-): { success: true; data: T } | { success: false; error: string } {
+export function validateMessage<T>(schema: z.ZodType<T>, data: unknown): { success: true; data: T } | { success: false; error: string } {
   const result = schema.safeParse(data);
   if (result.success) {
     return { success: true, data: result.data };
   }
-  const errorMessage = result.error.issues
-    .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-    .join(", ");
+  const errorMessage = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join(", ");
   return { success: false, error: errorMessage };
 }
 

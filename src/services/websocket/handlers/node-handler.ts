@@ -4,11 +4,12 @@
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import type { ConnectionManager } from "../connection-manager.js";
-import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "../message-types.js";
-import { isNodeBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, MessageKind, WSErrorCode, createWSError } from "../message-types.js";
+import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "../../../types/websocket-message.js";
+import { isNodeBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, createWSError } from "../../../types/websocket-message.js";
 import { ClientNotifier } from "./client-notifier.js";
 import { UpdateProcessor } from "@/lib/node/update-processor.js";
 import { NodeUpdate } from "@/types/node.js";
+import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 
 /**
  * Handles messages from dployrd connections.
@@ -155,27 +156,27 @@ export class NodeMessageHandler {
     const request = this.connectionManager.getPendingRequest(message.taskId);
     if (request) {
       switch (request.kind) {
-        case MessageKind.FILE_READ:
+        case MESSAGE_KIND.FILE_READ:
           return "file_read_response";
-        case MessageKind.FILE_WRITE:
+        case MESSAGE_KIND.FILE_WRITE:
           return "file_write_response";
-        case MessageKind.FILE_CREATE:
+        case MESSAGE_KIND.FILE_CREATE:
           return "file_create_response";
-        case MessageKind.FILE_DELETE:
+        case MESSAGE_KIND.FILE_DELETE:
           return "file_delete_response";
-        case MessageKind.FILE_TREE:
+        case MESSAGE_KIND.FILE_TREE:
           return "file_tree_response";
-        case MessageKind.DEPLOY:
+        case MESSAGE_KIND.DEPLOY:
           return "deploy_response";
-        case MessageKind.SERVICE_REMOVE:
+        case MESSAGE_KIND.SERVICE_REMOVE:
           return "service_remove_response";
-        case MessageKind.PROXY_STATUS:
+        case MESSAGE_KIND.PROXY_STATUS:
           return "proxy_status_response";
-        case MessageKind.PROXY_RESTART:
+        case MESSAGE_KIND.PROXY_RESTART:
           return "proxy_restart_response";
-        case MessageKind.PROXY_ADD:
+        case MESSAGE_KIND.PROXY_ADD:
           return "proxy_add_response";
-        case MessageKind.PROXY_REMOVE:
+        case MESSAGE_KIND.PROXY_REMOVE:
           return "proxy_remove_response";
         default:
           return "task_response";

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Bindings } from "@/types/index.js";
-import type { BillingProvider, CheckoutParams, CustomerParams, RawWebhookEvent } from "./billing/provider.js";
 import { PolarRequestValidationError } from "@/lib/errors/errors.js";
+import { BillingProvider, CustomerParams, CheckoutParams, RawWebhookEvent } from "./provider.js";
 
 export class PolarService implements BillingProvider {
   private baseUrl: string;

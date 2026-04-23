@@ -32,7 +32,7 @@ import type {
   ProcessHistoryResponseMessage,
   TerminalMessage,
   TerminalOpenMessage,
-} from "../message-types.js";
+} from "../../../types/websocket-message.js";
 import {
   isClientSubscribeMessage,
   isDeployMessage,
@@ -54,8 +54,6 @@ import {
   isFileUnwatchMessage,
   validateRequestMessage,
   createWSError,
-  WSErrorCode,
-  MessageKind,
   isServiceRemoveMessage,
   isProxyStatusMessage,
   isProxyRestartMessage,
@@ -64,12 +62,13 @@ import {
   isProcessHistoryMessage,
   isTerminalMessage,
   isTerminalOpenMessage,
-} from "../message-types.js";
+} from "../../../types/websocket-message.js";
 import { DployrdService } from "@/services/dployrd-service.js";
-import { JWTService } from "@/services/jwt.js";
+import { JWTService } from "@/services/auth/jwt.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
-import { TerminalManager } from "@/lib/websocket/terminal-manager.js";
+import { TerminalManager } from "@/services/websocket/terminal-manager.js";
+import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -401,7 +400,7 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MessageKind.DEPLOY);
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.DEPLOY);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -454,7 +453,7 @@ export class ClientMessageHandler {
 
     const taskId = ulid();
 
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MessageKind.DEPLOYMENT_LIST);
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.DEPLOYMENT_LIST);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -508,7 +507,7 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MessageKind.SERVICE_REMOVE);
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.SERVICE_REMOVE);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -1267,7 +1266,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MessageKind.PROXY_STATUS);
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MESSAGE_KIND.PROXY_STATUS);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -1319,7 +1318,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MessageKind.PROXY_RESTART);
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MESSAGE_KIND.PROXY_RESTART);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -1376,7 +1375,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MessageKind.PROXY_ADD);
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MESSAGE_KIND.PROXY_ADD);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
@@ -1433,7 +1432,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MessageKind.PROXY_REMOVE);
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, clusterId, MESSAGE_KIND.PROXY_REMOVE);
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");

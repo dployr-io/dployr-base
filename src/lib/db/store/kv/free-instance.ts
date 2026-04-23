@@ -1,5 +1,5 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { KV_KEYS } from "@/lib/constants/kv-keys.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 
 /**
  * Shape of a free instance entry stored in the pool.

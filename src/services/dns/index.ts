@@ -5,9 +5,9 @@ import type { DNSProvider, DNSRecord } from "@/types/dns.js";
 import type { Bindings } from "@/types/index.js";
 import { ulid } from "ulid";
 import { detectProvider, checkTxtRecord } from "@/lib/dns/provider.js";
-import { MANUAL_GUIDES, OAUTH_CONFIGS } from "@/lib/constants/domain-configs.js";
+import { MANUAL_GUIDES, OAUTH_CONFIGS } from "@/lib/constants/dns.js";
 
-export class DNSService {
+export class DnsService {
   constructor(private env: Bindings) {}
 
   /**
@@ -39,11 +39,7 @@ export class DNSService {
    * Builds DNS records from stored domain data.
    * Uses A record pointing directly to instance IP address.
    */
-  buildRecordsFromStored(
-    domain: string,
-    instanceAddress: string,
-    verificationToken: string
-  ): { record: DNSRecord; verification: DNSRecord } {
+  buildRecordsFromStored(domain: string, instanceAddress: string, verificationToken: string): { record: DNSRecord; verification: DNSRecord } {
     const parts = domain.split(".");
     const name = parts.length > 2 ? parts[0] : "@";
 
@@ -65,11 +61,7 @@ export class DNSService {
   /**
    * Builds OAuth URL for DNS provider setup
    */
-  buildOAuthUrl(
-    provider: DNSProvider,
-    state: string,
-    baseUrl: string
-  ): string | null {
+  buildOAuthUrl(provider: DNSProvider, state: string, baseUrl: string): string | null {
     const config = OAUTH_CONFIGS[provider];
     if (!config) return null;
 

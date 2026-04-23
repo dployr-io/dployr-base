@@ -4,20 +4,14 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { verifyGitHubWebhook } from "@/services/utils.js";
+import { verifyGitHubWebhook } from "@/lib/utils.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
-import { GitLabService } from "@/services/gitlab.js";
-import { BitBucketService } from "@/services/bitbucket.js";
-import { IntegrationsService } from "@/services/integrations.js";
-import {
-  GitLabAuthenticationError,
-  GitLabPermissionError,
-  GitLabNotFoundError,
-  GitLabRateLimitError,
-  GitLabAPIError,
-} from "@/lib/errors/errors.js";
+import { GitLabAuthenticationError, GitLabPermissionError, GitLabNotFoundError, GitLabRateLimitError, GitLabAPIError } from "@/lib/errors/errors.js";
 import { getKVStore, getGitHubService, type AppVariables, getDbStore } from "@/lib/context.js";
+import { BitBucketService } from "@/services/integrations/bitbucket.js";
+import { GitLabService } from "@/services/integrations/gitlab.js";
+import { IntegrationsService } from "@/services/integrations/index.js";
 
 const integrations = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
 
@@ -209,67 +203,67 @@ integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
     });
 
     return c.json(createSuccessResponse({ enabled }, "GitLab integration configured"));
-   } catch (error) {
-     console.error("[Integrations] GitLab setup error:", error);
+  } catch (error) {
+    console.error("[Integrations] GitLab setup error:", error);
 
-     if (error instanceof GitLabAuthenticationError) {
-       return c.json(
-         createErrorResponse({
-           message: error.message,
-           code: ERROR.AUTH.BAD_TOKEN.code,
-         }),
-         ERROR.AUTH.BAD_TOKEN.status,
-       );
-     }
+    if (error instanceof GitLabAuthenticationError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.AUTH.BAD_TOKEN.code,
+        }),
+        ERROR.AUTH.BAD_TOKEN.status,
+      );
+    }
 
-     if (error instanceof GitLabPermissionError) {
-       return c.json(
-         createErrorResponse({
-           message: error.message,
-           code: ERROR.PERMISSION.FORBIDDEN.code,
-         }),
-         ERROR.PERMISSION.FORBIDDEN.status,
-       );
-     }
+    if (error instanceof GitLabPermissionError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.PERMISSION.FORBIDDEN.code,
+        }),
+        ERROR.PERMISSION.FORBIDDEN.status,
+      );
+    }
 
-     if (error instanceof GitLabNotFoundError) {
-       return c.json(
-         createErrorResponse({
-           message: error.message,
-           code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-         }),
-         ERROR.RESOURCE.MISSING_RESOURCE.status,
-       );
-     }
+    if (error instanceof GitLabNotFoundError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+        }),
+        ERROR.RESOURCE.MISSING_RESOURCE.status,
+      );
+    }
 
-     if (error instanceof GitLabRateLimitError) {
-       return c.json(
-         createErrorResponse({
-           message: error.message,
-           code: ERROR.REQUEST.TOO_MANY_REQUESTS.code,
-         }),
-         ERROR.REQUEST.TOO_MANY_REQUESTS.status,
-       );
-     }
+    if (error instanceof GitLabRateLimitError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.REQUEST.TOO_MANY_REQUESTS.code,
+        }),
+        ERROR.REQUEST.TOO_MANY_REQUESTS.status,
+      );
+    }
 
-     if (error instanceof GitLabAPIError) {
-       return c.json(
-         createErrorResponse({
-           message: error.message,
-           code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-         }),
-         ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-       );
-     }
+    if (error instanceof GitLabAPIError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        }),
+        ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+      );
+    }
 
-     return c.json(
-       createErrorResponse({
-         message: "Internal server error",
-         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-       }),
-       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-     );
-   }
+    return c.json(
+      createErrorResponse({
+        message: "Internal server error",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
 });
 
 // BitBucket integration setup

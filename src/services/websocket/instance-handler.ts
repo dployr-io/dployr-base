@@ -4,20 +4,21 @@
 import type { WebSocket } from "ws";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import type { NodeTask } from "@/lib/tasks/types.js";
-import type { Session } from "@/types/index.js";
+import type { ConnectionManagerConfig, Session } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd-service.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
-import { JWTService } from "@/services/jwt.js";
-import { ConnectionManager, ConnectionManagerConfig } from "./connection-manager.js";
+import { JWTService } from "@/services/auth/jwt.js";
+import { ConnectionManager } from "./connection-manager.js";
 import { NodeMessageHandler } from "./handlers/node-handler.js";
 import { ClientMessageHandler } from "./handlers/client-handler.js";
 import { ClientNotifier } from "./handlers/client-notifier.js";
 import { TerminalManager } from "./terminal-manager.js";
-import { parseMessage, MessageKind, type ClusterConnection, isAckMessage } from "./message-types.js";
+import { parseMessage, type ClusterConnection, isAckMessage } from "../../types/websocket-message.js";
 import type { Config } from "@/lib/config/loader.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
+import { MESSAGE_KIND } from "../../lib/constants/websocket.js";
 
 export interface WebSocketHandlerConfig {
   connectionManager?: Partial<ConnectionManagerConfig>;
@@ -163,7 +164,7 @@ export class WebSocketHandler {
     }
 
     const message = {
-      kind: MessageKind.TASK,
+      kind: MESSAGE_KIND.TASK,
       items: [task],
     };
 

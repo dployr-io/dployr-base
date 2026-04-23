@@ -1,32 +1,25 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { Bindings } from "@/types/index.js";
+import type { Bindings, NotificationData } from "@/types/index.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
-import { DiscordService } from "./discord.js";
-import { SlackService } from "./slack.js";
-import { WebhookService } from "./webhook.js";
-import { EmailNotificationService } from "./email-notification.js";
+import { EmailNotifierService } from "./email/email-notifier.js";
 import { type NotificationEvent } from "./notifier.js";
-
-export interface NotificationData {
-  clusterId: string;
-  instanceId?: string;
-  userEmail?: string;
-  [key: string]: any;
-}
+import { DiscordService } from "../integrations/discord.js";
+import { SlackService } from "../integrations/slack.js";
+import { WebhookService } from "../integrations/webhook.js";
 
 export class NotificationService {
   private discordService: DiscordService;
   private slackService: SlackService;
   private webhookService: WebhookService;
-  private emailService: EmailNotificationService;
+  private emailService: EmailNotifierService;
 
   constructor(private env: Bindings) {
     this.discordService = new DiscordService();
     this.slackService = new SlackService();
     this.webhookService = new WebhookService();
-    this.emailService = new EmailNotificationService(env);
+    this.emailService = new EmailNotifierService(env);
   }
 
   private isEventSubscribed(integration: { enabled: boolean; events?: NotificationEvent[] }, event: NotificationEvent): boolean {

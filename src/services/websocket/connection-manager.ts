@@ -2,27 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { WebSocket } from "ws";
-import type { ClusterConnection, ConnectionRole, LogStreamSubscription, PendingRequest, WSErrorResponse } from "./message-types.js";
-import { WSErrorCode, createWSError } from "./message-types.js";
-import type { Session } from "@/types/index.js";
+import type { ClusterConnection, ConnectionRole, LogStreamSubscription, PendingRequest, WSErrorResponse } from "../../types/websocket-message.js";
+import { createWSError } from "../../types/websocket-message.js";
+import type { ConnectionManagerConfig, Session } from "@/types/index.js";
 import { ulid } from "ulid";
-
-/**
- * Configuration for connection manager
- */
-export interface ConnectionManagerConfig {
-  requestTimeoutMs: number;
-  cleanupIntervalMs: number;
-  maxPendingPerClient: number;
-  connectionTtlMs: number;
-}
-
-const DEFAULT_CONFIG: ConnectionManagerConfig = {
-  requestTimeoutMs: 30000,
-  cleanupIntervalMs: 10000,
-  maxPendingPerClient: 50,
-  connectionTtlMs: 300000,
-};
+import { DEFAULT_CONFIG, WSErrorCode } from "../../lib/constants/websocket.js";
 
 /**
  * Manages WebSocket connections, pending requests, and log stream subscriptions.

@@ -1,15 +1,15 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { KV_KEYS } from "@/lib/constants/kv-keys.js";
-import {
-  PENDING_GITHUB_INSTALL_TTL,
-  RELEASE_CACHE_TTL,
-} from "@/lib/constants/index.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
+import { PENDING_GITHUB_INSTALL_TTL, RELEASE_CACHE_TTL } from "@/lib/constants/index.js";
 
 /**
  * Third-party integrations: GitHub app install state and version cache.
  */
 export class IntegrationsStore {
-  constructor(private kv: IKVAdapter, private githubToken?: string) {}
+  constructor(
+    private kv: IKVAdapter,
+    private githubToken?: string,
+  ) {}
 
   /**
    * Temporarily stores the `clusterId` a user was trying to link when they
@@ -46,7 +46,6 @@ export class IntegrationsStore {
   async deletePendingGitHubInstall(userId: string): Promise<void> {
     await this.kv.delete(KV_KEYS.PENDING_GITHUB_INSTALL(userId));
   }
-
 
   // Retrieves the latest dployrd version from cache
   async getLatestVersion(): Promise<string | null> {

@@ -7,27 +7,9 @@ import { KVStore } from "@/lib/db/store/kv/index.js";
 import { TrafficRouter, ResolvedRoute } from "@/services/traffic-router.js";
 import { loadConfig } from "@/lib/config/loader.js";
 import { createDatabaseFromConfig, createKVFromConfig } from "@/lib/config/adapters.js";
+import { ProxyServerConfig } from "@/types/index.js";
+import { DEFAULT_PROXY_CONFIG } from "@/lib/constants/proxy.js";
 
-/**
- * Proxy server configuration
- */
-export interface ProxyServerConfig {
-  /** Port to listen on */
-  port: number;
-  /** Host to bind to */
-  host: string;
-  /** Base domain for routing */
-  baseDomain: string;
-  /** Request timeout in milliseconds */
-  timeoutMs: number;
-}
-
-const DEFAULT_PROXY_CONFIG: ProxyServerConfig = {
-  port: 8080,
-  host: "0.0.0.0",
-  baseDomain: "dployr.io",
-  timeoutMs: 30000,
-};
 
 /**
  * Standalone proxy server for routing traffic to services

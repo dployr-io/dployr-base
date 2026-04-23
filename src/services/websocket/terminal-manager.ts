@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import WebSocket from "ws";
-import type { TerminalMessage } from "./message-types.js";
+import type { TerminalMessage } from "../../types/websocket-message.js";
 
 /**
  * Terminal session tracking for task-based outbound approach
@@ -88,15 +88,17 @@ export class TerminalManager {
     // Setup node WebSocket handlers
     nodeWs.on("message", (data: Buffer) => {
       session.lastActivity = Date.now();
-      
+
       if (session.clientWs.readyState === WebSocket.OPEN) {
         try {
           const message = JSON.parse(data.toString());
-          session.clientWs.send(JSON.stringify({
-            kind: "terminal",
-            instanceId: session.instanceId,
-            ...message,
-          }));
+          session.clientWs.send(
+            JSON.stringify({
+              kind: "terminal",
+              instanceId: session.instanceId,
+              ...message,
+            }),
+          );
         } catch (err) {
           console.error(`[Terminal] Failed to parse node message:`, err);
         }
@@ -137,10 +139,12 @@ export class TerminalManager {
 
     if (session.nodeWs.readyState === WebSocket.OPEN) {
       try {
-        session.nodeWs.send(JSON.stringify({
-          ...message,
-          sessionId,
-        }));
+        session.nodeWs.send(
+          JSON.stringify({
+            ...message,
+            sessionId,
+          }),
+        );
       } catch (err) {
         console.error(`[Terminal] Failed to send message to node:`, err);
       }
@@ -165,11 +169,13 @@ export class TerminalManager {
 
     if (session.clientWs.readyState === WebSocket.OPEN) {
       try {
-        session.clientWs.send(JSON.stringify({
-          kind: "terminal",
-          instanceId: session.instanceId,
-          action: "close",
-        }));
+        session.clientWs.send(
+          JSON.stringify({
+            kind: "terminal",
+            instanceId: session.instanceId,
+            action: "close",
+          }),
+        );
       } catch (err) {
         console.error(`[Terminal] Error notifying client:`, err);
       }
@@ -201,7 +207,8 @@ export class TerminalManager {
 
       // Cleanup stale expected sessions (node never connected)
       for (const [sessionId, expected] of this.expectedSessions.entries()) {
-        if (now - expected.createdAt > 60000) { // 1 minute timeout
+        if (now - expected.createdAt > 60000) {
+          // 1 minute timeout
           console.log(`[Terminal] Expected session ${sessionId} timed out`);
           this.expectedSessions.delete(sessionId);
         }

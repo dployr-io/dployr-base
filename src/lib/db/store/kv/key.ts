@@ -1,6 +1,6 @@
 import { CryptoKey, importPKCS8, SignJWT } from "jose";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { KV_KEYS } from "@/lib/constants/kv-keys.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 import { generateKeyPair } from "@/lib/crypto/keystore.js";
 import { ADMIN_JWT_TTL, ADMIN_JWT_REFRESH_THRESHOLD } from "@/lib/constants/index.js";
 import { JsonWebKey } from "crypto";

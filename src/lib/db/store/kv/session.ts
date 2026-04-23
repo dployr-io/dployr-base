@@ -1,11 +1,7 @@
 import { Session, User } from "@/types/index.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { KV_KEYS } from "@/lib/constants/kv-keys.js";
-import {
-  OTP_TTL,
-  SESSION_TTL,
-  STATE_TTL,
-} from "@/lib/constants/index.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
+import { OTP_TTL, SESSION_TTL, STATE_TTL } from "@/lib/constants/index.js";
 
 /**
  * Session-related KV operations: auth sessions, OTP, OAuth state.
@@ -37,10 +33,7 @@ export class SessionStore {
 
     const ttl = SESSION_TTL;
 
-    await Promise.all([
-      this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(session), { ttl }),
-      this.kv.put(KV_KEYS.SESSION_BY_USER(user.id), sessionId, { ttl }),
-    ]);
+    await Promise.all([this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(session), { ttl }), this.kv.put(KV_KEYS.SESSION_BY_USER(user.id), sessionId, { ttl })]);
 
     return session;
   }
@@ -97,10 +90,7 @@ export class SessionStore {
     const remainingMs = existing.expiresAt - Date.now();
     const ttl = Math.ceil(remainingMs / 1000);
 
-    await Promise.all([
-      this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(refreshed), { ttl }),
-      this.kv.put(KV_KEYS.SESSION_BY_USER(existing.userId), sessionId, { ttl }),
-    ]);
+    await Promise.all([this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(refreshed), { ttl }), this.kv.put(KV_KEYS.SESSION_BY_USER(existing.userId), sessionId, { ttl })]);
   }
 
   /**
@@ -113,10 +103,7 @@ export class SessionStore {
   async deleteSession(sessionId: string): Promise<void> {
     const session = await this.getSession(sessionId);
     if (session) {
-      await Promise.all([
-        this.kv.delete(KV_KEYS.SESSION(sessionId)),
-        this.kv.delete(KV_KEYS.SESSION_BY_USER(session.userId)),
-      ]);
+      await Promise.all([this.kv.delete(KV_KEYS.SESSION(sessionId)), this.kv.delete(KV_KEYS.SESSION_BY_USER(session.userId))]);
     } else {
       await this.kv.delete(KV_KEYS.SESSION(sessionId));
     }

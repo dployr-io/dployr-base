@@ -1,17 +1,10 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Notifier, NotificationPayload } from "./notifier.js";
+import { NotificationPayload, Notifier } from "../notifications/notifier.js";
 
 export class WebhookService implements Notifier {
-  async sendNotification({
-    webhookUrl,
-    event,
-    data,
-    headers,
-    method,
-    timeoutMs,
-  }: NotificationPayload): Promise<void> {
+  async sendNotification({ webhookUrl, event, data, headers, method, timeoutMs }: NotificationPayload): Promise<void> {
     if (!webhookUrl) {
       throw new Error("Webhook URL is required");
     }
@@ -23,9 +16,7 @@ export class WebhookService implements Notifier {
     };
 
     const controller = new AbortController();
-    const id = timeoutMs
-      ? setTimeout(() => controller.abort(), timeoutMs)
-      : undefined;
+    const id = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
 
     try {
       await fetch(webhookUrl, {

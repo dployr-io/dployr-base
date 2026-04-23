@@ -1,15 +1,12 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Notifier, NotificationPayload, NotificationEvent } from "./notifier.js";
-import { EVENT_METADATA } from "../lib/constants/event-metadata.js";
+import { EVENT_METADATA } from "@/lib/constants/events.js";
+import { Notifier, NotificationPayload, NotificationEvent } from "../notifications/notifier.js";
+
 
 export class DiscordService implements Notifier {
-  async sendNotification({
-    webhookUrl,
-    event,
-    data,
-  }: NotificationPayload): Promise<void> {
+  async sendNotification({ webhookUrl, event, data }: NotificationPayload): Promise<void> {
     if (!webhookUrl) {
       throw new Error("Discord webhook URL is required");
     }

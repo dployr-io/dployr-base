@@ -58,11 +58,11 @@ export const integrationIds = ["resendMail", "mailChimp", "mailerSend", "discord
 export type IntegrationType = (typeof integrationIds)[number];
 
 export interface Service {
-    id: string;
-    instanceId: string;
-    name: string;
-    createdAt: number;
-    updatedAt: number;
+  id: string;
+  instanceId: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface User {
@@ -101,20 +101,20 @@ export interface Session {
 }
 
 export type Variables = {
-   user?: User | undefined;
-   session?: Session | undefined;
-   kvAdapter?: any;
-   dbAdapter?: any;
-   storageAdapter?: any;
-   wsHandler?: any;
-   billingProvider?: any;
-   _dbStore?: any;
-   _kvStore?: any;
-   _jwtService?: any;
-   _notificationService?: any;
-   _oauthService?: any;
-   _githubService?: any;
- };
+  user?: User | undefined;
+  session?: Session | undefined;
+  kvAdapter?: any;
+  dbAdapter?: any;
+  storageAdapter?: any;
+  wsHandler?: any;
+  billingProvider?: any;
+  _dbStore?: any;
+  _kvStore?: any;
+  _jwtService?: any;
+  _notificationService?: any;
+  _oauthService?: any;
+  _githubService?: any;
+};
 
 export type ActorType = "user" | "headless";
 
@@ -242,10 +242,31 @@ export interface Integrations {
   };
 }
 
+export interface ProxyServerConfig {
+  port: number; // Port to listen on
+  host: string; // Host to bind to
+  baseDomain: string; // Base domain for routing
+  timeoutMs: number; // Request timeout in milliseconds
+}
+
+export interface NotificationData {
+  clusterId: string;
+  instanceId?: string;
+  userEmail?: string;
+  [key: string]: any;
+}
+
+export interface ConnectionManagerConfig {
+  requestTimeoutMs: number;
+  cleanupIntervalMs: number;
+  maxPendingPerClient: number;
+  connectionTtlMs: number;
+}
+
 // Export response types
 export * from "./responses.js";
 
 // Export node types
 export * from "./node.js";
 
-import type { NotificationEvent } from "@/services/notifier.js";
+import type { NotificationEvent } from "@/services/notifications/notifier.js";

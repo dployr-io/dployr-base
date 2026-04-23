@@ -10,7 +10,7 @@ import type { BillingProvider } from "@/services/billing/provider.js";
 import { IKVAdapter } from "./storage/kv.interface.js";
 import { PostgresAdapter } from "./db/pg-adapter.js";
 import { IStorageAdapter } from "./context.js";
-import { WebSocketHandler } from "./websocket/instance-handler.js";
+import { WebSocketHandler } from "../services/websocket/instance-handler.js";
 
 export interface Adapters {
   kv: IKVAdapter;

@@ -3,15 +3,15 @@
 
 import type { Context } from "hono";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import type { WebSocketHandler } from "@/lib/websocket/instance-handler.js";
+import type { WebSocketHandler } from "@/services/websocket/instance-handler.js";
 import type { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
-import { JWTService } from "@/services/jwt.js";
-import { NotificationService } from "@/services/notifications.js";
-import { OAuthService } from "@/services/oauth.js";
-import { GitHubService } from "@/services/github.js";
+import { JWTService } from "@/services/auth/jwt.js";
+import { NotificationService } from "@/services/notifications/index.js";
+import { OAuthService } from "@/services/auth/oauth.js";
+import { GitHubService } from "@/services/integrations/github.js";
 
 // Storage adapter interface
 export interface IStorageAdapter {

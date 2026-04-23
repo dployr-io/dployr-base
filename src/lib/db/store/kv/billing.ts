@@ -1,5 +1,5 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
-import { KV_KEYS } from "@/lib/constants/kv-keys.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 import { BILLING_NOTIFICATION_TTL } from "@/lib/constants/index.js";
 
 /**

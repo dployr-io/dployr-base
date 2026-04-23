@@ -4,24 +4,22 @@
 import { Config } from "./loader.js";
 import { IKVAdapter, RedisKV, MemoryKV } from "@/lib/storage/kv.interface.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
-import { WebSocketHandler } from "@/lib/websocket/instance-handler.js";
+import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import type { Bindings } from "@/types/index.js";
-import { PolarService } from "@/services/polar.js";
+import { PolarService } from "@/services/billing/polar.js";
 
 /**
  * Create KV adapter from config
  */
-export async function createKVFromConfig(
-  config: Config
-): Promise<IKVAdapter> {
+export async function createKVFromConfig(config: Config): Promise<IKVAdapter> {
   switch (config.kv.type) {
     case "redis": {
       if (!config.kv.host || !config.kv.port) {
         throw new Error("Redis connection requires kv.host and kv.port in config.toml");
       }
       const { createClient } = await import("redis");
-      
+
       const client = createClient({
         socket: {
           host: config.kv.host,
@@ -31,8 +29,8 @@ export async function createKVFromConfig(
         ...(config.kv.password ? { password: config.kv.password } : {}),
       });
 
-      client.on('error', (err: any) => console.log('Redis Client Error', err));
-      
+      client.on("error", (err: any) => console.log("Redis Client Error", err));
+
       await client.connect();
 
       return new RedisKV(client);
@@ -40,9 +38,7 @@ export async function createKVFromConfig(
 
     case "upstash": {
       if (!config.kv.rest_url || !config.kv.rest_token) {
-        throw new Error(
-          "Upstash credentials required: kv.rest_url and kv.rest_token"
-        );
+        throw new Error("Upstash credentials required: kv.rest_url and kv.rest_token");
       }
       const { Redis } = await import("@upstash/redis");
       const client = new Redis({
@@ -53,10 +49,7 @@ export async function createKVFromConfig(
     }
 
     case "memory":
-      console.warn(
-        "Using in-memory KV; data will not persist across restarts. " +
-        "For production deployments, configure Upstash or another managed Redis service."
-      );
+      console.warn("Using in-memory KV; data will not persist across restarts. " + "For production deployments, configure Upstash or another managed Redis service.");
       return new MemoryKV();
 
     default:
@@ -78,9 +71,7 @@ export async function createDatabaseFromConfig(config: Config): Promise<Postgres
 /**
  * Create storage adapter from config
  */
-export async function createStorageFromConfig(
-  config: Config,
-): Promise<any> {
+export async function createStorageFromConfig(config: Config): Promise<any> {
   switch (config.storage.type) {
     case "filesystem": {
       if (!config.storage.path) {
@@ -129,7 +120,8 @@ export function createBillingProvider(config: Config, env: Bindings): BillingPro
       };
       return new PolarService(env as Bindings);
     }
-    default: throw new Error(`Unknown billing provider: ${config.billing?.provider}`);
+    default:
+      throw new Error(`Unknown billing provider: ${config.billing?.provider}`);
   }
 }
 
@@ -140,7 +132,7 @@ export async function initializeFromConfig(config: Config, env?: Bindings) {
   const kv = await createKVFromConfig(config);
   const db = await createDatabaseFromConfig(config);
   const storage = await createStorageFromConfig(config);
-  
+
   const billingProvider = env ? createBillingProvider(config, env) : null;
   const wsHandler = new WebSocketHandler(kv, db);
 
