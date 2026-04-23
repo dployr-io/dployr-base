@@ -48,7 +48,7 @@ export class PolarService implements BillingProvider {
         const parsed = JSON.parse(err);
         if (typeof parsed === "object" && parsed !== null && "detail" in parsed) {
           const detail = Array.isArray(parsed.detail) ? parsed.detail : [];
-           throw new PolarRequestValidationError(parsed.error?.field, detail);
+          throw new PolarRequestValidationError(parsed.error?.field, detail);
         }
       } catch (e) {
         if (e instanceof PolarRequestValidationError) throw e;
@@ -130,7 +130,7 @@ export class PolarService implements BillingProvider {
 
       return computed === receivedSig;
     } catch (error) {
-      console.error("[Polar] signature verification error:", error);
+      console.error("[PolarService] signature verification error:", error);
       return false;
     }
   }
