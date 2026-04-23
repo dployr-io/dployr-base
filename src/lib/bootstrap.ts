@@ -7,12 +7,16 @@ import { initializeDatabase } from "@/lib/db/migrate.js";
 import { loadConfig, type Config } from "@/lib/config/loader.js";
 import { initializeFromConfig } from "@/lib/config/adapters.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
+import { IKVAdapter } from "./storage/kv.interface.js";
+import { PostgresAdapter } from "./db/pg-adapter.js";
+import { IStorageAdapter } from "./context.js";
+import { WebSocketHandler } from "./websocket/instance-handler.js";
 
 export interface Adapters {
-  kv: any;
-  db: any;
-  storage: any;
-  ws: any;
+  kv: IKVAdapter;
+  db: PostgresAdapter;
+  storage: IStorageAdapter;
+  ws: WebSocketHandler;
   config: Config;
   billingProvider: BillingProvider | null;
 }
@@ -42,7 +46,7 @@ export async function initializeAdapters(): Promise<Adapters> {
   }
 
   const config = loadConfig();
-  
+
   adapters = await initializeFromConfig(config, {} as Bindings);
 
   if (config.database.auto_migrate) {
@@ -50,7 +54,7 @@ export async function initializeAdapters(): Promise<Adapters> {
   }
 
   if (config.free_instances && config.free_instances.length > 0) {
-    await adapters.kv.kv.put("free_instance:pool", JSON.stringify(config.free_instances));
+    await adapters.kv.put("free_instance:pool", JSON.stringify(config.free_instances));
     console.log(`[Bootstrap] Seeded free_instance:pool with ${config.free_instances.length} instance(s)`);
   }
 
@@ -61,10 +65,7 @@ export async function initializeAdapters(): Promise<Adapters> {
 /**
  * Middleware to inject adapters and environment bindings into Hono context
  */
-export async function bootstrapMiddleware(
-  c: Context<{ Bindings: Bindings; Variables: Variables }>,
-  next: Next
-): Promise<void | Response> {
+export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next): Promise<void | Response> {
   // Initialize adapters on first request (lazy initialization)
   if (!adapters) {
     await initializeAdapters();
@@ -86,32 +87,30 @@ export async function bootstrapMiddleware(
   const adminConfig = adapters!.config?.admin;
   const billingConfig = adapters!.config?.billing;
 
-   c.env = {
-     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
-     APP_URL: serverConfig?.app_url || process.env.APP_URL || "",
-     EMAIL_FROM: emailConfig?.from_address || process.env.EMAIL_FROM || "",
-     ZEPTO_API_KEY: emailConfig?.zepto_api_key || process.env.ZEPTO_API_KEY || "",
-     GITHUB_APP_ID: integrationsConfig?.github_app_id || process.env.GITHUB_APP_ID || "",
-     GITHUB_APP_PRIVATE_KEY: integrationsConfig?.github_app_private_key || process.env.GITHUB_APP_PRIVATE_KEY || "",
-     GITHUB_WEBHOOK_SECRET: integrationsConfig?.github_webhook_secret || process.env.GITHUB_WEBHOOK_SECRET || "",
-     GITHUB_TOKEN: integrationsConfig?.github_token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "",
-     GOOGLE_CLIENT_ID: authConfig?.google_client_id || process.env.GOOGLE_CLIENT_ID || "",
-     GOOGLE_CLIENT_SECRET: authConfig?.google_client_secret || process.env.GOOGLE_CLIENT_SECRET || "",
-     GITHUB_CLIENT_ID: authConfig?.github_client_id || process.env.GITHUB_CLIENT_ID || "",
-     GITHUB_CLIENT_SECRET: authConfig?.github_client_secret || process.env.GITHUB_CLIENT_SECRET || "",
-     MICROSOFT_CLIENT_ID: authConfig?.microsoft_client_id || process.env.MICROSOFT_CLIENT_ID || "",
-     MICROSOFT_CLIENT_SECRET: authConfig?.microsoft_client_secret || process.env.MICROSOFT_CLIENT_SECRET || "",
-     CORS_ALLOWED_ORIGINS: corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS || "",
-     ADMIN_API_KEY: adminConfig?.admin_api_key || process.env.ADMIN_API_KEY || "",
-     ALLOWED_DPLOYR_ADMINISTRATORS: Array.isArray(adminConfig?.allowed_ips)
-       ? adminConfig.allowed_ips.join(",")
-       : (adminConfig?.allowed_ips || process.env.ALLOWED_DPLOYR_ADMINISTRATORS || ""),
-ADMIN_TOTP_SECRET: adminConfig?.totp_secret || process.env.ADMIN_TOTP_SECRET || "",
-      POLAR_ACCESS_TOKEN: billingConfig?.polar_access_token || process.env.POLAR_ACCESS_TOKEN || "",
-      POLAR_WEBHOOK_SECRET: billingConfig?.polar_webhook_secret || process.env.POLAR_WEBHOOK_SECRET || "",
-      POLAR_ENVIRONMENT: billingConfig?.environment || process.env.POLAR_ENVIRONMENT || (process.env.NODE_ENV === "production" ? "production" : "sandbox"),
-      BILLING_CHECKOUT_URLS: billingConfig?.checkout_urls,
-    } as unknown as Bindings;
+  c.env = {
+    BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
+    APP_URL: serverConfig?.app_url || process.env.APP_URL || "",
+    EMAIL_FROM: emailConfig?.from_address || process.env.EMAIL_FROM || "",
+    ZEPTO_API_KEY: emailConfig?.zepto_api_key || process.env.ZEPTO_API_KEY || "",
+    GITHUB_APP_ID: integrationsConfig?.github_app_id || process.env.GITHUB_APP_ID || "",
+    GITHUB_APP_PRIVATE_KEY: integrationsConfig?.github_app_private_key || process.env.GITHUB_APP_PRIVATE_KEY || "",
+    GITHUB_WEBHOOK_SECRET: integrationsConfig?.github_webhook_secret || process.env.GITHUB_WEBHOOK_SECRET || "",
+    GITHUB_TOKEN: integrationsConfig?.github_token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "",
+    GOOGLE_CLIENT_ID: authConfig?.google_client_id || process.env.GOOGLE_CLIENT_ID || "",
+    GOOGLE_CLIENT_SECRET: authConfig?.google_client_secret || process.env.GOOGLE_CLIENT_SECRET || "",
+    GITHUB_CLIENT_ID: authConfig?.github_client_id || process.env.GITHUB_CLIENT_ID || "",
+    GITHUB_CLIENT_SECRET: authConfig?.github_client_secret || process.env.GITHUB_CLIENT_SECRET || "",
+    MICROSOFT_CLIENT_ID: authConfig?.microsoft_client_id || process.env.MICROSOFT_CLIENT_ID || "",
+    MICROSOFT_CLIENT_SECRET: authConfig?.microsoft_client_secret || process.env.MICROSOFT_CLIENT_SECRET || "",
+    CORS_ALLOWED_ORIGINS: corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS || "",
+    ADMIN_API_KEY: adminConfig?.admin_api_key || process.env.ADMIN_API_KEY || "",
+    ALLOWED_DPLOYR_ADMINISTRATORS: Array.isArray(adminConfig?.allowed_ips) ? adminConfig.allowed_ips.join(",") : adminConfig?.allowed_ips || process.env.ALLOWED_DPLOYR_ADMINISTRATORS || "",
+    ADMIN_TOTP_SECRET: adminConfig?.totp_secret || process.env.ADMIN_TOTP_SECRET || "",
+    POLAR_ACCESS_TOKEN: billingConfig?.polar_access_token || process.env.POLAR_ACCESS_TOKEN || "",
+    POLAR_WEBHOOK_SECRET: billingConfig?.polar_webhook_secret || process.env.POLAR_WEBHOOK_SECRET || "",
+    POLAR_ENVIRONMENT: billingConfig?.environment || process.env.POLAR_ENVIRONMENT || (process.env.NODE_ENV === "production" ? "production" : "sandbox"),
+    BILLING_CHECKOUT_URLS: billingConfig?.checkout_urls,
+  } as unknown as Bindings;
 
   await next();
 }
