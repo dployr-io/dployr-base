@@ -8,6 +8,7 @@ import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import type { Bindings } from "@/types/index.js";
 import { PolarService } from "@/services/billing/polar.js";
+import { DigitalOceanVMService } from "@/services/vm/index.js";
 
 /**
  * Create KV adapter from config
@@ -107,7 +108,7 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
 /**
  * Create billing provider from config
  */
-export function createBillingProvider(config: Config, env: Bindings): BillingProvider | null {
+export function createBillingProvider(config: Config): BillingProvider | null {
   if (!config.billing?.polar_access_token) return null;
   switch (config.billing?.provider ?? "polar") {
     case "polar": {
@@ -115,7 +116,6 @@ export function createBillingProvider(config: Config, env: Bindings): BillingPro
         POLAR_ACCESS_TOKEN: config.billing.polar_access_token,
         POLAR_WEBHOOK_SECRET: config.billing.polar_webhook_secret,
         POLAR_ENVIRONMENT: config.billing.environment,
-        APP_URL: config.server.app_url,
         BILLING_CHECKOUT_URLS: config.billing.checkout_urls,
       };
       return new PolarService(env as Bindings);
@@ -125,16 +125,34 @@ export function createBillingProvider(config: Config, env: Bindings): BillingPro
   }
 }
 
+export function createVmProvider(config: Config): DigitalOceanVMService | null {
+  if (!config.virtual_machines?.do_api_token) return null;
+  switch (config.virtual_machines?.provider ?? "digitalocean") {
+    case "digitalocean": {
+      const env: Partial<Bindings> = {
+        DO_API_TOKEN: config.virtual_machines.do_api_token,
+      };
+      const apiToken = env.DO_API_TOKEN;
+      if (apiToken) {
+        return new DigitalOceanVMService(apiToken);
+      }
+    }
+    default:
+      throw new Error(`Unknown VM provider: ${config.billing?.provider}`);
+  }
+}
+
 /**
  * Initialize all adapters from config (one-liner setup)
  */
-export async function initializeFromConfig(config: Config, env?: Bindings) {
+export async function initializeFromConfig(config: Config) {
   const kv = await createKVFromConfig(config);
   const db = await createDatabaseFromConfig(config);
   const storage = await createStorageFromConfig(config);
 
-  const billingProvider = env ? createBillingProvider(config, env) : null;
+  const billingProvider = createBillingProvider(config);
+  const vmProvider = createVmProvider(config);
   const wsHandler = new WebSocketHandler(kv, db);
 
-  return { kv, db, storage, ws: wsHandler, config, billingProvider };
+  return { kv, db, storage, ws: wsHandler, config, billingProvider, vmProvider };
 }

@@ -74,16 +74,20 @@ polar_environment = "sandbox"
 indie = "https://sandbox.polar.sh/checkout/polar_cl_..."
 pro = "https://sandbox.polar.sh/checkout/polar_cl_..."
 
-[[free_instances]]
-id = "fi_01"
-address = "192.168.1.10"
-tag = "free-us-east-1"
-capacity = 50
-region = "us-east"
+[proxy]
+# Enable the built-in reverse proxy
+enabled = false
+port = 7878
+host = "0.0.0.0"
+# Wildcard base domain: routes service.cluster.<base_domain>
+base_domain = "dployr.io"
+# Request timeout in milliseconds
+timeout_ms = 30000
+# Route cache TTL in seconds
+cache_ttl_seconds = 30
 
-[[free_instances]]
-id = "fi_02"
-address = "192.168.1.11"
-tag = "free-eu-west-1"
-capacity = 50
-region = "eu-west"
+[virtual_machines]
+# Cloud provider for VM provisioning
+provider = "digitalocean"
+# DigitalOcean personal access token
+do_api_token = ""

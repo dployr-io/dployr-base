@@ -7,10 +7,11 @@ import { initializeDatabase } from "@/lib/db/migrate.js";
 import { loadConfig, type Config } from "@/lib/config/loader.js";
 import { initializeFromConfig } from "@/lib/config/adapters.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
-import { IKVAdapter } from "./storage/kv.interface.js";
-import { PostgresAdapter } from "./db/pg-adapter.js";
+import type { VmProvider } from "@/services/vm/index.js";
+import { IKVAdapter } from "@/lib/storage/kv.interface.js";
+import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { IStorageAdapter } from "./context.js";
-import { WebSocketHandler } from "../services/websocket/instance-handler.js";
+import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
 
 export interface Adapters {
   kv: IKVAdapter;
@@ -19,6 +20,7 @@ export interface Adapters {
   ws: WebSocketHandler;
   config: Config;
   billingProvider: BillingProvider | null;
+  vmProvider: VmProvider | null;
 }
 
 let adapters: Adapters | null = null;
@@ -47,15 +49,10 @@ export async function initializeAdapters(): Promise<Adapters> {
 
   const config = loadConfig();
 
-  adapters = await initializeFromConfig(config, {} as Bindings);
+  adapters = await initializeFromConfig(config);
 
   if (config.database.auto_migrate) {
     await initializeDatabase(adapters.db);
-  }
-
-  if (config.free_instances && config.free_instances.length > 0) {
-    await adapters.kv.put("free_instance:pool", JSON.stringify(config.free_instances));
-    console.log(`[Bootstrap] Seeded free_instance:pool with ${config.free_instances.length} instance(s)`);
   }
 
   console.log("Dployr Base initialized");
@@ -77,6 +74,7 @@ export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Varia
   c.set("storageAdapter", adapters!.storage);
   c.set("wsHandler", adapters!.ws);
   c.set("billingProvider", adapters!.billingProvider);
+  c.set("vmProvider", adapters!.vmProvider);
 
   // Build environment bindings from config
   const serverConfig = adapters!.config?.server;
