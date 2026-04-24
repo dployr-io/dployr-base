@@ -6,13 +6,12 @@ import { z } from "zod";
 
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { authMiddleware } from "@/middleware/auth.js";
-import { BillingService } from "@/services/billing/index.js";
 import { PolarRequestValidationError } from "@/lib/errors/errors.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getKVStore, getBillingProvider, type AppVariables, getDbStore } from "@/lib/context.js";
+import { getKVStore, getBillingProvider, getBillingService, getDbStore } from "@/lib/config/context.js";
 import { PLANS } from "@/lib/constants/billing.js";
 
-const billing = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const billing = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const checkoutSchema = z.object({
   plan: z.enum(["indie", "pro"]),
@@ -51,8 +50,8 @@ billing.get("/status", authMiddleware, async (c) => {
     );
   }
 
-  const billingProvider = getBillingProvider(c);
-  if (!billingProvider) {
+  const billingService = getBillingService(c);
+  if (!billingService) {
     return c.json(
       createErrorResponse({
         message: "Billing is not configured",
@@ -62,7 +61,6 @@ billing.get("/status", authMiddleware, async (c) => {
     );
   }
 
-  const billingService = new BillingService(billingProvider, c.env);
   const result = await billingService.getStatus({ clusterId, db });
 
   return c.json(createSuccessResponse(result));
@@ -110,8 +108,8 @@ billing.post("/checkout", authMiddleware, async (c) => {
     );
   }
 
-  const billingProvider = getBillingProvider(c);
-  if (!billingProvider) {
+  const billingService = getBillingService(c);
+  if (!billingService) {
     console.error("[Billing] Billing provider not configured");
     return c.json(
       createErrorResponse({
@@ -134,7 +132,6 @@ billing.post("/checkout", authMiddleware, async (c) => {
   }
 
   try {
-    const billingService = new BillingService(billingProvider, c.env);
     const result = await billingService.createCheckout(
       {
         plan,
@@ -209,8 +206,7 @@ billing.post("/webhook", async (c) => {
   const kv = getKVStore(c);
 
   try {
-    const billingService = new BillingService(billingProvider, c.env);
-    await billingService.handleWebhook(event, db, kv);
+    await getBillingService(c)!.handleWebhook(event, db, kv);
   } catch (error) {
     console.error("[Billing] Webhook handler error:", error);
     return c.json({ received: true, error: "handler_error" }, 200);

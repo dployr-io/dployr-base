@@ -16,7 +16,7 @@ import node from "./node.js";
 import notifications from "./notifications.js";
 import proxy from "./proxy.js";
 import billing from "./billing.js";
-import { getWS } from "@/lib/context.js";
+import { getWS } from "@/lib/config/context.js";
 
 const VERSION = process.env.BASE_VERSION || "unknown";
 
@@ -59,10 +59,13 @@ export function registerRoutes(app: Hono<{ Bindings: Bindings; Variables: Variab
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
-      return c.json({
-        success: false,
-        error: "WebSocket handler not available",
-      }, 503);
+      return c.json(
+        {
+          success: false,
+          error: "WebSocket handler not available",
+        },
+        503,
+      );
     }
   });
 }

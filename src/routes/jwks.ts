@@ -3,9 +3,9 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables } from "@/types/index.js";
-import { getKVStore, type AppVariables } from "@/lib/context.js";
+import { getKVStore } from "@/lib/config/context.js";
 
-const jwks = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const jwks = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 jwks.get("/.well-known/jwks.json", async (c) => {
   const kv = getKVStore(c);

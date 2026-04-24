@@ -4,9 +4,9 @@
 import { Hono } from "hono";
 import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getKVStore, getJWTService, getWS, type AppVariables, getDbStore } from "@/lib/context.js";
+import { getKVStore, getJWTService, getWS, getDbStore } from "@/lib/config/context.js";
 
-const node = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const node = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Instance exchanges a valid node token for a fresh short-lived token
 node.post("/token", async (c) => {

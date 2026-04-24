@@ -6,10 +6,10 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse, parseP
 import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth.js";
 import z from "zod";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
-import { getKVStore, getNotificationService, getGitHubService, runBackground, type AppVariables, getDbStore } from "@/lib/context.js";
+import { getKVStore, getNotificationService, getGitHubService, runBackground, getDbStore } from "@/lib/config/context.js";
 import { ResourceNotFoundError, ValidationError } from "@/lib/errors/errors.js";
 
-const clusters = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const clusters = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 clusters.use("*", authMiddleware);
 
 const addUsersSchema = z.object({
@@ -109,26 +109,26 @@ clusters.get("/:id/users/invites/accept", async (c) => {
       ),
     );
 
-     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
-   } catch (error) {
-     console.error("[Clusters] Accept invite error:", error);
-     if (error instanceof ResourceNotFoundError) {
-       return c.json(
-         createErrorResponse({
-           message: error.message,
-           code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-         }),
-         ERROR.RESOURCE.MISSING_RESOURCE.status,
-       );
-     }
-     return c.json(
-       createErrorResponse({
-         message: "Failed to accept invite",
-         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-       }),
-       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-     );
-   }
+    return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
+  } catch (error) {
+    console.error("[Clusters] Accept invite error:", error);
+    if (error instanceof ResourceNotFoundError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+        }),
+        ERROR.RESOURCE.MISSING_RESOURCE.status,
+      );
+    }
+    return c.json(
+      createErrorResponse({
+        message: "Failed to accept invite",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
 });
 
 /**
@@ -159,26 +159,26 @@ clusters.get("/:id/users/invites/decline", async (c) => {
       await kv.refreshSession({ sessionId, updates: { clusters } });
     }
 
-     return c.json(createSuccessResponse({ clusterId }, "Invite declined"));
-   } catch (error) {
-     console.error("[Clusters] Decline invite error:", error);
-     if (error instanceof ResourceNotFoundError) {
-       return c.json(
-         createErrorResponse({
-           message: error.message,
-           code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-         }),
-         ERROR.RESOURCE.MISSING_RESOURCE.status,
-       );
-     }
-     return c.json(
-       createErrorResponse({
-         message: "Failed to decline invite",
-         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-       }),
-       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-     );
-   }
+    return c.json(createSuccessResponse({ clusterId }, "Invite declined"));
+  } catch (error) {
+    console.error("[Clusters] Decline invite error:", error);
+    if (error instanceof ResourceNotFoundError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+        }),
+        ERROR.RESOURCE.MISSING_RESOURCE.status,
+      );
+    }
+    return c.json(
+      createErrorResponse({
+        message: "Failed to decline invite",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
 });
 
 /**
@@ -313,28 +313,28 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
       request: c.req.raw,
     });
 
-     return c.json(createSuccessResponse({ users }, "Users removed successfully"));
-   } catch (error) {
-     console.error("[Clusters] Remove users error:", error);
-     if (error instanceof ValidationError) {
-       return c.json(
-         createErrorResponse({
-           message: error.message,
-           code: ERROR.REQUEST.BAD_REQUEST.code,
-         }),
-         ERROR.REQUEST.BAD_REQUEST.status,
-       );
-     }
-     const helpLink = "https://monitoring.dployr.io";
-     return c.json(
-       createErrorResponse({
-         message: "Failed to remove users",
-         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-         helpLink,
-       }),
-       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-     );
-   }
+    return c.json(createSuccessResponse({ users }, "Users removed successfully"));
+  } catch (error) {
+    console.error("[Clusters] Remove users error:", error);
+    if (error instanceof ValidationError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
+    const helpLink = "https://monitoring.dployr.io";
+    return c.json(
+      createErrorResponse({
+        message: "Failed to remove users",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
 });
 
 /**
@@ -402,28 +402,28 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
       request: c.req.raw,
     });
 
-     return c.json(createSuccessResponse({ cluster }, "Roles updated successfully"));
-   } catch (error) {
-     console.error("[Clusters] Update roles error:", error);
-     if (error instanceof ValidationError) {
-       return c.json(
-         createErrorResponse({
-           message: error.message,
-           code: ERROR.REQUEST.BAD_REQUEST.code,
-         }),
-         ERROR.REQUEST.BAD_REQUEST.status,
-       );
-     }
-     const helpLink = "https://monitoring.dployr.io";
-     return c.json(
-       createErrorResponse({
-         message: "Failed to update roles",
-         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-         helpLink,
-       }),
-       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-     );
-   }
+    return c.json(createSuccessResponse({ cluster }, "Roles updated successfully"));
+  } catch (error) {
+    console.error("[Clusters] Update roles error:", error);
+    if (error instanceof ValidationError) {
+      return c.json(
+        createErrorResponse({
+          message: error.message,
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
+    const helpLink = "https://monitoring.dployr.io";
+    return c.json(
+      createErrorResponse({
+        message: "Failed to update roles",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
 });
 
 /**

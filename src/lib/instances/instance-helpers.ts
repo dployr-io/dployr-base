@@ -4,14 +4,14 @@
 import { Context } from "hono";
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { ERROR, INSTANCE_REGIONS } from "@/lib/constants/index.js";
-import { InstanceService } from "@/services/instances.js";
+import { getInstanceService } from "@/lib/config/context.js";
 import { BillingService } from "@/services/billing/index.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
 import { DatabaseConflictError, handleInstanceError } from "../errors/errors.js";
 
-const createInstanceSchema = z.object({
+export const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
   address: z.string().regex(/^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/, "Address must be a valid IPv4 address"),
   tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(15, "Tag must be a maximum of 15 characters"),
@@ -33,10 +33,6 @@ const rebootInstanceSchema = z.object({
 const restartDaemonSchema = z.object({
   force: z.boolean().default(false),
 });
-
-export function getInstanceService(c: Context): InstanceService {
-  return new InstanceService((c as any).env);
-}
 
 export function requireClusterId(c: Context): { ok: true; clusterId: string } | { ok: false; response: Response } {
   const clusterId = c.req.query("clusterId");
@@ -109,18 +105,18 @@ export function attachListInstances(app: Hono<{ Bindings: Bindings; Variables: V
     const clusterId = c.req.query("clusterId");
     const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
     const instanceService = getInstanceService(c);
-    const [{ instances, total }, freeInstance] = await Promise.all([
+    const [{ instances, total }, instance] = await Promise.all([
       instanceService.listInstances({
         c,
         clusterId,
         limit: pageSize,
         offset,
       }),
-      instanceService.resolveFreeInstance({ c, clusterId }),
+      instanceService.resolveInstance({ c, clusterId }),
     ]);
 
-    const finalInstances = freeInstance ? [freeInstance, ...instances] : instances;
-    const finalTotal = freeInstance ? total + 1 : total;
+    const finalInstances = instance ? [instance, ...instances] : instances;
+    const finalTotal = instance ? total + 1 : total;
     const paginatedData = createPaginatedResponse(finalInstances, page, pageSize, finalTotal);
 
     return c.json(createSuccessResponse(paginatedData));

@@ -1,9 +1,9 @@
 // routes/admin/admin.ts
 import { Hono } from "hono";
 import { Bindings, createErrorResponse, createSuccessResponse, Variables } from "@/types/index.js";
-import { getKVStore } from "@/lib/context.js";
+import { getKVStore } from "@/lib/config/context.js";
 import { requireDployrAdministrator, requireDployrAdministratorIPAddress } from "@/middleware/auth.js";
-import instances from "./instances.js";
+import instances from "./instances/index.js";
 import * as OTPAuth from "otpauth";
 import { ADMIN_JWT_TTL, ERROR } from "@/lib/constants/index.js";
 import { readFileSync } from "fs";
@@ -24,7 +24,7 @@ admin.get("/config.js", (c) => {
     {
       "Content-Type": "application/javascript",
       "Cache-Control": "no-store",
-    }
+    },
   );
 });
 
@@ -71,7 +71,7 @@ admin.post("/login", async (c) => {
   const sessionId = session_id ?? `adm_${crypto.randomUUID().slice(0, 8)}`;
   const ttl = ADMIN_JWT_TTL;
 
-   const kv = getKVStore(c);
+  const kv = getKVStore(c);
   const token = await kv.createAdminJWT({ sessionId, ttl });
 
   await kv.saveAdminJWT({ sessionId, token, ttl });

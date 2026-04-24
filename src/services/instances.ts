@@ -5,7 +5,7 @@ import { Bindings, Instance, Session } from "@/types/index.js";
 import { EVENTS } from "@/lib/constants/index.js";
 import { Context } from "hono";
 import { ulid } from "ulid";
-import { getKVStore, getJWTService, getWS, getDbStore, getBillingProvider } from "@/lib/context.js";
+import { getKVStore, getJWTService, getWS, getDbStore, getBillingProvider } from "@/lib/config/context.js";
 import { InstanceConnectionFailureError, InstanceNotConnectedError, PermissionError, ResourceNotFoundError } from "@/lib/errors/errors.js";
 import { DployrdService } from "./dployrd.js";
 import { BillingService } from "./billing/index.js";
@@ -481,7 +481,19 @@ export class InstanceService {
     return task.ID;
   }
 
-  async resolveFreeInstance({ c, clusterId }: { c: any; clusterId?: string }) {
+  /**
+   * Resolves an instance for a cluster, primarily for hobby plan users.
+   *
+   * Checks the billing status for the cluster. If the plan is "hobby",
+   * attempts to retrieve an instance from the shared instance pool.
+   * Returns null for non-hobby plans, missing clusterId, if no pool
+   * instance is available, or if the instance is not found in the pool.
+   *
+   * @param params.c - Hono context with request bindings
+   * @param params.clusterId - Cluster ULID to resolve an instance for
+   * @returns Resolved instance with clusterId and metadata, or null if not available
+   */
+  async resolveInstance({ c, clusterId }: { c: any; clusterId?: string }) {
     if (!clusterId) return null;
 
     const billingProvider = getBillingProvider(c);
@@ -493,20 +505,19 @@ export class InstanceService {
     const status = await billingService.getStatus({ clusterId, db });
     if (status.plan !== "hobby") return null;
 
-    const kv = getKVStore(c);
-    const [freeInstanceId, pool] = await Promise.all([kv.getClusterFreeInstance(clusterId), kv.getFreeInstancePool()]);
+    const [instanceId, pool] = await Promise.all([db.instancePool.getClusterInstance(clusterId), db.instancePool.getInstancePool()]);
 
-    if (!freeInstanceId || !pool) return null;
+    if (!instanceId) return null;
 
-    const freeInstance = pool.find((inst) => inst.id === freeInstanceId);
-    if (!freeInstance) return null;
+    const instance = pool.find((inst) => inst.id === instanceId);
+    if (!instance) return null;
 
     const now = Date.now();
 
     return {
-      ...freeInstance,
+      ...instance,
       metadata: {
-        ...freeInstance.metadata,
+        ...instance.metadata,
         managed: true,
       },
       clusterId,

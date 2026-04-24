@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { authMiddleware, requireClusterViewer } from "@/middleware/auth.js";
 import { ERROR, LATEST_COMPATIBILITY_DATE } from "@/lib/constants/index.js";
-import { getKVStore, type AppVariables } from "@/lib/context.js";
+import { getKVStore } from "@/lib/config/context.js";
 import { isCompatible, getUpgradeLevel, compareSemver } from "@/lib/version.js";
 import { z } from "zod";
 
@@ -28,7 +28,7 @@ type GitHubRelease = {
   published_at?: string;
 };
 
-const runtime = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const runtime = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Public endpoint for version compatibility check (no auth required)
 runtime.post("/compatibility/check", async (c) => {
@@ -41,10 +41,13 @@ runtime.post("/compatibility/check", async (c) => {
         field: err.path.join("."),
         message: err.message,
       }));
-      return c.json(createErrorResponse({
-        message: "Validation failed: " + errors.map(e => `${e.field}: ${e.message}`).join(", "),
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(
+        createErrorResponse({
+          message: "Validation failed: " + errors.map((e) => `${e.field}: ${e.message}`).join(", "),
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
     }
 
     const { compatibilityDate, version } = validation.data;
@@ -66,7 +69,7 @@ runtime.post("/compatibility/check", async (c) => {
       });
 
       if (resp.ok) {
-        const data = await resp.json() as { tag_name?: string };
+        const data = (await resp.json()) as { tag_name?: string };
         if (typeof data.tag_name === "string" && data.tag_name.length > 0) {
           latestVersion = data.tag_name;
         }
@@ -77,27 +80,28 @@ runtime.post("/compatibility/check", async (c) => {
       console.error("Error fetching latest daemon version from GitHub", err);
     }
 
-    const upgradeLevel = latestVersion && version
-      ? getUpgradeLevel(latestVersion, version)
-      : "none";
+    const upgradeLevel = latestVersion && version ? getUpgradeLevel(latestVersion, version) : "none";
 
-    return c.json(createSuccessResponse({
-      compatible,
-      compatibilityDate,
-      version,
-      latestVersion,
-      upgradeLevel,
-      requiredCompatibilityDate: LATEST_COMPATIBILITY_DATE,
-      message: compatible
-        ? "dployrd is supported"
-        : `dployrd requires compatibility_date ${LATEST_COMPATIBILITY_DATE} (received: ${compatibilityDate})`,
-    }));
+    return c.json(
+      createSuccessResponse({
+        compatible,
+        compatibilityDate,
+        version,
+        latestVersion,
+        upgradeLevel,
+        requiredCompatibilityDate: LATEST_COMPATIBILITY_DATE,
+        message: compatible ? "dployrd is supported" : `dployrd requires compatibility_date ${LATEST_COMPATIBILITY_DATE} (received: ${compatibilityDate})`,
+      }),
+    );
   } catch (error) {
     console.error("Failed to check compatibility", error);
-    return c.json(createErrorResponse({
-      message: "Failed to check compatibility",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to check compatibility",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -122,13 +126,16 @@ runtime.get("/versions", async (c) => {
 
     if (!resp.ok) {
       console.error("Failed to fetch releases from GitHub", resp.status, await resp.text());
-      return c.json(createErrorResponse({
-        message: "Failed to fetch available versions",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+      return c.json(
+        createErrorResponse({
+          message: "Failed to fetch available versions",
+          code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        }),
+        ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+      );
     }
 
-    const releases = await resp.json() as GitHubRelease[];
+    const releases = (await resp.json()) as GitHubRelease[];
 
     const filtered = releases.filter((r) => {
       if (r.draft) return false;
@@ -161,18 +168,23 @@ runtime.get("/versions", async (c) => {
       oldestSupportedVersion = versions[versions.length - 1];
     }
 
-    return c.json(createSuccessResponse({
-      latest,
-      oldestSupportedVersion,
-      versions,
-      includePreReleases,
-    }));
+    return c.json(
+      createSuccessResponse({
+        latest,
+        oldestSupportedVersion,
+        versions,
+        includePreReleases,
+      }),
+    );
   } catch (error) {
     console.error("Failed to fetch available versions", error);
-    return c.json(createErrorResponse({
-      message: "Failed to fetch available versions",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to fetch available versions",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 
@@ -181,10 +193,13 @@ runtime.get("/events", authMiddleware, requireClusterViewer, async (c) => {
   const clusterId = c.req.query("clusterId");
 
   if (!clusterId) {
-    return c.json(createErrorResponse({
-      message: "clusterId is required",
-      code: ERROR.REQUEST.MISSING_PARAMS.code,
-    }), ERROR.REQUEST.MISSING_PARAMS.status);
+    return c.json(
+      createErrorResponse({
+        message: "clusterId is required",
+        code: ERROR.REQUEST.MISSING_PARAMS.code,
+      }),
+      ERROR.REQUEST.MISSING_PARAMS.status,
+    );
   }
 
   try {
@@ -198,11 +213,7 @@ runtime.get("/events", authMiddleware, requireClusterViewer, async (c) => {
     };
 
     const now = Date.now();
-    const windowMs =
-      filters.window === "24h" ? 24 * 60 * 60 * 1000 :
-      filters.window === "7d" ? 7 * 24 * 60 * 60 * 1000 :
-      filters.window === "30d" ? 30 * 24 * 60 * 60 * 1000 :
-      null;
+    const windowMs = filters.window === "24h" ? 24 * 60 * 60 * 1000 : filters.window === "7d" ? 7 * 24 * 60 * 60 * 1000 : filters.window === "30d" ? 30 * 24 * 60 * 60 * 1000 : null;
 
     let filteredEvents = events;
 
@@ -212,25 +223,18 @@ runtime.get("/events", authMiddleware, requireClusterViewer, async (c) => {
 
     if (filters.search) {
       const term = filters.search.toLowerCase();
-      filteredEvents = filteredEvents.filter((event: any) =>
-        JSON.stringify(event).toLowerCase().includes(term),
-      );
+      filteredEvents = filteredEvents.filter((event: any) => JSON.stringify(event).toLowerCase().includes(term));
     }
 
     if (windowMs !== null) {
-      filteredEvents = filteredEvents.filter((event: any) =>
-        typeof event.timestamp === "number" && event.timestamp >= now - windowMs,
-      );
+      filteredEvents = filteredEvents.filter((event: any) => typeof event.timestamp === "number" && event.timestamp >= now - windowMs);
     }
 
     if (filters.sort === "oldest") {
       filteredEvents = [...filteredEvents].sort((a: any, b: any) => a.timestamp - b.timestamp);
     }
 
-    const { page, pageSize, offset } = parsePaginationParams(
-      c.req.query("page"),
-      c.req.query("pageSize"),
-    );
+    const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
 
     const paginatedEvents = filteredEvents.slice(offset, offset + pageSize);
     const paginatedData = createPaginatedResponse(paginatedEvents, page, pageSize, filteredEvents.length);
@@ -239,11 +243,14 @@ runtime.get("/events", authMiddleware, requireClusterViewer, async (c) => {
   } catch (error) {
     console.error("Failed to retrieve events", error);
     const helpLink = "https://monitoring.dployr.io";
-    return c.json(createErrorResponse({
-      message: "Failed to retrieve events",
-      code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      helpLink,
-    }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to retrieve events",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        helpLink,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
   }
 });
 

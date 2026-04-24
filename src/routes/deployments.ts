@@ -5,9 +5,9 @@ import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getDbStore, type AppVariables } from "@/lib/context.js";
+import { getDbStore } from "@/lib/config/context.js";
 
-const deployments = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const deployments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 deployments.use("*", authMiddleware);
 
 // List all deployments

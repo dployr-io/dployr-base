@@ -3,23 +3,29 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables } from "@/types/index.js";
-import { authMiddleware } from "@/middleware/auth.js";
+import { requireDployrAdministrator } from "@/middleware/auth.js";
 import {
   attachListInstances,
   attachGetInstance,
-  attachCreateInstance,
   attachDeleteInstance,
-  attachPingInstance,
+  attachCreateInstance,
   attachAddInstanceDomain,
+  attachPingInstance,
+  attachRotateInstanceToken,
   attachInstallDployr,
   attachRebootInstance,
   attachRestartDaemon,
-  attachRotateInstanceToken,
 } from "@/lib/instances/instance-helpers.js";
+import { pool } from "./pool.js";
+import vm from "./vm.js";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-instances.use("*", authMiddleware);
+instances.use("*", requireDployrAdministrator);
+
+instances.route("/pool", pool);
+
+instances.route("/vm", vm);
 
 attachListInstances(instances);
 

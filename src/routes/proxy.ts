@@ -3,12 +3,11 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { TrafficRouter } from "@/services/proxy/traffic-router.js";
 import { authMiddleware, requireClusterViewer } from "@/middleware/auth.js";
-import { getDbStore, getKVStore, type AppVariables } from "@/lib/context.js";
+import { getDbStore, getTrafficRouter } from "@/lib/config/context.js";
 import { ERROR } from "@/lib/constants/index.js";
 
-const proxy = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const proxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // All routes require authentication
 proxy.use("*", authMiddleware);
@@ -30,12 +29,8 @@ proxy.get("/resolve", async (c) => {
     );
   }
 
-  const db = getDbStore(c);
-  const kv = getKVStore(c);
-
-  // Get base domain from config or default
   const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
-  const router = new TrafficRouter(db, kv, { baseDomain });
+  const router = getTrafficRouter(c);
 
   const parsed = router.parseHostname(hostname);
   if (!parsed) {
@@ -81,11 +76,8 @@ proxy.get("/resolve", async (c) => {
  * GET /v1/proxy/stats
  */
 proxy.get("/stats", async (c) => {
-  const db = getDbStore(c);
-  const kv = getKVStore(c);
-
   const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
-  const router = new TrafficRouter(db, kv, { baseDomain });
+  const router = getTrafficRouter(c);
 
   return c.json(
     createSuccessResponse({
@@ -171,11 +163,7 @@ proxy.post("/invalidate", requireClusterViewer, async (c) => {
     all?: boolean;
   }>();
 
-  const db = getDbStore(c);
-  const kv = getKVStore(c);
-
-  const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
-  const router = new TrafficRouter(db, kv, { baseDomain });
+  const router = getTrafficRouter(c);
 
   if (body.all) {
     router.clearCache();

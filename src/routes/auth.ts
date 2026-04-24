@@ -6,12 +6,11 @@ import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorR
 import { setCookie, getCookie } from "hono/cookie";
 import z from "zod";
 import { sanitizeReturnTo } from "@/lib/utils.js";
-import { EmailService } from "@/services/notifications/email/index.js";
 import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
-import { getKVStore, getOAuthService, getNotificationService, runBackground, type AppVariables, getDbStore } from "@/lib/context.js";
+import { getKVStore, getOAuthService, getNotificationService, runBackground, createEmailService, getDbStore } from "@/lib/config/context.js";
 
-const auth = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const loginSchema = z.object({
   email: z.email(),
@@ -126,9 +125,9 @@ auth.get("/callback/:provider", async (c) => {
 
     if (cluster) {
       try {
-        await kv.assignFreeInstance(cluster.id);
-      } catch (freeInstanceError) {
-        console.error("[AUTH] Failed to assign free instance for cluster", cluster.id, freeInstanceError);
+        await db.instancePool.assignInstance(cluster.id);
+      } catch (instanceError) {
+        console.error("[AUTH] Failed to assign free instance for cluster", cluster.id, instanceError);
       }
     }
 
@@ -217,10 +216,7 @@ auth.post("/login/email", async (c) => {
 
     const code = await kv.createOTP(email);
     const name = email.split("@")[0];
-    const emailService = new EmailService({
-      env: c.env,
-      to: email,
-    });
+    const emailService = createEmailService(c, email);
 
     try {
       await emailService.sendEmail("Verify your account", loginCodeTemplate(name, code));
@@ -303,9 +299,9 @@ auth.post("/login/email/verify", async (c) => {
 
     if (cluster) {
       try {
-        await kv.assignFreeInstance(cluster.id);
-      } catch (freeInstanceError) {
-        console.error("[AUTH] Failed to assign free instance for cluster", cluster.id, freeInstanceError);
+        await db.instancePool.assignInstance(cluster.id);
+      } catch (instanceError) {
+        console.error("[AUTH] Failed to assign free instance for cluster", cluster.id, instanceError);
       }
     }
 

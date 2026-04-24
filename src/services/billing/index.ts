@@ -198,14 +198,14 @@ export class BillingService {
 
     if (previousPlan === "hobby" && plan !== "hobby") {
       try {
-        await kv.releaseFreeInstance(clusterId);
+        await db.instancePool.releaseInstance(clusterId);
         console.log(`[Billing] Released free instance for cluster ${clusterId} (upgraded from hobby to ${plan})`);
       } catch (error) {
         console.error(`[Billing] Failed to release free instance for cluster ${clusterId}:`, error);
       }
     } else if (previousPlan !== "hobby" && plan === "hobby") {
       try {
-        await kv.assignFreeInstance(clusterId);
+        await db.instancePool.assignInstance(clusterId);
         console.log(`[Billing] Assigned free instance for cluster ${clusterId} (downgraded back to hobby)`);
       } catch (error) {
         console.error(`[Billing] Failed to assign free instance for cluster ${clusterId}:`, error);
@@ -278,7 +278,7 @@ export class BillingService {
 
     if (previousPlan !== "hobby") {
       try {
-        await kv.assignFreeInstance(existing.clusterId);
+        await db.instancePool.assignInstance(existing.clusterId);
         console.log(`[Billing] Assigned free instance for cluster ${existing.clusterId} (subscription revoked, downgraded to hobby)`);
       } catch (error) {
         console.error(`[Billing] Failed to assign free instance for cluster ${existing.clusterId}:`, error);
@@ -310,7 +310,7 @@ export class BillingService {
 
     if (previousPlan === "hobby" && existing.plan !== "hobby") {
       try {
-        await kv.releaseFreeInstance(existing.clusterId);
+        await db.instancePool.releaseInstance(existing.clusterId);
         console.log(`[Billing] Released free instance for cluster ${existing.clusterId} (subscription uncanceled, upgraded back to ${existing.plan})`);
       } catch (error) {
         console.error(`[Billing] Failed to release free instance for cluster ${existing.clusterId}:`, error);

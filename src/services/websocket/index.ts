@@ -7,7 +7,7 @@ import { Buffer } from "buffer";
 import type { IncomingMessage } from "http";
 import type { Socket } from "net";
 import type { Hono } from "hono";
-import { initializeAdapters, type Adapters } from "@/lib/bootstrap.js";
+import { initializeAdapters, type Adapters } from "@/lib/config/bootstrap.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import type { Session } from "@/types/index.js";

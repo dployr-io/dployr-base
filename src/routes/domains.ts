@@ -7,13 +7,11 @@ import { Bindings, Variables, createErrorResponse, createSuccessResponse } from 
 import type { DNSProvider } from "@/types/dns.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware, requireClusterDeveloper } from "@/middleware/auth.js";
-import { getDbStore, getKVStore, type AppVariables } from "@/lib/context.js";
-import { DnsService } from "@/services/dns/index.js";
-import { getInstanceService } from "@/lib/instances/instance-helpers.js";
+import { getDbStore, getKVStore, getDnsService, getInstanceService } from "@/lib/config/context.js";
 
 const domains = new Hono<{
   Bindings: Bindings;
-  Variables: Variables & AppVariables;
+  Variables: Variables;
 }>();
 
 const registerInstanceSchema = z.object({
@@ -133,7 +131,7 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   const session = c.get("session")!;
   const db = getDbStore(c);
   const kv = getKVStore(c);
-  const dns = new DnsService(c.env);
+  const dns = getDnsService(c);
 
   let body;
   try {
@@ -207,7 +205,7 @@ domains.get("/verify", async (c) => {
   }
 
   const db = getDbStore(c);
-  const dns = new DnsService(c.env);
+  const dns = getDnsService(c);
   const record = await db.domains.get(domain);
 
   if (!record) {
@@ -232,7 +230,7 @@ domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (
   try {
     const domain = c.req.param("domain").toLowerCase();
     const db = getDbStore(c);
-    const dns = new DnsService(c.env);
+    const dns = getDnsService(c);
 
     const record = await db.domains.get(domain);
     if (!record) {
@@ -268,7 +266,7 @@ domains.get("/:domain", authMiddleware, async (c) => {
   const domain = c.req.param("domain").toLowerCase();
   const session = c.get("session")!;
   const db = getDbStore(c);
-  const dns = new DnsService(c.env);
+  const dns = getDnsService(c);
 
   const domainRecord = await db.domains.get(domain);
   if (!domainRecord) {

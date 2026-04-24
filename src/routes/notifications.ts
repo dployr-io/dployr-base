@@ -5,10 +5,10 @@ import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { ERROR, DEFAULT_EVENTS } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
-import { getDbStore, type AppVariables } from "@/lib/context.js";
+import { getDbStore } from "@/lib/config/context.js";
 import z from "zod";
 
-const notifications = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const notifications = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const setupSchema = z.object({
   integration: z.enum(["discord", "slack", "customWebhook", "email"]),

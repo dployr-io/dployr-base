@@ -7,9 +7,9 @@ import { getCookie } from "hono/cookie";
 import z from "zod";
 import { authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getDbStore, getKVStore, type AppVariables } from "@/lib/context.js";
+import { getDbStore, getKVStore } from "@/lib/config/context.js";
 
-const users = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const users = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 users.use("*", authMiddleware);
 
 const updateUserSchema = z.object({

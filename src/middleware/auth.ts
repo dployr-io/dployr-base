@@ -6,7 +6,7 @@ import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
 import { Bindings, Variables, Session } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getDbStore, getKVStore } from "@/lib/context.js";
+import { getDbStore, getKVStore } from "@/lib/config/context.js";
 import { jwtVerify } from "jose";
 
 /**

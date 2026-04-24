@@ -8,12 +8,9 @@ import { verifyGitHubWebhook } from "@/lib/utils.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
 import { GitLabAuthenticationError, GitLabPermissionError, GitLabNotFoundError, GitLabRateLimitError, GitLabAPIError } from "@/lib/errors/errors.js";
-import { getKVStore, getGitHubService, type AppVariables, getDbStore } from "@/lib/context.js";
-import { BitBucketService } from "@/services/integrations/bitbucket.js";
-import { GitLabService } from "@/services/integrations/gitlab.js";
-import { IntegrationsService } from "@/services/integrations/index.js";
+import { getKVStore, getGitHubService, getGitLabService, getBitBucketService, getIntegrationsService, getDbStore } from "@/lib/config/context.js";
 
-const integrations = new Hono<{ Bindings: Bindings; Variables: Variables & AppVariables }>();
+const integrations = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // GitHub webhook
 integrations.post("/github/webhook", async (c) => {
@@ -49,9 +46,7 @@ integrations.post("/github/webhook", async (c) => {
       );
     }
 
-    const db = getDbStore(c);
-    const kv = getKVStore(c);
-    const integrationsService = new IntegrationsService(c.env, db, kv);
+    const integrationsService = getIntegrationsService(c);
 
     // Handle installation events
     if (event === "installation" && body.action === "created") {
@@ -193,7 +188,7 @@ integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
       );
     }
 
-    const gitlabService = new GitLabService(c.env);
+    const gitlabService = getGitLabService(c);
 
     await gitlabService.remoteCount({ accessToken });
 
@@ -282,7 +277,7 @@ integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
       );
     }
 
-    const bitbucketService = new BitBucketService(c.env);
+    const bitbucketService = getBitBucketService(c);
 
     // Test access
     await bitbucketService.remoteCount({ accessToken });
@@ -353,7 +348,7 @@ integrations.get("/remotes", requireClusterDeveloper, async (c) => {
 
     const db = getDbStore(c);
     const clusterIntegrations = await db.clusters.listClusterIntegrations(clusterId);
-    const integrationsService = new IntegrationsService(c.env);
+    const integrationsService = getIntegrationsService(c);
     const remotes = await integrationsService.listAllRemotes(clusterIntegrations);
 
     return c.json(createSuccessResponse({ remotes }, "Remotes retrieved"));
