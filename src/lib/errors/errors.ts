@@ -57,6 +57,13 @@ export class InstanceConnectionFailureError extends Error {
   }
 }
 
+export class PoolCapacityExceededError extends Error {
+  constructor() {
+    super("No active pool instances with remaining capacity are available");
+    this.name = "PoolCapacityExceededError";
+  }
+}
+
 export class PolarRequestValidationError extends Error {
   constructor(
     public field: string,

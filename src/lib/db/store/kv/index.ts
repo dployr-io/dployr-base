@@ -5,7 +5,6 @@ import { DomainStore } from "./domain.js";
 import { InstanceCacheStore } from "./instance-cache.js";
 import { IntegrationsStore } from "./integrations.js";
 import { BillingStore } from "./billing.js";
-import { FreeInstanceStore, FreeInstanceEntry } from "./free-instance.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 
 export class KVStore {
@@ -16,9 +15,10 @@ export class KVStore {
   public readonly instanceCache: InstanceCacheStore;
   public readonly integrations: IntegrationsStore;
   public readonly billing: BillingStore;
-  public readonly freeInstances: FreeInstanceStore;
-
-  constructor(public kv: IKVAdapter, private githubToken?: string) {
+  constructor(
+    public kv: IKVAdapter,
+    private githubToken?: string,
+  ) {
     this.sessions = new SessionStore(kv);
     this.keys = new KeyStore(kv);
     this.events = new EventStore(kv);
@@ -26,7 +26,6 @@ export class KVStore {
     this.instanceCache = new InstanceCacheStore(kv);
     this.integrations = new IntegrationsStore(kv, githubToken);
     this.billing = new BillingStore(kv);
-    this.freeInstances = new FreeInstanceStore(kv);
   }
 
   // SessionStore delegation
@@ -84,13 +83,4 @@ export class KVStore {
   getbillingNotification = (...args: Parameters<BillingStore["getbillingNotification"]>) => this.billing.getbillingNotification(...args);
   setReminderNotification = (...args: Parameters<BillingStore["setReminderNotification"]>) => this.billing.setReminderNotification(...args);
 
-  // FreeInstanceStore delegation
-  getFreeInstancePool = (...args: Parameters<FreeInstanceStore["getFreeInstancePool"]>) => this.freeInstances.getFreeInstancePool(...args);
-  setFreeInstancePool = (...args: Parameters<FreeInstanceStore["setFreeInstancePool"]>) => this.freeInstances.setFreeInstancePool(...args);
-  assignFreeInstance = (...args: Parameters<FreeInstanceStore["assignFreeInstance"]>) => this.freeInstances.assignFreeInstance(...args);
-  getClusterFreeInstance = (...args: Parameters<FreeInstanceStore["getClusterFreeInstance"]>) => this.freeInstances.getClusterFreeInstance(...args);
-  releaseFreeInstance = (...args: Parameters<FreeInstanceStore["releaseFreeInstance"]>) => this.freeInstances.releaseFreeInstance(...args);
-  getClustersFreeInstanceMap = (...args: Parameters<FreeInstanceStore["getClustersFreeInstanceMap"]>) => this.freeInstances.getClustersFreeInstanceMap(...args);
 }
-
-export type { FreeInstanceEntry };

@@ -1,24 +1,11 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
-
-/**
- * Shape of a free instance entry stored in the pool.
- */
-export interface FreeInstanceEntry {
-  id: string;
-  address: string;
-  tag: string;
-  capacity: number;
-  region?: string;
-  /** Runtime-only field set via admin API. Not present in config. */
-  status?: "active" | "paused";
-  metadata?: { managed: boolean; tier: string };
-}
+import { InstanceEntry } from "@/types/index.js";
 
 /**
  * Free instance pool management for hobby clusters.
  */
-export class FreeInstanceStore {
+export class InstanceStore {
   constructor(private kv: IKVAdapter) {}
 
   /**
@@ -26,10 +13,10 @@ export class FreeInstanceStore {
    * config on startup and mutated at runtime via admin API endpoints (pause,
    * resume, remove).
    *
-   * @returns An array of `FreeInstanceEntry` objects, or `null` if the pool has
+   * @returns An array of `InstanceEntry` objects, or `null` if the pool has
    *   not been seeded yet.
    */
-  async getFreeInstancePool(): Promise<FreeInstanceEntry[] | null> {
+  async getInstancePool(): Promise<InstanceEntry[] | null> {
     const data = await this.kv.get(KV_KEYS.FREE_INSTANCE_POOL);
     if (!data) return null;
     return JSON.parse(data);
@@ -41,13 +28,13 @@ export class FreeInstanceStore {
    *
    * @param pool - The new pool array to persist.
    */
-  async setFreeInstancePool(pool: FreeInstanceEntry[]): Promise<void> {
+  async setInstancePool(pool: InstanceEntry[]): Promise<void> {
     await this.kv.put(KV_KEYS.FREE_INSTANCE_POOL, JSON.stringify(pool));
   }
 
   // Assignment & lookup
-  async assignFreeInstance(clusterId: string): Promise<string | null> {
-    const pool = await this.getFreeInstancePool();
+  async assignInstance(clusterId: string): Promise<string | null> {
+    const pool = await this.getInstancePool();
     if (!pool || pool.length === 0) return null;
 
     const available = pool.filter((inst) => inst.status !== "paused");
@@ -79,7 +66,7 @@ export class FreeInstanceStore {
    * @param clusterId - The cluster to look up.
    * @returns The assigned free instance ID, or `null`.
    */
-  async getClusterFreeInstance(clusterId: string): Promise<string | null> {
+  async getClusterInstance(clusterId: string): Promise<string | null> {
     return await this.kv.get(KV_KEYS.FREE_INSTANCE_CLUSTER(clusterId));
   }
 
@@ -93,12 +80,12 @@ export class FreeInstanceStore {
    *
    * @param clusterId - The cluster whose free instance assignment to release.
    */
-  async releaseFreeInstance(clusterId: string): Promise<void> {
+  async releaseInstance(clusterId: string): Promise<void> {
     await this.kv.delete(KV_KEYS.FREE_INSTANCE_CLUSTER(clusterId));
   }
 
   // Cluster mapping scan
-  async getClustersFreeInstanceMap(): Promise<Array<{ clusterId: string; instanceId: string }>> {
+  async getClustersInstanceMap(): Promise<Array<{ clusterId: string; instanceId: string }>> {
     const prefix = "free_instance:cluster:";
     const keys = await this.kv.list({ prefix });
     const results = await Promise.all(

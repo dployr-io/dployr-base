@@ -1,51 +1,30 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-/**
- * Helper type to make specific properties required while keeping others optional
- */
+import { IStorageAdapter } from "@/lib/config/context.js";
+import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
+import { IKVAdapter } from "@/lib/storage/kv.interface.js";
+import { JWTService } from "@/services/auth/jwt.js";
+import { OAuthService } from "@/services/auth/oauth.js";
+import { BillingService } from "@/services/billing/index.js";
+import { BillingProvider } from "@/services/billing/provider.js";
+import { DnsService } from "@/services/dns/index.js";
+import { InstanceService } from "@/services/instances.js";
+import { BitBucketService } from "@/services/integrations/bitbucket.js";
+import { GitHubService } from "@/services/integrations/github.js";
+import { GitLabService } from "@/services/integrations/gitlab.js";
+import { IntegrationsService } from "@/services/integrations/index.js";
+import { NotificationService } from "@/services/notifications/index.js";
+import { TrafficRouter } from "@/services/proxy/traffic-router.js";
+import { VmProvider } from "@/services/vm/index.js";
+import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
+import { Bindings } from "./bindings.js";
+
+export type { Bindings }
+
 export type RequiredOnly<T, K extends keyof T> = Required<Pick<T, K>> & Partial<Omit<T, K>>;
-
-export type Bindings = {
-  ZEPTO_API_KEY: string;
-
-  GOOGLE_CLIENT_ID: string;
-  GOOGLE_CLIENT_SECRET: string;
-  GITHUB_CLIENT_ID: string;
-  GITHUB_CLIENT_SECRET: string;
-  MICROSOFT_CLIENT_ID: string;
-  MICROSOFT_CLIENT_SECRET: string;
-
-  GITHUB_APP_ID: string;
-  GITHUB_APP_PRIVATE_KEY: string;
-  GITHUB_WEBHOOK_SECRET: string;
-  GITHUB_TOKEN: string;
-
-  APP_URL: string;
-  BASE_URL: string;
-  PROXY_BASE_DOMAIN?: string;
-  EMAIL_FROM?: string;
-  CORS_ALLOWED_ORIGINS?: string;
-
-  ADMIN_API_KEY: string;
-  ALLOWED_DPLOYR_ADMINISTRATORS: string;
-  ADMIN_TOTP_SECRET: string;
-
-  // DNS OAuth (optional)
-  CLOUDFLARE_CLIENT_ID?: string;
-  CLOUDFLARE_CLIENT_SECRET?: string;
-  GODADDY_CLIENT_ID?: string;
-  GODADDY_CLIENT_SECRET?: string;
-  DIGITALOCEAN_CLIENT_ID?: string;
-  DIGITALOCEAN_CLIENT_SECRET?: string;
-  GOOGLE_DNS_CLIENT_ID?: string;
-  GOOGLE_DNS_CLIENT_SECRET?: string;
-
-  POLAR_ACCESS_TOKEN?: string;
-  POLAR_WEBHOOK_SECRET?: string;
-  POLAR_ENVIRONMENT?: string;
-  BILLING_CHECKOUT_URLS?: Record<string, string>;
-};
 
 export type OAuthProvider = "google" | "github" | "microsoft" | "email";
 
@@ -101,19 +80,26 @@ export interface Session {
 }
 
 export type Variables = {
-  user?: User | undefined;
-  session?: Session | undefined;
-  kvAdapter?: any;
-  dbAdapter?: any;
-  storageAdapter?: any;
-  wsHandler?: any;
-  billingProvider?: any;
-  _dbStore?: any;
-  _kvStore?: any;
-  _jwtService?: any;
-  _notificationService?: any;
-  _oauthService?: any;
-  _githubService?: any;
+    kvAdapter?: IKVAdapter;
+    dbAdapter?: PostgresAdapter;
+    storageAdapter?: IStorageAdapter;
+    wsHandler?: WebSocketHandler;
+    _dbStore?: DatabaseStore;
+    _kvStore?: KVStore;
+    _jwtService?: JWTService;
+    _notificationService?: NotificationService;
+    _oauthService?: OAuthService;
+    _githubService?: GitHubService;
+    _gitLabService?: GitLabService;
+    _bitBucketService?: BitBucketService;
+    _integrationsService?: IntegrationsService;
+    _instanceService?: InstanceService;
+    _dnsService?: DnsService;
+    _billingService?: BillingService;
+    _trafficRouter?: TrafficRouter;
+    billingProvider?: BillingProvider | null;
+    vmProvider?: VmProvider | null;
+    session?: Session;
 };
 
 export type ActorType = "user" | "headless";
@@ -138,6 +124,7 @@ export type StatusUpdateMessage = {
   system: SystemStatus;
 };
 
+
 export interface Instance {
   id: string;
   address: string;
@@ -145,6 +132,14 @@ export interface Instance {
   metadata?: Record<string, any> | undefined;
   createdAt: number;
   updatedAt: number;
+}
+
+// Instances in a pool 
+export interface InstanceEntry extends Instance {
+  capacity: number;
+  region?: string;
+  status?: "active" | "paused";
+  metadata?: { managed: boolean; tier: string };
 }
 
 export interface Cluster {
