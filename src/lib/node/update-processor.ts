@@ -59,7 +59,7 @@ export class UpdateProcessor {
 
     try {
       // Get instance first to get the database ID
-      const instance = await this.db.instances.getByName(instanceName);
+      const instance = await this.db.instances.find({ tag: instanceName });
       if (!instance) {
         console.warn(`[UpdateProcessor] Instance ${instanceName} not found`);
         return;
@@ -68,13 +68,12 @@ export class UpdateProcessor {
       const incomingServiceNames = new Set(services.map((s) => s.name as string));
 
       // Use instance.id (database ID) to query services
-      const existingServices = await this.db.services.getByInstance(instance.id);
+      const existingServices = await this.db.services.list({ instanceId: instance.id });
       const existingServiceNames = new Set(existingServices.map((s) => s.name));
 
       const hasChanges = existingServiceNames.size !== incomingServiceNames.size || Array.from(incomingServiceNames).some((name) => !existingServiceNames.has(name));
 
       if (!hasChanges) {
-        // No changes, skip sync
         return;
       }
 
@@ -85,7 +84,7 @@ export class UpdateProcessor {
       for (const service of toCreate) {
         try {
           const svc = service as { name: string };
-          await this.db.services.save(instanceTag, svc.name);
+          await this.db.services.create({ instanceTag, name: svc.name });
           console.log(`[UpdateProcessor] Created service: ${svc.name}`);
         } catch (error) {
           const svc = service as { name: string };
@@ -95,7 +94,7 @@ export class UpdateProcessor {
 
       for (const service of toDelete) {
         try {
-          await this.db.services.deleteByName(service.name);
+          await this.db.services.delete({ name: service.name });
           console.log(`[UpdateProcessor] Deleted service: ${service.name}`);
         } catch (error) {
           console.error(`[UpdateProcessor] Failed to delete service ${service.name}:`, error);
