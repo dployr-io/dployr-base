@@ -4,7 +4,7 @@
 export const _004_instance_pool = `
 CREATE TABLE IF NOT EXISTS instance_pool (
   id TEXT PRIMARY KEY,
-  address TEXT NOT NULL UNIQUE,
+  address TEXT UNIQUE,
   tag TEXT NOT NULL UNIQUE,
   capacity INTEGER NOT NULL DEFAULT 10,
   region TEXT,

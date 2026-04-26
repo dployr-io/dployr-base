@@ -7,3 +7,4 @@ export * from './001_domains.js';
 export * from './002_services.js';
 export * from './003_subscriptions.js';
 export * from './004_instance_pool.js';
+export * from './005_instance_status.js';
