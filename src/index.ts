@@ -4,6 +4,8 @@
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import { WebSocketService } from "@/services/websocket/index.js";
+import { worker } from "@/services/background/index.js";
+import { registerJobs } from "@/services/background/jobs/index.js";
 import { bootstrapMiddleware, getCorsConfig } from "@/lib/config/bootstrap.js";
 import { createCorsMiddleware } from "@/middleware/cors.js";
 import { globalRateLimit } from "@/middleware/ratelimit.js";
@@ -46,8 +48,10 @@ registerRoutes(app);
 
 // Node.js server startup
 if (isNode) {
+  registerJobs(worker);
   const wsService = new WebSocketService(app);
   wsService.start();
+  worker.start();
 }
 
 export default app;
