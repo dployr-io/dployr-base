@@ -995,15 +995,15 @@
               <div class="stat-value" id="stat-total">—</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Running</div>
+              <div class="stat-label">Healthy</div>
               <div class="stat-value green" id="stat-running">—</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Stopped</div>
+              <div class="stat-label">Offline</div>
               <div class="stat-value red" id="stat-stopped">—</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Pending</div>
+              <div class="stat-label">Degraded</div>
               <div class="stat-value yellow" id="stat-pending">—</div>
             </div>
           </div>
@@ -1028,11 +1028,13 @@
                 <table id="instances-table">
                   <thead>
                     <tr>
+                      <th>Type</th>
                       <th>Instance ID</th>
                       <th>Tag</th>
                       <th>Address</th>
                       <th>Region</th>
-                      <th>Cluster ID</th>
+                      <th>Status</th>
+                      <th>Cluster / Capacity</th>
                       <th>Created</th>
                       <th></th>
                     </tr>
@@ -1391,6 +1393,8 @@
       'af-south': '🇿🇦',
     };
 
+    const STATUS_BADGE_CLASS = { healthy: 'running', degraded: 'pending', offline: 'stopped', unreachable: 'stopped', maintenance: 'pending' };
+
     async function loadInstances() {
       const tbody = document.getElementById('instances-tbody');
       const loading = document.getElementById('instances-loading');
@@ -1403,40 +1407,66 @@
       table.style.display = 'none';
 
       try {
-        const url = new URL(`${API_BASE}/v1/admin/instances`);
-        url.searchParams.set('sessionId', state.sessionId);
-        const res = await fetch(url, { headers: apiHeaders() });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || err.error || `HTTP ${res.status}`);
-        }
-        const body = await res.json();
-        const instances = body.data?.items || body.data || body || [];
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const [instancesRes, poolRes] = await Promise.all([
+          fetch(`${API_BASE}/v1/admin/instances${sessionParam}`, { headers: apiHeaders() }),
+          fetch(`${API_BASE}/v1/admin/instances/pool${sessionParam}`, { headers: apiHeaders() }),
+        ]);
 
-        document.getElementById('stat-total').textContent = instances.length;
-        document.getElementById('stat-running').textContent = 0;
-        document.getElementById('stat-stopped').textContent = 0;
-        document.getElementById('stat-pending').textContent = 0;
+        if (!instancesRes.ok) {
+          const err = await instancesRes.json().catch(() => ({}));
+          throw new Error(err.error?.message || err.error || `HTTP ${instancesRes.status}`);
+        }
+
+        const instancesBody = await instancesRes.json();
+        const poolBody = poolRes.ok ? await poolRes.json().catch(() => ({})) : {};
+
+        const dedicated = (instancesBody.data?.items || []).map(i => ({
+          ...i, _source: 'dedicated', region: i.metadata?.region || i.region || null,
+        }));
+        const pool = (poolBody.data?.data?.items || []).map(i => ({
+          ...i, _source: 'pool', region: i.region || i.metadata?.region || null,
+        }));
+
+        const combined = [...pool, ...dedicated];
+
+        document.getElementById('stat-total').textContent = combined.length;
+        document.getElementById('stat-running').textContent = combined.filter(i => i.status === 'healthy').length;
+        document.getElementById('stat-stopped').textContent = combined.filter(i => ['offline', 'unreachable', 'maintenance'].includes(i.status)).length;
+        document.getElementById('stat-pending').textContent = combined.filter(i => i.status === 'degraded').length;
         document.getElementById('instances-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
         loading.classList.add('hidden');
 
-        if (!instances.length) { empty.classList.remove('hidden'); return; }
+        if (!combined.length) { empty.classList.remove('hidden'); return; }
 
         table.style.display = '';
-        instances.forEach(inst => {
-          const region = inst.metadata?.region || inst.region || null;
-          const regionLabel = region ? `${REGION_FLAGS[region] ?? '🌐'} ${region}` : '—';
+        combined.forEach(inst => {
+          const regionLabel = inst.region ? `${REGION_FLAGS[inst.region] ?? '🌐'} ${inst.region}` : '—';
           const createdMs = parseInt(inst.createdAt, 10);
+          const isPool = inst._source === 'pool';
+
+          const typeBadge = isPool
+            ? `<span class="badge" style="background:var(--accent-dim);color:var(--accent);">pool</span>`
+            : `<span class="badge" style="background:var(--bg-3);color:var(--text-muted);">dedicated</span>`;
+
+          const statusBadge = `<span class="badge ${STATUS_BADGE_CLASS[inst.status] || 'stopped'}">${escHtml(inst.status || '—')}</span>`;
+
+          const clusterCol = isPool
+            ? `<span class="text-muted" style="font-size:11px;">cap: ${escHtml(String(inst.capacity ?? '—'))}</span>`
+            : `<span class="mono" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;" title="${escAttr(inst.clusterId || '')}">${escHtml((inst.clusterId || '—').slice(0, 16))}${(inst.clusterId || '').length > 16 ? '…' : ''}</span>`;
+
           const tr = document.createElement('tr');
           tr.innerHTML = `
-          <td class="mono">${escHtml(inst.id || '—')}</td>
-          <td>${escHtml(inst.tag || '—')}</td>
-          <td class="dim">${escHtml(inst.address || '—')}</td>
-          <td class="dim">${escHtml(regionLabel)}</td>
-          <td class="mono dim" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escAttr(inst.clusterId || '')}">${escHtml((inst.clusterId || '—').slice(0, 16))}…</td>
-          <td class="dim">${escHtml(createdMs ? new Date(createdMs).toLocaleDateString() : '—')}</td>
-          <td><button class="btn btn-ghost btn-sm" onclick="prefillRemove('${escAttr(inst.id)}','${escAttr(inst.tag || inst.id)}')">Remove</button></td>
-        `;
+            <td>${typeBadge}</td>
+            <td class="mono">${escHtml(inst.id || '—')}</td>
+            <td>${escHtml(inst.tag || '—')}</td>
+            <td class="dim">${escHtml(inst.address || '—')}</td>
+            <td class="dim">${escHtml(regionLabel)}</td>
+            <td>${statusBadge}</td>
+            <td>${clusterCol}</td>
+            <td class="dim">${escHtml(createdMs ? new Date(createdMs).toLocaleDateString() : '—')}</td>
+            <td><button class="btn btn-ghost btn-sm" onclick="prefillRemove('${escAttr(inst.id)}','${escAttr(inst.tag || inst.id)}')">Remove</button></td>
+          `;
           tbody.appendChild(tr);
         });
       } catch (err) {
