@@ -1,9 +1,9 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { Bindings, NotificationData } from "@/types/index.js";
+import type { NotificationData } from "@/types/index.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
-import { EmailNotifierService } from "./email/email-notifier.js";
+import { EmailService } from "./email/index.js";
 import { type NotificationEvent } from "./notifier.js";
 import { DiscordService } from "../integrations/discord.js";
 import { SlackService } from "../integrations/slack.js";
@@ -13,13 +13,13 @@ export class NotificationService {
   private discordService: DiscordService;
   private slackService: SlackService;
   private webhookService: WebhookService;
-  private emailService: EmailNotifierService;
+  private emailService: EmailService | null;
 
-  constructor(private env: Bindings) {
+  constructor(emailService?: EmailService | null) {
     this.discordService = new DiscordService();
     this.slackService = new SlackService();
     this.webhookService = new WebhookService();
-    this.emailService = new EmailNotifierService(env);
+    this.emailService = emailService ?? null;
   }
 
   private isEventSubscribed(integration: { enabled: boolean; events?: NotificationEvent[] }, event: NotificationEvent): boolean {
@@ -39,7 +39,7 @@ export class NotificationService {
       if (integrations.notification?.discord?.webhookUrl && this.isEventSubscribed(integrations.notification.discord, event)) {
         promises.push(
           this.discordService
-            .sendNotification({
+            .send({
               webhookUrl: integrations.notification.discord.webhookUrl,
               event,
               data,
@@ -52,7 +52,7 @@ export class NotificationService {
       if (integrations.notification?.slack?.webhookUrl && this.isEventSubscribed(integrations.notification.slack, event)) {
         promises.push(
           this.slackService
-            .sendNotification({
+            .send({
               webhookUrl: integrations.notification.slack.webhookUrl,
               event,
               data,
@@ -65,7 +65,7 @@ export class NotificationService {
       if (integrations.notification?.customWebhook?.webhookUrl && this.isEventSubscribed(integrations.notification.customWebhook, event)) {
         promises.push(
           this.webhookService
-            .sendNotification({
+            .send({
               webhookUrl: integrations.notification.customWebhook.webhookUrl,
               event,
               data,
@@ -75,14 +75,14 @@ export class NotificationService {
       }
 
       // Email notification
-      if (integrations.notification?.email && this.isEventSubscribed(integrations.notification.email, event)) {
+      if (this.emailService && integrations.notification?.email && this.isEventSubscribed(integrations.notification.email, event)) {
         const ownerUserId = await d1.clusters.getOwner(data.clusterId);
         if (ownerUserId) {
           const owner = await d1.users.find({ id: ownerUserId });
           if (owner?.email) {
             promises.push(
               this.emailService
-                .sendNotification({
+                .send({
                   event,
                   data,
                   to: owner.email,

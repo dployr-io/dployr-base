@@ -35,5 +35,5 @@ export interface NotificationPayload {
 }
 
 export interface Notifier {
-  sendNotification(payload: NotificationPayload): Promise<void>;
+  send(payload: NotificationPayload): Promise<void>;
 }

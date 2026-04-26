@@ -1,56 +1,47 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Bindings } from "@/types/index.js";
+import { Notifier, NotificationPayload, NotificationEvent } from "../notifier.js";
+import { notificationTemplate } from "@/lib/templates/emails/notification.js";
+import { EVENT_METADATA } from "@/lib/constants/events.js";
+import type { Bindings } from "@/types/index.js";
 
-export class EmailService {
-    private env: Bindings;
-    private name?: string;
-    private to: string;
-
-    constructor({ env, name, to }: { env: Bindings; name?: string; to: string }) {
-        this.env = env;
-        this.name = name;
-        this.to = to;
-    }
-
-    async sendEmail(subject: string, body: string): Promise<{ success: boolean; error?: string }> {
-        const fromAddress = this.env.EMAIL_FROM;
-        if (!fromAddress) {
-            console.error('EMAIL_FROM is not configured');
-            return { success: false, error: 'EMAIL_FROM is not configured' };
-        }
-
-        const emailPayload = {
-            to: [{
-                email_address: {
-                    address: this.to,
-                    name: this.name || this.to
-                }
-            }],
-            from: {
-                address: fromAddress
-            },
-            subject,
-            htmlbody: body
-        };
-
-        const response = await fetch('https://api.zeptomail.com/v1.1/email', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Zoho-enczapikey ${this.env.ZEPTO_API_KEY}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(emailPayload)
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            console.error('Zepto API error:', error);
-            return { success: false, error: 'Failed to send email' };
-        }
-
-        return { success: true };
-    }
+export interface EmailPayload {
+  name?: string | null;
+  to: string;
+  subject: string;
+  body: string;
 }
+
+export interface EmailProvider {
+  sendEmail({ name, to, subject, body }: EmailPayload): Promise<{ success: boolean; error?: string }>;
+}
+
+export class EmailService implements Notifier {
+  constructor(
+    private provider: EmailProvider,
+    private env: Bindings,
+  ) {}
+
+  public async send({ event, data, to }: NotificationPayload): Promise<void> {
+    if (!to) {
+      throw new Error("Email recipient is required");
+    }
+
+    const subject = this.formatEventSubject(event as NotificationEvent);
+    const body = this.formatEventBody(event as NotificationEvent, data);
+
+    await this.provider.sendEmail({ subject, body, to });
+  }
+
+  private formatEventSubject(event: NotificationEvent): string {
+    const metadata = EVENT_METADATA[event];
+    return metadata?.title || "Cluster Notification";
+  }
+
+  private formatEventBody(event: NotificationEvent, data: Record<string, any>): string {
+    return notificationTemplate(event, data);
+  }
+}
+
+export { ZeptoProvider } from "./zepto.js";
