@@ -79,8 +79,8 @@ pro = "https://sandbox.polar.sh/checkout/polar_cl_..."
 enabled = false
 port = 7878
 host = "0.0.0.0"
-# Wildcard base domain: routes service.cluster.<base_domain>
-base_domain = "dployr.io"
+# Wildcard base domain: routes service.cluster.<tld>
+tld = "dployr.io"
 # Request timeout in milliseconds
 timeout_ms = 30000
 # Route cache TTL in seconds
@@ -91,3 +91,5 @@ cache_ttl_seconds = 30
 provider = "digitalocean"
 # DigitalOcean personal access token
 do_api_token = ""
+# ssh key id on DigitalOcean
+ssh_key = 12345678 

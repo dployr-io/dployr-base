@@ -7,11 +7,11 @@ import { initializeDatabase } from "@/lib/db/migrate.js";
 import { loadConfig, type Config } from "@/lib/config/loader.js";
 import { initializeFromConfig } from "@/lib/config/adapters.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
-import type { VmProvider } from "@/services/vm/index.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { IStorageAdapter } from "./context.js";
 import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
+import { VmProvider } from "@/services/vm/provider.js";
 
 export interface Adapters {
   kv: IKVAdapter;
@@ -84,8 +84,9 @@ export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Varia
   const authConfig = adapters!.config?.auth;
   const adminConfig = adapters!.config?.admin;
   const billingConfig = adapters!.config?.billing;
+  const vmConfig = adapters!.config?.virtual_machines;
 
-  c.env = {
+  const env: Bindings = {
     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
     APP_URL: serverConfig?.app_url || process.env.APP_URL || "",
     EMAIL_FROM: emailConfig?.from_address || process.env.EMAIL_FROM || "",
@@ -108,7 +109,10 @@ export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Varia
     POLAR_WEBHOOK_SECRET: billingConfig?.polar_webhook_secret || process.env.POLAR_WEBHOOK_SECRET || "",
     POLAR_ENVIRONMENT: billingConfig?.environment || process.env.POLAR_ENVIRONMENT || (process.env.NODE_ENV === "production" ? "production" : "sandbox"),
     BILLING_CHECKOUT_URLS: billingConfig?.checkout_urls,
-  } as unknown as Bindings;
+    DO_API_TOKEN: vmConfig?.do_api_token,
+    SSH_KEY: vmConfig?.ssh_key,
+  };
+  c.env = env as unknown as Bindings;
 
   await next();
 }

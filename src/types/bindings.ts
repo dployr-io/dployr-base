@@ -18,7 +18,7 @@ export type Bindings = {
 
   APP_URL: string;
   BASE_URL: string;
-  PROXY_BASE_DOMAIN?: string;
+  TLD?: string;
   EMAIL_FROM?: string;
   CORS_ALLOWED_ORIGINS?: string;
 
@@ -42,4 +42,5 @@ export type Bindings = {
   BILLING_CHECKOUT_URLS?: Record<string, string>;
 
   DO_API_TOKEN?: string;
+  SSH_KEY?: number;
 };

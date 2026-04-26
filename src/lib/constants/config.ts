@@ -105,7 +105,7 @@ export const CONFIG_SCHEMA = z.object({
   proxy: z
     .object({
       enabled: z.boolean().default(false),
-      port: z.number().default(8080),
+      port: z.number().default(7878),
       host: z.string().default("0.0.0.0"),
       base_domain: z.string().default("dployr.io"),
       timeout_ms: z.number().default(30000),
@@ -116,6 +116,7 @@ export const CONFIG_SCHEMA = z.object({
     .object({
       provider: z.enum(["digitalocean"]).default("digitalocean"),
       do_api_token: z.string().optional(),
+      ssh_key: z.number().int().positive(),
     })
     .optional(),
 });

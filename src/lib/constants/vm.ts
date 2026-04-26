@@ -3,10 +3,11 @@
 
 import type { VMSize, VMImage, VMRegion } from "@/types/vm.js";
 
-export const FREE_INSTANCE_SIZE: VMSize = "s-1vcpu-512mb-10gb";
-export const FREE_INSTANCE_IMAGE: VMImage = "debian-12-x64";
-export const FREE_INSTANCE_REGION: VMRegion = "nyc1";
-export const FREE_INSTANCE_TAGS = ["managed", "free-tier"] as const;
+export const DEFAULT_CAPACITY = 10;
+export const DEFAULT_INSTANCE_SIZE: VMSize = "s-1vcpu-512mb-10gb";
+export const DEFAULT_INSTANCE_IMAGE: VMImage = "debian-12-x64";
+export const DEFAULT_INSTANCE_REGION: VMRegion = "nyc1";
+export const DEFAULT_INSTANCE_TAGS = ["managed", "hobby"];
 
 export const VM_SIZES: Record<VMSize, { label: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: number }> = {
   "s-1vcpu-512mb-10gb": { label: "Starter", vcpu: 1, memoryMb: 512, diskGb: 10, priceMonthly: 4 },
@@ -38,10 +39,15 @@ export const VM_REGIONS: Record<VMRegion, { label: string; continent: string }> 
 };
 
 /** Bootstrap install script injected as user_data at droplet creation */
-export const DPLOYR_INSTALL_SCRIPT = `#!/bin/bash
+export function buildInstallScript(token: string, instanceTag: string): string {
+  const env = process.env.NODE_ENV === "production" ? "prod" : "dev";
+  return `#!/bin/bash
 set -euo pipefail
-curl -sSL https://raw.githubusercontent.com/dployr-io/dployr/master/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/dployr-io/dployr/master/install.sh -o /tmp/dployr-install.sh
+sudo bash /tmp/dployr-install.sh --token ${token} --instance ${instanceTag} --env ${env}
 `;
+
+}
 
 /** Milliseconds to wait between polling DO action status */
 export const VM_POLL_INTERVAL_MS = 5_000;

@@ -21,7 +21,8 @@ import { DnsService } from "@/services/dns/index.js";
 import { BillingService } from "@/services/billing/index.js";
 import { TrafficRouter } from "@/services/proxy/traffic-router.js";
 import { EmailService } from "@/services/notifications/email/index.js";
-import { VmProvider } from "@/services/vm/index.js";
+import { VmProvider } from "@/services/vm/provider.js";
+import { InstancePoolService } from "@/services/pool.js";
 
 // Storage adapter interface
 export interface IStorageAdapter {
@@ -139,6 +140,15 @@ export function getInstanceService(c: AppContext): InstanceService {
   return service;
 }
 
+export function getInstancePoolService(c: AppContext): InstancePoolService {
+  const existing = c.get("_instancePoolService");
+  if (existing) return existing;
+
+  const service = new InstancePoolService();
+  c.set("_instancePoolService", service);
+  return service;
+}
+
 export function getDnsService(c: AppContext): DnsService {
   const existing = c.get("_dnsService");
   if (existing) return existing;
@@ -191,7 +201,7 @@ export function getTrafficRouter(c: AppContext): TrafficRouter {
   const existing = c.get("_trafficRouter");
   if (existing) return existing;
 
-  const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
+  const baseDomain = c.env?.TLD ?? "dployr.io";
   const service = new TrafficRouter(getDbStore(c), getKVStore(c), { baseDomain });
   c.set("_trafficRouter", service);
   return service;

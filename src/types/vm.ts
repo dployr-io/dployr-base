@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-export type VMProvider = "digitalocean";
+export type VMProviderName = "digitalocean";
 
 export type VMRegion =
   | "nyc1"
@@ -52,14 +52,27 @@ export interface VirtualMachine {
   createdAt?: string;
 }
 
+export interface VMListOptions {
+  /** Filter by a provider label — on DigitalOcean this maps to `tag_name` */
+  tagName?: string;
+  /** Filter by droplet/VM name */
+  name?: string;
+  /** Results per page (DigitalOcean default: 20, max: 200) */
+  perPage?: number;
+  /** Page number for pagination */
+  page?: number;
+}
+
 export interface VMCreateOptions {
   name: string;
   size: VMSize;
   image: VMImage;
   region: VMRegion;
   sshKey?: string | number;
-  /** Cloud-init / user_data script run at first boot */
+  /** Cloud-init / user_data script run at first boot. Takes precedence over token. */
   userData?: string;
+  /** Bootstrap JWT token used to auto-generate the install user_data script */
+  token?: string;
   /** VPC UUID to place the droplet in */
   vpcUuid?: string;
   tags?: string[];

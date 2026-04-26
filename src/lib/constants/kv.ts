@@ -20,7 +20,8 @@ export const KV_KEYS = {
   INSTANCE_BY_NAME: (clusterId: string, tag: string) => `instance:name:${clusterId}:${tag}`,
   INSTANCE_BY_TAG: (tag: string) => `instance:tag:${tag}`,
   SERVICES: (instanceId: string) => `services:${instanceId}`,
-  PROCESS_SNAPSHOT: (instanceId: string, timestamp: number) => `process:${instanceId}:snapshot:${timestamp}`,
+  PROCESS_SNAPSHOT: (instanceId: string, timestamp?: number) =>
+    timestamp !== undefined ? `process:${instanceId}:snapshot:${timestamp}` : `process:${instanceId}:snapshot:`,
   ADMIN_JWT: (sessionId: string) => `admin_jwt:${sessionId}`,
   BILLING_NOTIFICATION: (clusterId: string) => `billing_notification:${clusterId}`,
   FREE_INSTANCE_POOL: "free_instance:pool",

@@ -4,7 +4,7 @@
 import type { WebSocket } from "ws";
 import type { DeploymentPayload } from "@/lib/tasks/types.js";
 import type { Session } from "@/types/index.js";
-import { MESSAGE_KIND, WSErrorCode } from "../lib/constants/websocket.js";
+import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 
 /**
  * Structured error response

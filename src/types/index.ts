@@ -18,11 +18,10 @@ import { GitLabService } from "@/services/integrations/gitlab.js";
 import { IntegrationsService } from "@/services/integrations/index.js";
 import { NotificationService } from "@/services/notifications/index.js";
 import { TrafficRouter } from "@/services/proxy/traffic-router.js";
-import { VmProvider } from "@/services/vm/index.js";
 import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
 import { Bindings } from "./bindings.js";
 
-export type { Bindings }
+export type { Bindings };
 
 export type RequiredOnly<T, K extends keyof T> = Required<Pick<T, K>> & Partial<Omit<T, K>>;
 
@@ -80,26 +79,28 @@ export interface Session {
 }
 
 export type Variables = {
-    kvAdapter?: IKVAdapter;
-    dbAdapter?: PostgresAdapter;
-    storageAdapter?: IStorageAdapter;
-    wsHandler?: WebSocketHandler;
-    _dbStore?: DatabaseStore;
-    _kvStore?: KVStore;
-    _jwtService?: JWTService;
-    _notificationService?: NotificationService;
-    _oauthService?: OAuthService;
-    _githubService?: GitHubService;
-    _gitLabService?: GitLabService;
-    _bitBucketService?: BitBucketService;
-    _integrationsService?: IntegrationsService;
-    _instanceService?: InstanceService;
-    _dnsService?: DnsService;
-    _billingService?: BillingService;
-    _trafficRouter?: TrafficRouter;
-    billingProvider?: BillingProvider | null;
-    vmProvider?: VmProvider | null;
-    session?: Session;
+  kvAdapter?: IKVAdapter;
+  dbAdapter?: PostgresAdapter;
+  storageAdapter?: IStorageAdapter;
+  wsHandler?: WebSocketHandler;
+  _dbStore?: DatabaseStore;
+  _kvStore?: KVStore;
+  _jwtService?: JWTService;
+  _notificationService?: NotificationService;
+  _oauthService?: OAuthService;
+  _githubService?: GitHubService;
+  _gitLabService?: GitLabService;
+  _bitBucketService?: BitBucketService;
+  _integrationsService?: IntegrationsService;
+  _instanceService?: InstanceService;
+  _instancePoolService?: InstancePoolService;
+  _dnsService?: DnsService;
+  _billingService?: BillingService;
+  _trafficRouter?: TrafficRouter;
+  billingProvider?: BillingProvider | null;
+  vmProvider?: VmProvider | null;
+  session?: Session;
+  resolvedClusterId?: string;
 };
 
 export type ActorType = "user" | "headless";
@@ -124,22 +125,33 @@ export type StatusUpdateMessage = {
   system: SystemStatus;
 };
 
+/**
+ * Instance status for instance pools.
+ *
+ * @property "healthy" - Instance is fully available for allocation
+ * @property "degraded" - Server is reachable but cannot connect with dployrd
+ * @property "offline" - Server is turned off but available on instance provider (DigitalOcean)
+ * @property "unreachable" - Server is not reachable
+ * @property "maintenance" - Server cannot receive allocation during this window
+ */
+export type InstanceStatus = "healthy" | "degraded" | "offline" | "unreachable" | "maintenance";
 
 export interface Instance {
   id: string;
   address: string;
   tag: string;
+  status: InstanceStatus;
   metadata?: Record<string, any> | undefined;
   createdAt: number;
   updatedAt: number;
 }
 
-// Instances in a pool 
-export interface InstanceEntry extends Instance {
+// Instances in a pool
+export interface InstancePool extends Omit<Instance, "address"> {
+  address: string | null;
   capacity: number;
   region?: string;
-  status?: "active" | "paused";
-  metadata?: { managed: boolean; tier: string };
+  metadata?: { managed: boolean; tier: SubscriptionPlan };
 }
 
 export interface Cluster {
@@ -147,6 +159,7 @@ export interface Cluster {
   name: string;
   users: string[]; // Array of user emails
   roles: Record<Role, string[]>; // role -> array of user emails
+  poolInstanceId?: string | null;
   metadata?: Record<string, any> | undefined;
   createdAt: number;
   updatedAt: number;
@@ -265,3 +278,5 @@ export * from "./responses.js";
 export * from "./node.js";
 
 import type { NotificationEvent } from "@/services/notifications/notifier.js";
+import { VmProvider } from "@/services/vm/provider.js";
+import { InstancePoolService } from "@/services/pool.js";

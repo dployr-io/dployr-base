@@ -24,7 +24,13 @@ export function loadConfig(path?: string): Config {
   const raw = parseToml(content);
 
   try {
-    return CONFIG_SCHEMA.parse(raw);
+    const config = CONFIG_SCHEMA.parse(raw);
+
+    // Allow env overrides for test isolation (embedded postgres + random port)
+    if (process.env.DATABASE_URL) config.database.url = process.env.DATABASE_URL;
+    if (process.env.PORT) config.server.port = parseInt(process.env.PORT);
+
+    return config;
   } catch (err) {
     if (err instanceof z.ZodError) {
       const errors = err.issues.map((e: any) => `  - ${e.path.join(".")}: ${e.message}`).join("\n");
@@ -114,13 +120,14 @@ function loadConfigFromEnv(): Config {
       enabled: process.env.PROXY_ENABLED === "true",
       port: process.env.PROXY_PORT ? parseInt(process.env.PROXY_PORT) : 8080,
       host: process.env.PROXY_HOST || "0.0.0.0",
-      base_domain: process.env.PROXY_BASE_DOMAIN || "dployr.io",
+      base_domain: process.env.TLD || "dployr.io",
       timeout_ms: process.env.PROXY_TIMEOUT_MS ? parseInt(process.env.PROXY_TIMEOUT_MS) : 30000,
       cache_ttl_seconds: process.env.PROXY_CACHE_TTL_SECONDS ? parseInt(process.env.PROXY_CACHE_TTL_SECONDS) : 30,
     },
     virtual_machines: {
       provider: (process.env.VM_PROVIDER as "digitalocean") || "digitalocean",
       do_api_token: process.env.DO_API_TOKEN,
+      ssh_key: process.env.SSH_KEY,
     },
   });
 }
