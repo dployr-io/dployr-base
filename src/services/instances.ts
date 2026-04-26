@@ -5,10 +5,9 @@ import { Bindings, Instance, Session } from "@/types/index.js";
 import { EVENTS } from "@/lib/constants/index.js";
 import { Context } from "hono";
 import { ulid } from "ulid";
-import { getKVStore, getJWTService, getWS, getDbStore, getBillingProvider } from "@/lib/config/context.js";
+import { getKVStore, getJWTService, getWS, getDbStore, getVMService } from "@/lib/config/context.js";
 import { InstanceConnectionFailureError, InstanceNotConnectedError, PermissionError, ResourceNotFoundError } from "@/lib/errors/errors.js";
 import { DployrdService } from "./dployrd.js";
-import { BillingService } from "./billing/index.js";
 
 /**
  * Service for managing dployr instances.
@@ -50,17 +49,20 @@ export class InstanceService {
   }): Promise<{ instance: Instance; token: string }> {
     const db = getDbStore(c);
     const kv = getKVStore(c);
-    const nonce = crypto.randomUUID();
+    const jwt = getJWTService(c);
 
     const instance = await db.instances.create({
       clusterId,
-      nonce,
       data: {
         tag,
         address,
         metadata,
       } as any,
     });
+
+    const token = await jwt.createBootstrapToken(tag);
+    const decoded = await jwt.verifyToken(token);
+    await db.bootstrapTokens.create(instance.id, decoded.nonce as string);
 
     await kv.logEvent({
       actor: {
@@ -75,11 +77,6 @@ export class InstanceService {
       type: EVENTS.BOOTSTRAP.BOOTSTRAP_SETUP_COMPLETED.code,
       request: c.req.raw,
     });
-
-    const jwt = getJWTService(c);
-    const token = await jwt.createBootstrapToken(instance.tag);
-    const decoded = await jwt.verifyToken(token);
-    await db.bootstrapTokens.create(instance.id, decoded.nonce as string);
 
     return { instance, token };
   }
@@ -111,7 +108,7 @@ export class InstanceService {
       }
     } catch {}
 
-    const instance = await db.instances.get(instanceId);
+    const instance = await db.instances.find({ id: instanceId });
     if (!instance) {
       throw new Error("Instance not found");
     }
@@ -153,7 +150,6 @@ export class InstanceService {
    */
   async rotateInstanceBootstrapToken({ token, instanceId, c }: { token: string; instanceId: string; c: Context }): Promise<string> {
     const db = getDbStore(c);
-    const kv = getKVStore(c);
     const jwt = getJWTService(c);
     let payload: any;
 
@@ -167,7 +163,7 @@ export class InstanceService {
       throw new Error("invalid token type");
     }
 
-    const instance = await db.instances.get(instanceId);
+    const instance = await db.instances.find({ id: instanceId });
     if (!instance) {
       throw new ResourceNotFoundError("instance");
     }
@@ -197,8 +193,7 @@ export class InstanceService {
    */
   async pingInstance({ instanceName, c }: { instanceName: string; c: Context }): Promise<"enqueued"> {
     const db = getDbStore(c);
-    const kv = getKVStore(c);
-    const instance = await db.instances.getByName(instanceName);
+    const instance = await db.instances.find({ tag: instanceName });
 
     if (!instance) {
       throw new Error("Instance not found");
@@ -228,7 +223,6 @@ export class InstanceService {
     token: string;
     c: Context;
   }): Promise<{ ok: true; instanceName: string; jwksUrl: string } | { ok: false; reason: "invalid_token" | "invalid_type" | "already_used" }> {
-    const kv = getKVStore(c);
     const db = getDbStore(c);
     const jwt = getJWTService(c);
 
@@ -268,15 +262,31 @@ export class InstanceService {
   async saveDomain({ instanceName, c }: { instanceName: string; c: Context }) {
     const db = getDbStore(c);
     const kv = getKVStore(c);
-    const instance = await db.instances.getByName(instanceName);
+    const instance = await db.instances.find({ tag: instanceName });
+    const pool = await db.instancePool.find({ tag: instanceName });
 
-    if (!instance) {
-      throw new Error("Instance not found");
+    const resolved = instance ?? pool;
+    if (!resolved) throw new Error("Instance not found");
+
+    let address = resolved.address;
+
+    if (!address && pool) {
+      try {
+        const vm = getVMService(c);
+        const droplets = await vm.list({ name: instanceName });
+        const match = droplets.find((d) => d.name === instanceName);
+        if (match?.ipv4) address = match.ipv4;
+      } catch {
+        // VM provider may not be configured; proceed without address
+      }
     }
 
-    await kv.saveDomain({ domain: instance.tag, address: instance.address });
+    if (!address) throw new Error("Instance has no address");
 
-    return `${instance.tag}.dployr.io`;
+    await kv.saveDomain({ domain: resolved.tag, address });
+
+    const baseDomain = c.env?.TLD ?? "dployr.io";
+    return `${resolved.tag}.${baseDomain}`;
   }
 
   /**
@@ -310,7 +320,7 @@ export class InstanceService {
     | null
   > {
     const db = getDbStore(c);
-    const instance = await db.instances.get(instanceId);
+    const instance = await db.instances.find({ id: instanceId });
     if (!instance) {
       throw new Error("Instance not found");
     }
@@ -328,11 +338,11 @@ export class InstanceService {
    */
   async deleteInstance({ instanceId, c }: { instanceId: string; c: Context }): Promise<void> {
     const db = getDbStore(c);
-    const instance = await db.instances.get(instanceId);
+    const instance = await db.instances.find({ id: instanceId });
     if (!instance) {
       throw new Error("Instance not found");
     }
-    await db.instances.delete(instanceId);
+    await db.instances.delete({ id: instanceId });
   }
 
   /**
@@ -351,10 +361,9 @@ export class InstanceService {
   async installDployr({ instanceId, clusterId, version, c }: { instanceId: string; clusterId: string; version: string; c: Context }): Promise<string> {
     const db = getDbStore(c);
     const session = c.get("session")!;
-    const kv = getKVStore(c);
     const jwtService = getJWTService(c);
 
-    const instance = await db.instances.get(instanceId);
+    const instance = await db.instances.find({ id: instanceId });
     if (!instance) {
       throw new ResourceNotFoundError("instance");
     }
@@ -400,10 +409,9 @@ export class InstanceService {
   async rebootInstance({ instanceId, clusterId, force, c }: { instanceId: string; clusterId: string; force: boolean; c: Context }): Promise<string> {
     const db = getDbStore(c);
     const session = c.get("session")!;
-    const kv = getKVStore(c);
     const jwtService = getJWTService(c);
 
-    const instance = await db.instances.get(instanceId);
+    const instance = await db.instances.find({ id: instanceId });
     if (!instance) {
       throw new ResourceNotFoundError("instance");
     }
@@ -448,10 +456,9 @@ export class InstanceService {
   async restartDaemon({ instanceId, clusterId, force, c }: { instanceId: string; clusterId: string; force: boolean; c: Context }): Promise<string> {
     const db = getDbStore(c);
     const session = c.get("session")!;
-    const kv = getKVStore(c);
     const jwtService = getJWTService(c);
 
-    const instance = await db.instances.get(instanceId);
+    const instance = await db.instances.find({ id: instanceId });
     if (!instance) {
       throw new ResourceNotFoundError("instance");
     }
@@ -479,50 +486,5 @@ export class InstanceService {
     }
 
     return task.ID;
-  }
-
-  /**
-   * Resolves an instance for a cluster, primarily for hobby plan users.
-   *
-   * Checks the billing status for the cluster. If the plan is "hobby",
-   * attempts to retrieve an instance from the shared instance pool.
-   * Returns null for non-hobby plans, missing clusterId, if no pool
-   * instance is available, or if the instance is not found in the pool.
-   *
-   * @param params.c - Hono context with request bindings
-   * @param params.clusterId - Cluster ULID to resolve an instance for
-   * @returns Resolved instance with clusterId and metadata, or null if not available
-   */
-  async resolveInstance({ c, clusterId }: { c: any; clusterId?: string }) {
-    if (!clusterId) return null;
-
-    const billingProvider = getBillingProvider(c);
-    if (!billingProvider) return null;
-
-    const billingService = new BillingService(billingProvider, c.env);
-    const db = getDbStore(c);
-
-    const status = await billingService.getStatus({ clusterId, db });
-    if (status.plan !== "hobby") return null;
-
-    const [instanceId, pool] = await Promise.all([db.instancePool.getClusterInstance(clusterId), db.instancePool.getInstancePool()]);
-
-    if (!instanceId) return null;
-
-    const instance = pool.find((inst) => inst.id === instanceId);
-    if (!instance) return null;
-
-    const now = Date.now();
-
-    return {
-      ...instance,
-      metadata: {
-        ...instance.metadata,
-        managed: true,
-      },
-      clusterId,
-      createdAt: now,
-      updatedAt: now,
-    };
   }
 }

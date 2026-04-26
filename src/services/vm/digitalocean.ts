@@ -1,8 +1,8 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { DPLOYR_INSTALL_SCRIPT, FREE_INSTANCE_TAGS, VM_POLL_INTERVAL_MS, VM_POLL_MAX_ATTEMPTS } from "@/lib/constants/vm.js";
-import type { VirtualMachine, VMCreateOptions, VMActionResult, VMMetrics, VMStatus } from "@/types/vm.js";
+import { buildInstallScript, DEFAULT_INSTANCE_TAGS, VM_POLL_INTERVAL_MS, VM_POLL_MAX_ATTEMPTS } from "@/lib/constants/vm.js";
+import type { VirtualMachine, VMCreateOptions, VMActionResult, VMMetrics, VMStatus, VMListOptions } from "@/types/vm.js";
 import { VmProvider } from "./provider.js";
 
 interface DONetwork {
@@ -37,7 +37,7 @@ export class DigitalOceanVMService extends VmProvider {
   private readonly headers: Record<string, string>;
   private readonly doApiBase: string;
 
-  constructor(private readonly apiToken: string) {
+  constructor(apiToken: string) {
     super();
     this.headers = {
       Authorization: `Bearer ${apiToken}`,
@@ -108,15 +108,15 @@ export class DigitalOceanVMService extends VmProvider {
    * are merged with any caller-supplied tags.
    */
   async create(options: VMCreateOptions): Promise<VirtualMachine> {
-    const { name, size, image, region, sshKey, userData, vpcUuid, tags = [], privateNetworking = true } = options;
+    const { name, size, image, region, sshKey, userData, token, vpcUuid, tags = [], privateNetworking = true } = options;
 
     const body: Record<string, unknown> = {
       name,
       size,
       image,
       region,
-      user_data: userData ?? DPLOYR_INSTALL_SCRIPT,
-      tags: [...FREE_INSTANCE_TAGS, ...tags],
+      user_data: userData ?? (token ? buildInstallScript(token, name) : undefined),
+      tags: [...DEFAULT_INSTANCE_TAGS, ...tags],
       private_networking: privateNetworking,
     };
 
@@ -144,9 +144,15 @@ export class DigitalOceanVMService extends VmProvider {
     }
   }
 
-  /** List all Droplets associated with this API token. */
-  async list(): Promise<VirtualMachine[]> {
-    const data = await this.request<{ droplets: DODroplet[] }>("/droplets");
+  /** List Droplets, optionally filtered by tag name, name, and/or page. */
+  async list(options?: VMListOptions): Promise<VirtualMachine[]> {
+    const qs = new URLSearchParams();
+    if (options?.tagName) qs.set("tag_name", options.tagName);
+    if (options?.name) qs.set("name", options.name);
+    if (options?.perPage) qs.set("per_page", String(options.perPage));
+    if (options?.page) qs.set("page", String(options.page));
+    const query = qs.toString() ? `?${qs}` : "";
+    const data = await this.request<{ droplets: DODroplet[] }>(`/droplets${query}`);
     return data.droplets.map((d) => this.mapDroplet(d));
   }
 

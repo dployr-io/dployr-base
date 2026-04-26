@@ -1,12 +1,12 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { VirtualMachine, VMCreateOptions, VMActionResult, VMMetrics } from "@/types/vm.js";
+import type { VirtualMachine, VMCreateOptions, VMActionResult, VMMetrics, VMListOptions } from "@/types/vm.js";
 
 export interface VmOperations {
   create(options: VMCreateOptions): Promise<VirtualMachine>;
   get(id: number): Promise<VirtualMachine | null>;
-  list(): Promise<VirtualMachine[]>;
+  list(options?: VMListOptions): Promise<VirtualMachine[]>;
   restart(id: number): Promise<VMActionResult>;
   start(id: number): Promise<VMActionResult>;
   stop(id: number): Promise<VMActionResult>;
@@ -20,7 +20,7 @@ export interface VmOperations {
 export abstract class VmProvider implements VmOperations {
   abstract create(options: VMCreateOptions): Promise<VirtualMachine>;
   abstract get(id: number): Promise<VirtualMachine | null>;
-  abstract list(): Promise<VirtualMachine[]>;
+  abstract list(options?: VMListOptions): Promise<VirtualMachine[]>;
   abstract restart(id: number): Promise<VMActionResult>;
   abstract start(id: number): Promise<VMActionResult>;
   abstract stop(id: number): Promise<VMActionResult>;

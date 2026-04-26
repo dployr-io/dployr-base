@@ -137,11 +137,11 @@ export class NodeMessageHandler {
     });
 
     if (success && data && this.getResponseKind(message) === "deploy_response") {
-      this.db.services.save(data["instance_id"], data["name"]);
+      this.db.services.create({ instanceTag: data["instance_id"], name: data["name"] });
     }
 
     if (success && data && this.getResponseKind(message) === "service_remove_response") {
-      this.db.services.deleteByName(data["name"]);
+      this.db.services.delete({ name: data["name"] });
     }
 
     if (!routed) {

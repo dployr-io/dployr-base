@@ -78,7 +78,7 @@ export class NotificationService {
       if (integrations.notification?.email && this.isEventSubscribed(integrations.notification.email, event)) {
         const ownerUserId = await d1.clusters.getOwner(data.clusterId);
         if (ownerUserId) {
-          const owner = await d1.users.get(ownerUserId);
+          const owner = await d1.users.find({ id: ownerUserId });
           if (owner?.email) {
             promises.push(
               this.emailService

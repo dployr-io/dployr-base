@@ -131,7 +131,7 @@ export class BillingService {
     const ownerEmail = cluster.users.find((id) => cluster.roles.owner.includes(id));
     if (!ownerEmail) return;
 
-    const user = await db.users.get(ownerEmail);
+    const user = await db.users.find({ email: ownerEmail });
     if (!user) return;
 
     const emailData = {
@@ -205,7 +205,7 @@ export class BillingService {
       }
     } else if (previousPlan !== "hobby" && plan === "hobby") {
       try {
-        await db.instancePool.assignInstance(clusterId);
+        await db.instancePool.assign(clusterId);
         console.log(`[Billing] Assigned free instance for cluster ${clusterId} (downgraded back to hobby)`);
       } catch (error) {
         console.error(`[Billing] Failed to assign free instance for cluster ${clusterId}:`, error);
@@ -278,7 +278,7 @@ export class BillingService {
 
     if (previousPlan !== "hobby") {
       try {
-        await db.instancePool.assignInstance(existing.clusterId);
+        await db.instancePool.assign(existing.clusterId);
         console.log(`[Billing] Assigned free instance for cluster ${existing.clusterId} (subscription revoked, downgraded to hobby)`);
       } catch (error) {
         console.error(`[Billing] Failed to assign free instance for cluster ${existing.clusterId}:`, error);

@@ -147,14 +147,13 @@ export class TrafficRouter {
   private async lookupRouteStepByStep(serviceName: string, clusterName: string): Promise<ResolvedRoute | null> {
     try {
       // Get service by name
-      const service = await this.db.services.getByName(serviceName);
+      const service = await this.db.services.find({ name: serviceName });
       if (!service) {
         console.debug(`[TrafficRouter] Service not found: ${serviceName}`);
         return null;
       }
 
-      // Get the instance
-      const instance = await this.db.instances.get(service.instanceId);
+      const instance = await this.db.instances.find({ id: service.instanceId });
       if (!instance) {
         console.debug(`[TrafficRouter] Instance not found for service: ${serviceName}`);
         return null;

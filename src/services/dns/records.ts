@@ -6,7 +6,8 @@ import { ulid } from "ulid";
 
 export function generateRecords(
   domain: string,
-  instanceTag: string
+  instanceTag: string,
+  baseDomain: string = "dployr.io"
 ): { record: DNSRecord; verification: DNSRecord; token: string } {
   const parts = domain.split(".");
   const name = parts.length > 2 ? parts[0] : "@";
@@ -16,7 +17,7 @@ export function generateRecords(
     record: {
       type: "CNAME",
       name,
-      value: `${instanceTag}.dployr.io`,
+      value: `${instanceTag}.${baseDomain}`,
       ttl: 300,
     },
     verification: {

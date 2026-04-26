@@ -15,14 +15,12 @@ import { NodeMessageHandler } from "./handlers/node-handler.js";
 import { ClientMessageHandler } from "./handlers/client-handler.js";
 import { ClientNotifier } from "./handlers/client-notifier.js";
 import { TerminalManager } from "./terminal-manager.js";
-import { parseMessage, type ClusterConnection, isAckMessage } from "../../types/websocket-message.js";
-import type { Config } from "@/lib/config/loader.js";
+import { parseMessage, type ClusterConnection } from "@/types/websocket-message.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
-import { MESSAGE_KIND } from "../../lib/constants/websocket.js";
+import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
 
 export interface WebSocketHandlerConfig {
   connectionManager?: Partial<ConnectionManagerConfig>;
-  appConfig?: Config;
   billingProvider?: BillingProvider | null;
 }
 
@@ -38,19 +36,16 @@ export class WebSocketHandler {
   private terminalManager: TerminalManager;
   private sessionConnections = new Map<string, string>();
   private dbStore: DatabaseStore;
-  private config?: Config;
 
   constructor(
     private kv: IKVAdapter,
     private db: PostgresAdapter,
     config?: WebSocketHandlerConfig,
-    appConfig?: Config,
   ) {
-    this.config = appConfig;
     this.connectionManager = new ConnectionManager(config?.connectionManager);
 
     const kvStore = new KVStore(this.kv);
-    this.dbStore = new DatabaseStore(this.db, kvStore);
+    this.dbStore = new DatabaseStore(this.db);
 
     this.clientNotifier = new ClientNotifier(this.connectionManager, kvStore);
 

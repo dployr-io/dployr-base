@@ -322,7 +322,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceName);
+    const instance = await this.db.instances.find({ tag: instanceName });
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -407,7 +407,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceName);
+    const instance = await this.db.instances.find({ tag: instanceName });
 
     if (!instance) {
       this.connectionManager.removePendingRequest(taskId);
@@ -460,7 +460,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceName);
+    const instance = await this.db.instances.find({ tag: instanceName });
 
     if (!instance) {
       this.connectionManager.removePendingRequest(taskId);
@@ -514,7 +514,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const service = await this.db.services.getByName(name);
+    const service = await this.db.services.find({ name });
 
     if (!service) {
       this.connectionManager.removePendingRequest(taskId);
@@ -522,7 +522,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.get(service.instanceId);
+    const instance = await this.db.instances.find({ id: service.instanceId });
     if (!instance) {
       this.connectionManager.removePendingRequest(taskId);
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -617,7 +617,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceId);
+    const instance = await this.db.instances.find({ tag: instanceId });
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -669,7 +669,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceId);
+    const instance = await this.db.instances.find({ tag: instanceId });
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -721,7 +721,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceId);
+    const instance = await this.db.instances.find({ tag: instanceId });
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -773,7 +773,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceId);
+    const instance = await this.db.instances.find({ tag: instanceId });
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -825,7 +825,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceId);
+    const instance = await this.db.instances.find({ tag: instanceId });
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -877,7 +877,7 @@ export class ClientMessageHandler {
     const { instanceName, token, requestId } = message;
 
     try {
-      const instance = await this.db.instances.getByName(instanceName);
+      const instance = await this.db.instances.find({ tag: instanceName });
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
         return;
@@ -932,7 +932,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const instance = await this.db.instances.getByName(instanceName);
+      const instance = await this.db.instances.find({ tag: instanceName });
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -989,7 +989,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const instance = await this.db.instances.getByName(instanceName);
+      const instance = await this.db.instances.find({ tag: instanceName });
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -1045,7 +1045,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceId);
+    const instance = await this.db.instances.find({ tag: instanceId });
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -1094,7 +1094,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceId);
+    const instance = await this.db.instances.find({ tag: instanceId });
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -1136,7 +1136,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.getByName(instanceId);
+    const instance = await this.db.instances.find({ tag: instanceId });
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
       return;
@@ -1196,7 +1196,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const instance = await this.db.instances.getByName(instanceName);
+      const instance = await this.db.instances.find({ tag: instanceName });
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -1254,7 +1254,7 @@ export class ClientMessageHandler {
 
     const taskId = ulid();
 
-    const instance = await this.db.instances.getByName(instanceName);
+    const instance = await this.db.instances.find({ tag: instanceName });
 
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -1306,7 +1306,7 @@ export class ClientMessageHandler {
 
     const taskId = ulid();
 
-    const instance = await this.db.instances.getByName(instanceName);
+    const instance = await this.db.instances.find({ tag: instanceName });
 
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -1363,7 +1363,7 @@ export class ClientMessageHandler {
 
     const taskId = ulid();
 
-    const instance = await this.db.instances.getByName(instanceName);
+    const instance = await this.db.instances.find({ tag: instanceName });
 
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -1420,7 +1420,7 @@ export class ClientMessageHandler {
 
     const taskId = ulid();
 
-    const instance = await this.db.instances.getByName(instanceName);
+    const instance = await this.db.instances.find({ tag: instanceName });
 
     if (!instance) {
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
@@ -1476,7 +1476,7 @@ export class ClientMessageHandler {
     }
 
     try {
-      const instance = await this.db.instances.getByName(instanceId);
+      const instance = await this.db.instances.find({ tag: instanceId });
 
       if (!instance) {
         this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");

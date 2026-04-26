@@ -166,7 +166,7 @@ export class WebSocketService {
           }
 
           const db = new DatabaseStore(this.adapters.db);
-          const instance = instanceId ? await db.instances.get(instanceId) : await db.instances.getByName(instanceName!);
+          const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName! });
 
           if (!instance) {
             socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
