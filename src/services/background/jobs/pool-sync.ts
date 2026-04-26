@@ -4,7 +4,6 @@
 import type { JobFn } from "../index.js";
 import { InstancePoolService } from "@/services/pool.js";
 
-
 export const poolSync: JobFn = async ({ db, adapters }) => {
   const vm = adapters.vmProvider;
   if (!vm) return;

@@ -1,5 +1,5 @@
 import { InstanceStatus } from "@/types/index.js";
-import { VmProvider } from "./vm/provider.js";
+import { VmProvider } from "./vm/index.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { HEARTBEAT_WINDOW } from "@/lib/constants/index.js";

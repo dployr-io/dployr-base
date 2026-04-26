@@ -58,6 +58,13 @@ export class BackgroundWorker {
     this.emitter.emit(event);
   }
 
+  /**
+   * Run a one-off job immediately using the managed job context.
+   */
+  dispatch(fn: JobFn, name = "dispatch"): void {
+    this.run(fn, name);
+  }
+
   async start(): Promise<void> {
     this.adapters = await initializeAdapters();
 
