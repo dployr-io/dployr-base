@@ -6,6 +6,7 @@ import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
+import { AuthService } from "@/services/auth/index.js";
 import { JWTService } from "@/services/auth/jwt.js";
 import { OAuthService } from "@/services/auth/oauth.js";
 import { BillingService } from "@/services/billing/index.js";
@@ -85,6 +86,7 @@ export type Variables = {
   wsHandler?: WebSocketHandler;
   _dbStore?: DatabaseStore;
   _kvStore?: KVStore;
+  _authService?: AuthService;
   _jwtService?: JWTService;
   _notificationService?: NotificationService;
   _oauthService?: OAuthService;

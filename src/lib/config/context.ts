@@ -10,6 +10,7 @@ import type { BillingProvider } from "@/services/billing/provider.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { JWTService } from "@/services/auth/jwt.js";
+import { AuthService } from "@/services/auth/index.js";
 import { NotificationService } from "@/services/notifications/index.js";
 import { EmailService } from "@/services/notifications/email/index.js";
 import { OAuthService } from "@/services/auth/oauth.js";
@@ -91,6 +92,15 @@ export function getKVStore(c: AppContext): KVStore {
   const store = new KVStore(getKV(c));
   c.set("_kvStore", store);
   return store;
+}
+
+export function getAuthService(c: AppContext): AuthService {
+  const existing = c.get("_authService");
+  if (existing) return existing;
+
+  const service = new AuthService(getDbStore(c), getKVStore(c), c.env);
+  c.set("_authService", service);
+  return service;
 }
 
 export function getJWTService(c: AppContext): JWTService {
