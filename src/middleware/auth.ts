@@ -39,16 +39,87 @@ async function authenticate(c: Context<{ Bindings: Bindings; Variables: Variable
 }
 
 /**
- * Extracts clusterId from request body, path parameter, or query string.
- *
- * @param c - Hono context
- * @param data - Parsed request body data
- * @returns The clusterId if found, otherwise undefined
+ * Extracts clusterId from context (pre-resolved), request body, path param `:id`, or query string.
+ * resolvedClusterId takes priority — set by resolveInstanceCluster / resolveDomainCluster middleware.
  */
-function getClusterId(c: Context, data: Record<string, any>): string | undefined {
+function getClusterId(c: Context<{ Bindings: Bindings; Variables: Variables }>, data: Record<string, any>): string | undefined {
+  const resolved = c.get("resolvedClusterId");
+  if (resolved) return resolved;
   const param = c.req.param("id");
   const query = c.req.query("clusterId");
   return data.clusterId || param || query;
+}
+
+/**
+ * Middleware factory that resolves a cluster ID from an entity in the request and injects it
+ * as `resolvedClusterId`, allowing downstream cluster-permission middleware to work on routes
+ * where the cluster is not directly in the request.
+ *
+ * @param entity  - The entity type to resolve the cluster from ("instance" or "domain")
+ * @param options - Where to find the entity value: `path` for path param, `body` for request body field, `query` for query string
+ * @param options.lookupBy - For "instance": whether to look up by "id" (default) or "tag"
+ */
+export function resolveCluster(
+  entity: "instance" | "domain",
+  options: { path?: string; body?: string; query?: string; lookupBy?: "id" | "tag" },
+) {
+  return async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
+    const db = getDbStore(c);
+
+    if (entity === "instance") {
+      let value: string | undefined;
+      if (options.path) {
+        value = c.req.param(options.path);
+      } else if (options.body) {
+        try {
+          const bodyData = await c.req.json();
+          value = bodyData[options.body];
+        } catch {}
+      } else if (options.query) {
+        value = c.req.query(options.query);
+      }
+
+      if (!value) {
+        return c.json({ error: "Instance identifier is required", code: ERROR.REQUEST.BAD_REQUEST.code }, ERROR.REQUEST.BAD_REQUEST.status);
+      }
+
+      const instance =
+        options.lookupBy === "tag"
+          ? await db.instances.find({ tag: value })
+          : await db.instances.find({ id: value });
+
+      if (!instance) {
+        return c.json({ error: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
+      }
+
+      c.set("resolvedClusterId", instance.clusterId);
+    } else {
+      let domainName: string | undefined;
+      if (options.path) {
+        domainName = c.req.param(options.path);
+      } else if (options.query) {
+        domainName = c.req.query(options.query);
+      }
+
+      if (!domainName) {
+        return c.json({ error: "Domain is required", code: ERROR.REQUEST.BAD_REQUEST.code }, ERROR.REQUEST.BAD_REQUEST.status);
+      }
+
+      const record = await db.domains.get(domainName);
+      if (!record) {
+        return c.json({ error: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
+      }
+
+      const instance = await db.instances.find({ id: record.instanceId });
+      if (!instance) {
+        return c.json({ error: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
+      }
+
+      c.set("resolvedClusterId", instance.clusterId);
+    }
+
+    await next();
+  };
 }
 
 /**
