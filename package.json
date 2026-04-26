@@ -25,12 +25,22 @@
     "ws": "^8.18.0",
     "zod": "^4.0.5"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@embedded-postgres/linux-x64",
+      "@embedded-postgres/linux-x64-alpine",
+      "@embedded-postgres/darwin-arm64",
+      "@embedded-postgres/darwin-x64",
+      "@embedded-postgres/windows-x64"
+    ]
+  },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
     "@types/ws": "^8.5.13",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
+    "embedded-postgres": "18.3.0-beta.17",
     "serve": "^14.2.0",
     "typescript": "^5.6.3"
   }

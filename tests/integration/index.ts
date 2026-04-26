@@ -9,19 +9,13 @@ import { setupFixtures, type TestFixtures } from "./fixtures.js";
 let fx: TestFixtures;
 let BASE_URL: string;
 
-const created = {
-  instanceIds: [] as string[],
-  domainNames: [] as string[],
-};
-
 before(async () => {
-  BASE_URL = process.env.BASE_URL ?? "http://localhost:7878";
   fx = await setupFixtures();
+  BASE_URL = fx.baseUrl;
   console.log("[test] Fixtures ready");
 });
 
 after(async () => {
-  await cleanupCreated();
   await fx?.cleanup();
   console.log("[test] Cleanup done");
 });
@@ -75,16 +69,7 @@ async function assertOk(res: Response, status = 200) {
   return body;
 }
 
-async function cleanupCreated() {
-  for (const id of created.instanceIds) {
-    try { await del(`/v1/instances/${id}`); } catch {}
-  }
-  for (const d of created.domainNames) {
-    try { await del(`/v1/domains/${d}`); } catch {}
-  }
-}
-
-function trackInstance(id: string) { created.instanceIds.push(id); }
+function trackInstance(_id: string) {}
 function randomOctet() { return Math.floor(Math.random() * 200) + 10; }
 
 
@@ -195,6 +180,21 @@ describe("Clusters", () => {
     const res = await get(`/v1/clusters/${fx.clusterId}/integrations`);
     await assertOk(res);
   });
+
+  it("GET /v1/clusters/:id/users rejects foreign cluster", async () => {
+    const res = await get(`/v1/clusters/${fx.otherClusterId}/users`);
+    assert.equal(res.status, 403, `Expected 403 for foreign cluster users, got ${res.status}`);
+  });
+
+  it("GET /v1/clusters/:id/integrations rejects foreign cluster", async () => {
+    const res = await get(`/v1/clusters/${fx.otherClusterId}/integrations`);
+    assert.equal(res.status, 403, `Expected 403 for foreign cluster integrations, got ${res.status}`);
+  });
+
+  it("GET /v1/clusters/:id/remotes rejects foreign cluster", async () => {
+    const res = await get(`/v1/clusters/${fx.otherClusterId}/remotes`);
+    assert.equal(res.status, 403, `Expected 403 for foreign cluster remotes, got ${res.status}`);
+  });
 });
 
 
@@ -205,6 +205,16 @@ describe("Instances", () => {
     const res = await get(`/v1/instances?clusterId=${fx.clusterId}`);
     const body = await assertOk(res);
     assert.ok(body.data.pagination, "Expected pagination object");
+  });
+
+  it("GET /v1/instances rejects missing clusterId", async () => {
+    const res = await get("/v1/instances");
+    assert.equal(res.status, 400, `Expected 400 for missing clusterId, got ${res.status}`);
+  });
+
+  it("GET /v1/instances rejects clusterId from a cluster user does not belong to", async () => {
+    const res = await get(`/v1/instances?clusterId=${fx.otherClusterId}`);
+    assert.equal(res.status, 403, `Expected 403 for foreign clusterId, got ${res.status}`);
   });
 
   it("POST /v1/instances rejects missing fields", async () => {
@@ -263,8 +273,6 @@ describe("Instances", () => {
     const res = await del(`/v1/instances/${instanceId}`);
     const body = await assertOk(res);
     assert.equal(body.data.deleted, true, "Expected deleted:true");
-    const idx = created.instanceIds.indexOf(instanceId);
-    if (idx !== -1) created.instanceIds.splice(idx, 1);
   });
 
   it("GET /v1/instances/:id after deletion returns error", async () => {

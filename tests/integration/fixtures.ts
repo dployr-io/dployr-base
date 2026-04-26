@@ -1,39 +1,102 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-const BASE_URL = process.env.BASE_URL ?? "http://localhost:7878";
+import EmbeddedPostgres from "embedded-postgres";
+import { spawn, type ChildProcess } from "child_process";
+import { createServer } from "net";
+import type { AddressInfo } from "net";
+import { tmpdir } from "os";
+import { join } from "path";
+import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
+import { runMigrations } from "@/lib/db/migrate.js";
+
 const TEST_EMAIL = process.env.TEST_EMAIL ?? "ci-test@example.com";
+const OTHER_EMAIL = "ci-test-other@example.com";
+
+function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const port = (srv.address() as AddressInfo).port;
+      srv.close(() => resolve(port));
+    });
+    srv.on("error", reject);
+  });
+}
 
 export interface TestFixtures {
-  session: string; // Cookie header value: "session=..."
+  session: string;
   clusterId: string;
-  cleanup: () => Promise<void>; // at the end
+  otherClusterId: string;
+  baseUrl: string;
+  cleanup: () => Promise<void>;
 }
 
-interface CreatedResources {
-  instanceIds: string[];
-  domainNames: string[];
-  clusterId: string | null;
-  clusterCreated: boolean;
+async function startPostgres(): Promise<{ pg: EmbeddedPostgres; connectionString: string }> {
+  const databaseDir = join(tmpdir(), `dployr-test-${Date.now()}`);
+  const port = await getFreePort();
+
+  const pg = new EmbeddedPostgres({
+    databaseDir,
+    user: "postgres",
+    password: "postgres",
+    port,
+    persistent: false,
+  });
+
+  await pg.initialise();
+  await pg.start();
+
+  const connectionString = `postgresql://postgres:postgres@localhost:${port}/postgres`;
+  return { pg, connectionString };
 }
 
-async function getSession(): Promise<string> {
-  // Step 1: request OTP
-  const req = await fetch(`${BASE_URL}/v1/auth/login/email`, {
+async function spawnServer(connectionString: string): Promise<{ proc: ChildProcess; port: number }> {
+  const port = await getFreePort();
+  const proc = spawn("node", ["--import", "tsx", "src/index.ts"], {
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      DATABASE_URL: connectionString,
+      PORT: String(port),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    cwd: process.cwd(),
+  });
+
+  proc.stdout?.on("data", (d: Buffer) => process.stdout.write(`[server] ${d}`));
+  proc.stderr?.on("data", (d: Buffer) => process.stderr.write(`[server] ${d}`));
+
+  return { proc, port };
+}
+
+async function waitForHealth(baseUrl: string, maxWaitMs = 30_000): Promise<void> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${baseUrl}/v1/health`);
+      if (res.ok) return;
+    } catch {}
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`Server at ${baseUrl} did not become healthy within ${maxWaitMs}ms`);
+}
+
+async function getSession(baseUrl: string, email = TEST_EMAIL): Promise<string> {
+  const req = await fetch(`${baseUrl}/v1/auth/login/email`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: TEST_EMAIL }),
+    body: JSON.stringify({ email }),
   });
   if (!req.ok) {
     const body = await req.text();
     throw new Error(`OTP request failed ${req.status}: ${body}`);
   }
 
-  // Step 2: verify OTP and capture session cookie
-  const verify = await fetch(`${BASE_URL}/v1/auth/login/email/verify`, {
+  const verify = await fetch(`${baseUrl}/v1/auth/login/email/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: TEST_EMAIL, code: "000000" }),
+    body: JSON.stringify({ email, code: "000000" }),
   });
   if (!verify.ok) {
     const body = await verify.text();
@@ -47,124 +110,69 @@ async function getSession(): Promise<string> {
   return `session=${match[1]}`;
 }
 
-/**
- * Gets or creates the CI test cluster.
- * Uses TEST_CLUSTER_ID if set (skips creation).
- * Otherwise creates one named "ci-test-<timestamp>".
- */
-async function provisionCluster(authHeader: string, resources: CreatedResources): Promise<string> {
-  if (process.env.TEST_CLUSTER_ID) {
-    resources.clusterId = process.env.TEST_CLUSTER_ID;
-    return process.env.TEST_CLUSTER_ID;
+async function resolveCluster(baseUrl: string, authCookie: string): Promise<string> {
+  // The cluster is auto-created during OTP verify — just fetch it.
+  const res = await apiFetch(baseUrl, "/v1/clusters", authCookie);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to list clusters: ${res.status} ${body}`);
   }
 
-  // Try to find an existing CI cluster first (avoids proliferation on retries)
-  const listRes = await apiFetch("/v1/clusters", authHeader);
-  const listBody = (await listRes.json()) as any;
-  const existing = (listBody.data?.clusters ?? []).find((c: any) => c.name?.startsWith("ci-test"));
-  if (existing) {
-    resources.clusterId = existing.id;
-    return existing.id;
-  }
+  const body = (await res.json()) as any;
+  const clusters: any[] = body.data?.clusters ?? [];
+  if (clusters.length === 0) throw new Error("No clusters found after login — expected auto-provisioned cluster");
 
-  // Create a new one
-  const createRes = await apiFetch("/v1/clusters", authHeader, {
-    method: "POST",
-    body: JSON.stringify({ name: `ci-test-${Date.now()}` }),
-  });
-
-  if (!createRes.ok) {
-    const body = await createRes.text();
-    throw new Error(`Failed to create cluster: ${createRes.status} ${body}`);
-  }
-
-  const body = (await createRes.json()) as any;
-  const id = body.data?.cluster?.id ?? body.data?.id;
-  if (!id) throw new Error(`Cluster created but no ID in response: ${JSON.stringify(body)}`);
-
-  resources.clusterId = id;
-  resources.clusterCreated = true;
-  console.log(`[fixtures] Created test cluster: ${id}`);
-  return id;
-}
-
-async function cleanup(authHeader: string, resources: CreatedResources): Promise<void> {
-  const errors: string[] = [];
-
-  // Delete instances
-  for (const id of resources.instanceIds) {
-    try {
-      const res = await apiFetch(`/v1/instances/${id}`, authHeader, { method: "DELETE" });
-      if (!res.ok) errors.push(`Instance ${id}: ${res.status}`);
-      else console.log(`[fixtures] Deleted instance: ${id}`);
-    } catch (e) {
-      errors.push(`Instance ${id}: ${e}`);
-    }
-  }
-
-  // Remove custom domains
-  for (const domain of resources.domainNames) {
-    try {
-      const res = await apiFetch(`/v1/domains/${domain}`, authHeader, { method: "DELETE" });
-      if (!res.ok && res.status !== 404) errors.push(`Domain ${domain}: ${res.status}`);
-      else console.log(`[fixtures] Removed domain: ${domain}`);
-    } catch (e) {
-      errors.push(`Domain ${domain}: ${e}`);
-    }
-  }
-
-  if (resources.clusterCreated && resources.clusterId) {
-    try {
-      const res = await apiFetch(`/v1/clusters/${resources.clusterId}`, authHeader, { method: "DELETE" });
-      if (!res.ok) errors.push(`Cluster ${resources.clusterId}: ${res.status}`);
-      else console.log(`[fixtures] Deleted cluster: ${resources.clusterId}`);
-    } catch (e) {
-      errors.push(`Cluster ${resources.clusterId}: ${e}`);
-    }
-  }
-
-  if (errors.length > 0) {
-    console.warn(`[fixtures] Cleanup errors:\n  ${errors.join("\n  ")}`);
-  }
+  return clusters[0].id as string;
 }
 
 export async function setupFixtures(): Promise<TestFixtures> {
-  const resources: CreatedResources = {
-    instanceIds: [],
-    domainNames: [],
-    clusterId: null,
-    clusterCreated: false,
-  };
+  console.log("[fixtures] Starting embedded PostgreSQL...");
+  const { pg, connectionString } = await startPostgres();
 
-  console.log(`[fixtures] NODE_ENV=${process.env.NODE_ENV} BASE_URL=${BASE_URL}`);
+  console.log("[fixtures] Running migrations...");
+  const db = new PostgresAdapter(connectionString);
+  await runMigrations(db);
+  await db.close();
 
-  const sessionCookie = await getSession();
+  console.log("[fixtures] Spawning server...");
+  const { proc, port } = await spawnServer(connectionString);
+  const baseUrl = `http://localhost:${port}`;
+
+  console.log("[fixtures] Waiting for server to be healthy...");
+  await waitForHealth(baseUrl);
+  console.log("[fixtures] Server ready");
+
+  const sessionCookie = await getSession(baseUrl);
   console.log("[fixtures] Session obtained");
 
-  const clusterId = await provisionCluster(sessionCookie, resources);
+  const clusterId = await resolveCluster(baseUrl, sessionCookie);
   console.log(`[fixtures] Using cluster: ${clusterId}`);
+
+  const otherSessionCookie = await getSession(baseUrl, OTHER_EMAIL);
+  const otherClusterId = await resolveCluster(baseUrl, otherSessionCookie);
+  console.log(`[fixtures] Other cluster: ${otherClusterId}`);
 
   return {
     session: sessionCookie,
     clusterId,
-    cleanup: () => cleanup(sessionCookie, resources),
+    otherClusterId,
+    baseUrl,
+    cleanup: async () => {
+      console.log("[fixtures] Killing server...");
+      proc.kill("SIGTERM");
+      await new Promise<void>((resolve) => {
+        proc.once("exit", () => resolve());
+        setTimeout(resolve, 5000);
+      });
+
+      console.log("[fixtures] Stopping PostgreSQL (data discarded)...");
+      await pg.stop();
+    },
   };
 }
 
-/**
- * Register a resource so it gets cleaned up after the test run.
- * Call this inside tests whenever you create something.
- */
-export function trackInstance(fixtures: TestFixtures & { _resources: CreatedResources }, id: string) {
-  fixtures._resources.instanceIds.push(id);
-}
-
-export function trackDomain(fixtures: TestFixtures & { _resources: CreatedResources }, domain: string) {
-  fixtures._resources.domainNames.push(domain);
-}
-
-function apiFetch(path: string, authCookie: string, init: RequestInit = {}) {
-  return fetch(`${BASE_URL}${path}`, {
+function apiFetch(baseUrl: string, path: string, authCookie: string, init: RequestInit = {}) {
+  return fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -172,8 +180,4 @@ function apiFetch(path: string, authCookie: string, init: RequestInit = {}) {
       ...((init.headers as Record<string, string>) ?? {}),
     },
   });
-}
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
 }
