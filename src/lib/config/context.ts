@@ -11,6 +11,7 @@ import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { JWTService } from "@/services/auth/jwt.js";
 import { NotificationService } from "@/services/notifications/index.js";
+import { EmailService } from "@/services/notifications/email/index.js";
 import { OAuthService } from "@/services/auth/oauth.js";
 import { GitHubService } from "@/services/integrations/github.js";
 import { GitLabService } from "@/services/integrations/gitlab.js";
@@ -20,9 +21,10 @@ import { InstanceService } from "@/services/instances.js";
 import { DnsService } from "@/services/dns/index.js";
 import { BillingService } from "@/services/billing/index.js";
 import { TrafficRouter } from "@/services/proxy/traffic-router.js";
-import { EmailService } from "@/services/notifications/email/index.js";
-import { VmProvider } from "@/services/vm/provider.js";
+import { ZeptoProvider } from "@/services/notifications/email/zepto.js";
+import { VmProvider } from "@/services/vm/index.js";
 import { InstancePoolService } from "@/services/pool.js";
+import { EmailProvider } from "@/services/notifications/email/index.js";
 
 // Storage adapter interface
 export interface IStorageAdapter {
@@ -104,7 +106,9 @@ export function getNotificationService(c: AppContext): NotificationService {
   const existing = c.get("_notificationService");
   if (existing) return existing;
 
-  const service = new NotificationService(c.env);
+  const emailProvider = c.get("emailProvider") ?? null;
+  const emailService = emailProvider ? new EmailService(emailProvider, c.env) : null;
+  const service = new NotificationService(emailService);
   c.set("_notificationService", service);
   return service;
 }
@@ -215,13 +219,10 @@ export function getVMService(c: AppContext): VmProvider {
   return provider;
 }
 
-export function createEmailService(c: AppContext, to: string): EmailService {
-  return new EmailService({ env: c.env, to });
-}
-
-/**
- * Execute a background task without blocking the response
- */
-export function runBackground(task: Promise<any>): void {
-  task.catch((err) => console.error("Background task error:", err));
+export function getEmailService(c: AppContext): EmailProvider {
+  const provider = c.get("emailProvider");
+  if (!provider) {
+    throw new Error("Email provider not configured");
+  }
+  return provider;
 }

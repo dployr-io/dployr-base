@@ -9,6 +9,7 @@ import type { BillingProvider } from "@/services/billing/provider.js";
 import type { Bindings } from "@/types/index.js";
 import { PolarService } from "@/services/billing/polar.js";
 import { DigitalOceanVMService } from "@/services/vm/index.js";
+import { EmailProvider, ZeptoProvider } from "@/services/notifications/email/index.js";
 
 /**
  * Create KV adapter from config
@@ -108,6 +109,24 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
 /**
  * Create billing provider from config
  */
+export function createEmailProvider(config: Config): EmailProvider | null {
+  if (!config.email) return null;
+  switch (config.email?.provider ?? "zepto") {
+    case "zepto": {
+      const env: Partial<Bindings> = {
+        ZEPTO_API_KEY: config.email.provider,
+        EMAIL_FROM: config.email.from_address,
+      };
+      return new ZeptoProvider(env as Bindings);
+    }
+    default:
+      throw new Error(`Unknown billing provider: ${config.billing?.provider}`);
+  }
+}
+
+/**
+ * Create billing provider from config
+ */
 export function createBillingProvider(config: Config): BillingProvider | null {
   if (!config.billing?.polar_access_token) return null;
   switch (config.billing?.provider ?? "polar") {
@@ -149,10 +168,10 @@ export async function initializeFromConfig(config: Config) {
   const kv = await createKVFromConfig(config);
   const db = await createDatabaseFromConfig(config);
   const storage = await createStorageFromConfig(config);
-
+  const email = createEmailProvider(config);
   const billingProvider = createBillingProvider(config);
   const vmProvider = createVmProvider(config);
   const wsHandler = new WebSocketHandler(kv, db);
 
-  return { kv, db, storage, ws: wsHandler, config, billingProvider, vmProvider };
+  return { kv, db, storage, ws: wsHandler, email, config, billingProvider, vmProvider };
 }

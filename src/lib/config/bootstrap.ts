@@ -11,13 +11,15 @@ import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { IStorageAdapter } from "./context.js";
 import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
-import { VmProvider } from "@/services/vm/provider.js";
+import { VmProvider } from "@/services/vm/index.js";
+import { EmailProvider } from "@/services/notifications/email/index.js";
 
 export interface Adapters {
   kv: IKVAdapter;
   db: PostgresAdapter;
   storage: IStorageAdapter;
   ws: WebSocketHandler;
+  email: EmailProvider | null;
   config: Config;
   billingProvider: BillingProvider | null;
   vmProvider: VmProvider | null;
@@ -59,34 +61,17 @@ export async function initializeAdapters(): Promise<Adapters> {
   return adapters;
 }
 
-/**
- * Middleware to inject adapters and environment bindings into Hono context
- */
-export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next): Promise<void | Response> {
-  // Initialize adapters on first request (lazy initialization)
-  if (!adapters) {
-    await initializeAdapters();
-  }
+export function buildBindings(a: Adapters): Bindings {
+  const serverConfig = a.config?.server;
+  const emailConfig = a.config?.email;
+  const corsConfig = a.config?.cors;
+  const integrationsConfig = a.config?.integrations;
+  const authConfig = a.config?.auth;
+  const adminConfig = a.config?.admin;
+  const billingConfig = a.config?.billing;
+  const vmConfig = a.config?.virtual_machines;
 
-  // Inject adapters into context
-  c.set("kvAdapter", adapters!.kv);
-  c.set("dbAdapter", adapters!.db);
-  c.set("storageAdapter", adapters!.storage);
-  c.set("wsHandler", adapters!.ws);
-  c.set("billingProvider", adapters!.billingProvider);
-  c.set("vmProvider", adapters!.vmProvider);
-
-  // Build environment bindings from config
-  const serverConfig = adapters!.config?.server;
-  const emailConfig = adapters!.config?.email;
-  const corsConfig = adapters!.config?.cors;
-  const integrationsConfig = adapters!.config?.integrations;
-  const authConfig = adapters!.config?.auth;
-  const adminConfig = adapters!.config?.admin;
-  const billingConfig = adapters!.config?.billing;
-  const vmConfig = adapters!.config?.virtual_machines;
-
-  const env: Bindings = {
+  return {
     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
     APP_URL: serverConfig?.app_url || process.env.APP_URL || "",
     EMAIL_FROM: emailConfig?.from_address || process.env.EMAIL_FROM || "",
@@ -112,7 +97,27 @@ export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Varia
     DO_API_TOKEN: vmConfig?.do_api_token,
     SSH_KEY: vmConfig?.ssh_key,
   };
-  c.env = env as unknown as Bindings;
+}
+
+/**
+ * Middleware to inject adapters and environment bindings into Hono context
+ */
+export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next): Promise<void | Response> {
+  // Initialize adapters on first request (lazy initialization)
+  if (!adapters) {
+    await initializeAdapters();
+  }
+
+  // Inject adapters into context
+  c.set("kvAdapter", adapters!.kv);
+  c.set("dbAdapter", adapters!.db);
+  c.set("storageAdapter", adapters!.storage);
+  c.set("wsHandler", adapters!.ws);
+  c.set("billingProvider", adapters!.billingProvider);
+  c.set("vmProvider", adapters!.vmProvider);
+  c.set("emailProvider", adapters!.email);
+
+  c.env = buildBindings(adapters!) as unknown as Bindings;
 
   await next();
 }
