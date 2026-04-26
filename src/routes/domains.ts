@@ -115,7 +115,7 @@ domains.post("/register", async (c) => {
       }),
     );
   } catch (error) {
-    console.error("Failed to register instance", error);
+    console.error("[Domains] Failed to register instance", error);
     return c.json(
       createErrorResponse({
         message: "Instance registration failed",
@@ -238,7 +238,7 @@ domains.post("/:domain/verify", authMiddleware, resolveCluster("domain", { path:
     await db.domains.activate(domain);
     return new Response(null, { status: 204 });
   } catch (err) {
-    console.error("Domain verification error:", err);
+    console.error("[Domains] Domain verification error:", err);
     return c.json(
       createErrorResponse({
         message: "Domain verification failed",
@@ -405,7 +405,7 @@ domains.get("/callback/:provider", async (c) => {
     url.searchParams.set("status", "authorized");
     return c.redirect(url.toString());
   } catch (err) {
-    console.error("OAuth callback error:", err);
+    console.error("[Domains] OAuth callback error:", err);
     return c.json(
       createErrorResponse({
         message: "OAuth callback failed",

@@ -30,7 +30,7 @@ node.post("/token", async (c) => {
   try {
     payload = await jwtService.verifyTokenIgnoringExpiry(rawToken);
   } catch (error) {
-    console.error("Invalid node token on /v1/node/token", error);
+    console.error("[Node] Invalid node token on /v1/node/token", error);
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -109,7 +109,7 @@ node.post("/cert", async (c) => {
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("Invalid node token", err);
+    console.error("[Node] Invalid node token", err);
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -225,7 +225,7 @@ node.put("/cert", async (c) => {
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("Invalid node token", err);
+    console.error("[Node] Invalid node token", err);
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,
@@ -333,7 +333,7 @@ node.get("/ws", async (c) => {
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("Invalid node token", err);
+    console.error("[Node] Invalid node token", err);
     return c.json(
       createErrorResponse({
         message: ERROR.AUTH.BAD_TOKEN.message,

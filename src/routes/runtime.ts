@@ -74,10 +74,10 @@ runtime.post("/compatibility/check", async (c) => {
           latestVersion = data.tag_name;
         }
       } else {
-        console.error("Failed to fetch latest daemon version from GitHub", resp.status, await resp.text());
+        console.error("[Runtime] Failed to fetch latest daemon version from GitHub", resp.status, await resp.text());
       }
     } catch (err) {
-      console.error("Error fetching latest daemon version from GitHub", err);
+      console.error("[Runtime] Error fetching latest daemon version from GitHub", err);
     }
 
     const upgradeLevel = latestVersion && version ? getUpgradeLevel(latestVersion, version) : "none";
@@ -94,7 +94,7 @@ runtime.post("/compatibility/check", async (c) => {
       }),
     );
   } catch (error) {
-    console.error("Failed to check compatibility", error);
+    console.error("[Runtime] Failed to check compatibility", error);
     return c.json(
       createErrorResponse({
         message: "Failed to check compatibility",
@@ -125,7 +125,7 @@ runtime.get("/versions", async (c) => {
     });
 
     if (!resp.ok) {
-      console.error("Failed to fetch releases from GitHub", resp.status, await resp.text());
+      console.error("[Runtime] Failed to fetch releases from GitHub", resp.status, await resp.text());
       return c.json(
         createErrorResponse({
           message: "Failed to fetch available versions",
@@ -177,7 +177,7 @@ runtime.get("/versions", async (c) => {
       }),
     );
   } catch (error) {
-    console.error("Failed to fetch available versions", error);
+    console.error("[Runtime] Failed to fetch available versions", error);
     return c.json(
       createErrorResponse({
         message: "Failed to fetch available versions",
@@ -241,7 +241,7 @@ runtime.get("/events", authMiddleware, requireClusterViewer, async (c) => {
 
     return c.json(createSuccessResponse(paginatedData));
   } catch (error) {
-    console.error("Failed to retrieve events", error);
+    console.error("[Runtime] Failed to retrieve events", error);
     const helpLink = "https://monitoring.dployr.io";
     return c.json(
       createErrorResponse({

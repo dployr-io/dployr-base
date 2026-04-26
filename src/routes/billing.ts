@@ -119,7 +119,7 @@ billing.post("/checkout", requireClusterOwner, async (c) => {
         ERROR.REQUEST.BAD_REQUEST.status,
       );
     }
-    console.error("Billing checkout error:", error);
+    console.error("[Billing] Billing checkout error:", error);
     return c.json(
       createErrorResponse({
         message: "Failed to create checkout session",

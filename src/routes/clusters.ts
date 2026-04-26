@@ -6,7 +6,9 @@ import { Bindings, Variables, createSuccessResponse, createErrorResponse, parseP
 import { authMiddleware, requireClusterViewer, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth.js";
 import z from "zod";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
-import { getKVStore, getNotificationService, getGitHubService, runBackground, getDbStore } from "@/lib/config/context.js";
+import { getKVStore, getGitHubService, getDbStore } from "@/lib/config/context.js";
+import { worker } from "@/services/background/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
 import { ResourceNotFoundError, ValidationError } from "@/lib/errors/errors.js";
 
 const clusters = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -97,17 +99,7 @@ clusters.get("/:id/users/invites/accept", async (c) => {
     }
 
     // Trigger notifications
-    const notificationService = getNotificationService(c);
-    runBackground(
-      notificationService.triggerEvent(
-        EVENTS.CLUSTER.INVITE_ACCEPTED.code,
-        {
-          clusterId,
-          userEmail: session.email,
-        },
-        db,
-      ),
-    );
+    worker.dispatch(notify(EVENTS.CLUSTER.INVITE_ACCEPTED.code, { clusterId, userEmail: session.email }));
 
     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
   } catch (error) {
