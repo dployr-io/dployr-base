@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorResponse, Cluster } from "@/types/index.js";
+import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { setCookie, getCookie } from "hono/cookie";
 import z from "zod";
 import { sanitizeReturnTo } from "@/lib/utils.js";
-import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
-import { getKVStore, getOAuthService, getNotificationService, runBackground, createEmailService, getDbStore } from "@/lib/config/context.js";
+import { getKVStore, getOAuthService, getDbStore, getJWTService, getEmailService, getAuthService } from "@/lib/config/context.js";
+import { worker } from "@/services/background/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -21,16 +22,26 @@ const otpSchema = z.object({
   code: z.string().min(6).max(6),
 });
 
+function setSessionCookie(c: any, sessionId: string) {
+  const url = new URL(c.req.url);
+  const isDployrHost = url.hostname === "dployr.io" || url.hostname.endsWith(".dployr.io");
+  setCookie(c, "session", sessionId, {
+    httpOnly: true,
+    secure: url.protocol === "https:",
+    sameSite: "Lax",
+    maxAge: 60 * 60 * 24 * 7,
+    path: "/",
+    ...(isDployrHost ? { domain: ".dployr.io" } : {}),
+  });
+}
+
 // Initiate OAuth flow
 auth.get("/login/:provider", async (c) => {
   const provider = c.req.param("provider") as OAuthProvider;
 
   if (!["google", "github", "microsoft"].includes(provider)) {
     return c.json(
-      createErrorResponse({
-        message: "Invalid provider",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: "Invalid provider", code: ERROR.REQUEST.BAD_REQUEST.code }),
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
@@ -41,13 +52,9 @@ auth.get("/login/:provider", async (c) => {
   const returnTo = c.req.query("redirect_to") || "/dashboard";
   const redirectUrl = sanitizeReturnTo(returnTo);
 
-  console.log(redirectUrl);
-
   await kv.createState({ state, redirectUrl });
 
-  const authUrl = oauth.getAuthUrl(provider, state);
-
-  return c.redirect(authUrl);
+  return c.redirect(oauth.getAuthUrl(provider, state));
 });
 
 // OAuth callback
@@ -58,306 +65,142 @@ auth.get("/callback/:provider", async (c) => {
 
   if (!code || !state) {
     return c.json(
-      createErrorResponse({
-        message: "Missing code or state",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: "Missing code or state", code: ERROR.REQUEST.BAD_REQUEST.code }),
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
 
   const kv = getKVStore(c);
-  const db = getDbStore(c);
-
   const redirectUrl = await kv.validateState(state);
 
   if (!redirectUrl) {
     return c.json(
-      createErrorResponse({
-        message: "Invalid state",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: "Invalid state", code: ERROR.REQUEST.BAD_REQUEST.code }),
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
 
-  let savedUser: any = null;
   try {
     const oauth = getOAuthService(c);
+    const authService = getAuthService(c);
+
     const accessToken = await oauth.exchangeCode({ provider, code });
     const oAuthUser = await oauth.getUserInfo({ provider, accessToken });
 
-    let existingUser = await db.users.get(oAuthUser.email);
-
-    const userToSave = existingUser
-      ? {
-          email: oAuthUser.email,
-          name: existingUser.name,
-          provider,
-          metadata: oAuthUser.metadata || {},
-        }
-      : {
-          email: oAuthUser.email,
-          name: oAuthUser.name,
-          picture: oAuthUser.picture,
-          provider,
-          metadata: oAuthUser.metadata || {},
-        };
-
-    savedUser = await db.users.save(userToSave);
-
-    if (!savedUser) {
-      return c.json(
-        createErrorResponse({
-          message: "Failed to save user",
-          code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-        }),
-        ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-      );
-    }
-
-    let cluster;
-    try {
-      cluster = await db.clusters.upsert(savedUser.id);
-    } catch (clusterError) {
-      console.error("[AUTH] Failed to create cluster for user after OAuth save", clusterError);
-    }
-
-    if (cluster) {
-      try {
-        await db.instancePool.assignInstance(cluster.id);
-      } catch (instanceError) {
-        console.error("[AUTH] Failed to assign free instance for cluster", cluster.id, instanceError);
-      }
-    }
-
-    const sessionId = crypto.randomUUID();
-    const clusters = await db.clusters.listUserClusters(savedUser.id);
-    await kv.createSession(sessionId, savedUser, clusters);
-
-    const url = new URL(c.req.url);
-    const hostname = url.hostname;
-    const isDployrHost = hostname === "dployr.io" || hostname.endsWith(".dployr.io");
-
-    setCookie(c, "session", sessionId, {
-      httpOnly: true,
-      secure: url.protocol === "https:",
-      sameSite: "Lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-      ...(isDployrHost ? { domain: ".dployr.io" } : {}),
+    const user = await authService.loginWithOAuth({
+      email: oAuthUser.email,
+      provider,
+      name: oAuthUser.name ?? oAuthUser.email.split("@")[0],
+      picture: oAuthUser.picture,
+      metadata: oAuthUser.metadata,
     });
 
+    const vmService = c.get("vmProvider") ?? undefined;
+    await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c) });
+    const { sessionId, clusters } = await authService.createSession({ user });
+
     await kv.logEvent({
-      actor: {
-        id: savedUser.id,
-        type: "user",
-      },
-      targets: clusters.map((cluster: any) => ({ id: cluster.id })),
+      actor: { id: user.id, type: "user" },
+      targets: clusters.map((cl) => ({ id: cl.id })),
       type: EVENTS.AUTH.SESSION_CREATED.code,
       request: c.req.raw,
     });
 
-    // Trigger notifications
+    setSessionCookie(c, sessionId);
+
     if (clusters.length > 0) {
-      const notificationService = getNotificationService(c);
-      runBackground(
-        notificationService.triggerEvent(
-          EVENTS.AUTH.SESSION_CREATED.code,
-          {
-            clusterId: clusters[0].id,
-            userEmail: savedUser.email,
-          },
-          db,
-        ),
-      );
+      worker.dispatch(notify(EVENTS.AUTH.SESSION_CREATED.code, { clusterId: clusters[0].id, userEmail: user.email }));
     }
 
     return c.redirect(c.env.APP_URL);
   } catch (error) {
-    console.error("OAuth error:", error);
+    console.error("[Auth] OAuth error:", error);
     return c.redirect(`${c.env.APP_URL}/?authError=${encodeURIComponent(`Failed to sign-in with ${provider}. Try email instead.`)}`);
   }
 });
 
 // Email authentication - Send OTP
 auth.post("/login/email", async (c) => {
-  try {
-    const data = await c.req.json();
-    const { email } = data;
-    const validation = loginSchema.safeParse(data);
-    if (!validation.success) {
-      const errors = validation.error.issues.map((err) => ({
-        field: err.path.join("."),
-        message: err.message,
-      }));
-      return c.json(
-        createErrorResponse({
-          message: "Invalid email format " + errors,
-          code: ERROR.REQUEST.BAD_REQUEST.code,
-        }),
-        ERROR.REQUEST.BAD_REQUEST.status,
-      );
-    }
+  const data = await c.req.json();
+  const validation = loginSchema.safeParse(data);
 
-    const kv = getKVStore(c);
-    const db = getDbStore(c);
-
-    let user = await db.users.get(email);
-    if (!user) {
-      const derivedName = email.split("@")[0] || email;
-      await db.users.save({
-        email,
-        name: derivedName,
-        provider: "email" as OAuthProvider,
-        metadata: {},
-      });
-    }
-
-    const code = await kv.createOTP(email);
-    const name = email.split("@")[0];
-    const emailService = createEmailService(c, email);
-
-    try {
-      await emailService.sendEmail("Verify your account", loginCodeTemplate(name, code));
-    } catch (error) {
-      console.error("Send OTP error:", error);
-      return c.json(
-        createErrorResponse({
-          message: "Failed to send code. Wait a few moments and try again.",
-          code: ERROR.REQUEST.BAD_REQUEST.code,
-        }),
-        ERROR.REQUEST.BAD_REQUEST.status,
-      );
-    }
-
-    return c.json(createSuccessResponse({ email }, "OTP sent to your email"));
-  } catch (error) {
-    console.error("Send OTP error:", error);
+  if (!validation.success) {
     return c.json(
-      createErrorResponse({
-        message: "Failed to send code. Wait a few moments and try again.",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: "Invalid email format", code: ERROR.REQUEST.BAD_REQUEST.code }),
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
+
+  const { email } = validation.data;
+  const authService = getAuthService(c);
+
+  await authService.findOrCreateEmailUser({ email });
+
+  try {
+    await authService.sendOTP({ email, emailProvider: getEmailService(c) });
+  } catch (error) {
+    console.error("[Auth] Send OTP error:", error);
+    return c.json(
+      createErrorResponse({ message: "Failed to send code. Wait a few moments and try again.", code: ERROR.REQUEST.BAD_REQUEST.code }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
+  }
+
+  return c.json(createSuccessResponse({ email }, "OTP sent to your email"));
 });
 
-// Email with magic code - Verify OTP
+// Email authentication - Verify OTP
 auth.post("/login/email/verify", async (c) => {
-  try {
-    const data = await c.req.json();
-    const { email, code } = data;
+  const data = await c.req.json();
+  const validation = otpSchema.safeParse(data);
 
-    const validation = otpSchema.safeParse(data);
-    if (!validation.success) {
-      const errors = validation.error.issues.map((err) => ({
-        field: err.path.join("."),
-        message: err.message,
-      }));
-      return c.json(
-        createErrorResponse({
-          message: "Invalid email or code format " + errors,
-          code: ERROR.REQUEST.BAD_REQUEST.code,
-        }),
-        ERROR.REQUEST.BAD_REQUEST.status,
-      );
-    }
-
-    const kv = getKVStore(c);
-    const db = getDbStore(c);
-    const isValid = await kv.validateOTP({ email, code: code.toUpperCase() });
-
-    if (!isValid && process.env.NODE_ENV !== "test") {
-      return c.json(
-        createErrorResponse({
-          message: "Invalid or expired code",
-          code: ERROR.REQUEST.INVALID_OTP.code,
-        }),
-        ERROR.REQUEST.INVALID_OTP.status,
-      );
-    }
-
-    let user = await db.users.get(email);
-    if (!user) {
-      return c.json(
-        createErrorResponse({
-          message: "User not found",
-          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-        }),
-        ERROR.RESOURCE.MISSING_RESOURCE.status,
-      );
-    }
-
-    let cluster;
-    try {
-      cluster = await db.clusters.upsert(user.id);
-    } catch (clusterError) {
-      console.error("[AUTH] Failed to create cluster for user after email OTP verification", clusterError);
-    }
-
-    if (cluster) {
-      try {
-        await db.instancePool.assignInstance(cluster.id);
-      } catch (instanceError) {
-        console.error("[AUTH] Failed to assign free instance for cluster", cluster.id, instanceError);
-      }
-    }
-
-    const sessionId = crypto.randomUUID();
-    const clusters = await db.clusters.listUserClusters(user.id);
-    await kv.createSession(sessionId, user, clusters);
-
-    await kv.logEvent({
-      actor: {
-        id: user.id,
-        type: "user",
-      },
-      targets: clusters.map((cluster: any) => ({ id: cluster.id })),
-      type: EVENTS.AUTH.SESSION_CREATED.code,
-      request: c.req.raw,
-    });
-
-    const url = new URL(c.req.url);
-    const hostname = url.hostname;
-    const isDployrHost = hostname === "dployr.io" || hostname.endsWith(".dployr.io");
-
-    setCookie(c, "session", sessionId, {
-      httpOnly: true,
-      secure: url.protocol === "https:",
-      sameSite: "Lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-      ...(isDployrHost ? { domain: ".dployr.io" } : {}),
-    });
-
-    // Trigger notifications
-    if (clusters.length > 0) {
-      const notificationService = getNotificationService(c);
-      runBackground(
-        notificationService.triggerEvent(
-          EVENTS.AUTH.SESSION_CREATED.code,
-          {
-            clusterId: clusters[0].id,
-            userEmail: user.email,
-          },
-          db,
-        ),
-      );
-    }
-
-    return c.json(createSuccessResponse({ email }, "Login successful"));
-  } catch (error) {
-    console.error("Verify OTP error:", error);
+  if (!validation.success) {
     return c.json(
-      createErrorResponse({
-        message: "Failed to verify code. Cross-check and try again.",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: "Invalid email or code format", code: ERROR.REQUEST.BAD_REQUEST.code }),
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
+
+  const { email, code } = validation.data;
+  const authService = getAuthService(c);
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
+
+  const isValid = await authService.verifyOTP({ email, code });
+  if (!isValid) {
+    return c.json(
+      createErrorResponse({ message: "Invalid or expired code", code: ERROR.REQUEST.INVALID_OTP.code }),
+      ERROR.REQUEST.INVALID_OTP.status,
+    );
+  }
+
+  const user = await db.users.find({ email });
+  if (!user) {
+    return c.json(
+      createErrorResponse({ message: "User not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
+      ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  const vmService = c.get("vmProvider") ?? undefined;
+  await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c) });
+
+  const { sessionId, clusters } = await authService.createSession({ user });
+
+  await kv.logEvent({
+    actor: { id: user.id, type: "user" },
+    targets: clusters.map((cl) => ({ id: cl.id })),
+    type: EVENTS.AUTH.SESSION_CREATED.code,
+    request: c.req.raw,
+  });
+
+  setSessionCookie(c, sessionId);
+
+  if (clusters.length > 0) {
+    worker.dispatch(notify(EVENTS.AUTH.SESSION_CREATED.code, { clusterId: clusters[0].id, userEmail: user.email }));
+  }
+
+  return c.json(createSuccessResponse({ email }, "Login successful"));
 });
 
 // Logout
@@ -370,8 +213,7 @@ auth.get("/logout", async (c) => {
   }
 
   const url = new URL(c.req.url);
-  const hostname = url.hostname;
-  const isDployrHost = hostname === "dployr.io" || hostname.endsWith(".dployr.io");
+  const isDployrHost = url.hostname === "dployr.io" || url.hostname.endsWith(".dployr.io");
 
   setCookie(c, "session", "", {
     maxAge: 0,
