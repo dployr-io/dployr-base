@@ -1,11 +1,9 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Context } from "hono";
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
-import { ERROR, INSTANCE_REGIONS } from "@/lib/constants/index.js";
-import { getInstanceService } from "@/lib/config/context.js";
-import { BillingService } from "@/services/billing/index.js";
+import { ERROR, SUCCESS, INSTANCE_REGIONS } from "@/lib/constants/index.js";
+import { getInstancePoolService, getInstanceService } from "@/lib/config/context.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
@@ -14,7 +12,7 @@ import { DatabaseConflictError, handleInstanceError } from "../errors/errors.js"
 export const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
   address: z.string().regex(/^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/, "Address must be a valid IPv4 address"),
-  tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(15, "Tag must be a maximum of 15 characters"),
+  tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(21, "Tag must be a maximum of 21 characters"),
   region: z.enum(INSTANCE_REGIONS).optional(),
 });
 
@@ -34,22 +32,6 @@ const restartDaemonSchema = z.object({
   force: z.boolean().default(false),
 });
 
-export function requireClusterId(c: Context): { ok: true; clusterId: string } | { ok: false; response: Response } {
-  const clusterId = c.req.query("clusterId");
-  if (!clusterId) {
-    return {
-      ok: false,
-      response: c.json(
-        createErrorResponse({
-          message: "clusterId is required",
-          code: ERROR.REQUEST.BAD_REQUEST.code,
-        }),
-        ERROR.REQUEST.BAD_REQUEST.status,
-      ) as unknown as Response,
-    };
-  }
-  return { ok: true, clusterId };
-}
 
 export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: Variables }>) {
   app.post("/", async (c) => {
@@ -75,7 +57,7 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
         metadata: region ? { region } : undefined,
       });
 
-      return c.json(createSuccessResponse({ data: instance }));
+      return c.json(createSuccessResponse(instance), SUCCESS.CREATED.status);
     } catch (error: any) {
       if (error instanceof DatabaseConflictError) {
         return c.json(
@@ -105,6 +87,7 @@ export function attachListInstances(app: Hono<{ Bindings: Bindings; Variables: V
     const clusterId = c.req.query("clusterId");
     const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
     const instanceService = getInstanceService(c);
+    const instancePoolService = getInstancePoolService(c);
     const [{ instances, total }, instance] = await Promise.all([
       instanceService.listInstances({
         c,
@@ -112,7 +95,13 @@ export function attachListInstances(app: Hono<{ Bindings: Bindings; Variables: V
         limit: pageSize,
         offset,
       }),
-      instanceService.resolveInstance({ c, clusterId }),
+      instancePoolService.resolveInstancePool({ c, clusterId }),
+      instancePoolService.listInstances({
+        c,
+        clusterId,
+        limit: pageSize,
+        offset,
+      }),
     ]);
 
     const finalInstances = instance ? [instance, ...instances] : instances;
@@ -242,8 +231,7 @@ export function attachInstallDployr(app: Hono<{ Bindings: Bindings; Variables: V
   app.post("/:instanceId/system/install", async (c) => {
     try {
       const instanceId = c.req.param("instanceId");
-      const guard = requireClusterId(c);
-      if (!guard.ok) return guard.response as any;
+      const clusterId = c.req.query("clusterId")!;
       const body = await c.req.json();
       const validation = installDployrSchema.safeParse(body);
       if (!validation.success) {
@@ -264,7 +252,7 @@ export function attachInstallDployr(app: Hono<{ Bindings: Bindings; Variables: V
 
       const taskId = await getInstanceService(c).installDployr({
         c,
-        clusterId: guard.clusterId,
+        clusterId,
         instanceId,
         version,
       });
@@ -287,8 +275,7 @@ export function attachRebootInstance(app: Hono<{ Bindings: Bindings; Variables: 
   app.post("/:instanceId/system/reboot", async (c) => {
     try {
       const instanceId = c.req.param("instanceId");
-      const guard = requireClusterId(c);
-      if (!guard.ok) return guard.response as any;
+      const clusterId = c.req.query("clusterId")!;
       const body = await c.req.json();
       const validation = rebootInstanceSchema.safeParse(body);
       if (!validation.success) {
@@ -309,7 +296,7 @@ export function attachRebootInstance(app: Hono<{ Bindings: Bindings; Variables: 
 
       const taskId = await getInstanceService(c).rebootInstance({
         c,
-        clusterId: guard.clusterId,
+        clusterId,
         instanceId,
         force,
       });
@@ -332,8 +319,7 @@ export function attachRestartDaemon(app: Hono<{ Bindings: Bindings; Variables: V
   app.post("/:instanceId/system/restart", async (c) => {
     try {
       const instanceId = c.req.param("instanceId");
-      const guard = requireClusterId(c);
-      if (!guard.ok) return guard.response as any;
+      const clusterId = c.req.query("clusterId")!;
       const body = await c.req.json();
       const validation = restartDaemonSchema.safeParse(body);
       if (!validation.success) {
@@ -354,7 +340,7 @@ export function attachRestartDaemon(app: Hono<{ Bindings: Bindings; Variables: V
 
       const taskId = await getInstanceService(c).restartDaemon({
         c,
-        clusterId: guard.clusterId,
+        clusterId,
         instanceId,
         force,
       });
