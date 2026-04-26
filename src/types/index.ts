@@ -99,6 +99,7 @@ export type Variables = {
   _trafficRouter?: TrafficRouter;
   billingProvider?: BillingProvider | null;
   vmProvider?: VmProvider | null;
+  emailProvider?: EmailProvider | null;
   session?: Session;
   resolvedClusterId?: string;
 };
@@ -257,9 +258,13 @@ export interface ProxyServerConfig {
   timeoutMs: number; // Request timeout in milliseconds
 }
 
+/** Payload passed to notification triggers. `clusterId` is required to look up integrations. */
 export interface NotificationData {
+  /** Cluster whose integrations (Discord, Slack, webhooks, email) will be notified. */
   clusterId: string;
+  /** Instance related to the event, if applicable. */
   instanceId?: string;
+  /** Email of the user who triggered the event, used in notification templates. */
   userEmail?: string;
   [key: string]: any;
 }
@@ -278,5 +283,6 @@ export * from "./responses.js";
 export * from "./node.js";
 
 import type { NotificationEvent } from "@/services/notifications/notifier.js";
-import { VmProvider } from "@/services/vm/provider.js";
-import { InstancePoolService } from "@/services/pool.js";
+import { VmProvider } from "@/services/vm/index.js";
+import { InstancePoolService } from "@/services/pool.js";import { EmailProvider } from "@/services/notifications/email/index.js";
+

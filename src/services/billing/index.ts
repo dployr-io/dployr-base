@@ -5,7 +5,7 @@ import type { Bindings, SubscriptionPlan, SubscriptionStatus } from "@/types/ind
 import type { DatabaseStore } from "@/lib/db/store/db/index.js";
 import type { KVStore } from "@/lib/db/store/kv/index.js";
 import type { BillingProvider } from "./provider.js";
-import { EmailService } from "@/services/notifications/email/index.js";
+import { ZeptoProvider } from "@/services/notifications/email/zepto.js";
 import { notificationTemplate } from "@/lib/templates/emails/notification.js";
 import { EVENTS } from "@/lib/constants/index.js";
 import { PLANS } from "@/lib/constants/billing.js";
@@ -144,11 +144,11 @@ export class BillingService {
       ...extraData,
     };
 
-    const emailService = new EmailService({ env: this.env, to: user.email });
+    const emailProvider = new ZeptoProvider(this.env);
     const html = notificationTemplate(event, emailData);
     const subject = event.includes("failed") ? "Payment Failed - Action Required" : event.includes("canceled") ? "Subscription Canceled" : "Subscription Update";
 
-    await emailService.sendEmail(subject, html);
+    await emailProvider.sendEmail({ to: user.email, subject, body: html });
     await kv.setReminderNotification({ clusterId });
 
     console.log(`[Billing] Sent ${event} notification to ${user.email} for cluster ${clusterId}`);
