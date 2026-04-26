@@ -3,7 +3,8 @@
 
 import { buildInstallScript, DEFAULT_INSTANCE_TAGS, VM_POLL_INTERVAL_MS, VM_POLL_MAX_ATTEMPTS } from "@/lib/constants/vm.js";
 import type { VirtualMachine, VMCreateOptions, VMActionResult, VMMetrics, VMStatus, VMListOptions } from "@/types/vm.js";
-import { VmProvider } from "./provider.js";
+import { VmProvider } from "./index.js";
+
 
 interface DONetwork {
   ip_address: string;
@@ -33,12 +34,11 @@ interface DOAction {
   resource_type: string;
 }
 
-export class DigitalOceanVMService extends VmProvider {
+export class DigitalOceanVMService implements VmProvider {
   private readonly headers: Record<string, string>;
   private readonly doApiBase: string;
 
   constructor(apiToken: string) {
-    super();
     this.headers = {
       Authorization: `Bearer ${apiToken}`,
       "Content-Type": "application/json",

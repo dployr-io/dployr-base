@@ -80,7 +80,7 @@ export function rateLimit(config: RateLimitConfig) {
 
       await next();
     } catch (error) {
-      console.error("Rate limit check failed:", error);
+      console.error("[Middleware] Rate limit check failed:", error);
       await next();
     }
   };
