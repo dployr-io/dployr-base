@@ -2,7 +2,7 @@ import { CryptoKey, importPKCS8, SignJWT } from "jose";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { generateKeyPair } from "@/lib/crypto/keystore.js";
-import { ADMIN_JWT_TTL, ADMIN_JWT_REFRESH_THRESHOLD } from "@/lib/constants/index.js";
+import { ADMIN_JWT_TTL, ADMIN_JWT_REFRESH_WINDOW } from "@/lib/constants/index.js";
 import { JsonWebKey } from "crypto";
 
 /**
@@ -92,7 +92,7 @@ export class KeyStore {
       const parsed = JSON.parse(data);
       const expiresAt = parsed.expiresAt;
       const now = Date.now();
-      if (expiresAt - now < ADMIN_JWT_REFRESH_THRESHOLD * 1000) {
+      if (expiresAt - now < ADMIN_JWT_REFRESH_WINDOW * 1000) {
         return null;
       }
       return parsed.token;

@@ -60,8 +60,6 @@ export class KVStore {
   // InstanceCacheStore delegation
   cacheInstance = (...args: Parameters<InstanceCacheStore["cacheInstance"]>) => this.instanceCache.cacheInstance(...args);
   getCachedInstance = (...args: Parameters<InstanceCacheStore["getCachedInstance"]>) => this.instanceCache.getCachedInstance(...args);
-  getCachedInstanceByName = (...args: Parameters<InstanceCacheStore["getCachedInstanceByName"]>) => this.instanceCache.getCachedInstanceByName(...args);
-  getCachedInstanceByTag = (...args: Parameters<InstanceCacheStore["getCachedInstanceByTag"]>) => this.instanceCache.getCachedInstanceByTag(...args);
   invalidateInstanceCache = (...args: Parameters<InstanceCacheStore["invalidateInstanceCache"]>) => this.instanceCache.invalidateInstanceCache(...args);
   cacheServices = (...args: Parameters<InstanceCacheStore["cacheServices"]>) => this.instanceCache.cacheServices(...args);
   getCachedServices = (...args: Parameters<InstanceCacheStore["getCachedServices"]>) => this.instanceCache.getCachedServices(...args);

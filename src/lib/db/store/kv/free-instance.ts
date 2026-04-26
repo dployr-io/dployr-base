@@ -1,6 +1,6 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
-import { InstanceEntry } from "@/types/index.js";
+import { InstancePool } from "@/types/index.js";
 
 /**
  * Free instance pool management for hobby clusters.
@@ -16,7 +16,7 @@ export class InstanceStore {
    * @returns An array of `InstanceEntry` objects, or `null` if the pool has
    *   not been seeded yet.
    */
-  async getInstancePool(): Promise<InstanceEntry[] | null> {
+  async getInstancePool(): Promise<InstancePool[] | null> {
     const data = await this.kv.get(KV_KEYS.FREE_INSTANCE_POOL);
     if (!data) return null;
     return JSON.parse(data);
@@ -28,7 +28,7 @@ export class InstanceStore {
    *
    * @param pool - The new pool array to persist.
    */
-  async setInstancePool(pool: InstanceEntry[]): Promise<void> {
+  async setInstancePool(pool: InstancePool[]): Promise<void> {
     await this.kv.put(KV_KEYS.FREE_INSTANCE_POOL, JSON.stringify(pool));
   }
 
@@ -37,7 +37,7 @@ export class InstanceStore {
     const pool = await this.getInstancePool();
     if (!pool || pool.length === 0) return null;
 
-    const available = pool.filter((inst) => inst.status !== "paused");
+    const available = pool.filter((inst) => inst.status === "healthy");
     if (available.length === 0) return null;
 
     let counter = 0;
