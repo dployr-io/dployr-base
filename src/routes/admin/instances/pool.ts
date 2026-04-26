@@ -1,10 +1,11 @@
 // pool.routes.ts
 import { Hono } from "hono";
-import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
-import { getDbStore } from "@/lib/config/context.js";
+import { Bindings, Variables, createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
+import { getDbStore, getVMService } from "@/lib/config/context.js";
 import { DatabaseConflictError, ResourceNotFoundError } from "@/lib/errors/errors.js";
 import { ERROR, INSTANCE_REGIONS } from "@/lib/constants/index.js";
 import { z } from "zod";
+import { InstancePoolService } from "@/services/pool.js";
 
 const addPoolInstanceSchema = z.object({
   address: z.string().regex(/^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/, "Address must be a valid IPv4 address"),
@@ -14,6 +15,28 @@ const addPoolInstanceSchema = z.object({
 });
 
 export const pool = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// Retrieve all instances in pool
+pool.get("/", async (c) => {
+  const service = new InstancePoolService();
+  const db = getDbStore(c);
+  const vm = getVMService(c);
+  const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
+
+  service.poolSync({ db, vm }).catch(() => {});
+
+  try {
+    const { instances, total } = await db.instancePool.list({ limit: pageSize, offset });
+    const paginated = createPaginatedResponse(instances, page, pageSize, total);
+    return c.json(createSuccessResponse({ data: paginated }));
+  } catch (error: any) {
+    console.error("[Admin/Pool] Failed to list instance pools: ", error);
+    if (error instanceof DatabaseConflictError) {
+      return c.json(createErrorResponse({ message: "Instance with that address or tag already exists", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
+    }
+    return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+  }
+});
 
 // Add instance to pool
 pool.post("/", async (c) => {
@@ -39,29 +62,31 @@ pool.post("/", async (c) => {
   const db = getDbStore(c);
 
   try {
-    const instance = await db.instancePool.addToPool({ address, tag, region, capacity });
+    const instance = await db.instancePool.add({ address, tag, region, capacity, status: "healthy" });
     return c.json(createSuccessResponse({ instance }));
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[Admin/Pool] Failed to add instance pools: ", error);
     if (error instanceof DatabaseConflictError) {
       return c.json(createErrorResponse({ message: "Instance with that address or tag already exists", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
     }
-    throw error;
+    return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
 
-// Remove instance from pool 
+// Remove instance from pool
 pool.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const db = getDbStore(c);
 
   try {
-    await db.instancePool.removeFromPool(id);
+    await db.instancePool.remove(id);
     return c.json(createSuccessResponse({ deleted: id }));
-  } catch (error) {
-    if (error instanceof ResourceNotFoundError) {
-      return c.json(createErrorResponse({ message: "Instance not found in pool", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  } catch (error: any) {
+    console.error("[Admin/Pool] Failed to remove instance from pools: ", error);
+    if (error instanceof DatabaseConflictError) {
+      return c.json(createErrorResponse({ message: "Instance with that address or tag already exists", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
     }
-    throw error;
+    return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
 
@@ -85,10 +110,11 @@ pool.patch("/:id", async (c) => {
   try {
     await db.instancePool.updateStatus(id, status);
     return c.json(createSuccessResponse({ id, status }));
-  } catch (error) {
-    if (error instanceof ResourceNotFoundError) {
-      return c.json(createErrorResponse({ message: "Instance not found in pool", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  } catch (error: any) {
+    console.error("[Admin/Pool] Failed to update instance pools: ", error);
+    if (error instanceof DatabaseConflictError) {
+      return c.json(createErrorResponse({ message: "Instance with that address or tag already exists", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
     }
-    throw error;
+    return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });

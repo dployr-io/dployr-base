@@ -11,7 +11,7 @@ import z from "zod";
 const notifications = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const setupSchema = z.object({
-  integration: z.enum(["discord", "slack", "customWebhook", "email"]),
+  integration: z.enum(["discord", "slack", "webhook", "email"]),
   events: z.array(z.string()),
 });
 
@@ -36,18 +36,7 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
     }
 
     const { integration, events } = validation.data;
-
-    const clusterId = c.req.query("clusterId");
-
-    if (!clusterId) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing clusterId query parameter",
-          code: ERROR.AUTH.BAD_SESSION.code,
-        }),
-        ERROR.AUTH.BAD_SESSION.status,
-      );
-    }
+    const clusterId = c.req.query("clusterId")!;
     const db = getDbStore(c);
     const cluster = await db.clusters.get(clusterId);
 
@@ -93,18 +82,7 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
 notifications.post("/discord/setup", requireClusterDeveloper, async (c) => {
   try {
     const { webhookUrl, enabled, events } = await c.req.json();
-    const clusterId = c.req.query("clusterId");
-
-    if (!clusterId) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing clusterId query parameter",
-          code: ERROR.AUTH.BAD_SESSION.code,
-        }),
-        ERROR.AUTH.BAD_SESSION.status,
-      );
-    }
-
+    const clusterId = c.req.query("clusterId")!;
     const db = getDbStore(c);
     await db.clusters.update(clusterId, {
       metadata: { discord: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } },
@@ -127,18 +105,7 @@ notifications.post("/discord/setup", requireClusterDeveloper, async (c) => {
 notifications.post("/slack/setup", requireClusterDeveloper, async (c) => {
   try {
     const { webhookUrl, enabled, events } = await c.req.json();
-    const clusterId = c.req.query("clusterId");
-
-    if (!clusterId) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing clusterId query parameter",
-          code: ERROR.AUTH.BAD_SESSION.code,
-        }),
-        ERROR.AUTH.BAD_SESSION.status,
-      );
-    }
-
+    const clusterId = c.req.query("clusterId")!;
     const db = getDbStore(c);
     await db.clusters.update(clusterId, {
       metadata: { slack: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } },
@@ -161,18 +128,7 @@ notifications.post("/slack/setup", requireClusterDeveloper, async (c) => {
 notifications.post("/webhook/setup", requireClusterDeveloper, async (c) => {
   try {
     const { webhookUrl, enabled, events } = await c.req.json();
-    const clusterId = c.req.query("clusterId");
-
-    if (!clusterId) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing clusterId query parameter",
-          code: ERROR.AUTH.BAD_SESSION.code,
-        }),
-        ERROR.AUTH.BAD_SESSION.status,
-      );
-    }
-
+    const clusterId = c.req.query("clusterId")!;
     const db = getDbStore(c);
     await db.clusters.update(clusterId, {
       metadata: { customWebhook: { webhookUrl, enabled, events: events || DEFAULT_EVENTS } },
@@ -195,18 +151,7 @@ notifications.post("/webhook/setup", requireClusterDeveloper, async (c) => {
 notifications.post("/email/setup", requireClusterDeveloper, async (c) => {
   try {
     const { enabled, events } = await c.req.json();
-    const clusterId = c.req.query("clusterId");
-
-    if (!clusterId) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing clusterId query parameter",
-          code: ERROR.AUTH.BAD_SESSION.code,
-        }),
-        ERROR.AUTH.BAD_SESSION.status,
-      );
-    }
-
+    const clusterId = c.req.query("clusterId")!;
     const db = getDbStore(c);
     await db.clusters.update(clusterId, {
       metadata: { emailNotification: { enabled, events } },

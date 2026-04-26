@@ -53,7 +53,7 @@ users.get("/me", async (c) => {
     );
   }
 
-  const user = await db.users.get(session.email);
+  const user = await db.users.find({ email: session.email });
 
   if (!user) {
     return c.json(

@@ -29,7 +29,7 @@ proxy.get("/resolve", async (c) => {
     );
   }
 
-  const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
+  const baseDomain = c.env?.TLD ?? "dployr.io";
   const router = getTrafficRouter(c);
 
   const parsed = router.parseHostname(hostname);
@@ -76,7 +76,7 @@ proxy.get("/resolve", async (c) => {
  * GET /v1/proxy/stats
  */
 proxy.get("/stats", async (c) => {
-  const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
+  const baseDomain = c.env?.TLD ?? "dployr.io";
   const router = getTrafficRouter(c);
 
   return c.json(
@@ -105,7 +105,7 @@ proxy.get("/services", requireClusterViewer, async (c) => {
   }
 
   const db = getDbStore(c);
-  const baseDomain = c.env?.PROXY_BASE_DOMAIN ?? "dployr.io";
+  const baseDomain = c.env?.TLD ?? "dployr.io";
 
   // Get cluster
   const cluster = await db.clusters.get(clusterId);
@@ -131,7 +131,7 @@ proxy.get("/services", requireClusterViewer, async (c) => {
   }> = [];
 
   for (const instance of instances) {
-    const instanceServices = await db.services.getByInstance(instance.id);
+    const instanceServices = await db.services.list({ instanceId: instance.id });
     for (const service of instanceServices) {
       services.push({
         serviceName: service.name,

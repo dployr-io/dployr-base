@@ -66,7 +66,7 @@ node.post("/token", async (c) => {
   }
 
   const db = getDbStore(c);
-  const instance = await db.instances.getByName(instanceName);
+  const instance = await db.instances.find({ tag: instanceName });
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -129,7 +129,7 @@ node.post("/cert", async (c) => {
     );
   }
 
-  const instance = instanceId ? await db.instances.get(instanceId) : await db.instances.getByName(instanceName!);
+  const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName! });
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -196,7 +196,7 @@ node.post("/cert", async (c) => {
     not_after: notAfter,
   };
 
-  await db.instances.updateMetadata(instance.id, metadata);
+  await db.instances.update({ id: instance.id }, { metadata });
 
   return new Response(null, { status: 204 });
 });
@@ -245,7 +245,7 @@ node.put("/cert", async (c) => {
     );
   }
 
-  const instance = instanceId ? await db.instances.get(instanceId) : await db.instances.getByName(instanceName!);
+  const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName! });
   if (!instance) {
     return c.json(
       createErrorResponse({
@@ -303,7 +303,7 @@ node.put("/cert", async (c) => {
     not_after: notAfter,
   };
 
-  await db.instances.updateMetadata(instance.id, metadata);
+  await db.instances.update({ id: instance.id }, { metadata });
 
   return new Response(null, { status: 204 });
 });
@@ -353,7 +353,7 @@ node.get("/ws", async (c) => {
     );
   }
 
-  const instance = instanceId ? await db.instances.get(instanceId) : await db.instances.getByName(instanceName!);
+  const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName! });
   if (!instance) {
     return c.json(
       createErrorResponse({

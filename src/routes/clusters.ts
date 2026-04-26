@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
-import { authMiddleware, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth.js";
+import { authMiddleware, requireClusterViewer, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth.js";
 import z from "zod";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { getKVStore, getNotificationService, getGitHubService, runBackground, getDbStore } from "@/lib/config/context.js";
@@ -184,7 +184,7 @@ clusters.get("/:id/users/invites/decline", async (c) => {
 /**
  * List all users in a cluster
  */
-clusters.get("/:id/users", async (c) => {
+clusters.get("/:id/users", requireClusterViewer, async (c) => {
   const db = getDbStore(c);
 
   const clusterId = c.req.param("id");
@@ -488,7 +488,7 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
 /**
  * List available connected integrations
  */
-clusters.get("/:id/integrations", async (c) => {
+clusters.get("/:id/integrations", requireClusterViewer, async (c) => {
   const db = getDbStore(c);
   const clusterId = c.req.param("id");
 
@@ -526,7 +526,7 @@ clusters.get("/:id/integrations", async (c) => {
  * List available GitHub repositories
  * This list reposistories that are accessible to the GitHub installation
  */
-clusters.get("/:id/remotes", async (c) => {
+clusters.get("/:id/remotes", requireClusterViewer, async (c) => {
   const clusterId = c.req.param("id");
   const db = getDbStore(c);
 

@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { authMiddleware } from "@/middleware/auth.js";
+import { requireClusterViewer, requireClusterOwner } from "@/middleware/auth.js";
 import { PolarRequestValidationError } from "@/lib/errors/errors.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKVStore, getBillingProvider, getBillingService, getDbStore } from "@/lib/config/context.js";
@@ -23,33 +23,9 @@ billing.get("/plans", (c) => {
   return c.json(createSuccessResponse({ plans: PLANS }));
 });
 
-billing.get("/status", authMiddleware, async (c) => {
-  const session = c.get("session")!;
-  const clusterId = c.req.query("clusterId");
-
-  if (!clusterId) {
-    return c.json(
-      createErrorResponse({
-        message: "clusterId is required",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
-      ERROR.REQUEST.BAD_REQUEST.status,
-    );
-  }
-
+billing.get("/status", requireClusterViewer, async (c) => {
+  const clusterId = c.req.query("clusterId")!;
   const db = getDbStore(c);
-
-  const canRead = await db.clusters.canRead(session.userId, clusterId);
-  if (!canRead) {
-    return c.json(
-      createErrorResponse({
-        message: "Insufficient permissions",
-        code: ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.code,
-      }),
-      ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.status,
-    );
-  }
-
   const billingService = getBillingService(c);
   if (!billingService) {
     return c.json(
@@ -66,7 +42,7 @@ billing.get("/status", authMiddleware, async (c) => {
   return c.json(createSuccessResponse(result));
 });
 
-billing.post("/checkout", authMiddleware, async (c) => {
+billing.post("/checkout", requireClusterOwner, async (c) => {
   const session = c.get("session")!;
 
   let body: unknown;
@@ -96,18 +72,6 @@ billing.post("/checkout", authMiddleware, async (c) => {
 
   const { plan, clusterId, successUrl } = validation.data;
   const db = getDbStore(c);
-
-  const isOwner = await db.clusters.isOwner(session.userId, clusterId);
-  if (!isOwner) {
-    return c.json(
-      createErrorResponse({
-        message: "Only the cluster owner can manage billing",
-        code: ERROR.PERMISSION.OWNER_ROLE_REQUIRED.code,
-      }),
-      ERROR.PERMISSION.OWNER_ROLE_REQUIRED.status,
-    );
-  }
-
   const billingService = getBillingService(c);
   if (!billingService) {
     console.error("[Billing] Billing provider not configured");
@@ -120,7 +84,7 @@ billing.post("/checkout", authMiddleware, async (c) => {
     );
   }
 
-  const user = await db.users.get(session.email);
+  const user = await db.users.find({ email: session.email });
   if (!user) {
     return c.json(
       createErrorResponse({

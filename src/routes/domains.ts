@@ -6,7 +6,7 @@ import { z } from "zod";
 import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
 import type { DNSProvider } from "@/types/dns.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
-import { authMiddleware, requireClusterDeveloper } from "@/middleware/auth.js";
+import { authMiddleware, requireClusterViewer, requireClusterDeveloper, resolveCluster } from "@/middleware/auth.js";
 import { getDbStore, getKVStore, getDnsService, getInstanceService } from "@/lib/config/context.js";
 
 const domains = new Hono<{
@@ -86,7 +86,7 @@ domains.post("/register", async (c) => {
 
     // Get instance to include ID in response for Dployrd version compatibility
     const db = getDbStore(c);
-    const instance = await db.instances.getByName(result.instanceName);
+    const instance = (await db.instances.find({ tag: result.instanceName })) ?? (await db.instancePool.find({ tag: result.instanceName }));
     if (!instance) {
       throw new Error("Instance not found after domain save");
     }
@@ -127,8 +127,7 @@ domains.post("/register", async (c) => {
 });
 
 // Create custom domain
-domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
-  const session = c.get("session")!;
+domains.post("/", authMiddleware, resolveCluster("instance", { body: "instanceId" }), requireClusterDeveloper, async (c) => {
   const db = getDbStore(c);
   const kv = getKVStore(c);
   const dns = getDnsService(c);
@@ -149,15 +148,9 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   const { domain, instanceId } = validation.data;
   const normalizedDomain = domain.toLowerCase();
 
-  // Check instance exists and user has access
-  const instance = await db.instances.get(instanceId);
+  const instance = await db.instances.find({ id: instanceId });
   if (!instance) {
     return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
-  }
-
-  const canWrite = await db.clusters.canWrite(session.userId, instance.clusterId);
-  if (!canWrite) {
-    return c.json(createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.code }), 403);
   }
 
   // Check domain not already claimed by another instance
@@ -226,7 +219,7 @@ domains.get("/verify", async (c) => {
 });
 
 // Client-initiated domain verification check
-domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (c) => {
+domains.post("/:domain/verify", authMiddleware, resolveCluster("domain", { path: "domain" }), requireClusterDeveloper, async (c) => {
   try {
     const domain = c.req.param("domain").toLowerCase();
     const db = getDbStore(c);
@@ -235,11 +228,6 @@ domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (
     const record = await db.domains.get(domain);
     if (!record) {
       return c.json(createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
-    }
-
-    const instance = await db.instances.get(record.instanceId);
-    if (!instance) {
-      return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
     }
 
     const verified = await dns.checkTxtRecord(domain, record.verificationToken);
@@ -262,9 +250,8 @@ domains.post("/:domain/verify", authMiddleware, requireClusterDeveloper, async (
 });
 
 // Get domain details
-domains.get("/:domain", authMiddleware, async (c) => {
+domains.get("/:domain", authMiddleware, resolveCluster("domain", { path: "domain" }), requireClusterViewer, async (c) => {
   const domain = c.req.param("domain").toLowerCase();
-  const session = c.get("session")!;
   const db = getDbStore(c);
   const dns = getDnsService(c);
 
@@ -273,15 +260,9 @@ domains.get("/:domain", authMiddleware, async (c) => {
     return c.json(createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
   }
 
-  const instance = await db.instances.get(domainRecord.instanceId);
+  const instance = await db.instances.find({ id: domainRecord.instanceId });
   if (!instance) {
     return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
-  }
-
-  // Permission check
-  const canRead = await db.clusters.canRead(session.userId, instance.clusterId);
-  if (!canRead) {
-    return c.json(createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.code }), 403);
   }
 
   const response: any = {
@@ -317,45 +298,19 @@ domains.get("/:domain", authMiddleware, async (c) => {
 });
 
 // List domains for an instance
-domains.get("/instance/:instanceId", authMiddleware, async (c) => {
+domains.get("/instance/:instanceId", authMiddleware, resolveCluster("instance", { path: "instanceId" }), requireClusterViewer, async (c) => {
   const instanceId = c.req.param("instanceId");
-  const session = c.get("session")!;
   const db = getDbStore(c);
-
-  const instance = await db.instances.get(instanceId);
-  if (!instance) {
-    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
-  }
-
-  const canRead = await db.clusters.canRead(session.userId, instance.clusterId);
-  if (!canRead) {
-    return c.json(createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.VIEWER_ROLE_REQUIRED.code }), 403);
-  }
 
   const domainsList = await db.domains.listByInstance(instanceId);
   return c.json(createSuccessResponse({ domains: domainsList }));
 });
 
 // Remove domain from instance
-domains.delete("/:domain", authMiddleware, requireClusterDeveloper, async (c) => {
+domains.delete("/:domain", authMiddleware, resolveCluster("domain", { path: "domain" }), requireClusterDeveloper, async (c) => {
   const domain = c.req.param("domain").toLowerCase();
   const session = c.get("session")!;
   const db = getDbStore(c);
-
-  const record = await db.domains.get(domain);
-  if (!record) {
-    return c.json(createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
-  }
-
-  const instance = await db.instances.get(record.instanceId);
-  if (!instance) {
-    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
-  }
-
-  const canWrite = await db.clusters.canWrite(session.userId, instance.clusterId);
-  if (!canWrite) {
-    return c.json(createErrorResponse({ message: "Permission denied", code: ERROR.PERMISSION.DEVELOPER_ROLE_REQUIRED.code }), 403);
-  }
 
   await db.domains.delete(domain);
   const kv = getKVStore(c);

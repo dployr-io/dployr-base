@@ -85,19 +85,8 @@ integrations.post("/github/webhook", async (c) => {
 
 // GitHub install
 integrations.get("/github/install", requireClusterDeveloper, async (c) => {
-  const clusterId = c.req.query("clusterId");
+  const clusterId = c.req.query("clusterId")!;
   const session = c.get("session")!;
-
-  if (!clusterId) {
-    return c.json(
-      createErrorResponse({
-        message: "Missing clusterId query parameter",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
-      ERROR.REQUEST.BAD_REQUEST.status,
-    );
-  }
-
   const kv = getKVStore(c);
   await kv.setPendingGitHubInstall(session.userId, clusterId);
 
@@ -176,18 +165,7 @@ integrations.get("/github/callback", async (c) => {
 integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
   try {
     const { accessToken, enabled } = await c.req.json();
-    const clusterId = c.req.query("clusterId");
-
-    if (!clusterId) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing clusterId query parameter",
-          code: ERROR.AUTH.BAD_SESSION.code,
-        }),
-        ERROR.AUTH.BAD_SESSION.status,
-      );
-    }
-
+    const clusterId = c.req.query("clusterId")!;
     const gitlabService = getGitLabService(c);
 
     await gitlabService.remoteCount({ accessToken });
@@ -265,18 +243,7 @@ integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
 integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
   try {
     const { accessToken, enabled } = await c.req.json();
-    const clusterId = c.req.query("clusterId");
-
-    if (!clusterId) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing clusterId query parameter",
-          code: ERROR.AUTH.BAD_SESSION.code,
-        }),
-        ERROR.AUTH.BAD_SESSION.status,
-      );
-    }
-
+    const clusterId = c.req.query("clusterId")!;
     const bitbucketService = getBitBucketService(c);
 
     // Test access
@@ -303,18 +270,7 @@ integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
 // List all integrations for a cluster
 integrations.get("/list", requireClusterDeveloper, async (c) => {
   try {
-    const clusterId = c.req.query("clusterId");
-
-    if (!clusterId) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing clusterId query parameter",
-          code: ERROR.AUTH.BAD_SESSION.code,
-        }),
-        ERROR.AUTH.BAD_SESSION.status,
-      );
-    }
-
+    const clusterId = c.req.query("clusterId")!;
     const db = getDbStore(c);
     const integrations = await db.clusters.listClusterIntegrations(clusterId);
 
@@ -334,18 +290,7 @@ integrations.get("/list", requireClusterDeveloper, async (c) => {
 // List all remotes from configured integrations
 integrations.get("/remotes", requireClusterDeveloper, async (c) => {
   try {
-    const clusterId = c.req.query("clusterId");
-
-    if (!clusterId) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing clusterId query parameter",
-          code: ERROR.AUTH.BAD_SESSION.code,
-        }),
-        ERROR.AUTH.BAD_SESSION.status,
-      );
-    }
-
+    const clusterId = c.req.query("clusterId")!;
     const db = getDbStore(c);
     const clusterIntegrations = await db.clusters.listClusterIntegrations(clusterId);
     const integrationsService = getIntegrationsService(c);
