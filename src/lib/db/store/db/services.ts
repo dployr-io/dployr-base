@@ -2,163 +2,96 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { BaseStore } from "./base.js";
-import { KVStore } from "../kv/index.js";
 import { Service } from "@/types/index.js";
 
+/** Fields that can be used to look up or filter services. */
+export type ServiceFilter = {
+  id?: string;
+  name?: string;
+  instanceId?: string;
+};
+
 export class ServiceStore extends BaseStore {
-  private kv?: KVStore;
+  /**
+   * Creates a service record under the instance identified by `instanceTag`.
+   * Returns `null` if no instance with that tag exists.
+   */
+  async create({ instanceTag, name }: { instanceTag: string; name: string }): Promise<Service | null> {
+    const instanceResult = await this.db
+      .prepare(`SELECT id FROM instances WHERE tag = $1`)
+      .bind(instanceTag)
+      .first();
 
-  constructor(db: any, kv?: KVStore) {
-    super(db);
-    this.kv = kv;
-  }
-  async save(instanceName: string, name: string): Promise<Service | null> {
-    const instanceStmt = this.db.prepare(`
-            SELECT id FROM instances WHERE tag = $1
-        `);
-    const instanceResult = await instanceStmt.bind(instanceName).first();
-
-    if (!instanceResult) {
-      return null; // Instance not found
-    }
+    if (!instanceResult) return null;
 
     const instanceId = instanceResult.id as string;
     const id = this.generateId();
     const now = this.now();
 
-    const stmt = this.db.prepare(`
-            INSERT INTO services (id, instance_id, name, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5)
-        `);
-
     try {
-      await stmt.bind(id, instanceId, name, now, now).run();
+      await this.db
+        .prepare(`INSERT INTO services (id, instance_id, name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`)
+        .bind(id, instanceId, name, now, now)
+        .run();
     } catch (error) {
       this.parsePostgresError({ error, table: "services" });
     }
 
-    // Invalidate cache after write
-    if (this.kv) {
-      await this.kv.invalidateServiceCache(instanceId).catch(() => {});
-    }
-
-    return {
-      id,
-      instanceId,
-      name,
-      createdAt: now,
-      updatedAt: now,
-    };
+    return { id, instanceId, name, createdAt: now, updatedAt: now };
   }
 
-  async get(id: string): Promise<Service | null> {
-    const stmt = this.db.prepare(`
-            SELECT id, instance_id, name, created_at, updated_at
-            FROM services
-            WHERE id = $1
-        `);
+  /**
+   * Returns the first service matching the given filter, or `null` if not found.
+   * At least one filter field must be set.
+   */
+  async find(filter: ServiceFilter): Promise<Service | null> {
+    const { clause, bindings } = this.buildWhere({
+      id: filter.id,
+      name: filter.name,
+      instance_id: filter.instanceId,
+    });
+    if (!bindings.length) return null;
 
-    const result = await stmt.bind(id).first();
-    if (!result) return null;
+    const result = await this.db
+      .prepare(`SELECT id, instance_id, name, created_at, updated_at FROM services ${clause} LIMIT 1`)
+      .bind(...bindings)
+      .first();
 
-    return {
-      id: result.id as string,
-      instanceId: result.instance_id as string,
-      name: result.name as string,
-      createdAt: result.created_at as number,
-      updatedAt: result.updated_at as number,
-    };
+    return result ? this.toService(result) : null;
   }
 
-  async getByName(name: string): Promise<Service | null> {
-    const stmt = this.db.prepare(`
-            SELECT id, instance_id, name, created_at, updated_at
-            FROM services
-            WHERE name = $1
-        `);
+  /**
+   * Returns all services matching the given filter.
+   * Omit `filter` (or pass `{}`) to list every service.
+   */
+  async list(filter?: ServiceFilter): Promise<Service[]> {
+    const { clause, bindings } = this.buildWhere({ instance_id: filter?.instanceId });
 
-    const result = await stmt.bind(name).first();
-    if (!result) return null;
+    const results = bindings.length
+      ? await this.db.prepare(`SELECT id, instance_id, name, created_at, updated_at FROM services ${clause} ORDER BY name ASC`).bind(...bindings).all()
+      : await this.db.prepare(`SELECT id, instance_id, name, created_at, updated_at FROM services ORDER BY name ASC`).all();
 
-    return {
-      id: result.id as string,
-      instanceId: result.instance_id as string,
-      name: result.name as string,
-      createdAt: result.created_at as number,
-      updatedAt: result.updated_at as number,
-    };
+    return results.results.map((r) => this.toService(r));
   }
 
-  async getByInstance(instanceId: string): Promise<Service[]> {
-    // Try cache first
-    if (this.kv) {
-      const cached = await this.kv.getCachedServices(instanceId).catch(() => null);
-      if (cached) {
-        return cached;
-      }
-    }
+  /**
+   * Deletes services matching the given filter.
+   * Accepts `id` or `name` as the lookup key.
+   */
+  async delete(filter: Pick<ServiceFilter, "id" | "name">): Promise<void> {
+    const col = filter.id !== undefined ? "id" : "name";
+    const val = filter.id ?? filter.name;
+    if (!val) return;
+    await this.db.prepare(`DELETE FROM services WHERE ${col} = $1`).bind(val).run();
+  }
 
-    // Cache miss - fetch from DB
-    const stmt = this.db.prepare(`
-            SELECT id, instance_id, name, created_at, updated_at
-            FROM services
-            WHERE instance_id = $1
-            ORDER BY name ASC
-        `);
-
-    const results = await stmt.bind(instanceId).all();
-
-    const services = results.results.map((row) => ({
+  private toService(row: any): Service {
+    return {
       id: row.id as string,
       instanceId: row.instance_id as string,
       name: row.name as string,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
-    }));
-
-    // Cache the result
-    if (this.kv) {
-      await this.kv.cacheServices(instanceId, services).catch(() => {});
-    }
-
-    return services;
-  }
-
-  async list(): Promise<Service[]> {
-    const stmt = this.db.prepare(`
-            SELECT id, instance_id, name, created_at, updated_at
-            FROM services
-            ORDER BY name ASC
-        `);
-
-    const results = await stmt.all();
-
-    return results.results.map((row) => ({
-      id: row.id as string,
-      instanceId: row.instance_id as string,
-      name: row.name as string,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
-    }));
-  }
-
-  async delete(id: string): Promise<void> {
-    // Get instanceId before deletion for cache invalidation
-    const service = await this.get(id);
-    await this.db.prepare(`DELETE FROM services WHERE id = $1`).bind(id).run();
-
-    if (service && this.kv) {
-      await this.kv.invalidateServiceCache(service.instanceId).catch(() => {});
-    }
-  }
-
-  async deleteByName(name: string): Promise<void> {
-    // Get instanceId before deletion for cache invalidation
-    const service = await this.getByName(name);
-    await this.db.prepare(`DELETE FROM services WHERE name = $1`).bind(name).run();
-
-    if (service && this.kv) {
-      await this.kv.invalidateServiceCache(service.instanceId).catch(() => {});
-    }
+    };
   }
 }

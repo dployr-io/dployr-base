@@ -1,25 +1,49 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { InstanceEntry } from "@/types/index.js";
+import { InstancePool, InstanceStatus } from "@/types/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { BaseStore } from "./base.js";
+import { InstanceFilter } from "./instances.js";
 
 export class InstancePoolStore extends BaseStore {
-  /** Returns all pool entries ordered by insertion time. */
-  async getInstancePool(): Promise<InstanceEntry[]> {
-    const result = await this.db
-      .prepare(`SELECT id, address, tag, capacity, region, status, metadata, created_at, updated_at FROM instance_pool ORDER BY created_at ASC`)
-      .all();
+  async list(params?: { clusterId?: string; limit?: number; offset?: number }): Promise<{ instances: InstancePool[]; total: number }> {
+    const { clusterId, limit, offset } = params || {};
 
-    return result.results.map(this.toEntry);
+    const filters: string[] = [];
+    const bindings: any[] = [];
+
+    if (clusterId) {
+      bindings.push(clusterId);
+      filters.push(`id = (SELECT pool_instance_id FROM clusters WHERE id = $${bindings.length})`);
+    }
+
+    const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+
+    const countStmt = this.db.prepare(`SELECT COUNT(*) as count FROM instance_pool ${whereClause}`);
+    const countResult = bindings.length ? await countStmt.bind(...bindings).first() : await countStmt.first();
+    const total = Number(countResult?.count || 0);
+
+    let dataSql = `SELECT id, address, tag, capacity, region, status, metadata, created_at, updated_at FROM instance_pool ${whereClause} ORDER BY created_at ASC`;
+
+    const dataBindings = [...bindings];
+
+    if (limit !== undefined) {
+      dataBindings.push(limit);
+      dataSql += ` LIMIT $${dataBindings.length}`;
+    }
+    if (offset !== undefined) {
+      dataBindings.push(offset);
+      dataSql += ` OFFSET $${dataBindings.length}`;
+    }
+
+    const dataStmt = this.db.prepare(dataSql);
+    const results = dataBindings.length ? await dataStmt.bind(...dataBindings).all() : await dataStmt.all();
+
+    return { instances: results.results.map(this.toPool), total };
   }
 
-  /**
-   * Inserts a new instance into the shared pool.
-   * Throws DatabaseConflictError if the address or tag is already taken.
-   */
-  async addToPool(entry: Omit<InstanceEntry, "id" | "createdAt" | "updatedAt">): Promise<InstanceEntry> {
+  async add(entry: Omit<InstancePool, "id" | "createdAt" | "updatedAt">): Promise<InstancePool> {
     const now = this.now();
     const id = this.generateId();
 
@@ -30,23 +54,17 @@ export class InstancePoolStore extends BaseStore {
           `INSERT INTO instance_pool (id, address, tag, capacity, region, status, metadata, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
            RETURNING id, address, tag, capacity, region, status, metadata, created_at, updated_at`,
-          [id, entry.address, entry.tag, entry.capacity ?? 10, entry.region ?? null, entry.status ?? "active", JSON.stringify(entry.metadata ?? {}), now, now],
+          [id, entry.address, entry.tag, entry.capacity ?? 10, entry.region ?? null, entry.status ?? "healthy", JSON.stringify(entry.metadata ?? {}), now, now],
         );
       } catch (error) {
         this.parsePostgresError({ error, table: "instance_pool" });
       }
 
-      return this.toEntry(result.rows[0]);
+      return this.toPool(result.rows[0]);
     });
   }
 
-  /**
-   * Removes a pool instance by ID.
-   * Due to `ON DELETE SET NULL` on clusters.pool_instance_id, all clusters
-   * that were assigned to this instance are automatically unassigned — no
-   * manual release loop required.
-   */
-  async removeFromPool(id: string): Promise<void> {
+  async remove(id: string): Promise<void> {
     try {
       await this.db.prepare(`DELETE FROM instance_pool WHERE id = $1`).bind(id).run();
     } catch (error) {
@@ -54,8 +72,33 @@ export class InstancePoolStore extends BaseStore {
     }
   }
 
-  /** Pauses or resumes a pool instance. Paused instances are skipped by assignInstance. */
-  async updateStatus(id: string, status: "active" | "paused"): Promise<void> {
+  /**
+   * Returns the first instance matching the given filter, or `null` if not found.
+   * At least one filter field must be set.
+   */
+  async find(filter: InstanceFilter): Promise<InstancePool | null> {
+    const { clause, bindings } = this.buildWhere({ id: filter.id, tag: filter.tag });
+    const parts = clause ? [clause.replace("WHERE ", "")] : [];
+
+    if (filter.clusterId !== undefined) {
+      bindings.push(filter.clusterId);
+      parts.push(`id = (SELECT pool_instance_id FROM clusters WHERE id = $${bindings.length})`);
+    }
+
+    if (!bindings.length) return null;
+
+    const where = `WHERE ${parts.join(" AND ")}`;
+
+    const result = await this.db
+      .prepare(`SELECT id, address, tag, capacity, region, status, metadata, created_at, updated_at FROM instance_pool ${where} LIMIT 1`)
+      .bind(...bindings)
+      .first();
+
+    return result ? this.toPool(result) : null;
+  }
+
+  /** Updates the health/operational status of a pool instance. */
+  async updateStatus(id: string, status: InstanceStatus): Promise<void> {
     const now = this.now();
     try {
       await this.db.prepare(`UPDATE instance_pool SET status = $1, updated_at = $2 WHERE id = $3`).bind(status, now, id).run();
@@ -67,19 +110,17 @@ export class InstancePoolStore extends BaseStore {
   /**
    * Assigns the least-loaded active pool instance to a cluster.
    *
-   * Runs inside a transaction to make the SELECT + UPDATE atomic, preventing
-   * double-assignment under concurrent signups. Only instances that are active
-   * and below their configured capacity limit are considered; among those the
-   * one with the fewest current assignments is chosen.
+   * Only instances that are active and below their configured capacity limit are
+   * considered; among those the one with the fewest current assignments is chosen.
    *
    * Throws PoolCapacityExceededError if no active instance has remaining capacity.
    */
-  async assignInstance(clusterId: string): Promise<string> {
+  async assign(clusterId: string): Promise<string> {
     return this.db.withTransaction(async (client) => {
       const result = await client.query(
         `SELECT ip.id
          FROM instance_pool ip
-         WHERE ip.status = 'active'
+         WHERE ip.status = 'healthy'
            AND (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = ip.id) < ip.capacity
          ORDER BY (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = ip.id) ASC
          LIMIT 1`,
@@ -123,9 +164,7 @@ export class InstancePoolStore extends BaseStore {
    * ON DELETE SET NULL rather than calling this + releaseInstance manually.
    */
   async getClustersInstanceMap(): Promise<Array<{ clusterId: string; instanceId: string }>> {
-    const result = await this.db
-      .prepare(`SELECT id AS cluster_id, pool_instance_id AS instance_id FROM clusters WHERE pool_instance_id IS NOT NULL`)
-      .all();
+    const result = await this.db.prepare(`SELECT id AS cluster_id, pool_instance_id AS instance_id FROM clusters WHERE pool_instance_id IS NOT NULL`).all();
 
     return result.results.map((row) => ({
       clusterId: row.cluster_id as string,
@@ -133,10 +172,10 @@ export class InstancePoolStore extends BaseStore {
     }));
   }
 
-  private toEntry(row: any): InstanceEntry {
+  private toPool(row: any): InstancePool {
     return {
       id: row.id,
-      address: row.address,
+      address: row.address ?? null,
       tag: row.tag,
       capacity: row.capacity,
       region: row.region ?? undefined,

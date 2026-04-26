@@ -6,6 +6,12 @@ import type { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { ALLOWED_TABLES, TABLE_ID_COLUMNS, type AllowedTable, type AllowedJsonField } from "@/lib/constants/index.js";
 import { DatabaseConflictError, ResourceNotFoundError, ValidationError } from "@/lib/errors/errors.js";
 
+/** Scalar value that can appear in a WHERE binding. */
+export type WhereValue = string | number | boolean | null;
+
+/** Pagination parameters shared by all list methods. */
+export type Pagination = { limit?: number; offset?: number };
+
 /**
  * Base class for database stores providing common utilities and patterns.
  *
@@ -150,6 +156,27 @@ export abstract class BaseStore {
   }
 
   /**
+   * Builds a parameterized WHERE clause from a plain column→value map.
+   * Keys must be DB column names (snake_case). Entries with `undefined` values
+   * are ignored; pass an empty object to get an empty clause (no WHERE).
+   *
+   * @example
+   * const { clause, bindings } = this.buildWhere({ id: 'abc', status: 'healthy' });
+   * // clause  → "WHERE id = $1 AND status = $2"
+   * // bindings → ['abc', 'healthy']
+   */
+  protected buildWhere(cols: Record<string, WhereValue | undefined>): { clause: string; bindings: WhereValue[] } {
+    const entries = Object.entries(cols).filter((e): e is [string, WhereValue] => e[1] !== undefined);
+    if (!entries.length) return { clause: "", bindings: [] };
+    const bindings: WhereValue[] = [];
+    const parts = entries.map(([col, val]) => {
+      bindings.push(val);
+      return `${col} = $${bindings.length}`;
+    });
+    return { clause: `WHERE ${parts.join(" AND ")}`, bindings };
+  }
+
+  /**
    * Generates a new ULID for use as a record ID.
    * ULIDs are lexicographically sortable and URL-safe.
    *
@@ -201,10 +228,11 @@ export abstract class BaseStore {
    */
   protected parsePostgresError({ error, table }: { error: unknown; table: AllowedTable }): never {
     if (error instanceof Error) {
+      console.error("[Postgres]: ", error);
       // Postgres unique violation
       if ((error as any).code === "23505") {
         // Extract constraint name from detail: Key (field)=(value) already exists
-        const match = error.message.match(/Key \(([^)]+)\)/);
+        const match = (error as any).detail?.match(/Key \(([^)]+)\)/);
         const field = match?.[1] ?? "unknown";
         throw new DatabaseConflictError(field, table);
       }

@@ -4,7 +4,17 @@
 import { type OAuthProvider, User, type RequiredOnly } from "@/types/index.js";
 import { BaseStore } from "./base.js";
 
+/** Fields that can be used to look up a user. */
+export type UserFilter = {
+  id?: string;
+  email?: string;
+};
+
 export class UserStore extends BaseStore {
+  /**
+   * Upserts a user record. On conflict by email the name, picture, provider,
+   * and metadata are merged with the existing row.
+   */
   async save(user: RequiredOnly<Omit<User, "id" | "createdAt" | "updatedAt">, "email" | "provider" | "metadata">): Promise<User | null> {
     const id = this.generateId();
     const now = this.now();
@@ -26,9 +36,7 @@ export class UserStore extends BaseStore {
         );
 
         const savedUser = userResult.rows[0];
-        if (!savedUser) {
-          return null;
-        }
+        if (!savedUser) return null;
 
         if (user.metadata && Object.keys(user.metadata).length > 0) {
           await client.query(
@@ -45,117 +53,69 @@ export class UserStore extends BaseStore {
           );
         }
 
-        return {
-          id: savedUser.id,
-          email: savedUser.email,
-          name: savedUser.name || "",
-          picture: savedUser.picture || "",
-          provider: savedUser.provider as OAuthProvider,
-          metadata: savedUser.metadata,
-          createdAt: savedUser.created_at,
-          updatedAt: savedUser.updated_at,
-        };
+        return this.toUser(savedUser);
       } catch (error) {
         this.parsePostgresError({ error, table: "clusters" });
       }
     });
   }
 
-  async get(email: string): Promise<User | null> {
-    const stmt = this.db.prepare(`
-            SELECT id, email, name, picture, provider, metadata, created_at, updated_at 
-            FROM users WHERE email = $1
-        `);
+  /**
+   * Returns the first user matching the given filter, or `null` if not found.
+   * At least one filter field must be set.
+   */
+  async find(filter: UserFilter): Promise<User | null> {
+    const { clause, bindings } = this.buildWhere({ id: filter.id, email: filter.email });
+    if (!bindings.length) return null;
 
-    const result = await stmt.bind(email).first();
-    if (!result) return null;
+    const result = await this.db
+      .prepare(`SELECT id, email, name, picture, provider, metadata, created_at, updated_at FROM users ${clause} LIMIT 1`)
+      .bind(...bindings)
+      .first();
 
-    return {
-      ...result,
-      metadata: (result as any).metadata || {},
-    } as User;
+    return result ? this.toUser(result) : null;
   }
 
-  async getById(userId: string): Promise<User | null> {
-    const stmt = this.db.prepare(`
-            SELECT id, email, name, picture, provider, metadata, created_at, updated_at 
-            FROM users WHERE id = $1
-        `);
-
-    const result = await stmt.bind(userId).first();
-    if (!result) return null;
-
-    return {
-      ...result,
-      metadata: (result as any).metadata || {},
-    } as User;
-  }
-
-  // By deliberate design, users cannot update their email addresses
-  // To change a user's email, create a new user with the desired email,
-  // assign the relevant roles, and then remove the previous user account
+  /**
+   * Updates mutable fields on a user identified by email.
+   * Email cannot be changed — create a new account and transfer roles instead.
+   */
   async update(email: string, updates: Partial<Omit<User, "id" | "email" | "createdAt">>): Promise<User | null> {
     if (!updates.name && !updates.picture && !updates.provider && !updates.metadata) {
-      return this.get(email);
+      return this.find({ email });
     }
 
     const now = this.now();
-    const setClauses: string[] = [];
+    const parts: string[] = [];
     const values: any[] = [];
-    let paramIndex = 1;
+    let p = 1;
 
-    if (updates.name !== undefined) {
-      setClauses.push(`name = $${paramIndex++}`);
-      values.push(updates.name);
-    }
-    if (updates.picture !== undefined) {
-      setClauses.push(`picture = $${paramIndex++}`);
-      values.push(updates.picture);
-    }
-    if (updates.provider !== undefined) {
-      setClauses.push(`provider = $${paramIndex++}`);
-      values.push(updates.provider);
-    }
-    if (updates.metadata !== undefined) {
-      setClauses.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${paramIndex++}::jsonb`);
-      values.push(updates.metadata);
-    }
+    if (updates.name !== undefined) { parts.push(`name = $${p++}`); values.push(updates.name); }
+    if (updates.picture !== undefined) { parts.push(`picture = $${p++}`); values.push(updates.picture); }
+    if (updates.provider !== undefined) { parts.push(`provider = $${p++}`); values.push(updates.provider); }
+    if (updates.metadata !== undefined) { parts.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${p++}::jsonb`); values.push(updates.metadata); }
 
-    setClauses.push(`updated_at = $${paramIndex++}`);
+    parts.push(`updated_at = $${p++}`);
     values.push(now, email);
 
-    const query = `
-            UPDATE users 
-            SET ${setClauses.join(", ")} 
-            WHERE email = $${paramIndex}
-            RETURNING id, email, name, picture, provider, metadata, created_at, updated_at
-        `;
-
     const result = await this.db
-      .prepare(query)
+      .prepare(`UPDATE users SET ${parts.join(", ")} WHERE email = $${p} RETURNING id, email, name, picture, provider, metadata, created_at, updated_at`)
       .bind(...values)
-      .first<{
-        id: string;
-        email: string;
-        name: string | null;
-        picture: string | null;
-        provider: string;
-        metadata: Record<string, unknown>;
-        created_at: number;
-        updated_at: number;
-      }>();
+      .first<{ id: string; email: string; name: string | null; picture: string | null; provider: string; metadata: Record<string, unknown>; created_at: number; updated_at: number }>();
 
-    if (!result) return null;
+    return result ? this.toUser(result) : null;
+  }
 
+  private toUser(row: any): User {
     return {
-      id: result.id,
-      email: result.email,
-      name: result.name || "",
-      picture: result.picture || "",
-      provider: result.provider as OAuthProvider,
-      metadata: result.metadata,
-      createdAt: result.created_at,
-      updatedAt: result.updated_at,
+      id: row.id,
+      email: row.email,
+      name: row.name || "",
+      picture: row.picture || "",
+      provider: row.provider as OAuthProvider,
+      metadata: row.metadata || {},
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
     };
   }
 }

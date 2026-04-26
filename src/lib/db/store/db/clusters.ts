@@ -18,7 +18,7 @@ export class ClusterStore extends BaseStore {
 
   async get(id: string): Promise<Cluster | null> {
     const clusterStmt = this.db.prepare(`
-      SELECT id, name, metadata, created_at, updated_at 
+      SELECT id, name, metadata, pool_instance_id, created_at, updated_at
       FROM clusters WHERE id = $1
     `);
 
@@ -58,6 +58,7 @@ export class ClusterStore extends BaseStore {
       name: cluster.name as string,
       users,
       roles,
+      poolInstanceId: (cluster.pool_instance_id as string) ?? null,
       metadata: (cluster as any).metadata || {},
       createdAt: cluster.created_at as number,
       updatedAt: cluster.updated_at as number,
@@ -69,7 +70,7 @@ export class ClusterStore extends BaseStore {
     const existingCluster = await this.db
       .prepare(
         `
-        SELECT c.id, c.name, c.metadata, c.created_at, c.updated_at
+        SELECT c.id, c.name, c.metadata, c.pool_instance_id, c.created_at, c.updated_at
         FROM clusters c
         JOIN user_clusters uc ON uc.cluster_id = c.id
         WHERE uc.user_id = $1 AND uc.role = 'owner'
@@ -90,6 +91,7 @@ export class ClusterStore extends BaseStore {
           viewer: [],
           invited: [],
         },
+        poolInstanceId: (existingCluster.pool_instance_id as string) ?? null,
         metadata: existingCluster.metadata,
         createdAt: existingCluster.created_at as number,
         updatedAt: existingCluster.updated_at as number,
@@ -116,7 +118,7 @@ export class ClusterStore extends BaseStore {
       this.parsePostgresError({ error, table: "clusters" });
     }
 
-    const clusterRow = await this.db.prepare(`SELECT id, name, metadata, created_at, updated_at FROM clusters WHERE id = $1`).bind(id).first();
+    const clusterRow = await this.db.prepare(`SELECT id, name, metadata, pool_instance_id, created_at, updated_at FROM clusters WHERE id = $1`).bind(id).first();
 
     if (!clusterRow) {
       throw new Error(`Failed to create cluster for user ${userId}`);
@@ -133,6 +135,7 @@ export class ClusterStore extends BaseStore {
         viewer: [],
         invited: [],
       },
+      poolInstanceId: (clusterRow.pool_instance_id as string) ?? null,
       metadata: (clusterRow as any).metadata || {},
       createdAt: clusterRow.created_at as number,
       updatedAt: clusterRow.updated_at as number,
@@ -721,6 +724,7 @@ export class ClusterStore extends BaseStore {
       name: result.name,
       users,
       roles,
+      poolInstanceId: result.pool_instance_id ?? null,
       metadata: result.metadata ? JSON.parse(result.metadata) : undefined,
       createdAt: result.created_at,
       updatedAt: result.updated_at,
