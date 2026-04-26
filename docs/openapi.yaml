@@ -1704,7 +1704,7 @@ paths:
       operationId: listClusterUsers
       tags: [Clusters]
       summary: List users or pending invites in a cluster
-      description: Requires viewer role. Pass `showInvites` to list pending invites instead of active members.
+      description: Requires **viewer** role or above on the cluster. Pass `showInvites` to list pending invites instead of active members.
       security:
         - sessionCookie: []
       parameters:
@@ -1740,6 +1740,12 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/PaginatedResponse'
+        '403':
+          description: Insufficient permissions (viewer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
     post:
       operationId: inviteClusterUsers
@@ -1963,6 +1969,7 @@ paths:
       operationId: listClusterIntegrations
       tags: [Clusters]
       summary: List cluster integrations
+      description: Requires **viewer** role or above on the cluster.
       security:
         - sessionCookie: []
       parameters:
@@ -2039,13 +2046,19 @@ paths:
                                     $ref: '#/components/schemas/NotificationEventArray'
                           email:
                             type: object
+        '403':
+          description: Insufficient permissions (viewer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /v1/clusters/{id}/remotes:
     get:
       operationId: listClusterRemotes
       tags: [Clusters]
       summary: List GitHub repositories accessible to the cluster installation
-      description: Requires GitHub integration to be configured on the cluster.
+      description: Requires **viewer** role or above on the cluster. GitHub integration must be configured.
       security:
         - sessionCookie: []
       parameters:
@@ -2076,6 +2089,12 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/PaginatedResponse'
+        '403':
+          description: Insufficient permissions (viewer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal error
           content:
@@ -2083,18 +2102,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  # ─── Instances ─────────────────────────────────────────────────────────────
-
   /v1/instances:
     get:
       operationId: listInstances
       tags: [Instances]
       summary: List instances
+      description: Requires **viewer** role or above on the cluster. `clusterId` is required.
       security:
         - sessionCookie: []
       parameters:
         - in: query
           name: clusterId
+          required: true
           schema:
             type: string
           description: Filter by cluster. Optional.
@@ -2120,11 +2139,24 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/PaginatedResponse'
+        '400':
+          description: Missing or invalid clusterId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (viewer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
     post:
       operationId: createInstance
       tags: [Instances]
       summary: Create an instance
+      description: Requires **developer** role or above on the cluster.
       security:
         - sessionCookie: []
       requestBody:
@@ -2203,6 +2235,7 @@ paths:
       operationId: getInstance
       tags: [Instances]
       summary: Get instance by ID
+      description: Requires **viewer** role or above on the instance's cluster.
       security:
         - sessionCookie: []
       parameters:
@@ -2223,7 +2256,13 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/Instance'
-        '400':
+        '403':
+          description: Insufficient permissions (viewer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
           description: Instance not found
           content:
             application/json:
@@ -2234,6 +2273,7 @@ paths:
       operationId: deleteInstance
       tags: [Instances]
       summary: Delete an instance
+      description: Requires **admin** role or above on the instance's cluster.
       security:
         - sessionCookie: []
       parameters:
@@ -2258,7 +2298,13 @@ paths:
                           deleted:
                             type: boolean
                             example: true
-        '400':
+        '403':
+          description: Insufficient permissions (admin role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
           description: Instance not found
           content:
             application/json:
@@ -2270,6 +2316,7 @@ paths:
       operationId: pingInstance
       tags: [Instances]
       summary: Ping an instance
+      description: Requires **developer** role or above on the instance's cluster.
       security:
         - sessionCookie: []
       parameters:
