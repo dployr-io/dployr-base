@@ -4,9 +4,8 @@
 import { EVENT_METADATA } from "@/lib/constants/events.js";
 import { Notifier, NotificationPayload, NotificationEvent } from "../notifications/notifier.js";
 
-
 export class DiscordService implements Notifier {
-  async sendNotification({ webhookUrl, event, data }: NotificationPayload): Promise<void> {
+  async send({ webhookUrl, event, data }: NotificationPayload): Promise<void> {
     if (!webhookUrl) {
       throw new Error("Discord webhook URL is required");
     }

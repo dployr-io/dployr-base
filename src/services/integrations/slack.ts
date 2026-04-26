@@ -5,7 +5,7 @@ import { EVENT_METADATA } from "@/lib/constants/events.js";
 import { Notifier, NotificationPayload, NotificationEvent } from "../notifications/notifier.js";
 
 export class SlackService implements Notifier {
-  async sendNotification({ webhookUrl, event, data }: NotificationPayload): Promise<void> {
+  async send({ webhookUrl, event, data }: NotificationPayload): Promise<void> {
     if (!webhookUrl) {
       throw new Error("Slack webhook URL is required");
     }

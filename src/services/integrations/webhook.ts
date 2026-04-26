@@ -4,7 +4,7 @@
 import { NotificationPayload, Notifier } from "../notifications/notifier.js";
 
 export class WebhookService implements Notifier {
-  async sendNotification({ webhookUrl, event, data, headers, method, timeoutMs }: NotificationPayload): Promise<void> {
+  async send({ webhookUrl, event, data, headers, method, timeoutMs }: NotificationPayload): Promise<void> {
     if (!webhookUrl) {
       throw new Error("Webhook URL is required");
     }
