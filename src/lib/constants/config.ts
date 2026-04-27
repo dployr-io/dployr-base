@@ -22,6 +22,7 @@ export const CONFIG_SCHEMA = z.object({
     port: z.number().optional(),
     username: z.string().optional(),
     password: z.string().optional(),
+    url: z.string().optional(),
     rest_url: z.string().optional(),
     rest_token: z.string().optional(),
   }),

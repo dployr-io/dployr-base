@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import EmbeddedPostgres from "embedded-postgres";
+import { RedisMemoryServer } from "redis-memory-server";
 import { spawn, type ChildProcess } from "child_process";
 import { createServer } from "net";
 import type { AddressInfo } from "net";
@@ -33,42 +34,55 @@ export interface TestFixtures {
 }
 
 async function startPostgres(): Promise<{ pg: EmbeddedPostgres; connectionString: string }> {
-  const databaseDir = join(tmpdir(), `dployr-test-${Date.now()}`);
-  const port = await getFreePort();
+   const databaseDir = join(tmpdir(), `dployr-test-${Date.now()}`);
+   const port = await getFreePort();
 
-  const pg = new EmbeddedPostgres({
-    databaseDir,
-    user: "postgres",
-    password: "postgres",
-    port,
-    persistent: false,
-  });
+   const pg = new EmbeddedPostgres({
+     databaseDir,
+     user: "postgres",
+     password: "postgres",
+     port,
+     persistent: false,
+   });
 
-  await pg.initialise();
-  await pg.start();
+   await pg.initialise();
+   await pg.start();
 
-  const connectionString = `postgresql://postgres:postgres@localhost:${port}/postgres`;
-  return { pg, connectionString };
-}
+   const connectionString = `postgresql://postgres:postgres@localhost:${port}/postgres`;
+   return { pg, connectionString };
+ }
 
-async function spawnServer(connectionString: string): Promise<{ proc: ChildProcess; port: number }> {
-  const port = await getFreePort();
-  const proc = spawn("node", ["--import", "tsx", "src/index.ts"], {
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      DATABASE_URL: connectionString,
-      PORT: String(port),
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-    cwd: process.cwd(),
-  });
+async function startRedis(): Promise<{ server: RedisMemoryServer; connectionString: string }> {
+    const redisServer = new RedisMemoryServer();
 
-  proc.stdout?.on("data", (d: Buffer) => process.stdout.write(`[server] ${d}`));
-  proc.stderr?.on("data", (d: Buffer) => process.stderr.write(`[server] ${d}`));
+    await redisServer.start();
+    
+    const host = await redisServer.getHost();
+    const port = await redisServer.getPort();
+    const connectionString = `redis://${host}:${port}`;
+    
+    return { server: redisServer, connectionString };
+ }
 
-  return { proc, port };
-}
+async function spawnServer(connectionString: string, redisConnectionString: string): Promise<{ proc: ChildProcess; port: number }> {
+   const port = await getFreePort();
+   const proc = spawn("node", ["--import", "tsx", "src/index.ts"], {
+     env: {
+       ...process.env,
+       NODE_ENV: "test",
+       DATABASE_URL: connectionString,
+       REDIS_URL: redisConnectionString,
+       PORT: String(port),
+     },
+     stdio: ["ignore", "pipe", "pipe"],
+     cwd: process.cwd(),
+   });
+
+   proc.stdout?.on("data", (d: Buffer) => process.stdout.write(`[server] ${d}`));
+   proc.stderr?.on("data", (d: Buffer) => process.stderr.write(`[server] ${d}`));
+
+   return { proc, port };
+ }
 
 async function waitForHealth(baseUrl: string, maxWaitMs = 30_000): Promise<void> {
   const deadline = Date.now() + maxWaitMs;
@@ -126,50 +140,56 @@ async function resolveCluster(baseUrl: string, authCookie: string): Promise<stri
 }
 
 export async function setupFixtures(): Promise<TestFixtures> {
-  console.log("[fixtures] Starting embedded PostgreSQL...");
-  const { pg, connectionString } = await startPostgres();
+   console.log("[fixtures] Starting embedded PostgreSQL...");
+   const { pg, connectionString } = await startPostgres();
 
-  console.log("[fixtures] Running migrations...");
-  const db = new PostgresAdapter(connectionString);
-  await runMigrations(db);
-  await db.close();
+   console.log("[fixtures] Running migrations...");
+   const db = new PostgresAdapter(connectionString);
+   await runMigrations(db);
+   await db.close();
 
-  console.log("[fixtures] Spawning server...");
-  const { proc, port } = await spawnServer(connectionString);
-  const baseUrl = `http://localhost:${port}`;
+   console.log("[fixtures] Starting embedded Redis...");
+   const { server: redisServer, connectionString: redisConnectionString } = await startRedis();
 
-  console.log("[fixtures] Waiting for server to be healthy...");
-  await waitForHealth(baseUrl);
-  console.log("[fixtures] Server ready");
+   console.log("[fixtures] Spawning server...");
+   const { proc, port } = await spawnServer(connectionString, redisConnectionString);
+   const baseUrl = `http://localhost:${port}`;
 
-  const sessionCookie = await getSession(baseUrl);
-  console.log("[fixtures] Session obtained");
+   console.log("[fixtures] Waiting for server to be healthy...");
+   await waitForHealth(baseUrl);
+   console.log("[fixtures] Server ready");
 
-  const clusterId = await resolveCluster(baseUrl, sessionCookie);
-  console.log(`[fixtures] Using cluster: ${clusterId}`);
+   const sessionCookie = await getSession(baseUrl);
+   console.log("[fixtures] Session obtained");
 
-  const otherSessionCookie = await getSession(baseUrl, OTHER_EMAIL);
-  const otherClusterId = await resolveCluster(baseUrl, otherSessionCookie);
-  console.log(`[fixtures] Other cluster: ${otherClusterId}`);
+   const clusterId = await resolveCluster(baseUrl, sessionCookie);
+   console.log(`[fixtures] Using cluster: ${clusterId}`);
 
-  return {
-    session: sessionCookie,
-    clusterId,
-    otherClusterId,
-    baseUrl,
-    cleanup: async () => {
-      console.log("[fixtures] Killing server...");
-      proc.kill("SIGTERM");
-      await new Promise<void>((resolve) => {
-        proc.once("exit", () => resolve());
-        setTimeout(resolve, 5000);
-      });
+   const otherSessionCookie = await getSession(baseUrl, OTHER_EMAIL);
+   const otherClusterId = await resolveCluster(baseUrl, otherSessionCookie);
+   console.log(`[fixtures] Other cluster: ${otherClusterId}`);
 
-      console.log("[fixtures] Stopping PostgreSQL (data discarded)...");
-      await pg.stop();
-    },
-  };
-}
+   return {
+     session: sessionCookie,
+     clusterId,
+     otherClusterId,
+     baseUrl,
+     cleanup: async () => {
+       console.log("[fixtures] Killing server...");
+       proc.kill("SIGTERM");
+       await new Promise<void>((resolve) => {
+         proc.once("exit", () => resolve());
+         setTimeout(resolve, 5000);
+       });
+
+       console.log("[fixtures] Stopping PostgreSQL (data discarded)...");
+       await pg.stop();
+
+       console.log("[fixtures] Stopping embedded Redis...");
+       await redisServer.stop();
+     },
+   };
+ }
 
 function apiFetch(baseUrl: string, path: string, authCookie: string, init: RequestInit = {}) {
   return fetch(`${baseUrl}${path}`, {

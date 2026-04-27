@@ -12,6 +12,7 @@ data/
 .idea/usage.statistics.xml
 .idea/shelf
 *.dev.toml
+*.test.toml
 
 # deps
 node_modules/

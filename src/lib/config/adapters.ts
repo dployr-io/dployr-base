@@ -15,28 +15,47 @@ import { EmailProvider, ZeptoProvider } from "@/services/notifications/email/ind
  * Create KV adapter from config
  */
 export async function createKVFromConfig(config: Config): Promise<IKVAdapter> {
-  switch (config.kv.type) {
-    case "redis": {
-      if (!config.kv.host || !config.kv.port) {
-        throw new Error("Redis connection requires kv.host and kv.port in config.toml");
-      }
-      const { createClient } = await import("redis");
+   switch (config.kv.type) {
+     case "redis": {
+       // Support both host/port and URL formats for Redis connection
+       let host: string | undefined = config.kv.host;
+       let port: number | undefined = config.kv.port;
+       
+       // If URL is provided, parse it to extract host and port
+       if (!host || !port) {
+         if (config.kv.url) {
+           const url = new URL(config.kv.url);
+           host = url.hostname;
+           port = parseInt(url.port);
+           // Handle authentication from URL if present
+           if (url.username) {
+             config.kv.username = url.username;
+           }
+           if (url.password) {
+             config.kv.password = url.password;
+           }
+         } else {
+           throw new Error("Redis connection requires either kv.host and kv.port or kv.url in config");
+         }
+       }
+       
+       const { createClient } = await import("redis");
 
-      const client = createClient({
-        socket: {
-          host: config.kv.host,
-          port: config.kv.port,
-        },
-        ...(config.kv.username ? { username: config.kv.username } : {}),
-        ...(config.kv.password ? { password: config.kv.password } : {}),
-      });
+       const client = createClient({
+         socket: {
+           host: host!,
+           port: port!,
+         },
+         ...(config.kv.username ? { username: config.kv.username } : {}),
+         ...(config.kv.password ? { password: config.kv.password } : {}),
+       });
 
-      client.on("error", (err: any) => console.log("Redis Client Error", err));
+       client.on("error", (err: any) => console.log("Redis Client Error", err));
 
-      await client.connect();
+       await client.connect();
 
-      return new RedisKV(client);
-    }
+       return new RedisKV(client);
+     }
 
     case "upstash": {
       if (!config.kv.rest_url || !config.kv.rest_token) {
@@ -106,23 +125,24 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
   }
 }
 
-/**
- * Create billing provider from config
- */
-export function createEmailProvider(config: Config): EmailProvider | null {
-  if (!config.email) return null;
-  switch (config.email?.provider ?? "zepto") {
-    case "zepto": {
-      const env: Partial<Bindings> = {
-        ZEPTO_API_KEY: config.email.provider,
-        EMAIL_FROM: config.email.from_address,
-      };
-      return new ZeptoProvider(env as Bindings);
-    }
-    default:
-      throw new Error(`Unknown billing provider: ${config.billing?.provider}`);
-  }
-}
+  /**
+   * Create email provider from config
+   */
+  export function createEmailProvider(config: Config): EmailProvider | null {
+    if (!config.email) return null;
+    switch (config.email?.provider ?? "zepto") {
+      case "zepto": {
+        const env: Partial<Bindings> = {
+          ZEPTO_API_KEY: config.email.zepto_api_key,
+          EMAIL_FROM: config.email.from_address,
+        };
+        return new ZeptoProvider(env as Bindings);
+       }
+       default:
+         throw new Error(`Unknown billing provider: ${config.billing?.provider}`);
+     }
+   }
+
 
 /**
  * Create billing provider from config

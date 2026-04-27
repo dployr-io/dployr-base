@@ -18,7 +18,20 @@ export function loadConfig(path?: string): Config {
   }
 
   // Fall back to TOML file
-  const configPath = path || process.env.CONFIG_PATH || (process.env.NODE_ENV === "development" || process.env.NODE_ENV == "test" ? "./config.dev.toml" : "./config.toml");
+  let defaultPath: string;
+
+  switch (process.env.NODE_ENV) {
+    case "development":
+      defaultPath = "./config.dev.toml";
+      break;
+    case "test":
+      defaultPath = "./config.test.toml";
+      break;
+    default:
+      defaultPath = "./config.toml";
+  }
+
+  const configPath = path || process.env.CONFIG_PATH || defaultPath;
 
   const content = readFileSync(configPath, "utf-8");
   const raw = parseToml(content);
@@ -29,6 +42,12 @@ export function loadConfig(path?: string): Config {
     // Allow env overrides for test isolation (embedded postgres + random port)
     if (process.env.DATABASE_URL) config.database.url = process.env.DATABASE_URL;
     if (process.env.PORT) config.server.port = parseInt(process.env.PORT);
+    if (process.env.REDIS_URL) {
+      config.kv.url = process.env.REDIS_URL;
+      // For redis type, url takes precedence over individual host/port
+      config.kv.host = undefined;
+      config.kv.port = undefined;
+    }
 
     return config;
   } catch (err) {
