@@ -78,11 +78,11 @@ export class InstancePoolService {
       this.db.instances.listPool(),
     ]);
 
-    const poolByTag = new Map(poolEntries.map((e) => [e.tag, e]));
-    const dropletByTag = new Map(droplets.map((d: VirtualMachine) => [d.name, d]));
+    const _pool = new Map(poolEntries.map((e) => [e.tag, e]));
+    const _droplet = new Map(droplets.map((d: VirtualMachine) => [d.name, d]));
 
     for (const droplet of droplets) {
-      if (!poolByTag.has(droplet.name)) {
+      if (!_pool.has(droplet.name)) {
         await this.db.instances.addPool({
           tag: droplet.name,
           address: droplet.ipv4 ?? null,
@@ -99,7 +99,7 @@ export class InstancePoolService {
     const unhealthyStatuses = new Set<InstanceStatus>(["degraded", "offline", "unreachable"]);
 
     for (const entry of poolEntries) {
-      if (!dropletByTag.has(entry.tag)) {
+      if (!_droplet.has(entry.tag)) {
         await this.db.instances.removePool(entry.id);
         continue;
       }
@@ -131,7 +131,7 @@ export class InstancePoolService {
     // Phase 4: sync dedicated instances against provider
     const { instances: dedicatedInstances } = await this.db.instances.list({ kind: "dedicated" });
     for (const instance of dedicatedInstances) {
-      const droplet = dropletByTag.get(instance.tag);
+      const droplet = _droplet.get(instance.tag);
       let next: InstanceStatus;
 
       if (!droplet) {
