@@ -64,7 +64,7 @@ jobs:
             -e 's|allowed_origins = ".*"|allowed_origins = "*"|' \
             -e 's|base_url = "https://.*"|base_url = "http://localhost:7878"|' \
             -e 's|url = "redis://.*"|host = "localhost"\nport = 6379|' \
-            config.example.toml > config.dev.toml
+            config.example.toml > config.test.toml
 
       - name: Start server
         run: pnpm run dev:app:test & 
