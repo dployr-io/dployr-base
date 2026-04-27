@@ -4,22 +4,18 @@
 import { Hono } from "hono";
 import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getKVStore, getJWTService, getWS, getDbStore } from "@/lib/config/context.js";
+import { getJWTService, getDbStore } from "@/lib/config/context.js";
 
 const node = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Instance exchanges a valid node token for a fresh short-lived token
+// Instance (dedicated or pool) exchanges a valid node token for a fresh short-lived token.
 node.post("/token", async (c) => {
-  const kv = getKVStore(c);
   const jwtService = getJWTService(c);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
@@ -32,47 +28,33 @@ node.post("/token", async (c) => {
   } catch (error) {
     console.error("[Node] Invalid node token on /v1/node/token", error);
     return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
-  const instanceName = payload.instance_id as string | undefined;
-  const tokenType = payload.token_type as string | undefined;
-  const exp = typeof payload.exp === "number" ? payload.exp : undefined;
+  const instanceTag = payload.instance_id as string | undefined;
+  if (!instanceTag) {
+    return c.json(
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
+      ERROR.AUTH.BAD_TOKEN.status,
+    );
+  }
+
+  // Reject explicitly expired "node" type tokens (bootstrap tokens are exempt)
   const nowSeconds = Math.floor(Date.now() / 1000);
-
-  if (!instanceName) {
+  if (payload.token_type === "node" && typeof payload.exp === "number" && payload.exp < nowSeconds) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
-      ERROR.AUTH.BAD_TOKEN.status,
-    );
-  }
-
-  if (tokenType === "node" && exp !== undefined && exp < nowSeconds) {
-    return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
   const db = getDbStore(c);
-  const instance = await db.instances.find({ tag: instanceName });
+  const instance = await db.instances.find({ tag: instanceTag });
   if (!instance) {
     return c.json(
-      createErrorResponse({
-        message: "Instance not found",
-        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-      }),
+      createErrorResponse({ message: ERROR.RESOURCE.MISSING_RESOURCE.message, code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
     );
   }
@@ -85,67 +67,54 @@ node.post("/token", async (c) => {
   return c.json(createSuccessResponse({ token }), 200);
 });
 
-node.post("/cert", async (c) => {
-  const instanceId = c.req.query("instanceId");
-  const instanceName = c.req.query("instanceName");
+// POST creates cert (409 if already exists), PUT upserts cert.
+// Both work for dedicated and pool instances.
+async function handleCert(c: any, upsert: boolean) {
   const db = getDbStore(c);
+  const jwtService = getJWTService(c);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = getKVStore(c);
-  const jwtService = getJWTService(c);
 
   let token: any;
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("[Node] Invalid node token", err);
+    console.error("[Node] Invalid node token on /cert", err);
     return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
+  const instanceId = c.req.query("instanceId");
+  const instanceName = c.req.query("instanceName");
+
   if (!instanceId && !instanceName) {
     return c.json(
-      createErrorResponse({
-        message: "Either instanceId or instanceName is required",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: "Either instanceId or instanceName is required", code: ERROR.REQUEST.BAD_REQUEST.code }),
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
 
-  const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName! });
+  const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName });
   if (!instance) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.RESOURCE.MISSING_RESOURCE.message,
-        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-      }),
+      createErrorResponse({ message: ERROR.RESOURCE.MISSING_RESOURCE.message, code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
     );
   }
 
   if (token?.instance_id !== instance.tag) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
@@ -155,10 +124,7 @@ node.post("/cert", async (c) => {
     body = await c.req.json();
   } catch {
     return c.json(
-      createErrorResponse({
-        message: ERROR.REQUEST.BAD_REQUEST.message,
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: ERROR.REQUEST.BAD_REQUEST.message, code: ERROR.REQUEST.BAD_REQUEST.code }),
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
@@ -170,211 +136,81 @@ node.post("/cert", async (c) => {
 
   if (!pem || !spkiSha256 || !subject || !notAfter) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.REQUEST.BAD_REQUEST.message,
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: ERROR.REQUEST.BAD_REQUEST.message, code: ERROR.REQUEST.BAD_REQUEST.code }),
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
 
-  const metadata = instance.metadata || {};
-  if (metadata.clientCert) {
+  const metadata = instance.metadata ?? {};
+
+  if (!upsert && metadata.clientCert) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.REQUEST.BAD_REQUEST.message,
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: ERROR.REQUEST.BAD_REQUEST.message, code: ERROR.REQUEST.BAD_REQUEST.code }),
       409,
     );
   }
 
-  metadata.clientCert = {
-    pem,
-    spki_sha256: spkiSha256,
-    subject,
-    not_after: notAfter,
-  };
-
+  metadata.clientCert = { pem, spki_sha256: spkiSha256, subject, not_after: notAfter };
   await db.instances.update({ id: instance.id }, { metadata });
 
   return new Response(null, { status: 204 });
-});
+}
 
-node.put("/cert", async (c) => {
-  const instanceId = c.req.query("instanceId");
-  const instanceName = c.req.query("instanceName");
-  const db = getDbStore(c);
+node.post("/cert", (c) => handleCert(c, false));
+node.put("/cert", (c) => handleCert(c, true));
 
-  const auth = c.req.header("authorization") || c.req.header("Authorization");
-  if (!auth || !auth.startsWith("Bearer ")) {
-    return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
-      ERROR.AUTH.BAD_TOKEN.status,
-    );
-  }
-
-  const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = getKVStore(c);
-  const jwtService = getJWTService(c);
-
-  let token: any;
-  try {
-    token = await jwtService.verifyToken(rawToken);
-  } catch (err) {
-    console.error("[Node] Invalid node token", err);
-    return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
-      ERROR.AUTH.BAD_TOKEN.status,
-    );
-  }
-
-  if (!instanceId && !instanceName) {
-    return c.json(
-      createErrorResponse({
-        message: "Either instanceId or instanceName is required",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
-      ERROR.REQUEST.BAD_REQUEST.status,
-    );
-  }
-
-  const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName! });
-  if (!instance) {
-    return c.json(
-      createErrorResponse({
-        message: ERROR.RESOURCE.MISSING_RESOURCE.message,
-        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-      }),
-      ERROR.RESOURCE.MISSING_RESOURCE.status,
-    );
-  }
-
-  if (token?.instance_id !== instance.tag) {
-    return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
-      ERROR.AUTH.BAD_TOKEN.status,
-    );
-  }
-
-  let body: any;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(
-      createErrorResponse({
-        message: ERROR.REQUEST.BAD_REQUEST.message,
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
-      ERROR.REQUEST.BAD_REQUEST.status,
-    );
-  }
-
-  const pem = typeof body?.pem === "string" ? body.pem : undefined;
-  const spkiSha256 = typeof body?.spki_sha256 === "string" ? body.spki_sha256 : undefined;
-  const subject = typeof body?.subject === "string" ? body.subject : undefined;
-  const notAfter = typeof body?.not_after === "string" ? body.not_after : undefined;
-
-  if (!pem || !spkiSha256 || !subject || !notAfter) {
-    return c.json(
-      createErrorResponse({
-        message: ERROR.REQUEST.BAD_REQUEST.message,
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
-      ERROR.REQUEST.BAD_REQUEST.status,
-    );
-  }
-
-  const metadata = instance.metadata || {};
-
-  metadata.clientCert = {
-    pem,
-    spki_sha256: spkiSha256,
-    subject,
-    not_after: notAfter,
-  };
-
-  await db.instances.update({ id: instance.id }, { metadata });
-
-  return new Response(null, { status: 204 });
-});
-
-// Instance WebSocket endpoint for tasks
+// WebSocket upgrade endpoint — actual upgrade is handled at the server level.
+// This route validates the token and resolves the instance (dedicated or pool).
 node.get("/ws", async (c) => {
-  const instanceId = c.req.query("instanceId");
-  const instanceName = c.req.query("instanceName");
   const db = getDbStore(c);
+  const jwtService = getJWTService(c);
 
   const auth = c.req.header("authorization") || c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
   const rawToken = auth.slice("Bearer ".length).trim();
-  const kv = getKVStore(c);
-  const jwtService = getJWTService(c);
 
   let token: any;
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("[Node] Invalid node token", err);
+    console.error("[Node] Invalid node token on /ws", err);
     return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
+  const instanceId = c.req.query("instanceId");
+  const instanceName = c.req.query("instanceName");
+
   if (!instanceId && !instanceName) {
     return c.json(
-      createErrorResponse({
-        message: "Either instanceId or instanceName is required",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
+      createErrorResponse({ message: "Either instanceId or instanceName is required", code: ERROR.REQUEST.BAD_REQUEST.code }),
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
 
-  const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName! });
+  const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName });
   if (!instance) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.RESOURCE.MISSING_RESOURCE.message,
-        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-      }),
+      createErrorResponse({ message: ERROR.RESOURCE.MISSING_RESOURCE.message, code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
     );
   }
 
   if (token?.instance_id !== instance.tag) {
     return c.json(
-      createErrorResponse({
-        message: ERROR.AUTH.BAD_TOKEN.message,
-        code: ERROR.AUTH.BAD_TOKEN.code,
-      }),
+      createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
     );
   }
 
-  // WebSocket upgrade is handled by the server-level upgrade handler
   return c.text("WebSocket upgrade required", 426);
 });
 

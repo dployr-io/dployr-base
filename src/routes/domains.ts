@@ -86,7 +86,7 @@ domains.post("/register", async (c) => {
 
     // Get instance to include ID in response for Dployrd version compatibility
     const db = getDbStore(c);
-    const instance = (await db.instances.find({ tag: result.instanceName })) ?? (await db.instancePool.find({ tag: result.instanceName }));
+    const instance = await db.instances.find({ tag: result.instanceName });
     if (!instance) {
       throw new Error("Instance not found after domain save");
     }
@@ -168,7 +168,7 @@ domains.post("/", authMiddleware, resolveCluster("instance", { body: "instanceId
     domainRecord = await db.domains.create(instanceId, normalizedDomain, token, provider);
   }
 
-  const { record, verification } = dns.buildRecordsFromStored(normalizedDomain, instance.address, domainRecord.verificationToken);
+  const { record, verification } = dns.buildRecordsFromStored(normalizedDomain, instance.address!, domainRecord.verificationToken);
 
   let autoSetupUrl: string | null = null;
   if (hasOAuth) {
@@ -277,7 +277,7 @@ domains.get("/:domain", authMiddleware, resolveCluster("domain", { path: "domain
   // For pending domains, include verification records
   // Use instance.address for A record target
   if (domainRecord.status === "pending") {
-    const { record, verification } = dns.buildRecordsFromStored(domain, instance.address, domainRecord.verificationToken);
+    const { record, verification } = dns.buildRecordsFromStored(domain, instance.address!, domainRecord.verificationToken);
     response.record = record;
     response.verification = verification;
 

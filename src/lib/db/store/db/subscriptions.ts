@@ -9,7 +9,7 @@ export class SubscriptionStore extends BaseStore {
     const row = await this.db
       .prepare(
         `SELECT cluster_id, plan, polar_customer_id, polar_subscription_id, status, canceled_at, period_end, created_at, updated_at
-         FROM cluster_subscriptions WHERE cluster_id = $1`,
+         FROM billing WHERE cluster_id = $1`,
       )
       .bind(clusterId)
       .first();
@@ -33,7 +33,7 @@ export class SubscriptionStore extends BaseStore {
     const row = await this.db
       .prepare(
         `SELECT cluster_id, plan, polar_customer_id, polar_subscription_id, status, canceled_at, period_end, created_at, updated_at
-         FROM cluster_subscriptions WHERE polar_subscription_id = $1`,
+         FROM billing WHERE polar_subscription_id = $1`,
       )
       .bind(polarSubscriptionId)
       .first();
@@ -57,7 +57,7 @@ export class SubscriptionStore extends BaseStore {
     const row = await this.db
       .prepare(
         `SELECT cluster_id, plan, polar_customer_id, polar_subscription_id, status, canceled_at, period_end, created_at, updated_at
-         FROM cluster_subscriptions WHERE polar_customer_id = $1`,
+         FROM billing WHERE polar_customer_id = $1`,
       )
       .bind(polarCustomerId)
       .first();
@@ -91,15 +91,15 @@ export class SubscriptionStore extends BaseStore {
     try {
       await this.db
         .prepare(
-          `INSERT INTO cluster_subscriptions (cluster_id, plan, polar_customer_id, polar_subscription_id, status, canceled_at, period_end, created_at, updated_at)
+          `INSERT INTO billing (cluster_id, plan, polar_customer_id, polar_subscription_id, status, canceled_at, period_end, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (cluster_id) DO UPDATE SET
            plan = EXCLUDED.plan,
-           polar_customer_id = COALESCE(EXCLUDED.polar_customer_id, cluster_subscriptions.polar_customer_id),
-           polar_subscription_id = COALESCE(EXCLUDED.polar_subscription_id, cluster_subscriptions.polar_subscription_id),
+           polar_customer_id = COALESCE(EXCLUDED.polar_customer_id, billing.polar_customer_id),
+           polar_subscription_id = COALESCE(EXCLUDED.polar_subscription_id, billing.polar_subscription_id),
            status = EXCLUDED.status,
-           canceled_at = COALESCE(EXCLUDED.canceled_at, cluster_subscriptions.canceled_at),
-           period_end = COALESCE(EXCLUDED.period_end, cluster_subscriptions.period_end),
+           canceled_at = COALESCE(EXCLUDED.canceled_at, billing.canceled_at),
+           period_end = COALESCE(EXCLUDED.period_end, billing.period_end),
            updated_at = EXCLUDED.updated_at`,
         )
         .bind(params.clusterId, params.plan, params.polarCustomerId ?? null, params.polarSubscriptionId ?? null, params.status, params.canceledAt ?? null, params.periodEnd ?? null, now, now)

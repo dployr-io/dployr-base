@@ -171,7 +171,7 @@ export class TrafficRouter {
       return {
         serviceName,
         clusterName,
-        instanceAddress: instance.address,
+        instanceAddress: instance.address!,
         instancePort: this.config.defaultPort,
         serviceId: service.id,
         instanceId: instance.id,

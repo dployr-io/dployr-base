@@ -175,7 +175,9 @@ export class WebSocketService {
             return;
           }
 
-          clusterId = instance.clusterId;
+          // Pool instances have no owning cluster; key their WS connection by tag.
+          // Dedicated instances are keyed by their cluster ID as before.
+          clusterId = instance.kind === "pool" ? `pool:${instance.tag}` : instance.clusterId ?? null;
           instanceTag = instance.tag;
         } else {
           clusterId = url.searchParams.get("clusterId");

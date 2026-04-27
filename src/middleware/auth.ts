@@ -92,7 +92,7 @@ export function resolveCluster(
         return c.json({ error: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
       }
 
-      c.set("resolvedClusterId", instance.clusterId);
+      c.set("resolvedClusterId", instance.clusterId ?? undefined);
     } else {
       let domainName: string | undefined;
       if (options.path) {
@@ -115,7 +115,7 @@ export function resolveCluster(
         return c.json({ error: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
       }
 
-      c.set("resolvedClusterId", instance.clusterId);
+      c.set("resolvedClusterId", instance.clusterId ?? undefined);
     }
 
     await next();

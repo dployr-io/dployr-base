@@ -109,9 +109,8 @@ export class ClientMessageHandler {
    * Check if a task is allowed on an instance
    */
   private async isTaskAllowedOnInstance(clusterId: string, instanceId: string, task: NodeTask): Promise<boolean> {
-    const _instanceId = await this.db.instancePool.getClusterInstance(clusterId);
+    const _instanceId = await this.db.instances.getClusterPoolInstance(clusterId);
     if (!_instanceId || _instanceId !== instanceId) {
-      // Not targeting a free instance, allow the task
       return true;
     }
 
@@ -1142,27 +1141,33 @@ export class ClientMessageHandler {
       return;
     }
 
+    const clusterId = instance.clusterId;
+    if (!clusterId) {
+      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+      return;
+    }
+
     const userClusters = conn.session.clusters.map((c) => c.id);
-    if (!userClusters.includes(instance.clusterId)) {
+    if (!userClusters.includes(clusterId)) {
       this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
       return;
     }
 
     const sessionId = `${instanceId}:${ulid()}`;
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, instance.clusterId);
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, clusterId);
 
     this.terminalManager.expectSession(sessionId, conn.ws, instanceId);
 
     const taskId = ulid();
     const task = this.dployrdService.createTerminalOpen(taskId, sessionId, cols, rows, token);
 
-    if (!(await this.isTaskAllowedOnInstance(instance.clusterId, instance.id, task))) {
+    if (!(await this.isTaskAllowedOnInstance(clusterId, instance.id, task))) {
       this.terminalManager.removeExpectedSession(sessionId);
       this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
       return;
     }
 
-    const sent = this.sendTaskToCluster(instance.clusterId, task);
+    const sent = this.sendTaskToCluster(clusterId, task);
     if (!sent) {
       this.terminalManager.removeExpectedSession(sessionId);
       this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No node available");
@@ -1485,7 +1490,7 @@ export class ClientMessageHandler {
 
       // Verify user has access to this instance's cluster
       const userClusters = conn.session.clusters.map((c) => c.id);
-      if (!userClusters.includes(instance.clusterId)) {
+      if (!instance.clusterId || !userClusters.includes(instance.clusterId)) {
         this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
         return;
       }

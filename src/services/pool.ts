@@ -1,4 +1,4 @@
-import { InstanceStatus, NodeUpdateV1_1, SubscriptionPlan } from "@/types/index.js";
+import { Instance, InstanceStatus, NodeUpdateV1_1, SubscriptionPlan } from "@/types/index.js";
 import { VmProvider } from "./vm/index.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
@@ -28,7 +28,7 @@ export class InstancePoolService {
     this.sshKey = sshKey;
   }
 
-  private async createInstancePool(): Promise<void> {
+  private async createPoolInstance(): Promise<void> {
     if (!this.vm || !this.jwt) return;
 
     const instanceId = ulid();
@@ -48,7 +48,7 @@ export class InstancePoolService {
       userData: buildInstallScript(token, name),
     });
 
-    await this.db.instancePool.add({
+    await this.db.instances.addPool({
       address: droplet.ipv4 ?? null,
       capacity: DEFAULT_CAPACITY,
       tag: name,
@@ -59,10 +59,10 @@ export class InstancePoolService {
 
   public async spawnPoolInstance({ clusterId }: { clusterId: string }): Promise<void> {
     try {
-      await this.createInstancePool();
-      await this.db.instancePool.assign(clusterId);
+      await this.createPoolInstance();
+      await this.db.instances.assignPool(clusterId);
     } catch (err) {
-      console.error("[Auth/Pools] Failed to provision pool instance for cluster", clusterId, err);
+      console.error("[Pools] Failed to provision pool instance for cluster", clusterId, err);
     }
   }
 
@@ -73,14 +73,17 @@ export class InstancePoolService {
     }
 
     // Phase 1: mirror provider → pool DB
-    const [droplets, { instances: poolEntries }] = await Promise.all([this.vm.list({ tagName: "managed", perPage: 200 }), this.db.instancePool.list()]);
+    const [droplets, { instances: poolEntries }] = await Promise.all([
+      this.vm.list({ tagName: "managed", perPage: 200 }),
+      this.db.instances.listPool(),
+    ]);
 
-    const poolByTag = new Map(poolEntries.map((e: { tag: any }) => [e.tag, e]));
+    const poolByTag = new Map(poolEntries.map((e) => [e.tag, e]));
     const dropletByTag = new Map(droplets.map((d: VirtualMachine) => [d.name, d]));
 
     for (const droplet of droplets) {
       if (!poolByTag.has(droplet.name)) {
-        await this.db.instancePool.add({
+        await this.db.instances.addPool({
           tag: droplet.name,
           address: droplet.ipv4 ?? null,
           capacity: 10,
@@ -92,17 +95,17 @@ export class InstancePoolService {
       }
     }
 
-    // Phase 2: health triage — remove stale entries, mark degraded instances for maintenance
+    // Phase 2: health triage
     const unhealthyStatuses = new Set<InstanceStatus>(["degraded", "offline", "unreachable"]);
 
     for (const entry of poolEntries) {
       if (!dropletByTag.has(entry.tag)) {
-        await this.db.instancePool.remove(entry.id);
+        await this.db.instances.removePool(entry.id);
         continue;
       }
 
       if (unhealthyStatuses.has(entry.status)) {
-        await this.db.instancePool.update({ id: entry.id, data: { status: "maintenance" } });
+        await this.db.instances.update({ id: entry.id }, { status: "maintenance" });
         await this.kv.logSystemEvent({
           type: EVENTS.POOL.INSTANCE_MAINTENANCE.code,
           targets: [{ id: entry.id }],
@@ -114,7 +117,7 @@ export class InstancePoolService {
     if (droplets.length < INSTANCE_POOL_QUOTA) {
       const lock = await this.kv.kv.get(KV_KEYS.POOL_PROVISION_LOCK);
       if (!lock) {
-        const unassigned = await this.db.clusters.listUnassigned();
+        const unassigned = await this.db.instances.listUnassignedClusters();
         if (unassigned.length > 0) {
           console.log(`[pool-sync] ${unassigned.length} cluster(s) unassigned — allocating`);
         }
@@ -126,7 +129,7 @@ export class InstancePoolService {
     }
 
     // Phase 4: sync dedicated instances against provider
-    const { instances: dedicatedInstances } = await this.db.instances.list();
+    const { instances: dedicatedInstances } = await this.db.instances.list({ kind: "dedicated" });
     for (const instance of dedicatedInstances) {
       const droplet = dropletByTag.get(instance.tag);
       let next: InstanceStatus;
@@ -162,7 +165,7 @@ export class InstancePoolService {
 
   private async allocateSharedPool(clusterId: string): Promise<void> {
     try {
-      await this.db.instancePool.assign(clusterId);
+      await this.db.instances.assignPool(clusterId);
       console.log(`[pool-sync] Assigned shared pool instance to cluster ${clusterId}`);
     } catch (err) {
       if (!(err instanceof PoolCapacityExceededError)) throw err;
@@ -174,8 +177,8 @@ export class InstancePoolService {
 
       console.log(`[pool-sync] Pool at capacity — provisioning new instance for cluster ${clusterId}`);
       await this.kv.kv.put(KV_KEYS.POOL_PROVISION_LOCK, "1", { ttl: POOL_PROVISION_LOCK_TTL });
-      await this.createInstancePool();
-      await this.db.instancePool.assign(clusterId);
+      await this.createPoolInstance();
+      await this.db.instances.assignPool(clusterId);
       await this.kv.logSystemEvent({ type: EVENTS.POOL.INSTANCE_PROVISIONED.code });
       console.log(`[pool-sync] Provisioned and assigned new instance to cluster ${clusterId}`);
     }
@@ -183,23 +186,26 @@ export class InstancePoolService {
 
   public async poolDrain() {
     if (!this.vm) return;
-    const { instances: poolEntries } = await this.db.instancePool.list();
-    const maintenanceInstances = poolEntries.filter((e: { status: string }) => e.status === "maintenance");
+    const { instances: poolEntries } = await this.db.instances.listPool();
+    const maintenanceInstances = poolEntries.filter((e) => e.status === "maintenance");
     if (maintenanceInstances.length === 0) return;
 
-    const [clusterMap, droplets] = await Promise.all([this.db.instancePool.getClustersInstanceMap(), this.vm.list({ tagName: "managed", perPage: 200 })]);
+    const [clusterMap, droplets] = await Promise.all([
+      this.db.instances.getPoolClustersMap(),
+      this.vm.list({ tagName: "managed", perPage: 200 }),
+    ]);
 
     const dropletByTag = new Map(droplets.map((d: VirtualMachine) => [d.name, d]));
 
     for (const instance of maintenanceInstances) {
-      const assignedClusters = clusterMap.filter((m: { instanceId: any }) => m.instanceId === instance.id).map((m: { clusterId: any }) => m.clusterId);
+      const assignedClusters = clusterMap.filter((m) => m.instanceId === instance.id).map((m) => m.clusterId);
 
       if (assignedClusters.length > 0) {
         let migratedAll = true;
 
         for (const clusterId of assignedClusters) {
           try {
-            await this.db.instancePool.assign(clusterId);
+            await this.db.instances.assignPool(clusterId);
           } catch (err) {
             if (err instanceof PoolCapacityExceededError) {
               migratedAll = false;
@@ -221,8 +227,7 @@ export class InstancePoolService {
         }
       }
 
-      await this.db.instancePool.remove(instance.id);
-
+      await this.db.instances.removePool(instance.id);
       await this.kv.logSystemEvent({
         type: EVENTS.POOL.INSTANCE_DRAINED.code,
         targets: [{ id: instance.id }],
@@ -232,8 +237,8 @@ export class InstancePoolService {
 
   public async poolPing() {
     if (!this.vm) return;
-    const { instances: poolEntries } = await this.db.instancePool.list();
-    const candidates = poolEntries.filter((e: { status: string }) => e.status !== "maintenance");
+    const { instances: poolEntries } = await this.db.instances.listPool();
+    const candidates = poolEntries.filter((e) => e.status !== "maintenance");
     if (candidates.length === 0) return;
 
     const droplets = await this.vm.list({ tagName: "managed", perPage: 200 });
@@ -248,14 +253,14 @@ export class InstancePoolService {
       else continue;
 
       if (entry.status !== next) {
-        await this.db.instancePool.update({ id: entry.id, data: { status: next } });
+        await this.db.instances.update({ id: entry.id }, { status: next });
       }
     }
   }
 
   public async poolPingDirect() {
-    const { instances: poolEntries } = await this.db.instancePool.list();
-    const candidates = poolEntries.filter((e: { address: any; status: string }) => e.address && e.status !== "maintenance" && e.status !== "offline" && e.status !== "unreachable");
+    const { instances: poolEntries } = await this.db.instances.listPool();
+    const candidates = poolEntries.filter((e) => e.address && e.status !== "maintenance" && e.status !== "offline" && e.status !== "unreachable");
 
     await Promise.all(
       candidates.map(async (entry) => {
@@ -263,15 +268,15 @@ export class InstancePoolService {
         const next: InstanceStatus = reachable ? "healthy" : "degraded";
 
         if (entry.status !== next) {
-          await this.db.instancePool.update({ id: entry.id, data: { status: next } });
+          await this.db.instances.update({ id: entry.id }, { status: next });
         }
       }),
     );
   }
 
   public async poolHealth() {
-    const { instances: poolEntries } = await this.db.instancePool.list();
-    const candidates = poolEntries.filter((e: { status: string }) => e.status !== "maintenance" && e.status !== "offline" && e.status !== "unreachable");
+    const { instances: poolEntries } = await this.db.instances.listPool();
+    const candidates = poolEntries.filter((e) => e.status !== "maintenance" && e.status !== "offline" && e.status !== "unreachable");
     const windowStart = Date.now() - HEARTBEAT_WINDOW;
 
     for (const entry of candidates) {
@@ -281,30 +286,27 @@ export class InstancePoolService {
       const next: InstanceStatus = isFresh && isHealthy ? "healthy" : "degraded";
 
       if (entry.status !== next) {
-        await this.db.instancePool.update({ id: entry.id, data: { status: next } });
+        await this.db.instances.update({ id: entry.id }, { status: next });
       }
     }
   }
 
-  async resolveInstancePool({ db, billingService, clusterId }: { db: DatabaseStore; billingService: BillingService | null; clusterId?: string }) {
+  async resolveInstancePool({ db, billingService, clusterId }: { db: DatabaseStore; billingService: BillingService | null; clusterId?: string }): Promise<Instance | null> {
     if (!clusterId || !billingService) return null;
 
     const status = await billingService.getStatus({ clusterId, db });
     if (status.plan !== "hobby") return null;
 
-    const [instanceId, { instances: pool }] = await Promise.all([db.instancePool.getClusterInstance(clusterId), db.instancePool.list()]);
-
+    const instanceId = await db.instances.getClusterPoolInstance(clusterId);
     if (!instanceId) return null;
 
-    const instance = pool.find((inst: { id: string }) => inst.id === instanceId);
+    const instance = await db.instances.find({ id: instanceId, kind: "pool" });
     if (!instance) return null;
 
     const now = Date.now();
-
     return {
       ...instance,
       metadata: { ...instance.metadata, managed: true },
-      clusterId,
       createdAt: now,
       updatedAt: now,
     };

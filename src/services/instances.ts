@@ -263,7 +263,7 @@ export class InstanceService {
     const db = getDbStore(c);
     const kv = getKVStore(c);
     const instance = await db.instances.find({ tag: instanceName });
-    const pool = await db.instancePool.find({ tag: instanceName });
+    const pool = await db.instances.find({ tag: instanceName });
 
     const resolved = instance ?? pool;
     if (!resolved) throw new Error("Instance not found");
@@ -314,9 +314,7 @@ export class InstanceService {
    * @returns Instance object with clusterId, or null if not found
    */
   async getInstance({ instanceId, c }: { instanceId: string; c: Context }): Promise<
-    | (Instance & {
-        clusterId: string;
-      })
+    | (Instance)
     | null
   > {
     const db = getDbStore(c);

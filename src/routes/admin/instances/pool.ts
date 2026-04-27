@@ -27,7 +27,7 @@ pool.get("/", async (c) => {
   service.poolSync().catch(() => {});
 
   try {
-    const [{ instances, total }, clusterMap] = await Promise.all([db.instancePool.list({ limit: pageSize, offset }), db.instancePool.getClustersInstanceMap()]);
+    const [{ instances, total }, clusterMap] = await Promise.all([db.instances.listPool({ limit: pageSize, offset }), db.instances.getPoolClustersMap()]);
 
     const countByInstance = new Map<string, number>();
     for (const { instanceId } of clusterMap) {
@@ -70,7 +70,7 @@ pool.post("/", async (c) => {
   const db = getDbStore(c);
 
   try {
-    const instance = await db.instancePool.add({ address, tag, region, capacity, status: "healthy" });
+    const instance = await db.instances.addPool({ address, tag, region, capacity, status: "healthy" });
     return c.json(createSuccessResponse({ instance }));
   } catch (error: any) {
     console.error("[Admin/Pool] Failed to add instance pools: ", error);
@@ -87,7 +87,7 @@ pool.delete("/:id", async (c) => {
   const db = getDbStore(c);
 
   try {
-    await db.instancePool.remove(id);
+    await db.instances.removePool(id);
     return c.json(createSuccessResponse({ deleted: id }));
   } catch (error: any) {
     console.error("[Admin/Pool] Failed to remove instance from pools: ", error);
@@ -103,10 +103,10 @@ pool.patch("/:id", async (c) => {
   const id = c.req.param("id");
   const { status } = await c.req.json();
 
-  if (!["active", "paused"].includes(status)) {
+  if (!["healthy", "degraded", "offline", "provisioning"].includes(status)) {
     return c.json(
       createErrorResponse({
-        message: "Status must be either 'active' or 'paused'",
+        message: "Status must be one of: healthy, degraded, offline, provisioning",
         code: ERROR.REQUEST.BAD_REQUEST.code,
       }),
       ERROR.REQUEST.BAD_REQUEST.status,
@@ -116,7 +116,7 @@ pool.patch("/:id", async (c) => {
   const db = getDbStore(c);
 
   try {
-    await db.instancePool.update({ id, data: { status } });
+    await db.instances.update({ id }, { status });
     return c.json(createSuccessResponse({ id, status }));
   } catch (error: any) {
     console.error("[Admin/Pool] Failed to update instance pools: ", error);

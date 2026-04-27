@@ -9,8 +9,6 @@ import type { JWTService } from "./jwt.js";
 import type { EmailProvider } from "@/services/notifications/email/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode.js";
-import { buildInstallScript, DEFAULT_CAPACITY, DEFAULT_INSTANCE_IMAGE, DEFAULT_INSTANCE_REGION, DEFAULT_INSTANCE_SIZE, DEFAULT_INSTANCE_TAGS } from "@/lib/constants/vm.js";
-import { ulid } from "ulid";
 import { InstancePoolService } from "@/services/pool.js";
 
 export class AuthService {
@@ -92,7 +90,7 @@ export class AuthService {
     if (!cluster || cluster.poolInstanceId || process.env.NODE_ENV === "test") return cluster;
 
     try {
-      await this.db.instancePool.assign(cluster.id);
+      await this.db.instances.assignPool(cluster.id);
     } catch (err) {
       if (err instanceof PoolCapacityExceededError && vmService && jwt) {
         const poolService = new InstancePoolService({ db: this.db, kv: this.kv, vm: vmService, jwt, sshKey: this.env.SSH_KEY });

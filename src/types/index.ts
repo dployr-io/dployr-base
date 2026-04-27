@@ -129,32 +129,33 @@ export type StatusUpdateMessage = {
 };
 
 /**
- * Instance status for instance pools.
- *
- * @property "healthy" - Instance is fully available for allocation
- * @property "degraded" - Server is reachable but cannot connect with dployrd
- * @property "offline" - Server is turned off but available on instance provider (DigitalOcean)
- * @property "unreachable" - Server is not reachable
- * @property "maintenance" - Server cannot receive allocation during this window
+ * @property "healthy" - Fully available
+ * @property "degraded" - Reachable but dployrd not responding
+ * @property "offline" - Turned off but still provisioned on the VM provider
+ * @property "unreachable" - Not reachable at all
+ * @property "maintenance" - Taken out of pool rotation
  */
 export type InstanceStatus = "healthy" | "degraded" | "offline" | "unreachable" | "maintenance";
 
+/** dedicated = user-managed, belongs to one cluster; pool = platform-managed, shared across many clusters */
+export type InstanceKind = "dedicated" | "pool";
+
 export interface Instance {
   id: string;
-  address: string;
+  kind: InstanceKind;
+  /** null only for pool instances before their VM is provisioned */
+  address: string | null;
   tag: string;
   status: InstanceStatus;
-  metadata?: Record<string, any> | undefined;
+  /** present only for pool instances */
+  capacity?: number;
+  /** present only for pool instances */
+  region?: string;
+  /** null for pool instances (no single owning cluster) */
+  clusterId?: string | null;
+  metadata?: Record<string, any>;
   createdAt: number;
   updatedAt: number;
-}
-
-// Instances in a pool
-export interface InstancePool extends Omit<Instance, "address"> {
-  address: string | null;
-  capacity: number;
-  region?: string;
-  metadata?: { managed: boolean; tier: SubscriptionPlan };
 }
 
 export interface Cluster {
@@ -286,5 +287,6 @@ export * from "./node.js";
 
 import type { NotificationEvent } from "@/services/notifications/notifier.js";
 import { VmProvider } from "@/services/vm/index.js";
-import { InstancePoolService } from "@/services/pool.js";import { EmailProvider } from "@/services/notifications/email/index.js";
+import { InstancePoolService } from "@/services/pool.js";
+import { EmailProvider } from "@/services/notifications/email/index.js";
 
