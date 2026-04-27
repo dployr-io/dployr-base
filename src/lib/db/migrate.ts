@@ -71,7 +71,12 @@ async function applyMigration(db: PostgresAdapter, filename: string, sql: string
 export async function runMigrations(db: PostgresAdapter): Promise<void> {
   console.log("Starting database migrations...");
 
-  await db.prepare(MIGRATION_TABLE_DDL).run();
+  try {
+    await db.prepare(MIGRATION_TABLE_DDL).run();
+  } catch (err: any) {
+    // 23505 = unique_violation — another process won the race to create _migrations; that's fine
+    if (err?.code !== '23505') throw err;
+  }
 
   const appliedMigrations = await getAppliedMigrations(db);
   const discoveredMigrations = getMigrations();

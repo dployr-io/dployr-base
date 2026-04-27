@@ -4,7 +4,7 @@
 export const _000_init = `
 DO $$ BEGIN
   CREATE TYPE instance_status AS ENUM ('healthy', 'degraded', 'offline', 'unreachable', 'maintenance');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 
 CREATE TABLE IF NOT EXISTS users (
@@ -57,10 +57,13 @@ CREATE TABLE IF NOT EXISTS instances (
   )
 );
 
-ALTER TABLE clusters
-  ADD CONSTRAINT clusters_pool_instance_id_fkey
-  FOREIGN KEY (pool_instance_id) REFERENCES instances(id) ON DELETE SET NULL
-  NOT VALID;
+DO $$ BEGIN
+  ALTER TABLE clusters
+    ADD CONSTRAINT clusters_pool_instance_id_fkey
+    FOREIGN KEY (pool_instance_id) REFERENCES instances(id) ON DELETE SET NULL
+    NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS bootstrap_tokens (
   instance_id TEXT PRIMARY KEY,
