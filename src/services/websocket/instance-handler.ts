@@ -37,6 +37,8 @@ export class WebSocketHandler {
   private sessionConnections = new Map<string, string>();
   private dbStore: DatabaseStore;
 
+  private kvStore: KVStore;
+
   constructor(
     private kv: IKVAdapter,
     private db: PostgresAdapter,
@@ -44,20 +46,20 @@ export class WebSocketHandler {
   ) {
     this.connectionManager = new ConnectionManager(config?.connectionManager);
 
-    const kvStore = new KVStore(this.kv);
+    this.kvStore = new KVStore(this.kv);
     this.dbStore = new DatabaseStore(this.db);
 
-    this.clientNotifier = new ClientNotifier(this.connectionManager, kvStore);
+    this.clientNotifier = new ClientNotifier(this.connectionManager, this.kvStore);
 
-    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, kvStore);
+    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore);
 
-    const jwtService = new JWTService(kvStore);
+    const jwtService = new JWTService(this.kvStore);
     const dployrdService = new DployrdService();
 
     this.terminalManager = new TerminalManager(300000);
     this.clientHandler = new ClientMessageHandler({
       connectionManager: this.connectionManager,
-      kv: kvStore,
+      kv: this.kvStore,
       db: this.dbStore,
       jwtService,
       dployrdService,
@@ -69,8 +71,13 @@ export class WebSocketHandler {
   /**
    * Register a new WebSocket connection for a cluster.
    */
-  acceptWebSocket(clusterId: string, ws: WebSocket, role: "node" | "client", session?: Session): void {
+  acceptWebSocket(clusterId: string, ws: WebSocket, role: "node" | "client", session?: Session, instanceTag?: string): void {
     const conn = this.connectionManager.addConnection(clusterId, ws, role, session);
+
+    if (role === "node" && instanceTag) {
+      conn.instanceTag = instanceTag;
+      this.kvStore.setNodeConnected(instanceTag).catch(() => {});
+    }
 
     // Handle reconnection for clients
     if (role === "client" && session) {
@@ -126,6 +133,9 @@ export class WebSocketHandler {
     this.connectionManager.removeConnection(conn);
 
     if (conn.role === "node") {
+      if (conn.instanceTag) {
+        this.kvStore.deleteNodeConnected(conn.instanceTag).catch(() => {});
+      }
       this.dployrdHandler.handleNodeDisconnect(conn.clusterId);
     }
   }
@@ -141,6 +151,9 @@ export class WebSocketHandler {
     }
 
     if (conn.role === "node") {
+      if (conn.instanceTag) {
+        this.kvStore.refreshNodeConnected(conn.instanceTag).catch(() => {});
+      }
       await this.dployrdHandler.handleMessage(conn, message);
     } else {
       await this.clientHandler.handleMessage(conn, message);

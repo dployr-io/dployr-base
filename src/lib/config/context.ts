@@ -158,7 +158,13 @@ export function getInstancePoolService(c: AppContext): InstancePoolService {
   const existing = c.get("_instancePoolService");
   if (existing) return existing;
 
-  const service = new InstancePoolService();
+  const service = new InstancePoolService({
+    db: getDbStore(c),
+    kv: getKVStore(c),
+    vm: c.get("vmProvider") ?? undefined,
+    jwt: getJWTService(c),
+    sshKey: c.env.SSH_KEY,
+  });
   c.set("_instancePoolService", service);
   return service;
 }

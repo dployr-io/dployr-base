@@ -22,31 +22,25 @@ interface ScheduledEntry {
   timer?: ReturnType<typeof setInterval>;
 }
 
+interface TriggeredEntry {
+  name: string;
+  fn: JobFn;
+  runImmediately: boolean;
+}
+
 export class BackgroundWorker {
   private emitter = new EventEmitter();
   private scheduled: ScheduledEntry[] = [];
-  private triggeredCount = 0;
+  private triggered: TriggeredEntry[] = [];
   private adapters: Adapters | null = null;
 
-  /**
-   * Register a recurring job.
-   *
-   * @param name        - Identifier used in logs
-   * @param intervalMs  - How often to run
-   * @param fn          - The job function
-   * @param options.runImmediately - Also run once on startup before the first interval fires
-   */
   schedule(name: string, intervalMs: number, fn: JobFn, options?: { runImmediately?: boolean }): this {
     this.scheduled.push({ name, intervalMs, fn, runImmediately: options?.runImmediately ?? false });
     return this;
   }
 
-  /**
-   * Register a job that runs when an event is emitted via worker.emit().
-   * Safe to call before start() — events fired before start() are dropped.
-   */
-  on(event: string, fn: JobFn): this {
-    this.triggeredCount++;
+  on(event: string, fn: JobFn, options?: { runImmediately?: boolean }): this {
+    this.triggered.push({ name: event, fn, runImmediately: options?.runImmediately ?? false });
     this.emitter.on(event, () => this.run(fn, event));
     return this;
   }
@@ -73,14 +67,19 @@ export class BackgroundWorker {
         this.run(entry.fn, entry.name);
       }
       entry.timer = setInterval(() => this.run(entry.fn, entry.name), entry.intervalMs);
-      // Don't keep the process alive solely for background jobs
       entry.timer.unref();
     }
 
     process.on("SIGTERM", () => this.stop());
     process.on("SIGINT", () => this.stop());
 
-    console.log(`[Worker] Started — ${this.scheduled.length} scheduled, ${this.triggeredCount} triggered`);
+    console.log(`[Worker] Started — ${this.scheduled.length} scheduled, ${this.triggered.length} triggered`);
+
+    for (const entry of this.triggered) {
+      if (entry.runImmediately) {
+        this.run(entry.fn, entry.name);
+      }
+    }
   }
 
   stop(): void {

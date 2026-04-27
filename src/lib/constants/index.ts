@@ -19,6 +19,9 @@ export const WORKFLOW_NAME = "dployr-bootstrap";
 // Versioning
 export const LATEST_COMPATIBILITY_DATE = "2025-12-28";
 
+// Instance pool quota
+export const INSTANCE_POOL_QUOTA = 8; 
+
 // Instance regions
 export const INSTANCE_REGIONS = ["us-east", "us-west", "us-central", "eu-west", "eu-central", "eu-north", "ap-south", "ap-southeast", "ap-northeast", "af-south", "me-central", "sa-east"] as const;
 

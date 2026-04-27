@@ -27,4 +27,6 @@ export const KV_KEYS = {
   FREE_INSTANCE_POOL: "free_instance:pool",
   FREE_INSTANCE_CLUSTER: (clusterId: string) => `free_instance:cluster:${clusterId}`,
   FREE_INSTANCE_COUNTER: (instanceId: string) => `free_instance:counter:${instanceId}`,
+  POOL_PROVISION_LOCK: "pool:provision:lock",
+  NODE_CONNECTED: (tag: string) => `node:connected:${tag}`,
 } as const;

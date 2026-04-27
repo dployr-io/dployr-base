@@ -4,7 +4,7 @@
 import { InstancePool, InstanceStatus } from "@/types/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { BaseStore } from "./base.js";
-import { InstanceFilter } from "./instances.js";
+import { InstanceFilter, InstanceUpdateData } from "./instances.js";
 
 export class InstancePoolStore extends BaseStore {
   async list(params?: { clusterId?: string; limit?: number; offset?: number }): Promise<{ instances: InstancePool[]; total: number }> {
@@ -97,14 +97,31 @@ export class InstancePoolStore extends BaseStore {
     return result ? this.toPool(result) : null;
   }
 
-  /** Updates the health/operational status of a pool instance. */
-  async updateStatus(id: string, status: InstanceStatus): Promise<void> {
-    const now = this.now();
-    try {
-      await this.db.prepare(`UPDATE instance_pool SET status = $1, updated_at = $2 WHERE id = $3`).bind(status, now, id).run();
-    } catch (error) {
-      this.parsePostgresError({ error, table: "instance_pool" });
+  /**
+   * Updates mutable fields on an instance. Only the provided fields are written.
+   */
+  async update({ id, data }: { id: string; data: InstanceUpdateData }): Promise<void> {
+    const parts: string[] = [];
+    const values: any[] = [];
+    let p = 1;
+
+    if (data.status !== undefined) {
+      parts.push(`status = $${p++}::instance_status`);
+      values.push(data.status);
     }
+    if (data.metadata !== undefined) {
+      parts.push(`metadata = $${p++}::jsonb`);
+      values.push(data.metadata);
+    }
+    if (!parts.length) return;
+
+    parts.push(`updated_at = $${p++}`);
+    values.push(this.now(), id);
+
+    await this.db
+      .prepare(`UPDATE instances SET ${parts.join(", ")} WHERE id = $${p}`)
+      .bind(...values)
+      .run();
   }
 
   /**

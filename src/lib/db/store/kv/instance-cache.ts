@@ -1,6 +1,6 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
-import { INSTANCE_STATUS_TTL, NODE_UPDATE_TTL } from "@/lib/constants/index.js";
+import { INSTANCE_STATUS_TTL, NODE_UPDATE_TTL, NODE_CONNECTED_TTL } from "@/lib/constants/index.js";
 import type { Instance } from "@/types/index.js";
 
 type CachedInstance = Instance & { clusterId: string };
@@ -78,6 +78,22 @@ export class InstanceCacheStore {
 
   async invalidateServiceCache(instanceId: string): Promise<void> {
     await this.kv.delete(KV_KEYS.SERVICES(instanceId));
+  }
+
+  async setNodeConnected(tag: string): Promise<void> {
+    await this.kv.put(KV_KEYS.NODE_CONNECTED(tag), "1", { ttl: NODE_CONNECTED_TTL });
+  }
+
+  async refreshNodeConnected(tag: string): Promise<void> {
+    await this.kv.put(KV_KEYS.NODE_CONNECTED(tag), "1", { ttl: NODE_CONNECTED_TTL });
+  }
+
+  async deleteNodeConnected(tag: string): Promise<void> {
+    await this.kv.delete(KV_KEYS.NODE_CONNECTED(tag));
+  }
+
+  async isNodeConnected(tag: string): Promise<boolean> {
+    return (await this.kv.get(KV_KEYS.NODE_CONNECTED(tag))) !== null;
   }
 
   async saveNodeUpdate({ instanceId, update }: { instanceId: string; update: Record<string, unknown> }): Promise<void> {

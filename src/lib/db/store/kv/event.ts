@@ -97,15 +97,16 @@ export class EventStore {
    * @returns An array of event objects, sorted by `timestamp` descending.
    */
   async getEvents(userId: string): Promise<any[]> {
-    const result = await this.kv.list({ prefix: KV_KEYS.ACTOR_EVENT(userId, "") });
+    const prefix = KV_KEYS.ACTOR_EVENT(userId, "");
+    const result = await this.kv.list({ prefix });
     const events = await Promise.all(
       result.map(async (key) => {
+        if (!key.name.startsWith(prefix)) return null;
         const data = await this.kv.get(key.name);
         if (!data) return null;
         try {
           return JSON.parse(data);
-        } catch (err) {
-          console.warn("[KV] Skipping invalid event JSON", { key: key.name, err });
+        } catch {
           return null;
         }
       }),
@@ -143,6 +144,28 @@ export class EventStore {
       }),
     );
     return events.filter((e) => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
+  }
+
+  /**
+   * Records a system-originated event without an HTTP request context.
+   * Used by background jobs where no ray ID or timezone is available.
+   * Deduplication is skipped — each call produces a distinct event entry.
+   */
+  async logSystemEvent({ type, targets }: { type: string; targets?: { id: string }[] }): Promise<void> {
+    const actor = { id: "system", type: "headless" as ActorType };
+    const base = { type, actor, timestamp: Date.now(), timezone: "UTC" };
+
+    if (targets && targets.length > 0) {
+      const id = ulid();
+      const writes: Promise<any>[] = [this.kv.put(KV_KEYS.ACTOR_EVENT(actor.id, id), JSON.stringify({ ...base, id, targets }), { ttl: EVENT_TTL })];
+      for (const target of targets) {
+        writes.push(this.kv.put(KV_KEYS.TARGET_EVENT(target.id, id), JSON.stringify({ ...base, id, targets: [target] }), { ttl: EVENT_TTL }));
+      }
+      await Promise.all(writes);
+    } else {
+      const id = ulid();
+      await this.kv.put(KV_KEYS.ACTOR_EVENT(actor.id, id), JSON.stringify({ ...base, id }), { ttl: EVENT_TTL });
+    }
   }
 
   // Workflow failure tracking

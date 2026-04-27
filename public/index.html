@@ -874,6 +874,61 @@
     .items-center {
       align-items: center;
     }
+
+    .load-bar-wrap {
+      width: 64px;
+      height: 3px;
+      background: var(--bg-3);
+      border-radius: 2px;
+      overflow: hidden;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    .load-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+
+    .badge.maintenance {
+      background: rgba(107, 114, 128, 0.12);
+      color: #6b7280;
+    }
+
+    .badge.maintenance::before {
+      background: #6b7280;
+    }
+
+    .evt-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+
+    .evt-pill.maintenance {
+      background: var(--yellow-dim);
+      color: var(--yellow);
+    }
+
+    .evt-pill.drained {
+      background: var(--green-dim);
+      color: var(--green);
+    }
+
+    .evt-pill.provisioned {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .evt-pill.other {
+      background: var(--bg-3);
+      color: var(--text-dim);
+    }
   </style>
 </head>
 
@@ -962,6 +1017,20 @@
           </svg>
           Remove Instance
         </button>
+        <button class="nav-item" data-view="pool" onclick="switchView('pool', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+          </svg>
+          Pool Health
+        </button>
+        <button class="nav-item" data-view="events" onclick="switchView('events', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          </svg>
+          Events
+        </button>
         <div class="nav-divider"></div>
         <div class="nav-section-label">System</div>
         <button class="nav-item" data-view="token" onclick="switchView('token', this)">
@@ -1003,7 +1072,7 @@
               <div class="stat-value red" id="stat-stopped">—</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Degraded</div>
+              <div class="stat-label">Degraded / Maintenance</div>
               <div class="stat-value yellow" id="stat-pending">—</div>
             </div>
           </div>
@@ -1135,6 +1204,128 @@
                 <div class="response-label">API Response</div>
                 <div class="response-box" id="remove-response">Waiting for submission…</div>
                 <div class="mt-12" style="font-size:11px;color:var(--text-muted);">DELETE /v1/admin/instances/:id</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pool Health view -->
+        <div id="view-pool" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Pool Health</div>
+              <div class="page-subtitle">Managed instance pool — capacity, load, and status</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadPoolHealth()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <div class="stats-row" style="grid-template-columns:repeat(5,1fr);">
+            <div class="stat-card">
+              <div class="stat-label">Total Pools</div>
+              <div class="stat-value" id="ps-total">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Healthy</div>
+              <div class="stat-value green" id="ps-healthy">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Maintenance</div>
+              <div class="stat-value yellow" id="ps-maint">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Clusters Hosted</div>
+              <div class="stat-value" id="ps-used">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Spare Slots</div>
+              <div class="stat-value green" id="ps-spare">—</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Pool Instances</span>
+              <span class="text-muted" style="font-size:11px;" id="pool-timestamp">—</span>
+            </div>
+            <div class="panel-body" style="padding:0;">
+              <div id="pool-loading" class="empty-state hidden">
+                <div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);"></div>
+                <span>Fetching pool…</span>
+              </div>
+              <div id="pool-empty" class="empty-state hidden">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <ellipse cx="12" cy="5" rx="9" ry="3" />
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                </svg>
+                <span>No pool instances</span>
+              </div>
+              <div class="table-wrap">
+                <table id="pool-table">
+                  <thead>
+                    <tr>
+                      <th>Tag</th>
+                      <th>Address</th>
+                      <th>Region</th>
+                      <th>Status</th>
+                      <th>Load</th>
+                      <th>Clusters / Cap</th>
+                      <th>Created</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="pool-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Events view -->
+        <div id="view-events" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Events</div>
+              <div class="page-subtitle">Pool lifecycle and system events</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadEvents()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Event Feed</span>
+              <span class="text-muted" style="font-size:11px;" id="events-timestamp">—</span>
+            </div>
+            <div class="panel-body" style="padding:0;">
+              <div id="events-loading" class="empty-state hidden">
+                <div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);"></div>
+                <span>Loading events…</span>
+              </div>
+              <div id="events-empty" class="empty-state hidden">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                <span>No events yet</span>
+              </div>
+              <div class="table-wrap">
+                <table id="events-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Event</th>
+                      <th>Target</th>
+                    </tr>
+                  </thead>
+                  <tbody id="events-tbody"></tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -1273,6 +1464,8 @@
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       if (navEl) navEl.classList.add('active');
       if (name === 'instances') loadInstances();
+      if (name === 'pool') loadPoolHealth();
+      if (name === 'events') loadEvents();
       if (name === 'token') populateTokenView();
     }
 
@@ -1432,8 +1625,8 @@
 
         document.getElementById('stat-total').textContent = combined.length;
         document.getElementById('stat-running').textContent = combined.filter(i => i.status === 'healthy').length;
-        document.getElementById('stat-stopped').textContent = combined.filter(i => ['offline', 'unreachable', 'maintenance'].includes(i.status)).length;
-        document.getElementById('stat-pending').textContent = combined.filter(i => i.status === 'degraded').length;
+        document.getElementById('stat-stopped').textContent = combined.filter(i => ['offline', 'unreachable'].includes(i.status)).length;
+        document.getElementById('stat-pending').textContent = combined.filter(i => ['degraded', 'maintenance'].includes(i.status)).length;
         document.getElementById('instances-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
         loading.classList.add('hidden');
 
@@ -1473,6 +1666,126 @@
         loading.classList.add('hidden');
         empty.classList.remove('hidden');
         toast(`Failed to load instances: ${err.message}`, 'error');
+      }
+    }
+
+    const POOL_EVENT_META = {
+      'pool.instance_maintenance': { label: 'Maintenance', cls: 'maintenance' },
+      'pool.instance_drained': { label: 'Drained', cls: 'drained' },
+      'pool.instance_provisioned': { label: 'Provisioned', cls: 'provisioned' },
+    };
+
+    function relTime(ms) {
+      const diff = Date.now() - ms;
+      if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+      return new Date(ms).toLocaleDateString();
+    }
+
+    function loadBarHtml(count, capacity) {
+      const pct = capacity > 0 ? Math.min(100, (count / capacity) * 100) : 0;
+      const color = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--yellow)' : 'var(--green)';
+      return `<span class="load-bar-wrap"><span class="load-bar-fill" style="width:${pct}%;background:${color};"></span></span>`;
+    }
+
+    async function loadPoolHealth() {
+      const tbody = document.getElementById('pool-tbody');
+      const loading = document.getElementById('pool-loading');
+      const empty = document.getElementById('pool-empty');
+      const table = document.getElementById('pool-table');
+
+      tbody.innerHTML = '';
+      loading.classList.remove('hidden');
+      empty.classList.add('hidden');
+      table.style.display = 'none';
+
+      try {
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const res = await fetch(`${API_BASE}/v1/admin/instances/pool${sessionParam}`, { headers: apiHeaders() });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
+        const body = await res.json();
+        const items = body.data?.data?.items || [];
+
+        const totalClusters = items.reduce((s, i) => s + (i.clusterCount ?? 0), 0);
+        const totalCap = items.reduce((s, i) => s + (i.capacity ?? 0), 0);
+        const spare = items.filter(i => i.status === 'healthy').reduce((s, i) => s + Math.max(0, i.capacity - (i.clusterCount ?? 0)), 0);
+
+        document.getElementById('ps-total').textContent = items.length;
+        document.getElementById('ps-healthy').textContent = items.filter(i => i.status === 'healthy').length;
+        document.getElementById('ps-maint').textContent = items.filter(i => i.status === 'maintenance').length;
+        document.getElementById('ps-used').textContent = totalClusters;
+        document.getElementById('ps-spare').textContent = spare;
+        document.getElementById('pool-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+        loading.classList.add('hidden');
+        if (!items.length) { empty.classList.remove('hidden'); return; }
+
+        table.style.display = '';
+        items.forEach(inst => {
+          const statusCls = STATUS_BADGE_CLASS[inst.status] || 'stopped';
+          const count = inst.clusterCount ?? 0;
+          const cap = inst.capacity ?? 10;
+          const regionLabel = inst.region ? `${REGION_FLAGS[inst.region] ?? '🌐'} ${inst.region}` : '—';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="mono" style="font-size:11px;">${escHtml(inst.tag || '—')}</td>
+            <td class="dim">${escHtml(inst.address || '—')}</td>
+            <td class="dim">${escHtml(regionLabel)}</td>
+            <td><span class="badge ${statusCls}">${escHtml(inst.status || '—')}</span></td>
+            <td>${loadBarHtml(count, cap)}<span style="font-size:11px;color:var(--text-dim);">${Math.round(count / cap * 100) || 0}%</span></td>
+            <td class="dim" style="font-size:11px;">${count} / ${cap}</td>
+            <td class="dim">${escHtml(inst.createdAt ? new Date(parseInt(inst.createdAt, 10)).toLocaleDateString() : '—')}</td>
+            <td><button class="btn btn-ghost btn-sm" onclick="prefillRemove('${escAttr(inst.id)}','${escAttr(inst.tag || inst.id)}')">Remove</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        loading.classList.add('hidden');
+        empty.classList.remove('hidden');
+        toast(`Failed to load pool: ${err.message}`, 'error');
+      }
+    }
+
+    async function loadEvents() {
+      const tbody = document.getElementById('events-tbody');
+      const loading = document.getElementById('events-loading');
+      const empty = document.getElementById('events-empty');
+      const table = document.getElementById('events-table');
+
+      tbody.innerHTML = '';
+      loading.classList.remove('hidden');
+      empty.classList.add('hidden');
+      table.style.display = 'none';
+
+      try {
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const res = await fetch(`${API_BASE}/v1/admin/events${sessionParam}`, { headers: apiHeaders() });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
+        const body = await res.json();
+        const events = (body.data?.events || []).slice(0, 200);
+
+        document.getElementById('events-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
+        loading.classList.add('hidden');
+
+        if (!events.length) { empty.classList.remove('hidden'); return; }
+
+        table.style.display = '';
+        events.forEach(evt => {
+          const meta = POOL_EVENT_META[evt.type] || { label: evt.type, cls: 'other' };
+          const targets = (evt.targets || []).map(t => `<span class="mono" style="font-size:10px;color:var(--text-dim);">${escHtml(t.id.slice(0, 16))}…</span>`).join(' ');
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="dim" style="font-size:11px;white-space:nowrap;">${escHtml(relTime(evt.timestamp))}</td>
+            <td><span class="evt-pill ${meta.cls}">${escHtml(meta.label)}</span> <span class="dim" style="font-size:10px;">${escHtml(evt.type)}</span></td>
+            <td>${targets || '<span class="text-muted">—</span>'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        loading.classList.add('hidden');
+        empty.classList.remove('hidden');
+        toast(`Failed to load events: ${err.message}`, 'error');
       }
     }
 

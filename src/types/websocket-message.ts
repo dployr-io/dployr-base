@@ -578,6 +578,7 @@ export interface ClusterConnection {
   ws: WebSocket;
   role: ConnectionRole;
   clusterId: string;
+  instanceTag?: string;
   session?: Session;
   connectionId: string;
   connectedAt: number;

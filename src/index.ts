@@ -48,10 +48,13 @@ registerRoutes(app);
 
 // Node.js server startup
 if (isNode) {
-  registerJobs(worker);
   const wsService = new WebSocketService(app);
   wsService.start();
-  worker.start();
+
+  if (process.env.NODE_ENV !== "test") {
+    registerJobs(worker);
+    worker.start();
+  }
 }
 
 export default app;

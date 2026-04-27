@@ -41,6 +41,8 @@ export class UpdateProcessor {
       }
     }
 
+    tasks.push(this.kv.saveNodeUpdate({ instanceId, update: message as Record<string, unknown> }));
+
     await Promise.all(tasks);
   }
 

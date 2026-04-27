@@ -4,8 +4,7 @@
 import { InstancePoolService } from "@/services/pool.js";
 import type { JobFn } from "../index.js";
 
-
 export const poolHealth: JobFn = async ({ db, kv }) => {
-  const service = new InstancePoolService();
-  service.poolHealth({ db, kv });
+  const service = new InstancePoolService({ db, kv });
+  service.poolHealth();
 };

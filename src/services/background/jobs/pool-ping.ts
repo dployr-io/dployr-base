@@ -17,13 +17,12 @@ type PingMode =
   | { mode: "tcp" };
 
 export function poolPing(options: PingMode): JobFn {
-  return async ({ db, adapters }) => {
-    const service = new InstancePoolService();
+  return async ({ db, kv, adapters }) => {
+    const service = new InstancePoolService({ db, kv, vm: adapters.vmProvider ?? undefined });
     if (options.mode === "provider") {
-      if (!adapters.vmProvider) return;
-      service.poolPing({ vm: adapters.vmProvider, db });
+      service.poolPing();
     } else {
-      service.poolPingDirect({ db });
+      service.poolPingDirect();
     }
   };
 }

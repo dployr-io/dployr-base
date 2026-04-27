@@ -52,6 +52,11 @@ export const EVENTS = {
   READ: {
     BOOTSTRAP_LOGS: { code: "read.bootstrap_logs", message: "Bootstrap logs read" },
   },
+  POOL: {
+    INSTANCE_MAINTENANCE: { code: "pool.instance_maintenance", message: "Pool instance placed in maintenance" },
+    INSTANCE_DRAINED: { code: "pool.instance_drained", message: "Pool instance drained and removed" },
+    INSTANCE_PROVISIONED: { code: "pool.instance_provisioned", message: "New pool instance provisioned" },
+  },
 } as const;
 
 export const DEFAULT_EVENTS = [

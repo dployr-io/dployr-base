@@ -154,6 +154,7 @@ export class WebSocketService {
         const role = url.pathname.includes("/node/ws") ? "node" : "client";
 
         let clusterId: string | null = null;
+        let instanceTag: string | undefined;
 
         if (role === "node") {
           const instanceId = url.searchParams.get("instanceId");
@@ -175,6 +176,7 @@ export class WebSocketService {
           }
 
           clusterId = instance.clusterId;
+          instanceTag = instance.tag;
         } else {
           clusterId = url.searchParams.get("clusterId");
         }
@@ -213,7 +215,7 @@ export class WebSocketService {
         }
 
         this.wss.handleUpgrade(message, socket, head, (ws: WebSocket) => {
-          this.adapters!.ws.acceptWebSocket(clusterId, ws, role, session);
+          this.adapters!.ws.acceptWebSocket(clusterId, ws, role, session, instanceTag);
         });
       } else {
         socket.destroy();

@@ -3,7 +3,7 @@
 
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { ERROR, SUCCESS, INSTANCE_REGIONS } from "@/lib/constants/index.js";
-import { getInstancePoolService, getInstanceService } from "@/lib/config/context.js";
+import { getBillingService, getDbStore, getInstancePoolService, getInstanceService } from "@/lib/config/context.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
@@ -89,19 +89,8 @@ export function attachListInstances(app: Hono<{ Bindings: Bindings; Variables: V
     const instanceService = getInstanceService(c);
     const instancePoolService = getInstancePoolService(c);
     const [{ instances, total }, instance] = await Promise.all([
-      instanceService.listInstances({
-        c,
-        clusterId,
-        limit: pageSize,
-        offset,
-      }),
-      instancePoolService.resolveInstancePool({ c, clusterId }),
-      instancePoolService.listInstances({
-        c,
-        clusterId,
-        limit: pageSize,
-        offset,
-      }),
+      instanceService.listInstances({ c, clusterId, limit: pageSize, offset }),
+      instancePoolService.resolveInstancePool({ db: getDbStore(c), billingService: getBillingService(c), clusterId }),
     ]);
 
     const finalInstances = instance ? [instance, ...instances] : instances;

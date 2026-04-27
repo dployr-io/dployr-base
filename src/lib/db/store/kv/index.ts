@@ -49,6 +49,7 @@ export class KVStore {
 
   // EventStore delegation
   logEvent = (...args: Parameters<EventStore["logEvent"]>) => this.events.logEvent(...args);
+  logSystemEvent = (...args: Parameters<EventStore["logSystemEvent"]>) => this.events.logSystemEvent(...args);
   getEvents = (...args: Parameters<EventStore["getEvents"]>) => this.events.getEvents(...args);
   getClusterEvents = (...args: Parameters<EventStore["getClusterEvents"]>) => this.events.getClusterEvents(...args);
   createWorkflowFailedEvent = (...args: Parameters<EventStore["createWorkflowFailedEvent"]>) => this.events.createWorkflowFailedEvent(...args);
@@ -64,6 +65,10 @@ export class KVStore {
   cacheServices = (...args: Parameters<InstanceCacheStore["cacheServices"]>) => this.instanceCache.cacheServices(...args);
   getCachedServices = (...args: Parameters<InstanceCacheStore["getCachedServices"]>) => this.instanceCache.getCachedServices(...args);
   invalidateServiceCache = (...args: Parameters<InstanceCacheStore["invalidateServiceCache"]>) => this.instanceCache.invalidateServiceCache(...args);
+  setNodeConnected = (...args: Parameters<InstanceCacheStore["setNodeConnected"]>) => this.instanceCache.setNodeConnected(...args);
+  refreshNodeConnected = (...args: Parameters<InstanceCacheStore["refreshNodeConnected"]>) => this.instanceCache.refreshNodeConnected(...args);
+  deleteNodeConnected = (...args: Parameters<InstanceCacheStore["deleteNodeConnected"]>) => this.instanceCache.deleteNodeConnected(...args);
+  isNodeConnected = (...args: Parameters<InstanceCacheStore["isNodeConnected"]>) => this.instanceCache.isNodeConnected(...args);
   saveNodeUpdate = (...args: Parameters<InstanceCacheStore["saveNodeUpdate"]>) => this.instanceCache.saveNodeUpdate(...args);
   getNodeUpdate = (...args: Parameters<InstanceCacheStore["getNodeUpdate"]>) => this.instanceCache.getNodeUpdate(...args);
   saveProcessSnapshot = (...args: Parameters<InstanceCacheStore["saveProcessSnapshot"]>) => this.instanceCache.saveProcessSnapshot(...args);

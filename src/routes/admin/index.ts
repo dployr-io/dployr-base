@@ -81,6 +81,12 @@ admin.post("/login", async (c) => {
 
 admin.use("*", requireDployrAdministrator);
 
+admin.get("/events", async (c) => {
+  const kv = getKVStore(c);
+  const events = await kv.getEvents("system");
+  return c.json(createSuccessResponse({ events }));
+});
+
 admin.route("/instances", instances);
 
 export default admin;

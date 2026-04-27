@@ -1,7 +1,7 @@
 // pool.routes.ts
 import { Hono } from "hono";
 import { Bindings, Variables, createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
-import { getDbStore, getVMService } from "@/lib/config/context.js";
+import { getDbStore, getKVStore, getVMService } from "@/lib/config/context.js";
 import { DatabaseConflictError, ResourceNotFoundError } from "@/lib/errors/errors.js";
 import { ERROR, INSTANCE_REGIONS } from "@/lib/constants/index.js";
 import { z } from "zod";
@@ -18,16 +18,24 @@ export const pool = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Retrieve all instances in pool
 pool.get("/", async (c) => {
-  const service = new InstancePoolService();
   const db = getDbStore(c);
+  const kv = getKVStore(c);
   const vm = getVMService(c);
   const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
 
-  service.poolSync({ db, vm }).catch(() => {});
+  const service = new InstancePoolService({ db, kv, vm: vm ?? undefined });
+  service.poolSync().catch(() => {});
 
   try {
-    const { instances, total } = await db.instancePool.list({ limit: pageSize, offset });
-    const paginated = createPaginatedResponse(instances, page, pageSize, total);
+    const [{ instances, total }, clusterMap] = await Promise.all([db.instancePool.list({ limit: pageSize, offset }), db.instancePool.getClustersInstanceMap()]);
+
+    const countByInstance = new Map<string, number>();
+    for (const { instanceId } of clusterMap) {
+      countByInstance.set(instanceId, (countByInstance.get(instanceId) ?? 0) + 1);
+    }
+
+    const enriched = instances.map((i) => ({ ...i, clusterCount: countByInstance.get(i.id) ?? 0 }));
+    const paginated = createPaginatedResponse(enriched, page, pageSize, total);
     return c.json(createSuccessResponse({ data: paginated }));
   } catch (error: any) {
     console.error("[Admin/Pool] Failed to list instance pools: ", error);
@@ -108,7 +116,7 @@ pool.patch("/:id", async (c) => {
   const db = getDbStore(c);
 
   try {
-    await db.instancePool.updateStatus(id, status);
+    await db.instancePool.update({ id, data: { status } });
     return c.json(createSuccessResponse({ id, status }));
   } catch (error: any) {
     console.error("[Admin/Pool] Failed to update instance pools: ", error);

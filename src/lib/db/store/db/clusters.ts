@@ -464,6 +464,11 @@ export class ClusterStore extends BaseStore {
       : null;
   }
 
+  async listUnassigned(): Promise<{ id: string }[]> {
+    const result = await this.db.prepare(`SELECT id FROM clusters WHERE pool_instance_id IS NULL`).all();
+    return result.results.map((r) => ({ id: r.id as string }));
+  }
+
   /**
    * Gets a list of clusters that belongs to a user (excludes invited).
    *
