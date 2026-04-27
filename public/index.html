@@ -929,6 +929,61 @@
       background: var(--bg-3);
       color: var(--text-dim);
     }
+
+    .copy-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 10px;
+      padding: 1px 4px;
+      vertical-align: middle;
+      border-radius: 2px;
+      transition: color var(--transition);
+      font-family: var(--mono);
+    }
+
+    .copy-btn:hover { color: var(--accent); }
+
+    .toggle-group {
+      display: flex;
+      gap: 4px;
+    }
+
+    .toggle-btn {
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 11px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .toggle-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .toggle-btn:hover:not(.active) {
+      border-color: var(--border-hi);
+      color: var(--text);
+    }
+
+    .cell-id {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    .cell-tag {
+      font-family: var(--mono);
+      font-weight: 500;
+    }
   </style>
 </head>
 
@@ -1017,14 +1072,6 @@
           </svg>
           Remove Instance
         </button>
-        <button class="nav-item" data-view="pool" onclick="switchView('pool', this)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <ellipse cx="12" cy="5" rx="9" ry="3" />
-            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-          </svg>
-          Pool Health
-        </button>
         <button class="nav-item" data-view="events" onclick="switchView('events', this)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
@@ -1097,9 +1144,9 @@
                 <table id="instances-table">
                   <thead>
                     <tr>
-                      <th>Type</th>
-                      <th>Instance ID</th>
+                      <th>Kind</th>
                       <th>Tag</th>
+                      <th>ID</th>
                       <th>Address</th>
                       <th>Region</th>
                       <th>Status</th>
@@ -1209,95 +1256,27 @@
           </div>
         </div>
 
-        <!-- Pool Health view -->
-        <div id="view-pool" class="hidden">
-          <div class="page-header">
-            <div>
-              <div class="page-title">Pool Health</div>
-              <div class="page-subtitle">Managed instance pool — capacity, load, and status</div>
-            </div>
-            <button class="btn btn-ghost btn-sm" onclick="loadPoolHealth()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
-              </svg>
-              Refresh
-            </button>
-          </div>
-          <div class="stats-row" style="grid-template-columns:repeat(5,1fr);">
-            <div class="stat-card">
-              <div class="stat-label">Total Pools</div>
-              <div class="stat-value" id="ps-total">—</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Healthy</div>
-              <div class="stat-value green" id="ps-healthy">—</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Maintenance</div>
-              <div class="stat-value yellow" id="ps-maint">—</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Clusters Hosted</div>
-              <div class="stat-value" id="ps-used">—</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Spare Slots</div>
-              <div class="stat-value green" id="ps-spare">—</div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header">
-              <span class="panel-title">Pool Instances</span>
-              <span class="text-muted" style="font-size:11px;" id="pool-timestamp">—</span>
-            </div>
-            <div class="panel-body" style="padding:0;">
-              <div id="pool-loading" class="empty-state hidden">
-                <div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);"></div>
-                <span>Fetching pool…</span>
-              </div>
-              <div id="pool-empty" class="empty-state hidden">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <ellipse cx="12" cy="5" rx="9" ry="3" />
-                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-                </svg>
-                <span>No pool instances</span>
-              </div>
-              <div class="table-wrap">
-                <table id="pool-table">
-                  <thead>
-                    <tr>
-                      <th>Tag</th>
-                      <th>Address</th>
-                      <th>Region</th>
-                      <th>Status</th>
-                      <th>Load</th>
-                      <th>Clusters / Cap</th>
-                      <th>Created</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody id="pool-tbody"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Events view -->
         <div id="view-events" class="hidden">
           <div class="page-header">
             <div>
               <div class="page-title">Events</div>
-              <div class="page-subtitle">Pool lifecycle and system events</div>
+              <div class="page-subtitle">System and user activity feed</div>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="loadEvents()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
-              </svg>
-              Refresh
-            </button>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <div class="toggle-group">
+                <button class="toggle-btn active" id="evt-toggle-all" onclick="setEventsFilter('all',this)">All</button>
+                <button class="toggle-btn" id="evt-toggle-user" onclick="setEventsFilter('user',this)">User</button>
+                <button class="toggle-btn" id="evt-toggle-system" onclick="setEventsFilter('system',this)">System</button>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="loadEvents()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+                </svg>
+                Refresh
+              </button>
+            </div>
           </div>
           <div class="panel">
             <div class="panel-header">
@@ -1313,14 +1292,15 @@
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                 </svg>
-                <span>No events yet</span>
+                <span>No events</span>
               </div>
               <div class="table-wrap">
                 <table id="events-table">
                   <thead>
                     <tr>
-                      <th>Time</th>
+                      <th style="width:90px;">Time</th>
                       <th>Event</th>
+                      <th>Actor</th>
                       <th>Target</th>
                     </tr>
                   </thead>
@@ -1464,7 +1444,6 @@
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       if (navEl) navEl.classList.add('active');
       if (name === 'instances') loadInstances();
-      if (name === 'pool') loadPoolHealth();
       if (name === 'events') loadEvents();
       if (name === 'token') populateTokenView();
     }
@@ -1601,63 +1580,54 @@
 
       try {
         const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
-        const [instancesRes, poolRes] = await Promise.all([
-          fetch(`${API_BASE}/v1/admin/instances${sessionParam}`, { headers: apiHeaders() }),
-          fetch(`${API_BASE}/v1/admin/instances/pool${sessionParam}`, { headers: apiHeaders() }),
-        ]);
-
-        if (!instancesRes.ok) {
-          const err = await instancesRes.json().catch(() => ({}));
-          throw new Error(err.error?.message || err.error || `HTTP ${instancesRes.status}`);
+        const res = await fetch(`${API_BASE}/v1/admin/instances${sessionParam}`, { headers: apiHeaders() });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || err.error || `HTTP ${res.status}`);
         }
 
-        const instancesBody = await instancesRes.json();
-        const poolBody = poolRes.ok ? await poolRes.json().catch(() => ({})) : {};
-
-        const dedicated = (instancesBody.data?.items || []).map(i => ({
-          ...i, _source: 'dedicated', region: i.metadata?.region || i.region || null,
-        }));
-        const pool = (poolBody.data?.data?.items || []).map(i => ({
-          ...i, _source: 'pool', region: i.region || i.metadata?.region || null,
+        const body = await res.json();
+        const all = (body.data?.items || []).map(i => ({
+          ...i, region: i.metadata?.region || i.region || null,
         }));
 
-        const combined = [...pool, ...dedicated];
-
-        document.getElementById('stat-total').textContent = combined.length;
-        document.getElementById('stat-running').textContent = combined.filter(i => i.status === 'healthy').length;
-        document.getElementById('stat-stopped').textContent = combined.filter(i => ['offline', 'unreachable'].includes(i.status)).length;
-        document.getElementById('stat-pending').textContent = combined.filter(i => ['degraded', 'maintenance'].includes(i.status)).length;
+        document.getElementById('stat-total').textContent = all.length;
+        document.getElementById('stat-running').textContent = all.filter(i => i.status === 'healthy').length;
+        document.getElementById('stat-stopped').textContent = all.filter(i => ['offline', 'unreachable'].includes(i.status)).length;
+        document.getElementById('stat-pending').textContent = all.filter(i => ['degraded', 'maintenance'].includes(i.status)).length;
         document.getElementById('instances-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
         loading.classList.add('hidden');
 
-        if (!combined.length) { empty.classList.remove('hidden'); return; }
+        if (!all.length) { empty.classList.remove('hidden'); return; }
 
         table.style.display = '';
-        combined.forEach(inst => {
+        all.forEach(inst => {
+          const isPool = inst.kind === 'pool';
           const regionLabel = inst.region ? `${REGION_FLAGS[inst.region] ?? '🌐'} ${inst.region}` : '—';
           const createdMs = parseInt(inst.createdAt, 10);
-          const isPool = inst._source === 'pool';
 
-          const typeBadge = isPool
+          const kindBadge = isPool
             ? `<span class="badge" style="background:var(--accent-dim);color:var(--accent);">pool</span>`
-            : `<span class="badge" style="background:var(--bg-3);color:var(--text-muted);">dedicated</span>`;
+            : `<span class="badge" style="background:var(--bg-3);color:var(--text-dim);">dedicated</span>`;
 
           const statusBadge = `<span class="badge ${STATUS_BADGE_CLASS[inst.status] || 'stopped'}">${escHtml(inst.status || '—')}</span>`;
 
           const clusterCol = isPool
-            ? `<span class="text-muted" style="font-size:11px;">cap: ${escHtml(String(inst.capacity ?? '—'))}</span>`
-            : `<span class="mono" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;" title="${escAttr(inst.clusterId || '')}">${escHtml((inst.clusterId || '—').slice(0, 16))}${(inst.clusterId || '').length > 16 ? '…' : ''}</span>`;
+            ? `<span style="font-size:11px;color:var(--text-dim);">${loadBarHtml(inst.clusterCount ?? 0, inst.capacity ?? 10)}<span style="font-size:11px;">${inst.clusterCount ?? 0}/${inst.capacity ?? 10}</span></span>`
+            : (inst.clusterId
+                ? `<span class="cell-id">${escHtml(inst.clusterId.slice(0, 12))}… <button class="copy-btn" onclick="copyCell('${escAttr(inst.clusterId)}',this)" title="Copy cluster ID">⎘</button></span>`
+                : `<span class="text-muted">—</span>`);
 
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${typeBadge}</td>
-            <td class="mono">${escHtml(inst.id || '—')}</td>
-            <td>${escHtml(inst.tag || '—')}</td>
-            <td class="dim">${escHtml(inst.address || '—')}</td>
-            <td class="dim">${escHtml(regionLabel)}</td>
+            <td style="width:76px;">${kindBadge}</td>
+            <td class="cell-tag">${escHtml(inst.tag || '—')} <button class="copy-btn" onclick="copyCell('${escAttr(inst.tag || '')}',this)" title="Copy tag">⎘</button></td>
+            <td class="cell-id">${escHtml((inst.id || '—').slice(0, 8))}… <button class="copy-btn" onclick="copyCell('${escAttr(inst.id || '')}',this)" title="Copy ID">⎘</button></td>
+            <td class="dim">${inst.address ? `${escHtml(inst.address)} <button class="copy-btn" onclick="copyCell('${escAttr(inst.address)}',this)" title="Copy address">⎘</button>` : '—'}</td>
+            <td class="dim" style="white-space:nowrap;">${escHtml(regionLabel)}</td>
             <td>${statusBadge}</td>
             <td>${clusterCol}</td>
-            <td class="dim">${escHtml(createdMs ? new Date(createdMs).toLocaleDateString() : '—')}</td>
+            <td class="dim" style="white-space:nowrap;">${createdMs ? relTime(createdMs) : '—'}</td>
             <td><button class="btn btn-ghost btn-sm" onclick="prefillRemove('${escAttr(inst.id)}','${escAttr(inst.tag || inst.id)}')">Remove</button></td>
           `;
           tbody.appendChild(tr);
@@ -1669,7 +1639,7 @@
       }
     }
 
-    const POOL_EVENT_META = {
+    const EVENT_META = {
       'pool.instance_maintenance': { label: 'Maintenance', cls: 'maintenance' },
       'pool.instance_drained': { label: 'Drained', cls: 'drained' },
       'pool.instance_provisioned': { label: 'Provisioned', cls: 'provisioned' },
@@ -1689,71 +1659,62 @@
       return `<span class="load-bar-wrap"><span class="load-bar-fill" style="width:${pct}%;background:${color};"></span></span>`;
     }
 
-    async function loadPoolHealth() {
-      const tbody = document.getElementById('pool-tbody');
-      const loading = document.getElementById('pool-loading');
-      const empty = document.getElementById('pool-empty');
-      const table = document.getElementById('pool-table');
+    let _eventsData = [];
+    let _eventsFilter = 'all';
+
+    function setEventsFilter(filter, btn) {
+      _eventsFilter = filter;
+      document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderEvents();
+    }
+
+    function renderEvents() {
+      const tbody = document.getElementById('events-tbody');
+      const empty = document.getElementById('events-empty');
+      const table = document.getElementById('events-table');
+
+      const filtered = _eventsData.filter(evt => {
+        if (_eventsFilter === 'all') return true;
+        const actorType = evt.actor?.type || 'system';
+        if (_eventsFilter === 'user') return actorType === 'user';
+        return actorType !== 'user'; // system = headless + system
+      });
 
       tbody.innerHTML = '';
-      loading.classList.remove('hidden');
-      empty.classList.add('hidden');
-      table.style.display = 'none';
-
-      try {
-        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
-        const res = await fetch(`${API_BASE}/v1/admin/instances/pool${sessionParam}`, { headers: apiHeaders() });
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
-        const body = await res.json();
-        const items = body.data?.data?.items || [];
-
-        const totalClusters = items.reduce((s, i) => s + (i.clusterCount ?? 0), 0);
-        const totalCap = items.reduce((s, i) => s + (i.capacity ?? 0), 0);
-        const spare = items.filter(i => i.status === 'healthy').reduce((s, i) => s + Math.max(0, i.capacity - (i.clusterCount ?? 0)), 0);
-
-        document.getElementById('ps-total').textContent = items.length;
-        document.getElementById('ps-healthy').textContent = items.filter(i => i.status === 'healthy').length;
-        document.getElementById('ps-maint').textContent = items.filter(i => i.status === 'maintenance').length;
-        document.getElementById('ps-used').textContent = totalClusters;
-        document.getElementById('ps-spare').textContent = spare;
-        document.getElementById('pool-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
-
-        loading.classList.add('hidden');
-        if (!items.length) { empty.classList.remove('hidden'); return; }
-
-        table.style.display = '';
-        items.forEach(inst => {
-          const statusCls = STATUS_BADGE_CLASS[inst.status] || 'stopped';
-          const count = inst.clusterCount ?? 0;
-          const cap = inst.capacity ?? 10;
-          const regionLabel = inst.region ? `${REGION_FLAGS[inst.region] ?? '🌐'} ${inst.region}` : '—';
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="mono" style="font-size:11px;">${escHtml(inst.tag || '—')}</td>
-            <td class="dim">${escHtml(inst.address || '—')}</td>
-            <td class="dim">${escHtml(regionLabel)}</td>
-            <td><span class="badge ${statusCls}">${escHtml(inst.status || '—')}</span></td>
-            <td>${loadBarHtml(count, cap)}<span style="font-size:11px;color:var(--text-dim);">${Math.round(count / cap * 100) || 0}%</span></td>
-            <td class="dim" style="font-size:11px;">${count} / ${cap}</td>
-            <td class="dim">${escHtml(inst.createdAt ? new Date(parseInt(inst.createdAt, 10)).toLocaleDateString() : '—')}</td>
-            <td><button class="btn btn-ghost btn-sm" onclick="prefillRemove('${escAttr(inst.id)}','${escAttr(inst.tag || inst.id)}')">Remove</button></td>
-          `;
-          tbody.appendChild(tr);
-        });
-      } catch (err) {
-        loading.classList.add('hidden');
+      if (!filtered.length) {
         empty.classList.remove('hidden');
-        toast(`Failed to load pool: ${err.message}`, 'error');
+        table.style.display = 'none';
+        return;
       }
+      empty.classList.add('hidden');
+      table.style.display = '';
+
+      filtered.forEach(evt => {
+        const meta = EVENT_META[evt.type] || { label: evt.type, cls: 'other' };
+        const actorType = evt.actor?.type || '—';
+        const actorId = evt.actor?.id || '—';
+        const actorCell = `<span class="cell-id">${escHtml(actorType)}: ${escHtml(actorId.slice(0, 14))}${actorId.length > 14 ? '…' : ''}</span>`;
+        const targets = (evt.targets || [])
+          .map(t => `<span class="cell-id">${escHtml((t.id || '').slice(0, 16))}${(t.id || '').length > 16 ? '…' : ''} <button class="copy-btn" onclick="copyCell('${escAttr(t.id || '')}',this)" title="Copy ID">⎘</button></span>`)
+          .join(' ');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="dim" style="white-space:nowrap;">${escHtml(relTime(evt.timestamp))}</td>
+          <td><span class="evt-pill ${meta.cls}">${escHtml(meta.label)}</span> <span class="dim" style="font-size:10px;">${escHtml(evt.type)}</span></td>
+          <td>${actorCell}</td>
+          <td>${targets || '<span class="text-muted">—</span>'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
     }
 
     async function loadEvents() {
-      const tbody = document.getElementById('events-tbody');
       const loading = document.getElementById('events-loading');
       const empty = document.getElementById('events-empty');
       const table = document.getElementById('events-table');
 
-      tbody.innerHTML = '';
+      document.getElementById('events-tbody').innerHTML = '';
       loading.classList.remove('hidden');
       empty.classList.add('hidden');
       table.style.display = 'none';
@@ -1763,25 +1724,11 @@
         const res = await fetch(`${API_BASE}/v1/admin/events${sessionParam}`, { headers: apiHeaders() });
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
         const body = await res.json();
-        const events = (body.data?.events || []).slice(0, 200);
+        _eventsData = (body.data?.events || []).slice(0, 200);
 
         document.getElementById('events-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
         loading.classList.add('hidden');
-
-        if (!events.length) { empty.classList.remove('hidden'); return; }
-
-        table.style.display = '';
-        events.forEach(evt => {
-          const meta = POOL_EVENT_META[evt.type] || { label: evt.type, cls: 'other' };
-          const targets = (evt.targets || []).map(t => `<span class="mono" style="font-size:10px;color:var(--text-dim);">${escHtml(t.id.slice(0, 16))}…</span>`).join(' ');
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="dim" style="font-size:11px;white-space:nowrap;">${escHtml(relTime(evt.timestamp))}</td>
-            <td><span class="evt-pill ${meta.cls}">${escHtml(meta.label)}</span> <span class="dim" style="font-size:10px;">${escHtml(evt.type)}</span></td>
-            <td>${targets || '<span class="text-muted">—</span>'}</td>
-          `;
-          tbody.appendChild(tr);
-        });
+        renderEvents();
       } catch (err) {
         loading.classList.add('hidden');
         empty.classList.remove('hidden');
@@ -1865,6 +1812,15 @@
       navigator.clipboard.writeText(state.jwt)
         .then(() => toast('Token copied to clipboard', 'success'))
         .catch(() => toast('Copy failed', 'error'));
+    }
+
+    function copyCell(value, btn) {
+      navigator.clipboard.writeText(value).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓';
+        btn.style.color = 'var(--green)';
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1200);
+      }).catch(() => toast('Copy failed', 'error'));
     }
 
     function escHtml(str) {
