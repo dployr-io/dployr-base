@@ -4,7 +4,7 @@
 import { ClusterSubscription, SubscriptionPlan, SubscriptionStatus } from "@/types/index.js";
 import { BaseStore } from "./base.js";
 
-export class SubscriptionStore extends BaseStore {
+export class BillingStore extends BaseStore {
   async get(clusterId: string): Promise<ClusterSubscription | null> {
     const row = await this.db
       .prepare(

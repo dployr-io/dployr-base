@@ -13,6 +13,7 @@ export type InstanceFilter = {
 };
 
 export type InstanceUpdateData = {
+  address?: string;
   status?: InstanceStatus;
   metadata?: Record<string, any>;
 };
@@ -87,7 +88,10 @@ export class InstanceStore extends BaseStore {
     const where = parts.length ? `WHERE ${parts.join(" AND ")}` : "";
 
     const countResult = bindings.length
-      ? await this.db.prepare(`SELECT COUNT(*) as count FROM instances ${where}`).bind(...bindings).first()
+      ? await this.db
+          .prepare(`SELECT COUNT(*) as count FROM instances ${where}`)
+          .bind(...bindings)
+          .first()
       : await this.db.prepare(`SELECT COUNT(*) as count FROM instances ${where}`).first();
 
     const total = Number(countResult?.count ?? 0);
@@ -105,7 +109,10 @@ export class InstanceStore extends BaseStore {
     }
 
     const results = dataBindings.length
-      ? await this.db.prepare(sql).bind(...dataBindings).all()
+      ? await this.db
+          .prepare(sql)
+          .bind(...dataBindings)
+          .all()
       : await this.db.prepare(sql).all();
 
     return { instances: results.results.map((r) => this.toInstance(r)), total };
@@ -116,6 +123,10 @@ export class InstanceStore extends BaseStore {
     const values: any[] = [];
     let p = 1;
 
+    if (data.address !== undefined) {
+      parts.push(`address = $${p++}`);
+      values.push(data.address);
+    }
     if (data.status !== undefined) {
       parts.push(`status = $${p++}::instance_status`);
       values.push(data.status);
@@ -129,7 +140,10 @@ export class InstanceStore extends BaseStore {
     parts.push(`updated_at = $${p++}`);
     values.push(this.now(), id);
 
-    await this.db.prepare(`UPDATE instances SET ${parts.join(", ")} WHERE id = $${p}`).bind(...values).run();
+    await this.db
+      .prepare(`UPDATE instances SET ${parts.join(", ")} WHERE id = $${p}`)
+      .bind(...values)
+      .run();
   }
 
   async delete({ id }: { id: string }): Promise<void> {

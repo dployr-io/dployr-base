@@ -47,8 +47,8 @@ export class BillingService {
       updatedAt: number;
     } | null;
   }> {
-    const sub = await db.subscriptions.get(clusterId);
-    const plan = await db.subscriptions.getEffectivePlan(clusterId);
+    const sub = await db.billing.get(clusterId);
+    const plan = await db.billing.getEffectivePlan(clusterId);
     const planDetails = PLANS.find((p) => p.id === plan) || null;
 
     return {
@@ -75,9 +75,9 @@ export class BillingService {
 
     const checkoutUrl = await this.provider.buildCheckoutUrl(params);
 
-    await db.subscriptions.upsert({
+    await db.billing.upsert({
       clusterId: params.clusterId,
-      plan: await db.subscriptions.getEffectivePlan(params.clusterId),
+      plan: await db.billing.getEffectivePlan(params.clusterId),
       polarCustomerId: customer.id,
       status: "active",
     });
@@ -122,7 +122,7 @@ export class BillingService {
       return;
     }
 
-    const sub = await db.subscriptions.get(clusterId);
+    const sub = await db.billing.get(clusterId);
     if (!sub) return;
 
     const cluster = await db.clusters.get(clusterId);
@@ -186,7 +186,7 @@ export class BillingService {
       return;
     }
 
-    const previousPlan = await db.subscriptions.getEffectivePlan(clusterId);
+    const previousPlan = await db.billing.getEffectivePlan(clusterId);
 
     const polarStatus = (data.status as string) || "active";
     const status: SubscriptionStatus = polarStatus === "past_due" ? "past_due" : "active";
@@ -194,7 +194,7 @@ export class BillingService {
     const canceledAt = this.toEpochMs(data.canceled_at);
     const periodEnd = this.toEpochMs(data.current_period_end);
 
-    await db.subscriptions.upsert({ clusterId, plan, polarCustomerId, polarSubscriptionId, status, canceledAt, periodEnd });
+    await db.billing.upsert({ clusterId, plan, polarCustomerId, polarSubscriptionId, status, canceledAt, periodEnd });
 
     if (previousPlan === "hobby" && plan !== "hobby") {
       try {
@@ -223,10 +223,10 @@ export class BillingService {
     const periodEnd = this.toEpochMs(data.current_period_end);
 
     if (polarSubscriptionId) {
-      const existing = await db.subscriptions.getByPolarSubscriptionId(polarSubscriptionId);
+      const existing = await db.billing.getByPolarSubscriptionId(polarSubscriptionId);
       if (!existing) return;
 
-      await db.subscriptions.upsert({
+      await db.billing.upsert({
         clusterId: existing.clusterId,
         plan: existing.plan,
         polarCustomerId: existing.polarCustomerId,
@@ -239,10 +239,10 @@ export class BillingService {
       console.log(`[Billing] Cluster ${existing.clusterId} marked canceled`);
       await this.sendBillingNotification(EVENTS.BILLING.SUBSCRIPTION_CANCELLED.code, existing.clusterId, db, kv, { periodEnd });
     } else if (clusterId) {
-      const existing = await db.subscriptions.get(clusterId);
+      const existing = await db.billing.get(clusterId);
       if (!existing) return;
 
-      await db.subscriptions.upsert({
+      await db.billing.upsert({
         clusterId,
         plan: existing.plan,
         polarCustomerId: existing.polarCustomerId,
@@ -261,12 +261,12 @@ export class BillingService {
     const polarSubscriptionId = this.getPolarSubscriptionId(data);
     if (!polarSubscriptionId) return;
 
-    const existing = await db.subscriptions.getByPolarSubscriptionId(polarSubscriptionId);
+    const existing = await db.billing.getByPolarSubscriptionId(polarSubscriptionId);
     if (!existing) return;
 
-    const previousPlan = await db.subscriptions.getEffectivePlan(existing.clusterId);
+    const previousPlan = await db.billing.getEffectivePlan(existing.clusterId);
 
-    await db.subscriptions.upsert({
+    await db.billing.upsert({
       clusterId: existing.clusterId,
       plan: "hobby",
       polarCustomerId: existing.polarCustomerId,
@@ -293,12 +293,12 @@ export class BillingService {
     const polarSubscriptionId = this.getPolarSubscriptionId(data);
     if (!polarSubscriptionId) return;
 
-    const existing = await db.subscriptions.getByPolarSubscriptionId(polarSubscriptionId);
+    const existing = await db.billing.getByPolarSubscriptionId(polarSubscriptionId);
     if (!existing) return;
 
-    const previousPlan = await db.subscriptions.getEffectivePlan(existing.clusterId);
+    const previousPlan = await db.billing.getEffectivePlan(existing.clusterId);
 
-    await db.subscriptions.upsert({
+    await db.billing.upsert({
       clusterId: existing.clusterId,
       plan: existing.plan,
       polarCustomerId: existing.polarCustomerId,
@@ -325,10 +325,10 @@ export class BillingService {
     const clusterId = this.getPolarReferencedClusterId(data);
     if (!clusterId) return;
 
-    const existing = await db.subscriptions.get(clusterId);
+    const existing = await db.billing.get(clusterId);
     if (!existing) return;
 
-    await db.subscriptions.upsert({
+    await db.billing.upsert({
       clusterId,
       plan: existing.plan,
       polarCustomerId: existing.polarCustomerId,

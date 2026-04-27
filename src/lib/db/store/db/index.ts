@@ -8,7 +8,7 @@ import { InstanceStore } from "./instances.js";
 import { BootstrapTokenStore } from "./bootstrap-tokens.js";
 import { DomainStore } from "./domains.js";
 import { ServiceStore } from "./services.js";
-import { SubscriptionStore } from "./subscriptions.js";
+import { BillingStore } from "./billing.js";
 
 export class DatabaseStore {
   public users: UserStore;
@@ -17,7 +17,7 @@ export class DatabaseStore {
   public bootstrapTokens: BootstrapTokenStore;
   public domains: DomainStore;
   public services: ServiceStore;
-  public subscriptions: SubscriptionStore;
+  public billing: BillingStore;
 
   constructor(db: PostgresAdapter) {
     this.users = new UserStore(db);
@@ -26,12 +26,12 @@ export class DatabaseStore {
     this.bootstrapTokens = new BootstrapTokenStore(db);
     this.domains = new DomainStore(db);
     this.services = new ServiceStore(db);
-    this.subscriptions = new SubscriptionStore(db);
+    this.billing = new BillingStore(db);
   }
 }
 
 export const PostgresStore = DatabaseStore;
-export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore, DomainStore, ServiceStore, SubscriptionStore };
+export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore, DomainStore, ServiceStore, BillingStore };
 export type { InstanceFilter, InstanceUpdateData } from "./instances.js";
 export type { ServiceFilter } from "./services.js";
 export type { UserFilter } from "./users.js";

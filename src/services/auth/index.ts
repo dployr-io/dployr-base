@@ -26,7 +26,7 @@ export class AuthService {
     const existing = await this.db.users.find({ email });
     const userToSave = existing ? { email, name: existing.name, provider, metadata: metadata ?? {} } : { email, name, picture, provider, metadata: metadata ?? {} };
 
-    const user = await this.db.users.save(userToSave);
+    const user = await this.db.users.upsert(userToSave);
     if (!user) throw new Error("Failed to save user");
     return user;
   }
@@ -39,7 +39,7 @@ export class AuthService {
     const existing = await this.db.users.find({ email });
     if (existing) return existing;
 
-    const user = await this.db.users.save({
+    const user = await this.db.users.upsert({
       email,
       name: email.split("@")[0] ?? email,
       provider: "email" as OAuthProvider,

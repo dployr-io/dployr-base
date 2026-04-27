@@ -15,7 +15,7 @@ export class UserStore extends BaseStore {
    * Upserts a user record. On conflict by email the name, picture, provider,
    * and metadata are merged with the existing row.
    */
-  async save(user: RequiredOnly<Omit<User, "id" | "createdAt" | "updatedAt">, "email" | "provider" | "metadata">): Promise<User | null> {
+  async upsert(user: RequiredOnly<Omit<User, "id" | "createdAt" | "updatedAt">, "email" | "provider" | "metadata">): Promise<User | null> {
     const id = this.generateId();
     const now = this.now();
     const metadataJson = user.metadata || {};
@@ -90,10 +90,22 @@ export class UserStore extends BaseStore {
     const values: any[] = [];
     let p = 1;
 
-    if (updates.name !== undefined) { parts.push(`name = $${p++}`); values.push(updates.name); }
-    if (updates.picture !== undefined) { parts.push(`picture = $${p++}`); values.push(updates.picture); }
-    if (updates.provider !== undefined) { parts.push(`provider = $${p++}`); values.push(updates.provider); }
-    if (updates.metadata !== undefined) { parts.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${p++}::jsonb`); values.push(updates.metadata); }
+    if (updates.name !== undefined) {
+      parts.push(`name = $${p++}`);
+      values.push(updates.name);
+    }
+    if (updates.picture !== undefined) {
+      parts.push(`picture = $${p++}`);
+      values.push(updates.picture);
+    }
+    if (updates.provider !== undefined) {
+      parts.push(`provider = $${p++}`);
+      values.push(updates.provider);
+    }
+    if (updates.metadata !== undefined) {
+      parts.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${p++}::jsonb`);
+      values.push(updates.metadata);
+    }
 
     parts.push(`updated_at = $${p++}`);
     values.push(now, email);
