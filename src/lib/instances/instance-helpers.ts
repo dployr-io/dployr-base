@@ -3,7 +3,7 @@
 
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { ERROR, SUCCESS, INSTANCE_REGIONS } from "@/lib/constants/index.js";
-import { getBillingService, getDbStore, getInstancePoolService, getInstanceService } from "@/lib/config/context.js";
+import { getBillingService, getDbStore, getInstancePoolService, getInstanceService, getKVStore } from "@/lib/config/context.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
@@ -301,6 +301,36 @@ export function attachRebootInstance(app: Hono<{ Bindings: Bindings; Variables: 
     } catch (error) {
       return handleInstanceError(c, error, "Failed to send system reboot instance task");
     }
+  });
+}
+
+export function attachGetInstanceHealth(app: Hono<{ Bindings: Bindings; Variables: Variables }>) {
+  app.get("/:tag/health", async (c) => {
+    const tag = c.req.param("tag");
+    const kv = getKVStore(c);
+    const raw = await kv.getNodeUpdate(tag);
+    if (!raw) {
+      return c.json(createSuccessResponse(null));
+    }
+    const resources = raw.resources as any;
+    const node = raw.node as any;
+    const status = raw.status as any;
+    const processes = raw.processes as any;
+    const data = {
+      health: raw.health,
+      resources: {
+        cpu: resources?.cpu,
+        memory: resources?.memory,
+        disks: (resources?.disks as any[])?.slice(0, 4),
+      },
+      processes: (processes?.list as any[])?.slice(0, 6),
+      uptime: status?.uptime_seconds,
+      version: node?.version,
+      go_version: node?.go_version,
+      timestamp: raw.timestamp,
+      lastUpdated: raw.lastUpdated,
+    };
+    return c.json(createSuccessResponse(data));
   });
 }
 

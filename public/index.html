@@ -930,6 +930,11 @@
       color: var(--text-dim);
     }
 
+    .evt-pill.error {
+      background: var(--red-dim);
+      color: var(--red);
+    }
+
     .copy-btn {
       background: none;
       border: none;
@@ -985,6 +990,153 @@
     .cell-tag {
       font-family: var(--mono);
       font-weight: 500;
+    }
+
+    .cell-tag-btn {
+      background: none;
+      border: none;
+      color: inherit;
+      font: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 0;
+      text-align: left;
+    }
+
+    .cell-tag-btn:hover {
+      color: var(--accent);
+    }
+
+    .cell-tag-btn.expanded {
+      color: var(--accent);
+    }
+
+    tr.instance-detail > td {
+      padding: 0;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .health-panel {
+      padding: 14px 20px 12px;
+      border-left: 2px solid var(--accent);
+    }
+
+    .health-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .health-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .health-dot::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .health-dot.ok::before { background: var(--green); }
+    .health-dot.down::before { background: var(--red); }
+    .health-dot.degraded::before { background: var(--yellow); }
+
+    .health-uptime {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-left: auto;
+    }
+
+    .health-gauges {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .health-gauge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .health-gauge-label {
+      min-width: 48px;
+      color: var(--text-muted);
+    }
+
+    .health-gauge-bar {
+      width: 80px;
+      height: 4px;
+      background: var(--bg-3);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .health-gauge-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+
+    .health-gauge-val {
+      color: var(--text-dim);
+      min-width: 80px;
+    }
+
+    .health-proc-title {
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .health-proc-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+
+    .health-proc-table th {
+      color: var(--text-muted);
+      font-weight: 400;
+      text-align: left;
+      padding: 2px 12px 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .health-proc-table td {
+      padding: 3px 12px 3px 0;
+      color: var(--text-dim);
+      background: transparent;
+      border-bottom: none;
+    }
+
+    .health-proc-table td:first-child { color: var(--text-muted); }
+
+    .cpu-hi { color: var(--red); }
+    .cpu-med { color: var(--yellow); }
+
+    .health-footer {
+      font-size: 10px;
+      color: var(--text-muted);
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 6px;
     }
   </style>
 </head>
@@ -1548,6 +1700,109 @@
         return (body.data?.events || []).slice(0, 200);
       }
 
+      const healthCache = new Map(); // tag -> { data, fetchedAt }
+
+      async function fetchInstanceHealth(tag) {
+        const cached = healthCache.get(tag);
+        if (cached && Date.now() - cached.fetchedAt < 15000) return cached.data;
+        const body = await apiRequest(`${API_BASE}/v1/admin/instances/${encodeURIComponent(tag)}/health`, {
+          headers: apiHeaders()
+        });
+        healthCache.set(tag, { data: body.data, fetchedAt: Date.now() });
+        return body.data;
+      }
+
+      function fmtBytes(b) {
+        if (!b || b === 0) return '0 B';
+        const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(Math.floor(Math.log(b) / Math.log(1024)), u.length - 1);
+        return (b / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0) + ' ' + u[i];
+      }
+
+      function fmtUptime(s) {
+        if (!s) return '—';
+        const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+        if (d > 0) return `${d}d ${h}h`;
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}m`;
+      }
+
+      function healthDotClass(v) {
+        if (!v) return '';
+        const s = String(v).toLowerCase();
+        if (['ok', 'healthy', 'connected'].includes(s)) return 'ok';
+        if (['down', 'error', 'offline', 'disconnected'].includes(s)) return 'down';
+        return 'degraded';
+      }
+
+      function gaugeBar(pct) {
+        const color = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--yellow)' : 'var(--green)';
+        return `<div class="health-gauge-bar"><div class="health-gauge-fill" style="width:${Math.min(100, pct)}%;background:${color};"></div></div>`;
+      }
+
+      function renderHealthDetail(detailTr, data) {
+        if (!data) {
+          detailTr.innerHTML = `<td colspan="9"><div class="health-panel"><span style="color:var(--text-muted);font-size:11px;">No telemetry data available — node has not reported recently.</span></div></td>`;
+          return;
+        }
+
+        const h = data.health || {};
+        const res = data.resources || {};
+        const cpu = res.cpu || {};
+        const mem = res.memory || {};
+        const disks = res.disks || [];
+        const procs = data.processes || [];
+
+        const subsystems = [['websocket', 'WS'], ['tasks', 'tasks'], ['proxy', 'proxy'], ['auth', 'auth']];
+        const dotsHtml = [
+          `<span class="health-dot ${healthDotClass(h.overall)}" style="font-weight:500;">overall</span>`,
+          ...subsystems.filter(([k]) => h[k]).map(([k, label]) =>
+            `<span class="health-dot ${healthDotClass(h[k])}">${escHtml(label)}</span>`)
+        ].join('');
+
+        const uptimeHtml = data.uptime != null
+          ? `<span class="health-uptime">uptime: ${fmtUptime(data.uptime)}</span>` : '';
+
+        const cpuPct = cpu.idle_percent != null ? Math.round(100 - cpu.idle_percent) : null;
+        const cpuHtml = cpuPct != null ? `<div class="health-gauge">
+          <span class="health-gauge-label">CPU</span>${gaugeBar(cpuPct)}
+          <span class="health-gauge-val">${cpuPct}%</span></div>` : '';
+
+        const memHtml = mem.total_bytes ? `<div class="health-gauge">
+          <span class="health-gauge-label">Memory</span>${gaugeBar(Math.round((mem.used_bytes / mem.total_bytes) * 100))}
+          <span class="health-gauge-val">${fmtBytes(mem.used_bytes)} / ${fmtBytes(mem.total_bytes)}</span></div>` : '';
+
+        const rootDisk = disks.find(d => d.mount_point === '/') || disks[0];
+        const diskHtml = rootDisk?.total_bytes ? `<div class="health-gauge">
+          <span class="health-gauge-label">Disk</span>${gaugeBar(Math.round((rootDisk.used_bytes / rootDisk.total_bytes) * 100))}
+          <span class="health-gauge-val">${fmtBytes(rootDisk.used_bytes)} / ${fmtBytes(rootDisk.total_bytes)}</span></div>` : '';
+
+        const procRows = procs.map(p => {
+          const cpuCls = p.cpu_percent >= 50 ? 'cpu-hi' : p.cpu_percent >= 10 ? 'cpu-med' : '';
+          const cmd = escHtml(p.command.length > 32 ? p.command.slice(0, 32) + '…' : p.command);
+          return `<tr><td>${p.pid}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${cmd}</td><td class="${cpuCls}">${p.cpu_percent.toFixed(2)}%</td><td>${fmtBytes(p.resident_memory_bytes)}</td></tr>`;
+        }).join('');
+
+        const procsHtml = procs.length ? `<div>
+          <div class="health-proc-title">Top Processes</div>
+          <table class="health-proc-table">
+            <thead><tr><th>PID</th><th>Command</th><th>CPU%</th><th>Mem</th></tr></thead>
+            <tbody>${procRows}</tbody>
+          </table></div>` : '';
+
+        const lastSeen = data.lastUpdated ? relTime(data.lastUpdated) : '—';
+        const versionStr = data.version
+          ? `daemon v${escHtml(data.version)}${data.go_version ? ` (${escHtml(data.go_version)})` : ''}`
+          : '';
+
+        detailTr.innerHTML = `<td colspan="9"><div class="health-panel">
+          <div class="health-row">${dotsHtml}${uptimeHtml}</div>
+          <div class="health-gauges">${cpuHtml}${memHtml}${diskHtml}</div>
+          ${procsHtml}
+          <div class="health-footer">${versionStr ? `<span>${versionStr}</span>` : ''}<span>last heartbeat ${lastSeen}</span></div>
+        </div></td>`;
+      }
+
       const REGION_FLAGS = {
         'us-east': '🇺🇸', 'us-west': '🇺🇸', 'us-central': '🇺🇸',
         'eu-west': '🇪🇺', 'eu-central': '🇪🇺',
@@ -1586,9 +1841,10 @@
               : `<span class="text-muted">—</span>`);
 
           const tr = document.createElement('tr');
+          tr.dataset.tag = inst.tag || '';
           tr.innerHTML = `
             <td style="width:76px;">${kindBadge}</td>
-            <td class="cell-tag">${escHtml(inst.tag || '—')} <button class="copy-btn" title="Copy tag">⎘</button></td>
+            <td class="cell-tag"><button class="cell-tag-btn" title="Toggle health dashboard">${escHtml(inst.tag || '—')}</button> <button class="copy-btn" title="Copy tag">⎘</button></td>
             <td class="cell-id">${escHtml((inst.id || '—').slice(0, 8))}… <button class="copy-btn" title="Copy ID">⎘</button></td>
             <td class="dim">${inst.address ? `${escHtml(inst.address)} <button class="copy-btn" title="Copy address">⎘</button>` : '—'}</td>
             <td class="dim" style="white-space:nowrap;">${escHtml(regionLabel)}</td>
@@ -1604,6 +1860,28 @@
               const txt = btn.closest('td').textContent.trim().split(' ')[0]; // grab first word (id/address/tag)
               copyToClipboard(txt, btn);
             });
+          });
+
+          // attach health dashboard toggle
+          const tagBtn = tr.querySelector('.cell-tag-btn');
+          tagBtn.addEventListener('click', async () => {
+            const existing = tr.nextElementSibling;
+            if (existing && existing.classList.contains('instance-detail')) {
+              existing.remove();
+              tagBtn.classList.remove('expanded');
+              return;
+            }
+            tagBtn.classList.add('expanded');
+            const detailTr = document.createElement('tr');
+            detailTr.className = 'instance-detail';
+            detailTr.innerHTML = `<td colspan="9"><div class="health-panel"><div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);display:inline-block;"></div></div></td>`;
+            tr.after(detailTr);
+            try {
+              const health = await fetchInstanceHealth(inst.tag);
+              renderHealthDetail(detailTr, health);
+            } catch (err) {
+              detailTr.innerHTML = `<td colspan="9"><div class="health-panel"><span style="color:var(--red);font-size:11px;">Failed to load health data: ${escHtml(err.message)}</span></div></td>`;
+            }
           });
 
           // attach remove action
@@ -1675,9 +1953,37 @@
       }
 
       const EVENT_META = {
-        'pool.instance_maintenance': { label: 'Maintenance', cls: 'maintenance' },
-        'pool.instance_drained': { label: 'Drained', cls: 'drained' },
-        'pool.instance_provisioned': { label: 'Provisioned', cls: 'provisioned' },
+        // pool events
+        'pool.instance_healthy':       { label: 'Healthy',       cls: 'drained' },
+        'pool.instance_degraded':      { label: 'Degraded',      cls: 'maintenance' },
+        'pool.instance_offline':       { label: 'Offline',       cls: 'error' },
+        'pool.instance_unreachable':   { label: 'Unreachable',   cls: 'error' },
+        'pool.instance_maintenance':   { label: 'Maintenance',   cls: 'maintenance' },
+        'pool.instance_drained':       { label: 'Drained',       cls: 'drained' },
+        'pool.instance_data_cleared':  { label: 'Data Cleared',  cls: 'other' },
+        'pool.instance_provisioned':   { label: 'Provisioned',   cls: 'provisioned' },
+        'pool.instance_allocated':     { label: 'Allocated',     cls: 'provisioned' },
+        // auth events
+        'auth.session_created':        { label: 'Sign-in',       cls: 'provisioned' },
+        // cluster events
+        'cluster.modified':            { label: 'Modified',      cls: 'provisioned' },
+        'cluster.user_invited':        { label: 'User Invited',  cls: 'provisioned' },
+        'cluster.invite_revoked':      { label: 'Invite Revoked', cls: 'maintenance' },
+        'cluster.invite_accepted':     { label: 'Joined',        cls: 'drained' },
+        'cluster.invite_declined':     { label: 'Declined',      cls: 'maintenance' },
+        'cluster.removed_user':        { label: 'User Removed',  cls: 'error' },
+        'cluster.user_role_changed':   { label: 'Role Changed',  cls: 'provisioned' },
+        'cluster.ownership_transferred': { label: 'Ownership',   cls: 'maintenance' },
+        // resource events
+        'resource.resource_created':   { label: 'Created',       cls: 'provisioned' },
+        'resource.resource_updated':   { label: 'Updated',       cls: 'provisioned' },
+        'resource.resource_deleted':   { label: 'Deleted',       cls: 'error' },
+        // domain events
+        'domain.domain_added':         { label: 'Domain Added',  cls: 'provisioned' },
+        'domain.domain_removed':       { label: 'Domain Removed', cls: 'maintenance' },
+        // instance events
+        'instance.instance_created':   { label: 'Created',       cls: 'provisioned' },
+        'instance.instance_deleted':   { label: 'Deleted',       cls: 'error' },
       };
 
       async function loadInstances() {

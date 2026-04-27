@@ -122,6 +122,28 @@ export class EventStore {
    * @param clusterId - The cluster whose event history to retrieve.
    * @returns An array of event objects, sorted by `timestamp` descending.
    */
+  /**
+   * Returns all events across every actor, sorted newest-first.
+   * Used by the admin dashboard to display a unified event feed.
+   */
+  async getAllEvents(): Promise<any[]> {
+    const prefix = "actor:";
+    const result = await this.kv.list({ prefix });
+    const events = await Promise.all(
+      result.map(async (key) => {
+        if (!key.name.startsWith(prefix)) return null;
+        const data = await this.kv.get(key.name);
+        if (!data) return null;
+        try {
+          return JSON.parse(data);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    return events.filter((e) => e !== null).sort((a: any, b: any) => b.timestamp - a.timestamp);
+  }
+
   async getClusterEvents(clusterId: string): Promise<any[]> {
     const prefix = KV_KEYS.TARGET_EVENT(clusterId, "");
     const result = await this.kv.list({ prefix });

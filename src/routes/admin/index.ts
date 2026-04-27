@@ -83,7 +83,7 @@ admin.use("*", requireDployrAdministrator);
 
 admin.get("/events", async (c) => {
   const kv = getKVStore(c);
-  const events = await kv.getEvents("system");
+  const events = await kv.getAllEvents();
   return c.json(createSuccessResponse({ events }));
 });
 

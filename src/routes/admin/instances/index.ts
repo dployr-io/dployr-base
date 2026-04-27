@@ -15,6 +15,7 @@ import {
   attachInstallDployr,
   attachRebootInstance,
   attachRestartDaemon,
+  attachGetInstanceHealth,
 } from "@/lib/instances/instance-helpers.js";
 import { pool } from "./pool.js";
 import vm from "./vm.js";
@@ -46,5 +47,7 @@ attachInstallDployr(instances);
 attachRebootInstance(instances);
 
 attachRestartDaemon(instances);
+
+attachGetInstanceHealth(instances);
 
 export default instances;

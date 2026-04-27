@@ -51,6 +51,7 @@ export class KVStore {
   logEvent = (...args: Parameters<EventStore["logEvent"]>) => this.events.logEvent(...args);
   logSystemEvent = (...args: Parameters<EventStore["logSystemEvent"]>) => this.events.logSystemEvent(...args);
   getEvents = (...args: Parameters<EventStore["getEvents"]>) => this.events.getEvents(...args);
+  getAllEvents = () => this.events.getAllEvents();
   getClusterEvents = (...args: Parameters<EventStore["getClusterEvents"]>) => this.events.getClusterEvents(...args);
   createWorkflowFailedEvent = (...args: Parameters<EventStore["createWorkflowFailedEvent"]>) => this.events.createWorkflowFailedEvent(...args);
 
