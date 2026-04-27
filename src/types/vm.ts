@@ -49,6 +49,7 @@ export interface VirtualMachine {
   ipv4?: string;
   /** Private network IPv4 address */
   privateIpv4?: string;
+  tags?: string[];
   createdAt?: string;
 }
 

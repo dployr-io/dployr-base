@@ -53,9 +53,15 @@ export const EVENTS = {
     BOOTSTRAP_LOGS: { code: "read.bootstrap_logs", message: "Bootstrap logs read" },
   },
   POOL: {
+    INSTANCE_HEALTHY: { code: "pool.instance_healthy", message: "Instance is healthy" },
+    INSTANCE_DEGRADED: { code: "pool.instance_degraded", message: "Instance is degraded" },
+    INSTANCE_OFFLINE: { code: "pool.instance_offline", message: "Instance is offline" },
+    INSTANCE_UNREACHABLE: { code: "pool.instance_unreachable", message: "Instance is unreachable" },
     INSTANCE_MAINTENANCE: { code: "pool.instance_maintenance", message: "Pool instance placed in maintenance" },
     INSTANCE_DRAINED: { code: "pool.instance_drained", message: "Pool instance drained and removed" },
+    INSTANCE_DATA_CLEARED: { code: "pool.instance_data_cleared", message: "Pool instance data cleared" },
     INSTANCE_PROVISIONED: { code: "pool.instance_provisioned", message: "New pool instance provisioned" },
+    INSTANCE_ALLOCATED: { code: "pool.instance_allocated", message: "Pool instance allocated" },
   },
 } as const;
 
@@ -172,4 +178,3 @@ export const EVENT_METADATA: EventMetadataMap = {
     category: "billing",
   },
 };
-
