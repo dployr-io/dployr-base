@@ -416,6 +416,15 @@
       background: var(--yellow);
     }
 
+    .badge.maintenance {
+      background: rgba(107, 114, 128, 0.12);
+      color: #6b7280;
+    }
+
+    .badge.maintenance::before {
+      background: #6b7280;
+    }
+
     .form-group {
       margin-bottom: 14px;
     }
@@ -892,15 +901,6 @@
       transition: width 0.4s ease;
     }
 
-    .badge.maintenance {
-      background: rgba(107, 114, 128, 0.12);
-      color: #6b7280;
-    }
-
-    .badge.maintenance::before {
-      background: #6b7280;
-    }
-
     .evt-pill {
       display: inline-block;
       padding: 2px 7px;
@@ -943,7 +943,9 @@
       font-family: var(--mono);
     }
 
-    .copy-btn:hover { color: var(--accent); }
+    .copy-btn:hover {
+      color: var(--accent);
+    }
 
     .toggle-group {
       display: flex;
@@ -988,7 +990,6 @@
 </head>
 
 <body>
-
   <div id="login-screen">
     <div class="login-card">
       <div class="login-logo">
@@ -1017,11 +1018,11 @@
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="text" class="form-input" id="login-session" readonly
             style="color:var(--text-dim);cursor:default;flex:1;" />
-          <button type="button" class="regen-btn" onclick="regenerateSessionId()">↻ New</button>
+          <button type="button" class="regen-btn" id="regen-session">↻ New</button>
         </div>
         <div class="form-hint">Auto-generated for this session.</div>
       </div>
-      <button class="btn btn-primary btn-full mt-12" id="login-btn" onclick="login()">Sign in</button>
+      <button class="btn btn-primary btn-full mt-12" id="login-btn">Sign in</button>
     </div>
   </div>
 
@@ -1039,7 +1040,7 @@
           <span id="session-id-display">—</span>
         </div>
         <span id="expiry-pill"></span>
-        <button class="btn-logout" onclick="logout()">logout</button>
+        <button class="btn-logout" id="logout-btn">logout</button>
       </div>
     </header>
     <div id="expiry-bar-wrap">
@@ -1049,14 +1050,14 @@
     <main>
       <aside>
         <div class="nav-section-label">Navigation</div>
-        <button class="nav-item active" data-view="instances" onclick="switchView('instances', this)">
+        <button class="nav-item active" data-view="instances">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="3" width="20" height="14" rx="2" />
             <path d="M8 21h8M12 17v4" />
           </svg>
           Instances
         </button>
-        <button class="nav-item" data-view="add" onclick="switchView('add', this)">
+        <button class="nav-item" data-view="add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="16" />
@@ -1064,7 +1065,7 @@
           </svg>
           Add Instance
         </button>
-        <button class="nav-item" data-view="remove" onclick="switchView('remove', this)">
+        <button class="nav-item" data-view="remove">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="3 6 5 6 21 6" />
             <path d="M19 6l-1 14H6L5 6" />
@@ -1072,7 +1073,7 @@
           </svg>
           Remove Instance
         </button>
-        <button class="nav-item" data-view="events" onclick="switchView('events', this)">
+        <button class="nav-item" data-view="events">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
           </svg>
@@ -1080,7 +1081,7 @@
         </button>
         <div class="nav-divider"></div>
         <div class="nav-section-label">System</div>
-        <button class="nav-item" data-view="token" onclick="switchView('token', this)">
+        <button class="nav-item" data-view="token">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="11" width="18" height="11" rx="2" />
             <path d="M7 11V7a5 5 0 0110 0v4" />
@@ -1090,14 +1091,14 @@
       </aside>
 
       <div id="content">
-
+        <!-- instances view -->
         <div id="view-instances">
           <div class="page-header">
             <div>
               <div class="page-title">Instances</div>
               <div class="page-subtitle">All registered nodes on dployr-base</div>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="loadInstances()">
+            <button class="btn btn-ghost btn-sm" id="refresh-instances">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="23 4 23 10 17 10" />
                 <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
@@ -1209,8 +1210,7 @@
                     <option value="sa-east">sa-east</option>
                   </select>
                 </div>
-                <button class="btn btn-primary btn-full mt-12" id="add-btn" onclick="addInstance()">Add
-                  Instance</button>
+                <button class="btn btn-primary btn-full mt-12" id="add-btn">Add Instance</button>
               </div>
             </div>
             <div class="panel">
@@ -1241,8 +1241,7 @@
                     required />
                   <div class="form-hint">The unique ID of the instance to remove.</div>
                 </div>
-                <button class="btn btn-danger btn-full mt-12" id="remove-btn" onclick="confirmRemove()">Remove
-                  Instance</button>
+                <button class="btn btn-danger btn-full mt-12" id="remove-btn">Remove Instance</button>
               </div>
             </div>
             <div class="panel">
@@ -1265,11 +1264,11 @@
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <div class="toggle-group">
-                <button class="toggle-btn active" id="evt-toggle-all" onclick="setEventsFilter('all',this)">All</button>
-                <button class="toggle-btn" id="evt-toggle-user" onclick="setEventsFilter('user',this)">User</button>
-                <button class="toggle-btn" id="evt-toggle-system" onclick="setEventsFilter('system',this)">System</button>
+                <button class="toggle-btn active" data-filter="all">All</button>
+                <button class="toggle-btn" data-filter="user">User</button>
+                <button class="toggle-btn" data-filter="system">System</button>
               </div>
-              <button class="btn btn-ghost btn-sm" onclick="loadEvents()">
+              <button class="btn btn-ghost btn-sm" id="refresh-events">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="23 4 23 10 17 10" />
                   <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
@@ -1334,13 +1333,12 @@
                 <input type="text" class="form-input" id="token-expires" readonly />
               </div>
               <div class="flex gap-8 mt-12">
-                <button class="btn btn-ghost btn-sm" onclick="copyToken()">Copy token</button>
-                <button class="btn btn-ghost btn-sm" onclick="logout()">Revoke &amp; logout</button>
+                <button class="btn btn-ghost btn-sm" id="copy-token">Copy token</button>
+                <button class="btn btn-ghost btn-sm" id="revoke-logout">Revoke &amp; logout</button>
               </div>
             </div>
           </div>
         </div>
-
       </div>
     </main>
   </div>
@@ -1350,8 +1348,8 @@
       <div class="dialog-title">Confirm Removal</div>
       <div class="dialog-body" id="dialog-body">—</div>
       <div class="dialog-actions">
-        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Cancel</button>
-        <button class="btn btn-danger btn-sm" id="dialog-confirm-btn" onclick="removeInstance()">Remove</button>
+        <button class="btn btn-ghost btn-sm" id="dialog-cancel">Cancel</button>
+        <button class="btn btn-danger btn-sm" id="dialog-confirm">Remove</button>
       </div>
     </div>
   </div>
@@ -1360,248 +1358,217 @@
 
   <script src="/v1/admin/config.js"></script>
   <script>
-    const CHARS = 'abcdefghijkmnpqrstuvwxyz23456789';
+    (function () {
+      const API_BASE = window.__CONFIG__.API_BASE;
+      const CHARS = 'abcdefghijkmnpqrstuvwxyz23456789';
 
-    function genSessionId() {
-      return 'adm_' + Array.from(crypto.getRandomValues(new Uint8Array(6)))
-        .map(b => CHARS[b % CHARS.length]).join('');
-    }
+      // application state 
+      const state = {
+        jwt: null,
+        sessionId: null,
+        expiresAt: null,
+        _expiryTimer: null,
+        instances: [],
+        events: [],
+        eventsFilter: 'all'
+      };
 
-    function regenerateSessionId() {
-      document.getElementById('login-session').value = genSessionId();
-    }
+      // dom references
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => document.querySelectorAll(sel);
 
-    regenerateSessionId();
+      // utilities 
+      const escHtml = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const escAttr = (str) => String(str).replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
-    const API_BASE = window.__CONFIG__.API_BASE;
+      const relTime = (ms) => {
+        const diff = Date.now() - ms;
+        if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
+        if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+        return new Date(ms).toLocaleDateString();
+      };
 
-    const state = { jwt: null, sessionId: null, expiresAt: null, _expiryTimer: null };
+      const loadBarHtml = (count, capacity) => {
+        const pct = capacity > 0 ? Math.min(100, (count / capacity) * 100) : 0;
+        const color = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--yellow)' : 'var(--green)';
+        return `<span class="load-bar-wrap"><span class="load-bar-fill" style="width:${pct}%;background:${color};"></span></span>`;
+      };
 
-    function saveSession() {
-      sessionStorage.setItem('dployr_session', JSON.stringify({
-        jwt: state.jwt, sessionId: state.sessionId, expiresAt: state.expiresAt,
-      }));
-    }
+      const genSessionId = () => 'adm_' + Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => CHARS[b % CHARS.length]).join('');
 
-    function clearSession() {
-      sessionStorage.removeItem('dployr_session');
-    }
-
-    function restoreSession() {
-      try {
-        const saved = JSON.parse(sessionStorage.getItem('dployr_session') || 'null');
-        if (!saved?.jwt || !saved?.expiresAt) return false;
-        const remainingMs = saved.expiresAt - Date.now();
-        if (remainingMs <= 0) return false;
-        Object.assign(state, { jwt: saved.jwt, sessionId: saved.sessionId, expiresAt: saved.expiresAt });
-        return Math.ceil(remainingMs / 1000);
-      } catch { return false; }
-    }
-
-    function apiHeaders() {
-      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.jwt}` };
-    }
-
-    function setLoading(btnId, loading) {
-      const btn = document.getElementById(btnId);
-      if (!btn) return;
-      btn.disabled = loading;
-      if (loading) {
-        btn._orig = btn.innerHTML;
-        btn.innerHTML = '<div class="spinner"></div> Working…';
-      } else {
-        btn.innerHTML = btn._orig || btn.innerHTML;
-      }
-    }
-
-    function setResponse(elId, data, isError) {
-      const el = document.getElementById(elId);
-      el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-      el.className = 'response-box ' + (isError ? 'error' : 'success');
-    }
-
-    function toast(msg, type = 'info') {
-      const icons = { success: '✓', error: '✕', info: 'ℹ' };
-      const el = document.createElement('div');
-      el.className = `toast ${type}`;
-      el.innerHTML = `<span class="toast-icon">${icons[type]}</span><span class="toast-msg">${msg}</span><button class="toast-close" onclick="this.closest('.toast').remove()">✕</button>`;
-      document.getElementById('toast-container').appendChild(el);
-      setTimeout(() => el.remove(), 4500);
-    }
-
-    function openDialog(body) {
-      document.getElementById('dialog-body').innerHTML = body;
-      document.getElementById('dialog-overlay').classList.add('open');
-    }
-
-    function closeDialog() {
-      document.getElementById('dialog-overlay').classList.remove('open');
-    }
-
-    function switchView(name, navEl) {
-      document.querySelectorAll('[id^="view-"]').forEach(v => v.classList.add('hidden'));
-      document.getElementById(`view-${name}`).classList.remove('hidden');
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      if (navEl) navEl.classList.add('active');
-      if (name === 'instances') loadInstances();
-      if (name === 'events') loadEvents();
-      if (name === 'token') populateTokenView();
-    }
-
-    function startExpiryTimer(ttlSeconds) {
-      const bar = document.getElementById('expiry-bar');
-      const pill = document.getElementById('expiry-pill');
-      const total = ttlSeconds * 1000;
-      const start = Date.now();
-
-      function tick() {
-        const remaining = Math.max(0, total - (Date.now() - start));
-        const pct = (remaining / total) * 100;
-        const secs = Math.ceil(remaining / 1000);
-        bar.style.width = pct + '%';
-        pill.textContent = `expires ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-        const urgency = pct < 10 ? 'urgent' : pct < 25 ? 'warn' : '';
-        bar.className = urgency;
-        pill.className = urgency;
-        if (remaining <= 0) { clearInterval(state._expiryTimer); sessionExpired(); }
+      function saveSession() {
+        sessionStorage.setItem('dployr_session', JSON.stringify({
+          jwt: state.jwt, sessionId: state.sessionId, expiresAt: state.expiresAt
+        }));
       }
 
-      tick();
-      state._expiryTimer = setInterval(tick, 1000);
-    }
-
-    function stopExpiryTimer() {
-      clearInterval(state._expiryTimer);
-      state._expiryTimer = null;
-      document.getElementById('expiry-bar').style.width = '0%';
-      document.getElementById('expiry-pill').textContent = '';
-    }
-
-    function sessionExpired() {
-      toast('Session expired — please sign in again.', 'error');
-      setTimeout(() => logout(true), 1800);
-    }
-
-    async function login() {
-      const key = document.getElementById('login-key').value.trim();
-      const otp = document.getElementById('login-otp').value.trim();
-      const sessionId = document.getElementById('login-session').value.trim();
-      const errEl = document.getElementById('login-error');
-      const btn = document.getElementById('login-btn');
-
-      errEl.style.display = 'none';
-
-      if (!key || !otp || !sessionId) {
-        errEl.textContent = 'API key, authenticator code, and session ID are required.';
-        errEl.style.display = 'block';
-        return;
-      }
-      if (!/^\d{6}$/.test(otp)) {
-        errEl.textContent = 'Authenticator code must be exactly 6 digits.';
-        errEl.style.display = 'block';
-        return;
+      function clearSession() {
+        sessionStorage.removeItem('dployr_session');
       }
 
-      btn.disabled = true;
-      btn.innerHTML = '<div class="spinner"></div> Verifying…';
+      function restoreSession() {
+        try {
+          const saved = JSON.parse(sessionStorage.getItem('dployr_session') || 'null');
+          if (!saved?.jwt || !saved?.expiresAt) return false;
+          const remainingMs = saved.expiresAt - Date.now();
+          if (remainingMs <= 0) return false;
+          Object.assign(state, { jwt: saved.jwt, sessionId: saved.sessionId, expiresAt: saved.expiresAt });
+          return Math.ceil(remainingMs / 1000);
+        } catch { return false; }
+      }
 
-      try {
-        const res = await fetch(`${API_BASE}/v1/admin/login`, {
+      function apiHeaders() {
+        return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.jwt}` };
+      }
+
+      async function apiRequest(url, options = {}) {
+        const res = await fetch(url, options);
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error?.message || body.error || `HTTP ${res.status}`);
+        return body;
+      }
+
+      function setLoading(btnId, loading) {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        btn.disabled = loading;
+        if (loading) {
+          btn._origHTML = btn.innerHTML;
+          btn.innerHTML = '<div class="spinner"></div> Working…';
+        } else {
+          btn.innerHTML = btn._origHTML || btn.innerHTML;
+        }
+      }
+
+      function setResponse(elId, data, isError) {
+        const el = document.getElementById(elId);
+        el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        el.className = 'response-box ' + (isError ? 'error' : 'success');
+      }
+
+      function toast(msg, type = 'info') {
+        const icons = { success: '✓', error: '✕', info: 'ℹ' };
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.innerHTML = `<span class="toast-icon">${icons[type]}</span><span class="toast-msg">${msg}</span><button class="toast-close">✕</button>`;
+        el.querySelector('.toast-close').addEventListener('click', () => el.remove());
+        $('#toast-container').appendChild(el);
+        setTimeout(() => el.remove(), 4500);
+      }
+
+      function startExpiryTimer(ttlSeconds) {
+        const bar = $('#expiry-bar');
+        const pill = $('#expiry-pill');
+        const total = ttlSeconds * 1000;
+        const start = Date.now();
+
+        function tick() {
+          const remaining = Math.max(0, total - (Date.now() - start));
+          const pct = (remaining / total) * 100;
+          const secs = Math.ceil(remaining / 1000);
+          bar.style.width = pct + '%';
+          pill.textContent = `expires ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+          const urgency = pct < 10 ? 'urgent' : pct < 25 ? 'warn' : '';
+          bar.className = urgency;
+          pill.className = urgency;
+          if (remaining <= 0) { clearInterval(state._expiryTimer); sessionExpired(); }
+        }
+        tick();
+        state._expiryTimer = setInterval(tick, 1000);
+      }
+
+      function stopExpiryTimer() {
+        clearInterval(state._expiryTimer);
+        state._expiryTimer = null;
+        $('#expiry-bar').style.width = '0%';
+        $('#expiry-pill').textContent = '';
+      }
+
+      function sessionExpired() {
+        toast('Session expired — please sign in again.', 'error');
+        setTimeout(() => logout(true), 1800);
+      }
+
+      function switchView(name) {
+        $$('[id^="view-"]').forEach(v => v.classList.add('hidden'));
+        $(`#view-${name}`).classList.remove('hidden');
+        $$('.nav-item').forEach(n => n.classList.remove('active'));
+        const activeNav = document.querySelector(`.nav-item[data-view="${name}"]`);
+        if (activeNav) activeNav.classList.add('active');
+        if (name === 'instances') loadInstances();
+        if (name === 'events') loadEvents();
+        if (name === 'token') populateTokenView();
+      }
+
+      async function loginApi(apiKey, otp, sessionId) {
+        const body = await apiRequest(`${API_BASE}/v1/admin/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ api_key: key, otp_code: otp, session_id: sessionId }),
+          body: JSON.stringify({ api_key: apiKey, otp_code: otp, session_id: sessionId })
         });
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error?.message || body.error || `HTTP ${res.status}`);
-
-        const { token, expiresIn } = body.data || body;
-        Object.assign(state, { jwt: token, sessionId, expiresAt: Date.now() + expiresIn * 1000 });
-        saveSession();
-
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('app').classList.remove('hidden');
-        document.getElementById('session-id-display').textContent = sessionId;
-        document.getElementById('login-key').value = '';
-        document.getElementById('login-otp').value = '';
-
-        startExpiryTimer(expiresIn);
-        loadInstances();
-        toast('Authenticated successfully', 'success');
-      } catch (err) {
-        errEl.textContent = err.message || 'Authentication failed.';
-        errEl.style.display = 'block';
-        document.getElementById('login-otp').value = '';
-        document.getElementById('login-otp').focus();
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Authenticate';
+        return body.data;
       }
-    }
 
-    document.getElementById('login-otp').addEventListener('input', function () {
-      this.value = this.value.replace(/\D/g, '').slice(0, 6);
-      if (this.value.length === 6) login();
-    });
-
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') login();
-    });
-
-    function logout(expired = false) {
-      stopExpiryTimer();
-      Object.assign(state, { jwt: null, sessionId: null, expiresAt: null });
-      clearSession();
-      document.getElementById('login-screen').style.display = 'flex';
-      document.getElementById('app').classList.add('hidden');
-      document.getElementById('session-id-display').textContent = '—';
-      regenerateSessionId();
-      if (!expired) toast('Signed out.', 'info');
-    }
-
-    const REGION_FLAGS = {
-      'us-east': '🇺🇸', 'us-west': '🇺🇸', 'us-central': '🇺🇸',
-      'eu-west': '🇪🇺', 'eu-central': '🇪🇺',
-      'ap-south': '🇮🇳', 'ap-southeast': '🇸🇬', 'ap-northeast': '🇯🇵',
-      'af-south': '🇿🇦',
-    };
-
-    const STATUS_BADGE_CLASS = { healthy: 'running', degraded: 'pending', offline: 'stopped', unreachable: 'stopped', maintenance: 'pending' };
-
-    async function loadInstances() {
-      const tbody = document.getElementById('instances-tbody');
-      const loading = document.getElementById('instances-loading');
-      const empty = document.getElementById('instances-empty');
-      const table = document.getElementById('instances-table');
-
-      tbody.innerHTML = '';
-      loading.classList.remove('hidden');
-      empty.classList.add('hidden');
-      table.style.display = 'none';
-
-      try {
+      async function fetchInstances() {
         const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
-        const res = await fetch(`${API_BASE}/v1/admin/instances${sessionParam}`, { headers: apiHeaders() });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error?.message || err.error || `HTTP ${res.status}`);
-        }
-
-        const body = await res.json();
-        const all = (body.data?.items || []).map(i => ({
-          ...i, region: i.metadata?.region || i.region || null,
+        const body = await apiRequest(`${API_BASE}/v1/admin/instances${sessionParam}`, {
+          headers: apiHeaders()
+        });
+        return (body.data?.items || []).map(i => ({
+          ...i,
+          region: i.metadata?.region || i.region || null,
         }));
+      }
 
-        document.getElementById('stat-total').textContent = all.length;
-        document.getElementById('stat-running').textContent = all.filter(i => i.status === 'healthy').length;
-        document.getElementById('stat-stopped').textContent = all.filter(i => ['offline', 'unreachable'].includes(i.status)).length;
-        document.getElementById('stat-pending').textContent = all.filter(i => ['degraded', 'maintenance'].includes(i.status)).length;
-        document.getElementById('instances-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
-        loading.classList.add('hidden');
+      async function addInstanceApi(payload) {
+        const url = new URL(`${API_BASE}/v1/admin/instances`);
+        url.searchParams.set('sessionId', state.sessionId);
+        return await apiRequest(url, {
+          method: 'POST',
+          headers: apiHeaders(),
+          body: JSON.stringify(payload)
+        });
+      }
 
-        if (!all.length) { empty.classList.remove('hidden'); return; }
+      async function removeInstanceApi(id) {
+        const url = new URL(`${API_BASE}/v1/admin/instances/${encodeURIComponent(id)}`);
+        url.searchParams.set('sessionId', state.sessionId);
+        return await apiRequest(url, {
+          method: 'DELETE',
+          headers: apiHeaders()
+        });
+      }
 
-        table.style.display = '';
-        all.forEach(inst => {
+      async function fetchEvents() {
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const body = await apiRequest(`${API_BASE}/v1/admin/events${sessionParam}`, {
+          headers: apiHeaders()
+        });
+        return (body.data?.events || []).slice(0, 200);
+      }
+
+      const REGION_FLAGS = {
+        'us-east': '🇺🇸', 'us-west': '🇺🇸', 'us-central': '🇺🇸',
+        'eu-west': '🇪🇺', 'eu-central': '🇪🇺',
+        'ap-south': '🇮🇳', 'ap-southeast': '🇸🇬', 'ap-northeast': '🇯🇵',
+        'af-south': '🇿🇦',
+      };
+      const STATUS_BADGE = { healthy: 'running', degraded: 'pending', offline: 'stopped', unreachable: 'stopped', maintenance: 'pending' };
+
+      function renderInstances(instances) {
+        const tbody = $('#instances-tbody');
+        tbody.innerHTML = '';
+
+        if (!instances.length) {
+          $('#instances-empty').classList.remove('hidden');
+          $('#instances-table').style.display = 'none';
+          return;
+        }
+        $('#instances-empty').classList.add('hidden');
+        $('#instances-table').style.display = '';
+
+        instances.forEach(inst => {
           const isPool = inst.kind === 'pool';
           const regionLabel = inst.region ? `${REGION_FLAGS[inst.region] ?? '🌐'} ${inst.region}` : '—';
           const createdMs = parseInt(inst.createdAt, 10);
@@ -1610,233 +1577,355 @@
             ? `<span class="badge" style="background:var(--accent-dim);color:var(--accent);">pool</span>`
             : `<span class="badge" style="background:var(--bg-3);color:var(--text-dim);">dedicated</span>`;
 
-          const statusBadge = `<span class="badge ${STATUS_BADGE_CLASS[inst.status] || 'stopped'}">${escHtml(inst.status || '—')}</span>`;
+          const statusBadge = `<span class="badge ${STATUS_BADGE[inst.status] || 'stopped'}">${escHtml(inst.status || '—')}</span>`;
 
           const clusterCol = isPool
-            ? `<span style="font-size:11px;color:var(--text-dim);">${loadBarHtml(inst.clusterCount ?? 0, inst.capacity ?? 10)}<span style="font-size:11px;">${inst.clusterCount ?? 0}/${inst.capacity ?? 10}</span></span>`
+            ? `<span style="font-size:11px;color:var(--text-dim);">${loadBarHtml(instances.length ?? 0, inst.capacity ?? 10)}<span style="font-size:11px;">${instances.length ?? 0}/${inst.capacity ?? 10}</span></span>`
             : (inst.clusterId
-                ? `<span class="cell-id">${escHtml(inst.clusterId.slice(0, 12))}… <button class="copy-btn" onclick="copyCell('${escAttr(inst.clusterId)}',this)" title="Copy cluster ID">⎘</button></span>`
-                : `<span class="text-muted">—</span>`);
+              ? `<span class="cell-id">${escHtml(inst.clusterId.slice(0, 12))}… <button class="copy-btn" title="Copy cluster ID">⎘</button></span>`
+              : `<span class="text-muted">—</span>`);
 
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td style="width:76px;">${kindBadge}</td>
-            <td class="cell-tag">${escHtml(inst.tag || '—')} <button class="copy-btn" onclick="copyCell('${escAttr(inst.tag || '')}',this)" title="Copy tag">⎘</button></td>
-            <td class="cell-id">${escHtml((inst.id || '—').slice(0, 8))}… <button class="copy-btn" onclick="copyCell('${escAttr(inst.id || '')}',this)" title="Copy ID">⎘</button></td>
-            <td class="dim">${inst.address ? `${escHtml(inst.address)} <button class="copy-btn" onclick="copyCell('${escAttr(inst.address)}',this)" title="Copy address">⎘</button>` : '—'}</td>
+            <td class="cell-tag">${escHtml(inst.tag || '—')} <button class="copy-btn" title="Copy tag">⎘</button></td>
+            <td class="cell-id">${escHtml((inst.id || '—').slice(0, 8))}… <button class="copy-btn" title="Copy ID">⎘</button></td>
+            <td class="dim">${inst.address ? `${escHtml(inst.address)} <button class="copy-btn" title="Copy address">⎘</button>` : '—'}</td>
             <td class="dim" style="white-space:nowrap;">${escHtml(regionLabel)}</td>
             <td>${statusBadge}</td>
             <td>${clusterCol}</td>
             <td class="dim" style="white-space:nowrap;">${createdMs ? relTime(createdMs) : '—'}</td>
-            <td><button class="btn btn-ghost btn-sm" onclick="prefillRemove('${escAttr(inst.id)}','${escAttr(inst.tag || inst.id)}')">Remove</button></td>
+            <td><button class="btn btn-ghost btn-sm remove-instance-action">Remove</button></td>
           `;
+
+          // attach copy handlers
+          tr.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              const txt = btn.closest('td').textContent.trim().split(' ')[0]; // grab first word (id/address/tag)
+              copyToClipboard(txt, btn);
+            });
+          });
+
+          // attach remove action
+          const removeBtn = tr.querySelector('.remove-instance-action');
+          removeBtn.addEventListener('click', () => {
+            prefillRemove(inst.id, inst.tag || inst.id);
+          });
+
           tbody.appendChild(tr);
         });
-      } catch (err) {
-        loading.classList.add('hidden');
-        empty.classList.remove('hidden');
-        toast(`Failed to load instances: ${err.message}`, 'error');
       }
-    }
 
-    const EVENT_META = {
-      'pool.instance_maintenance': { label: 'Maintenance', cls: 'maintenance' },
-      'pool.instance_drained': { label: 'Drained', cls: 'drained' },
-      'pool.instance_provisioned': { label: 'Provisioned', cls: 'provisioned' },
-    };
-
-    function relTime(ms) {
-      const diff = Date.now() - ms;
-      if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
-      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-      return new Date(ms).toLocaleDateString();
-    }
-
-    function loadBarHtml(count, capacity) {
-      const pct = capacity > 0 ? Math.min(100, (count / capacity) * 100) : 0;
-      const color = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--yellow)' : 'var(--green)';
-      return `<span class="load-bar-wrap"><span class="load-bar-fill" style="width:${pct}%;background:${color};"></span></span>`;
-    }
-
-    let _eventsData = [];
-    let _eventsFilter = 'all';
-
-    function setEventsFilter(filter, btn) {
-      _eventsFilter = filter;
-      document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderEvents();
-    }
-
-    function renderEvents() {
-      const tbody = document.getElementById('events-tbody');
-      const empty = document.getElementById('events-empty');
-      const table = document.getElementById('events-table');
-
-      const filtered = _eventsData.filter(evt => {
-        if (_eventsFilter === 'all') return true;
-        const actorType = evt.actor?.type || 'system';
-        if (_eventsFilter === 'user') return actorType === 'user';
-        return actorType !== 'user'; // system = headless + system
-      });
-
-      tbody.innerHTML = '';
-      if (!filtered.length) {
-        empty.classList.remove('hidden');
-        table.style.display = 'none';
-        return;
+      function updateStats(instances) {
+        $('#stat-total').textContent = instances.length;
+        $('#stat-running').textContent = instances.filter(i => i.status === 'healthy').length;
+        $('#stat-stopped').textContent = instances.filter(i => ['offline', 'unreachable'].includes(i.status)).length;
+        $('#stat-pending').textContent = instances.filter(i => ['degraded', 'maintenance'].includes(i.status)).length;
+        $('#instances-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
       }
-      empty.classList.add('hidden');
-      table.style.display = '';
 
-      filtered.forEach(evt => {
-        const meta = EVENT_META[evt.type] || { label: evt.type, cls: 'other' };
-        const actorType = evt.actor?.type || '—';
-        const actorId = evt.actor?.id || '—';
-        const actorCell = `<span class="cell-id">${escHtml(actorType)}: ${escHtml(actorId.slice(0, 14))}${actorId.length > 14 ? '…' : ''}</span>`;
-        const targets = (evt.targets || [])
-          .map(t => `<span class="cell-id">${escHtml((t.id || '').slice(0, 16))}${(t.id || '').length > 16 ? '…' : ''} <button class="copy-btn" onclick="copyCell('${escAttr(t.id || '')}',this)" title="Copy ID">⎘</button></span>`)
-          .join(' ');
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="dim" style="white-space:nowrap;">${escHtml(relTime(evt.timestamp))}</td>
-          <td><span class="evt-pill ${meta.cls}">${escHtml(meta.label)}</span> <span class="dim" style="font-size:10px;">${escHtml(evt.type)}</span></td>
-          <td>${actorCell}</td>
-          <td>${targets || '<span class="text-muted">—</span>'}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
+      function renderEvents() {
+        const tbody = $('#events-tbody');
+        tbody.innerHTML = '';
+        const filtered = state.events.filter(evt => {
+          if (state.eventsFilter === 'all') return true;
+          const actorType = evt.actor?.type || 'system';
+          if (state.eventsFilter === 'user') return actorType === 'user';
+          return actorType !== 'user';
+        });
 
-    async function loadEvents() {
-      const loading = document.getElementById('events-loading');
-      const empty = document.getElementById('events-empty');
-      const table = document.getElementById('events-table');
+        if (!filtered.length) {
+          $('#events-empty').classList.remove('hidden');
+          $('#events-table').style.display = 'none';
+          return;
+        }
+        $('#events-empty').classList.add('hidden');
+        $('#events-table').style.display = '';
 
-      document.getElementById('events-tbody').innerHTML = '';
-      loading.classList.remove('hidden');
-      empty.classList.add('hidden');
-      table.style.display = 'none';
+        filtered.forEach(evt => {
+          const meta = EVENT_META[evt.type] || { label: evt.type, cls: 'other' };
+          const actorType = evt.actor?.type || '—';
+          const actorId = evt.actor?.id || '—';
+          const actorCell = `<span class="cell-id">${escHtml(actorType)}: ${escHtml(actorId.slice(0, 14))}${actorId.length > 14 ? '…' : ''}</span>`;
+          const targets = (evt.targets || []).map(t => `<span class="cell-id">${escHtml((t.id || '').slice(0, 16))}${(t.id || '').length > 16 ? '…' : ''} <button class="copy-btn" title="Copy ID">⎘</button></span>`).join(' ');
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="dim" style="white-space:nowrap;">${escHtml(relTime(evt.timestamp))}</td>
+            <td><span class="evt-pill ${meta.cls}">${escHtml(meta.label)}</span> <span class="dim" style="font-size:10px;">${escHtml(evt.type)}</span></td>
+            <td>${actorCell}</td>
+            <td>${targets || '<span class="text-muted">—</span>'}</td>
+          `;
+          tr.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const txt = btn.previousSibling.textContent.trim();
+              copyToClipboard(txt, btn);
+            });
+          });
+          tbody.appendChild(tr);
+        });
+      }
 
-      try {
-        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
-        const res = await fetch(`${API_BASE}/v1/admin/events${sessionParam}`, { headers: apiHeaders() });
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `HTTP ${res.status}`); }
-        const body = await res.json();
-        _eventsData = (body.data?.events || []).slice(0, 200);
+      function copyToClipboard(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+          const orig = btn.textContent;
+          btn.textContent = '✓';
+          btn.style.color = 'var(--green)';
+          setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1200);
+        }).catch(() => toast('Copy failed', 'error'));
+      }
 
-        document.getElementById('events-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
-        loading.classList.add('hidden');
+      const EVENT_META = {
+        'pool.instance_maintenance': { label: 'Maintenance', cls: 'maintenance' },
+        'pool.instance_drained': { label: 'Drained', cls: 'drained' },
+        'pool.instance_provisioned': { label: 'Provisioned', cls: 'provisioned' },
+      };
+
+      async function loadInstances() {
+        const loading = $('#instances-loading');
+        const empty = $('#instances-empty');
+        loading.classList.remove('hidden');
+        empty.classList.add('hidden');
+        $('#instances-table').style.display = 'none';
+        try {
+          const instances = await fetchInstances();
+          state.instances = instances;
+          updateStats(instances);
+          renderInstances(instances);
+        } catch (err) {
+          empty.classList.remove('hidden');
+          toast(`Failed to load instances: ${err.message}`, 'error');
+        } finally {
+          loading.classList.add('hidden');
+        }
+      }
+
+      async function addInstance() {
+        const clusterId = $('#add-clusterId').value.trim();
+        const tag = $('#add-tag').value.trim();
+        const address = $('#add-address').value.trim();
+        const region = $('#add-region').value;
+
+        if (!clusterId || !tag || !address) {
+          toast('Cluster ID, tag, and address are required.', 'error');
+          return;
+        }
+
+        setLoading('add-btn', true);
+        setResponse('add-response', 'Submitting…', false);
+
+        const payload = { clusterId, tag, address };
+        if (region) payload.region = region;
+
+        try {
+          const result = await addInstanceApi(payload);
+          setResponse('add-response', result, false);
+          toast(`Instance "${tag}" added successfully`, 'success');
+          ['add-clusterId', 'add-tag', 'add-address', 'add-region'].forEach(id => document.getElementById(id).value = '');
+        } catch (err) {
+          setResponse('add-response', { error: err.message }, true);
+          toast(`Failed: ${err.message}`, 'error');
+        } finally {
+          setLoading('add-btn', false);
+        }
+      }
+
+      function prefillRemove(id, tag) {
+        switchView('remove');
+        $('#remove-id').value = id;
+        // store tag for dialog
+        $('#remove-id').dataset.tag = tag;
+      }
+
+      function confirmRemove() {
+        const id = $('#remove-id').value.trim();
+        if (!id) { toast('Instance ID is required.', 'error'); return; }
+        const tag = $('#remove-id').dataset.tag || id;
+        $('#dialog-body').innerHTML = `You are about to permanently remove instance <strong>${escHtml(tag)}</strong>. This action cannot be undone.`;
+        $('#dialog-overlay').classList.add('open');
+      }
+
+      async function removeInstance() {
+        const id = $('#remove-id').value.trim();
+        closeDialog();
+        setLoading('remove-btn', true);
+        setResponse('remove-response', 'Submitting…', false);
+
+        try {
+          const result = await removeInstanceApi(id);
+          setResponse('remove-response', result, false);
+          toast(`Instance ${id} removed`, 'success');
+          $('#remove-id').value = '';
+        } catch (err) {
+          setResponse('remove-response', { error: err.message }, true);
+          toast(`Failed: ${err.message}`, 'error');
+        } finally {
+          setLoading('remove-btn', false);
+        }
+      }
+
+      function closeDialog() {
+        $('#dialog-overlay').classList.remove('open');
+      }
+
+      async function loadEvents() {
+        const loading = $('#events-loading');
+        const empty = $('#events-empty');
+        loading.classList.remove('hidden');
+        empty.classList.add('hidden');
+        $('#events-table').style.display = 'none';
+        try {
+          const events = await fetchEvents();
+          state.events = events;
+          renderEvents();
+          $('#events-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
+        } catch (err) {
+          empty.classList.remove('hidden');
+          toast(`Failed to load events: ${err.message}`, 'error');
+        } finally {
+          loading.classList.add('hidden');
+        }
+      }
+
+      function setEventsFilter(filter) {
+        state.eventsFilter = filter;
+        $$('.toggle-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector(`.toggle-btn[data-filter="${filter}"]`).classList.add('active');
         renderEvents();
-      } catch (err) {
-        loading.classList.add('hidden');
-        empty.classList.remove('hidden');
-        toast(`Failed to load events: ${err.message}`, 'error');
       }
-    }
 
-    function prefillRemove(id) {
-      switchView('remove', document.querySelector('[data-view="remove"]'));
-      document.getElementById('remove-id').value = id;
-    }
-
-    function confirmRemove() {
-      const id = document.getElementById('remove-id').value.trim();
-      if (!id) { toast('Instance ID is required.', 'error'); return; }
-      openDialog(`You are about to permanently remove instance <strong>${escHtml(id)}</strong>. This action cannot be undone.`);
-    }
-
-    async function addInstance() {
-      const clusterId = document.getElementById('add-clusterId').value.trim();
-      const tag = document.getElementById('add-tag').value.trim();
-      const address = document.getElementById('add-address').value.trim();
-      const region = document.getElementById('add-region').value;
-
-      if (!clusterId || !tag || !address) { toast('Cluster ID, tag, and address are required.', 'error'); return; }
-
-      setLoading('add-btn', true);
-      setResponse('add-response', 'Submitting…', false);
-
-      const payload = { clusterId, tag, address };
-      if (region) payload.region = region;
-
-      try {
-        const url = new URL(`${API_BASE}/v1/admin/instances`);
-        url.searchParams.set('sessionId', state.sessionId);
-        const res = await fetch(url, { method: 'POST', headers: apiHeaders(), body: JSON.stringify(payload) });
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error?.message || body.error || `HTTP ${res.status}`);
-        setResponse('add-response', body, false);
-        toast(`Instance "${tag}" added successfully`, 'success');
-        ['add-clusterId', 'add-tag', 'add-address', 'add-region'].forEach(id => document.getElementById(id).value = '');
-      } catch (err) {
-        setResponse('add-response', { error: err.message }, true);
-        toast(`Failed: ${err.message}`, 'error');
-      } finally {
-        setLoading('add-btn', false);
+      function populateTokenView() {
+        $('#token-session-display').value = state.sessionId || '—';
+        $('#token-display').value = state.jwt || '—';
+        $('#token-expires').value = state.expiresAt ? new Date(state.expiresAt).toLocaleString() : '—';
       }
-    }
 
-    async function removeInstance() {
-      const id = document.getElementById('remove-id').value.trim();
-      closeDialog();
-      setLoading('remove-btn', true);
-      setResponse('remove-response', 'Submitting…', false);
-
-      try {
-        const url = new URL(`${API_BASE}/v1/admin/instances/${encodeURIComponent(id)}`);
-        url.searchParams.set('sessionId', state.sessionId);
-        const res = await fetch(url, { method: 'DELETE', headers: apiHeaders() });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.error?.message || body.error || `HTTP ${res.status}`);
-        setResponse('remove-response', body, false);
-        toast(`Instance ${id} removed`, 'success');
-        document.getElementById('remove-id').value = '';
-      } catch (err) {
-        setResponse('remove-response', { error: err.message }, true);
-        toast(`Failed: ${err.message}`, 'error');
-      } finally {
-        setLoading('remove-btn', false);
+      function copyToken() {
+        if (!state.jwt) return;
+        navigator.clipboard.writeText(state.jwt)
+          .then(() => toast('Token copied to clipboard', 'success'))
+          .catch(() => toast('Copy failed', 'error'));
       }
-    }
 
-    function populateTokenView() {
-      document.getElementById('token-session-display').value = state.sessionId || '—';
-      document.getElementById('token-display').value = state.jwt || '—';
-      document.getElementById('token-expires').value = state.expiresAt ? new Date(state.expiresAt).toLocaleString() : '—';
-    }
+      async function login() {
+        const key = $('#login-key').value.trim();
+        const otp = $('#login-otp').value.trim();
+        const sessionId = $('#login-session').value.trim();
+        const errEl = $('#login-error');
+        const btn = $('#login-btn');
 
-    function copyToken() {
-      if (!state.jwt) return;
-      navigator.clipboard.writeText(state.jwt)
-        .then(() => toast('Token copied to clipboard', 'success'))
-        .catch(() => toast('Copy failed', 'error'));
-    }
+        errEl.style.display = 'none';
+        if (!key || !otp || !sessionId) {
+          errEl.textContent = 'API key, authenticator code, and session ID are required.';
+          errEl.style.display = 'block';
+          return;
+        }
+        if (!/^\d{6}$/.test(otp)) {
+          errEl.textContent = 'Authenticator code must be exactly 6 digits.';
+          errEl.style.display = 'block';
+          return;
+        }
 
-    function copyCell(value, btn) {
-      navigator.clipboard.writeText(value).then(() => {
-        const orig = btn.textContent;
-        btn.textContent = '✓';
-        btn.style.color = 'var(--green)';
-        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1200);
-      }).catch(() => toast('Copy failed', 'error'));
-    }
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Verifying…';
 
-    function escHtml(str) {
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
+        try {
+          const { token, expiresIn } = await loginApi(key, otp, sessionId);
+          Object.assign(state, { jwt: token, sessionId, expiresAt: Date.now() + expiresIn * 1000 });
+          saveSession();
 
-    function escAttr(str) {
-      return String(str).replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    }
+          $('#login-screen').style.display = 'none';
+          $('#app').classList.remove('hidden');
+          $('#session-id-display').textContent = sessionId;
+          $('#login-key').value = '';
+          $('#login-otp').value = '';
 
-    (function () {
+          startExpiryTimer(expiresIn);
+          loadInstances();
+          toast('Authenticated successfully', 'success');
+        } catch (err) {
+          errEl.textContent = err.message || 'Authentication failed.';
+          errEl.style.display = 'block';
+          $('#login-otp').value = '';
+          $('#login-otp').focus();
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = 'Sign in';
+        }
+      }
+
+      function logout(expired = false) {
+        stopExpiryTimer();
+        Object.assign(state, { jwt: null, sessionId: null, expiresAt: null });
+        clearSession();
+        $('#login-screen').style.display = 'flex';
+        $('#app').classList.add('hidden');
+        $('#session-id-display').textContent = '—';
+        genSessionIdInit();
+        if (!expired) toast('Signed out.', 'info');
+      }
+
+      function genSessionIdInit() {
+        $('#login-session').value = genSessionId();
+      }
+
+      // event listeners 
+      function bindEvents() {
+        // login
+        $('#login-btn').addEventListener('click', login);
+        $('#login-otp').addEventListener('input', function () {
+          this.value = this.value.replace(/\D/g, '').slice(0, 6);
+          if (this.value.length === 6) login();
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && $('#login-screen').style.display !== 'none') login();
+        });
+        $('#regen-session').addEventListener('click', genSessionIdInit);
+
+        // logout
+        $('#logout-btn').addEventListener('click', () => logout());
+
+        // navigation
+        $$('.nav-item').forEach(item => {
+          item.addEventListener('click', (e) => {
+            const view = e.currentTarget.dataset.view;
+            switchView(view);
+          });
+        });
+
+        // refresh buttons
+        $('#refresh-instances').addEventListener('click', loadInstances);
+        $('#refresh-events').addEventListener('click', loadEvents);
+
+        // add instance
+        $('#add-btn').addEventListener('click', addInstance);
+
+        // remove instance
+        $('#remove-btn').addEventListener('click', confirmRemove);
+        $('#dialog-cancel').addEventListener('click', closeDialog);
+        $('#dialog-confirm').addEventListener('click', removeInstance);
+
+        // events filter
+        $$('.toggle-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            setEventsFilter(e.currentTarget.dataset.filter);
+          });
+        });
+
+        // token actions
+        $('#copy-token').addEventListener('click', copyToken);
+        $('#revoke-logout').addEventListener('click', () => logout());
+      }
+
+      // init
+      genSessionIdInit();
+      bindEvents();
+
+      // restore session if valid
       const remainingSecs = restoreSession();
       if (remainingSecs) {
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('app').classList.remove('hidden');
-        document.getElementById('session-id-display').textContent = state.sessionId;
+        $('#login-screen').style.display = 'none';
+        $('#app').classList.remove('hidden');
+        $('#session-id-display').textContent = state.sessionId;
         startExpiryTimer(remainingSecs);
         loadInstances();
       }
