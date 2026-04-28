@@ -36,5 +36,6 @@ export const ERROR = {
     BAD_WEBHOOK_SIGNATURE: { code: "runtime.bad_webhook_signature", status: 500, message: "Invalid webhook signature" },
     INTERNAL_SERVER_ERROR: { code: "runtime.internal_server_error", status: 500, message: "Internal server error" },
     INSTANCE_NOT_CONNECTED: { code: "runtime.node_not_connected", status: 503, message: "Instance is not connected or unresponsive to instance" },
+    ADMIN_TOTP_NOT_CONFIGURED: { code: "runtime.admin_totp_not_configured", status: 503, message: "Admin TOTP secret is not configured" }
   },
 } as const;

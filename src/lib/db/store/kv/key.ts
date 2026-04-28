@@ -68,13 +68,18 @@ export class KeyStore {
   }
 
   // Admin JWT
-  async createAdminJWT({ sessionId, ttl }: { sessionId: string; ttl?: number }): Promise<string> {
+  async createAdminJWT({ sessionId, ttl }: { sessionId: string; ttl?: number | string }): Promise<string> {
     const privateKey = await this.getPrivateKey();
-    const payload = {
-      sub: sessionId,
-      type: "admin",
-    };
-    return await new SignJWT(payload).setProtectedHeader({ alg: "RS256" }).setIssuedAt().setExpirationTime("30m").sign(privateKey);
+    const payload = { sub: sessionId, type: "admin" };
+
+    let exp: string | number = "30m";
+    if (typeof ttl === "number") {
+      exp = `${ttl}s`;
+    } else if (typeof ttl === "string") {
+      exp = ttl;
+    }
+
+    return await new SignJWT(payload).setProtectedHeader({ alg: "RS256" }).setIssuedAt().setExpirationTime(exp).sign(privateKey);
   }
 
   /**

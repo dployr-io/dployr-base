@@ -49,9 +49,9 @@ admin.post("/login", async (c) => {
     return c.json(
       createErrorResponse({
         message: "TOTP secret not configured",
-        code: "CONFIG_MISSING",
+        code: ERROR.RUNTIME.ADMIN_TOTP_NOT_CONFIGURED.code,
       }),
-      500,
+      ERROR.RUNTIME.ADMIN_TOTP_NOT_CONFIGURED.status,
     );
   }
 
@@ -69,7 +69,11 @@ admin.post("/login", async (c) => {
   }
 
   const sessionId = session_id ?? `adm_${crypto.randomUUID().slice(0, 8)}`;
-  const ttl = ADMIN_JWT_TTL;
+  // 7 days in dev mode, 30 minutes in prod (set in ADMIN_JWT_TTL)
+  const ttl =
+    process.env.NODE_ENV === "development"
+      ? 604800 // 7 days in s
+      : ADMIN_JWT_TTL; // e.g., "30m"
 
   const kv = getKVStore(c);
   const token = await kv.createAdminJWT({ sessionId, ttl });
