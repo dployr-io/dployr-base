@@ -5,8 +5,9 @@ import type { WebSocket } from "ws";
 import type { ClusterConnection, ConnectionRole, LogStreamSubscription, PendingRequest, WSErrorResponse } from "../../types/websocket-message.js";
 import { createWSError } from "../../types/websocket-message.js";
 import type { ConnectionManagerConfig, Session } from "@/types/index.js";
+import type { NodeTask } from "@/lib/tasks/types.js";
 import { ulid } from "ulid";
-import { DEFAULT_CONFIG, WSErrorCode } from "../../lib/constants/websocket.js";
+import { DEFAULT_CONFIG, MESSAGE_KIND, WSErrorCode } from "../../lib/constants/websocket.js";
 
 /**
  * Manages WebSocket connections, pending requests, and log stream subscriptions.
@@ -142,7 +143,45 @@ export class ConnectionManager {
     return this.getNodeConnections(instanceId).length > 0;
   }
 
-  // ==================== Pending Request Management ====================
+  /**
+   * Find a connection by its connectionId across all clusters.
+   */
+  getConnectionById(connectionId: string): ClusterConnection | undefined {
+    for (const conns of this.connections.values()) {
+      for (const conn of conns) {
+        if (conn.connectionId === connectionId) return conn;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Send a task to all nodes reachable via routingKey.
+   * Pass clusterId for dedicated instances or `pool:${instance.tag}` for pool instances.
+   * Returns true if sent to at least one node.
+   */
+  sendTask(routingKey: string, task: NodeTask): boolean {
+    const nodeConns = this.getNodeConnections(routingKey);
+    if (nodeConns.length === 0) {
+      console.warn(`[WS] No node connections for routing key ${routingKey}`);
+      return false;
+    }
+
+    const payload = JSON.stringify({ kind: MESSAGE_KIND.TASK, items: [task] });
+    let sentCount = 0;
+
+    for (const nodeConn of nodeConns) {
+      try {
+        nodeConn.ws.send(payload);
+        sentCount++;
+      } catch (err) {
+        console.error(`[WS] Failed to send task to node:`, err);
+      }
+    }
+
+    console.log(`[WS] Sent task ${task.ID} to ${sentCount}/${nodeConns.length} nodes (key: ${routingKey})`);
+    return sentCount > 0;
+  }
 
   /**
    * Check if client can make more requests (rate limiting)

@@ -64,7 +64,6 @@ export class WebSocketHandler {
       jwtService,
       dployrdService,
       terminalManager: this.terminalManager,
-      sendTaskToCluster: this.sendTaskToCluster.bind(this),
     });
   }
 

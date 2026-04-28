@@ -43,7 +43,13 @@ export class NodeMessageHandler {
         await this.updateProcessor.processUpdate(update.instance_id, update);
       }
 
-      await this.clientNotifier.broadcast(conn.clusterId, message);
+      if (conn.clusterId.startsWith("pool:")) {
+        const instanceTag = conn.clusterId.slice("pool:".length);
+        const clusterIds = await this.db.instances.getClusterIdsByPoolInstanceTag(instanceTag);
+        await Promise.all(clusterIds.map((id) => this.clientNotifier.broadcast(id, message)));
+      } else {
+        await this.clientNotifier.broadcast(conn.clusterId, message);
+      }
       return;
     }
 
@@ -53,7 +59,7 @@ export class NodeMessageHandler {
     }
 
     if (isFileUpdateMessage(message)) {
-      this.handleFileUpdate(conn.clusterId, message);
+      this.handleFileUpdate(message);
       return;
     }
   }
@@ -212,7 +218,7 @@ export class NodeMessageHandler {
   /**
    * Handle filesystem update messages from node
    */
-  private handleFileUpdate(clusterId: string, message: FileUpdateMessage): void {
+  private handleFileUpdate(message: FileUpdateMessage): void {
     const { instanceId, event } = message;
     const watchKey = `${instanceId}:${event.path}`;
     const subscribers = this.connectionManager.getFileWatchSubscribers(watchKey);
@@ -224,11 +230,8 @@ export class NodeMessageHandler {
     const payload = JSON.stringify(message);
     let sentCount = 0;
 
-    const allConnections = this.connectionManager.getConnections(clusterId);
-    if (!allConnections) return;
-
     for (const connectionId of subscribers) {
-      const conn = Array.from(allConnections).find((c) => c.connectionId === connectionId);
+      const conn = this.connectionManager.getConnectionById(connectionId);
       if (conn && conn.ws.readyState === 1) {
         try {
           conn.ws.send(payload);

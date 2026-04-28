@@ -220,6 +220,14 @@ export class InstanceStore extends BaseStore {
     return (result?.pool_instance_id as string) ?? null;
   }
 
+  async getClusterIdsByPoolInstanceTag(instanceTag: string): Promise<string[]> {
+    const result = await this.db
+      .prepare(`SELECT c.id FROM clusters c JOIN instances i ON c.pool_instance_id = i.id WHERE i.tag = $1`)
+      .bind(instanceTag)
+      .all();
+    return result.results.map((row) => row.id as string);
+  }
+
   async releasePoolInstance(clusterId: string): Promise<void> {
     const now = this.now();
     try {
