@@ -22,9 +22,8 @@ import { InstanceService } from "@/services/instances.js";
 import { DnsService } from "@/services/dns/index.js";
 import { BillingService } from "@/services/billing/index.js";
 import { TrafficRouter } from "@/services/proxy/traffic-router.js";
-import { ZeptoProvider } from "@/services/notifications/email/zepto.js";
 import { VmProvider } from "@/services/vm/index.js";
-import { InstancePoolService } from "@/services/pool.js";
+import { InstancePool } from "@/services/pool.js";
 import { EmailProvider } from "@/services/notifications/email/index.js";
 
 // Storage adapter interface
@@ -154,11 +153,11 @@ export function getInstanceService(c: AppContext): InstanceService {
   return service;
 }
 
-export function getInstancePoolService(c: AppContext): InstancePoolService {
+export function getInstancePoolService(c: AppContext): InstancePool {
   const existing = c.get("_instancePoolService");
   if (existing) return existing;
 
-  const service = new InstancePoolService({
+  const service = new InstancePool({
     db: getDbStore(c),
     kv: getKVStore(c),
     vm: c.get("vmProvider") ?? undefined,
