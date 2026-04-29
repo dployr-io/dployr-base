@@ -91,12 +91,12 @@ export class AuthService {
 
     try {
       await this.db.instances.assignPool(cluster.id);
-    } catch (err) {
-      if (err instanceof PoolCapacityExceededError && vmService && jwt) {
-        const poolService = new InstancePool({ db: this.db, kv: this.kv, vm: vmService, jwt, sshKey: this.env.SSH_KEY });
-        await poolService.spawnPoolInstance({ clusterId: cluster.id });
+    } catch (error) {
+      if (error instanceof PoolCapacityExceededError && vmService && jwt) {
+        const service = new InstancePool({ db: this.db, kv: this.kv, vm: vmService, jwt, sshKey: this.env.SSH_KEY });
+        await service.spawnPoolInstance({ clusterId: cluster.id });
       } else {
-        console.error("[Auth] Failed to assign pool instance for cluster", cluster.id, err);
+        console.error("[Auth] Failed to assign pool instance for cluster", cluster.id, error);
       }
     }
 

@@ -11,7 +11,7 @@ export class UpdateProcessor {
     private kv: KVStore,
   ) {}
 
-  async processUpdate(instanceId: string, message: NodeUpdate): Promise<void> {
+  async processUpdate(tag: string, message: NodeUpdate): Promise<void> {
     if (!message.instance_id) {
       console.warn(`[UpdateProcessor] Update missing instance_id`);
       return;
@@ -23,10 +23,10 @@ export class UpdateProcessor {
     if (message.schema === "v1") {
       const v1Message = message as NodeUpdateV1;
       if (v1Message.top && v1Message.seq) {
-        tasks.push(this.saveProcessSnapshot({ instanceId, seq: v1Message.seq, snapshot: v1Message.top }));
+        tasks.push(this.saveProcessSnapshot({ tag, seq: v1Message.seq, snapshot: v1Message.top }));
       }
       if (v1Message.services) {
-        tasks.push(this.syncServices(instanceId, v1Message.services));
+        tasks.push(this.syncServices(tag, v1Message.services));
       }
     }
 
@@ -34,36 +34,36 @@ export class UpdateProcessor {
     if (message.schema === "v1.1") {
       const v1_1Message = message as NodeUpdateV1_1;
       if (v1_1Message.processes?.list && v1_1Message.sequence) {
-        tasks.push(this.saveProcessSnapshot({ instanceId, seq: v1_1Message.sequence, snapshot: { list: v1_1Message.processes.list } }));
+        tasks.push(this.saveProcessSnapshot({ tag, seq: v1_1Message.sequence, snapshot: { list: v1_1Message.processes.list } }));
       }
       if (v1_1Message.workloads?.services) {
-        tasks.push(this.syncServices(instanceId, v1_1Message.workloads.services));
+        tasks.push(this.syncServices(tag, v1_1Message.workloads.services));
       }
     }
 
-    tasks.push(this.kv.saveNodeUpdate({ instanceId, update: message as Record<string, unknown> }));
+    tasks.push(this.kv.saveNodeUpdate({ tag, update: message as Record<string, unknown> }));
 
     await Promise.all(tasks);
   }
 
-  private async saveProcessSnapshot({ instanceId, seq, snapshot }: { instanceId: string; seq: number; snapshot: Record<string, unknown> }): Promise<void> {
+  private async saveProcessSnapshot({ tag, seq, snapshot }: { tag: string; seq: number; snapshot: Record<string, unknown> }): Promise<void> {
     try {
-      await this.kv.saveProcessSnapshot({ instanceId, seq, snapshot });
+      await this.kv.saveProcessSnapshot({ tag, seq, snapshot });
     } catch (error) {
       console.error(`[UpdateProcessor] Failed to save process snapshot:`, error);
     }
   }
 
-  private async syncServices(instanceName: string, services: Record<string, unknown>[]): Promise<void> {
+  private async syncServices(tag: string, services: Record<string, unknown>[]): Promise<void> {
     if (!Array.isArray(services)) {
       return;
     }
 
     try {
       // Get instance first to get the database ID
-      const instance = await this.db.instances.find({ tag: instanceName });
+      const instance = await this.db.instances.find({ tag });
       if (!instance) {
-        console.warn(`[UpdateProcessor] Instance ${instanceName} not found`);
+        console.warn(`[UpdateProcessor] Instance ${tag} not found`);
         return;
       }
 

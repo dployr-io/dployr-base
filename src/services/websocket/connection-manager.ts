@@ -121,8 +121,8 @@ export class ConnectionManager {
   /**
    * Get all node connections for a cluster
    */
-  getNodeConnections(instanceId: string): ClusterConnection[] {
-    const conns = this.connections.get(instanceId);
+  getNodeConnections(key: string): ClusterConnection[] {
+    const conns = this.connections.get(key) || this.connections.get(`pool:${key}`);
     if (!conns) return [];
     return Array.from(conns).filter((c) => c.role === "node");
   }
@@ -139,8 +139,8 @@ export class ConnectionManager {
   /**
    * Check if any node is connected for a cluster
    */
-  hasNodeConnection(instanceId: string): boolean {
-    return this.getNodeConnections(instanceId).length > 0;
+  hasNodeConnection(tag: string): boolean {
+    return this.getNodeConnections(tag).length > 0;
   }
 
   /**

@@ -73,7 +73,7 @@ vm.post("/", async (c) => {
       userData,
     });
 
-    worker.emit("pool-sync");
+    worker.emit("node-sync");
 
     return c.json(createSuccessResponse({ droplet }), 201);
   } catch (error: any) {
