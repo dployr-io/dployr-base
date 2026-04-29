@@ -8,6 +8,7 @@ import { ulid } from "ulid";
 import { getKVStore, getJWTService, getWS, getDbStore, getVMService } from "@/lib/config/context.js";
 import { InstanceConnectionFailureError, InstanceNotConnectedError, PermissionError, ResourceNotFoundError } from "@/lib/errors/errors.js";
 import { DployrdService } from "./dployrd.js";
+import { InstancePayload } from "@/lib/db/store/db/instances.js";
 
 /**
  * Service for managing dployr instances.
@@ -38,6 +39,7 @@ export class InstanceService {
     address,
     userId,
     c,
+    managed,
     metadata,
   }: {
     clusterId: string;
@@ -45,6 +47,7 @@ export class InstanceService {
     address: string;
     userId: string;
     c: Context;
+    managed?: boolean;
     metadata?: Record<string, any> | undefined;
   }): Promise<{ instance: Instance; token: string }> {
     const db = getDbStore(c);
@@ -57,7 +60,8 @@ export class InstanceService {
         tag,
         address,
         metadata,
-      } as any,
+        managed,
+      } as InstancePayload,
     });
 
     const token = await jwt.createBootstrapToken(tag);

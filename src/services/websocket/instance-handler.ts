@@ -29,7 +29,7 @@ export interface WebSocketHandlerConfig {
  * Coordinates connection management and message routing between nodes and clients.
  */
 export class WebSocketHandler {
-  private connectionManager: ConnectionManager;
+  public readonly connectionManager: ConnectionManager;
   private dployrdHandler: NodeMessageHandler;
   private clientHandler: ClientMessageHandler;
   private clientNotifier: ClientNotifier;

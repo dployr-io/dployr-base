@@ -9,7 +9,7 @@ import type { JWTService } from "./jwt.js";
 import type { EmailProvider } from "@/services/notifications/email/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode.js";
-import { InstancePoolService } from "@/services/pool.js";
+import { InstancePool } from "@/services/pool.js";
 
 export class AuthService {
   constructor(
@@ -93,7 +93,7 @@ export class AuthService {
       await this.db.instances.assignPool(cluster.id);
     } catch (err) {
       if (err instanceof PoolCapacityExceededError && vmService && jwt) {
-        const poolService = new InstancePoolService({ db: this.db, kv: this.kv, vm: vmService, jwt, sshKey: this.env.SSH_KEY });
+        const poolService = new InstancePool({ db: this.db, kv: this.kv, vm: vmService, jwt, sshKey: this.env.SSH_KEY });
         await poolService.spawnPoolInstance({ clusterId: cluster.id });
       } else {
         console.error("[Auth] Failed to assign pool instance for cluster", cluster.id, err);

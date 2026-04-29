@@ -1,11 +1,11 @@
 // pool.routes.ts
 import { Hono } from "hono";
 import { Bindings, Variables, createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
-import { getDbStore, getKVStore, getVMService } from "@/lib/config/context.js";
-import { DatabaseConflictError, ResourceNotFoundError } from "@/lib/errors/errors.js";
-import { ERROR, INSTANCE_REGIONS } from "@/lib/constants/index.js";
+import { getDbStore } from "@/lib/config/context.js";
+import { DatabaseConflictError } from "@/lib/errors/errors.js";
+import { ERROR } from "@/lib/constants/index.js";
 import { z } from "zod";
-import { InstancePoolService } from "@/services/pool.js";
+import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
 
 const addPoolInstanceSchema = z.object({
   address: z.string().regex(/^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/, "Address must be a valid IPv4 address"),
@@ -19,15 +19,10 @@ export const pool = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // Retrieve all instances in pool
 pool.get("/", async (c) => {
   const db = getDbStore(c);
-  const kv = getKVStore(c);
-  const vm = getVMService(c);
   const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
 
-  const service = new InstancePoolService({ db, kv, vm: vm ?? undefined });
-  service.poolSync().catch(() => {});
-
   try {
-    const [{ instances, total }, clusterMap] = await Promise.all([db.instances.listPool({ limit: pageSize, offset }), db.instances.getPoolClustersMap()]);
+    const [{ instances, total }, clusterMap] = await Promise.all([db.instances.list({ limit: pageSize, offset }), db.instances.getPoolClustersMap()]);
 
     const countByInstance = new Map<string, number>();
     for (const { instanceId } of clusterMap) {

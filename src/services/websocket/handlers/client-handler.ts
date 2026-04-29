@@ -1,7 +1,6 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { NodeTask } from "@/lib/tasks/types.js";
 import type { Instance } from "@/types/index.js";
 import type { ConnectionManager } from "../connection-manager.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
@@ -70,7 +69,7 @@ import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { TerminalManager } from "@/services/websocket/terminal-manager.js";
 import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
-import { ALLOWED_TASKS_ON_POOLED_INSTANCES } from "@/lib/constants/index.js";
+import { ALLOWED_TASKS_ON_POOLED_INSTANCES } from "@/lib/constants/instances.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -111,12 +110,11 @@ export class ClientMessageHandler {
   /**
    * Check if a task is allowed on an instance
    */
-  private isTaskAllowedOnInstance(instance: Instance, task: NodeTask): boolean {
-    if (instance.kind !== "pool") {
-      return true; // dedicated instances have no task restrictions
-    }
-    const taskKind = task.Type.split(":")[0];
-    return this.ALLOWED_FREE_INSTANCE_TASK_KINDS.has(taskKind);
+  private isTaskAllowedOnInstance(instance: Instance, message: BaseMessage): boolean {
+    // return true; ////////////////////////////// REMOVE BEFORE COMMIT !@@@@@@@@@@@@@@@@
+    if (instance.kind !== "pool") return true;
+    const kind = message.kind;
+    return ALLOWED_TASKS_ON_POOLED_INSTANCES.some((allowed) => (allowed.endsWith(":") ? kind.startsWith(allowed) : kind === allowed));
   }
 
   /**
@@ -125,6 +123,10 @@ export class ClientMessageHandler {
   async handleMessage(conn: ClusterConnection, message: BaseMessage): Promise<void> {
     // Update activity timestamp
     this.connectionManager.updateActivity(conn.ws);
+    
+////////////////////////////// REMOVE BEFORE COMMIT !@@@@@@@@@@@@@@@@
+    if (message.kind !== "terminal") console.debug("Client message: ", message); ////////////////////////////// REMOVE BEFORE COMMIT !@@@@@@@@@@@@@@@@
+////////////////////////////// REMOVE BEFORE COMMIT !@@@@@@@@@@@@@@@@
 
     // Handle acknowledgments
     if (isAckMessage(message)) {
