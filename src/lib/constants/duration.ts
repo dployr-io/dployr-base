@@ -21,13 +21,15 @@ export const BILLING_NOTIFICATION_TTL = 60 * 60 * 24; // 24 hours
 export const ADMIN_JWT_REFRESH_WINDOW = 60 * 29.5; // 29.5 minutes
 
 // VMs
-export const HEARTBEAT_WINDOW = 60 * 2; // 2 minutes
+export const ACCEPTABLE_HEARTBEAT_WINDOW = 60 * 3; // 3 minutes
 
 // Jobs (milliseconds — used with setInterval)
 export const THIRTY_SECONDS_MS = 30 * 1000;
 export const FIVE_MINUTES_MS = 5 * 60 * 1000;
 export const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 
-// 5 min — enough for a droplet to spin up and appear in vm.list()
-export const POOL_PROVISION_LOCK_TTL = 60 * 5;
+export const POOL_PROVISION_LOCK_TTL = 100; // 100 seconds
 export const NODE_CONNECTED_TTL = 60; // 60 seconds — refreshed on every node message
+
+// During this period, pool sync will skip decommission of degraded, until next window
+export const INSTANCE_DECOMMISSION_RECOVERY_WINDOW_MS = 30_000; // 100 seconds

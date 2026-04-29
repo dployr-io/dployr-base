@@ -28,19 +28,17 @@ export const VM_IMAGES: Record<VMImage, { label: string; distro: string }> = {
 
 export const VM_REGIONS: string[] = ["nyc1", "nyc3", "ams3", "sfo3", "sgp1", "lon1", "fra1", "tor1", "blr1", "syd1"];
 
-export const VM_INSTANCE_REGIONS_MAPPING: Record<typeof INSTANCE_REGIONS[number], string[]> = {
-  "us-east": ["nyc1", "nyc3", "tor1"],
-  "us-west": ["sfo3"],
-  "us-central": [],
-  "eu-west": ["lon1", "ams3"],
-  "eu-central": ["fra1"],
-  "eu-north": [],
-  "ap-south": ["blr1"],
-  "ap-southeast": ["sgp1", "syd1"],
-  "ap-northeast": [],
-  "af-south": [],
-  "me-central": [],
-  "sa-east": [],
+export const PROVIDER_TO_INSTANCE_REGION: Record<string, (typeof INSTANCE_REGIONS)[number]> = {
+  nyc1: "us-east",
+  nyc3: "us-east",
+  tor1: "us-east",
+  sfo3: "us-west",
+  lon1: "eu-west",
+  ams3: "eu-west",
+  fra1: "eu-central",
+  blr1: "ap-south",
+  sgp1: "ap-southeast",
+  syd1: "ap-southeast",
 };
 
 /** Bootstrap install script injected as user_data at droplet creation */

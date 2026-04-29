@@ -29,4 +29,5 @@ export const KV_KEYS = {
   FREE_INSTANCE_COUNTER: (instanceId: string) => `free_instance:counter:${instanceId}`,
   POOL_PROVISION_LOCK: "pool:provision:lock",
   NODE_CONNECTED: (tag: string) => `node:connected:${tag}`,
+  INSTANCE_DECOMMISSION_RECOVERY_WINDOW: (instanceId: string) => `recovery_window:${instanceId}`
 } as const;

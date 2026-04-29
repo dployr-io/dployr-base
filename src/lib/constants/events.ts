@@ -24,7 +24,7 @@ export const EVENTS = {
   },
   INSTANCE: {
     CREATED: { code: "instance.created", message: "Instance created successfully" },
-    MODIFIED: { code: "instance.modified", message: "Instance modified successfully" },
+    UPDATED: { code: "instance.updated", message: "Instance updated successfully" },
     DELETED: { code: "instance.deleted", message: "Instance deleted successfully" },
   },
   PERMISSION: {
@@ -53,22 +53,23 @@ export const EVENTS = {
   READ: {
     BOOTSTRAP_LOGS: { code: "read.bootstrap_logs", message: "Bootstrap logs read" },
   },
-  POOL: {
-    INSTANCE_HEALTHY: { code: "pool.instance_healthy", message: "Instance is healthy" },
-    INSTANCE_DEGRADED: { code: "pool.instance_degraded", message: "Instance is degraded" },
-    INSTANCE_OFFLINE: { code: "pool.instance_offline", message: "Instance is offline" },
-    INSTANCE_UNREACHABLE: { code: "pool.instance_unreachable", message: "Instance is unreachable" },
-    INSTANCE_MAINTENANCE: { code: "pool.instance_maintenance", message: "Pool instance placed in maintenance" },
-    INSTANCE_DRAINED: { code: "pool.instance_drained", message: "Pool instance drained and removed" },
-    INSTANCE_DATA_CLEARED: { code: "pool.instance_data_cleared", message: "Pool instance data cleared" },
-    INSTANCE_PROVISIONED: { code: "pool.instance_provisioned", message: "New pool instance provisioned" },
-    INSTANCE_ALLOCATED: { code: "pool.instance_allocated", message: "Pool instance allocated" },
+  NODE: {
+    HEALTHY: { code: "node.healthy", message: "Node is healthy" },
+    DEGRADED: { code: "node.degraded", message: "Node is degraded" },
+    OFFLINE: { code: "node.offline", message: "Node is offline" },
+    UNREACHABLE: { code: "node.unreachable", message: "Node is unreachable" },
+    MAINTENANCE: { code: "node.maintenance", message: "Node placed under maintenance" },
+    DRAINED: { code: "node.drained", message: "Node drained and removed" },
+    DATA_CLEARED: { code: "node.data_cleared", message: "Node data cleared" },
+    PROVISIONED: { code: "node.provisioned", message: "New instance provisioned" },
+    DECOMMISSIONED: { code: "node.decommissioned", message: "Node marked for decommission" },
+    ALLOCATED: { code: "node.allocated", message: "Pool instance allocated" },
   },
 } as const;
 
 export const DEFAULT_EVENTS = [
   EVENTS.INSTANCE.CREATED.code,
-  EVENTS.INSTANCE.MODIFIED.code,
+  EVENTS.INSTANCE.UPDATED.code,
   EVENTS.INSTANCE.DELETED.code,
   EVENTS.CLUSTER.INVITE_ACCEPTED.code,
   EVENTS.CLUSTER.USER_INVITED.code,
@@ -78,11 +79,11 @@ export const DEFAULT_EVENTS = [
 
 /** Maps an InstanceStatus to the corresponding event code. */
 export const HEADLESS_EVENTS: Record<InstanceStatus, string> = {
-  healthy: EVENTS.POOL.INSTANCE_HEALTHY.code,
-  degraded: EVENTS.POOL.INSTANCE_DEGRADED.code,
-  offline: EVENTS.POOL.INSTANCE_OFFLINE.code,
-  unreachable: EVENTS.POOL.INSTANCE_UNREACHABLE.code,
-  maintenance: EVENTS.POOL.INSTANCE_MAINTENANCE.code
+  healthy: EVENTS.NODE.HEALTHY.code,
+  degraded: EVENTS.NODE.DEGRADED.code,
+  offline: EVENTS.NODE.OFFLINE.code,
+  unreachable: EVENTS.NODE.UNREACHABLE.code,
+  maintenance: EVENTS.NODE.MAINTENANCE.code,
 };
 
 export const EVENT_METADATA: EventMetadataMap = {
@@ -93,7 +94,7 @@ export const EVENT_METADATA: EventMetadataMap = {
     color: 0x00ff00,
     category: "instance",
   },
-  [EVENTS.INSTANCE.MODIFIED.code]: {
+  [EVENTS.INSTANCE.UPDATED.code]: {
     title: "🔧 Instance Modified",
     description: (data: any) => `Instance **${data.instanceId}** has been modified.`,
     color: 0xffa500,
