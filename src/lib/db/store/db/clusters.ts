@@ -646,7 +646,7 @@ export class ClusterStore extends BaseStore {
     // Default event subscriptions for all notification integrations
     const defaultNotificationEvents = [
       EVENTS.INSTANCE.CREATED.code,
-      EVENTS.INSTANCE.MODIFIED.code,
+      EVENTS.INSTANCE.UPDATED.code,
       EVENTS.INSTANCE.DELETED.code,
       EVENTS.CLUSTER.INVITE_ACCEPTED.code,
       EVENTS.CLUSTER.USER_INVITED.code,

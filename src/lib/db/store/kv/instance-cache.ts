@@ -1,14 +1,11 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
-import { INSTANCE_STATUS_TTL, NODE_UPDATE_TTL, NODE_CONNECTED_TTL } from "@/lib/constants/index.js";
+import { INSTANCE_STATUS_TTL, NODE_UPDATE_TTL, NODE_CONNECTED_TTL, INSTANCE_DECOMMISSION_RECOVERY_WINDOW_MS } from "@/lib/constants/index.js";
 import type { Instance } from "@/types/index.js";
 
 type CachedInstance = Instance & { clusterId: string };
 
-type InstanceCacheFilter =
-  | { id: string }
-  | { clusterId: string; tag: string }
-  | { tag: string };
+type InstanceCacheFilter = { id: string } | { clusterId: string; tag: string } | { tag: string };
 
 export class InstanceCacheStore {
   constructor(private kv: IKVAdapter) {}
@@ -62,13 +59,13 @@ export class InstanceCacheStore {
     await Promise.all(deletes);
   }
 
-  async cacheServices(instanceId: string, services: Array<{ id: string; name: string; instanceId: string; createdAt: number; updatedAt: number }>): Promise<void> {
-    await this.kv.put(KV_KEYS.SERVICES(instanceId), JSON.stringify(services), { ttl: 60 });
+  async cacheServices(tag: string, services: Array<{ id: string; name: string; instanceId: string; createdAt: number; updatedAt: number }>): Promise<void> {
+    await this.kv.put(KV_KEYS.SERVICES(tag), JSON.stringify(services), { ttl: 60 });
   }
 
-  async getCachedServices(instanceId: string): Promise<Array<{ id: string; name: string; instanceId: string; createdAt: number; updatedAt: number }> | null> {
+  async getCachedServices(tag: string): Promise<Array<{ id: string; name: string; instanceId: string; createdAt: number; updatedAt: number }> | null> {
     try {
-      const data = await this.kv.get(KV_KEYS.SERVICES(instanceId));
+      const data = await this.kv.get(KV_KEYS.SERVICES(tag));
       if (!data) return null;
       return JSON.parse(data);
     } catch {
@@ -76,8 +73,8 @@ export class InstanceCacheStore {
     }
   }
 
-  async invalidateServiceCache(instanceId: string): Promise<void> {
-    await this.kv.delete(KV_KEYS.SERVICES(instanceId));
+  async invalidateServiceCache(tag: string): Promise<void> {
+    await this.kv.delete(KV_KEYS.SERVICES(tag));
   }
 
   async setNodeConnected(tag: string): Promise<void> {
@@ -96,34 +93,30 @@ export class InstanceCacheStore {
     return (await this.kv.get(KV_KEYS.NODE_CONNECTED(tag))) !== null;
   }
 
-  async saveNodeUpdate({ instanceId, update }: { instanceId: string; update: Record<string, unknown> }): Promise<void> {
+  async saveNodeUpdate({ tag, update }: { tag: string; update: Record<string, unknown> }): Promise<void> {
     const data = { ...update, lastUpdated: Date.now() };
-    await this.kv.put(KV_KEYS.NODE_UPDATE(instanceId), JSON.stringify(data), { ttl: NODE_UPDATE_TTL });
+    await this.kv.put(KV_KEYS.NODE_UPDATE(tag), JSON.stringify(data), { ttl: NODE_UPDATE_TTL });
   }
 
-  async getNodeUpdate(instanceId: string): Promise<Record<string, unknown> | null> {
-    const data = await this.kv.get(KV_KEYS.NODE_UPDATE(instanceId));
+  async getNodeUpdate(tag: string): Promise<Record<string, unknown> | null> {
+    const data = await this.kv.get(KV_KEYS.NODE_UPDATE(tag));
     if (!data) return null;
     return JSON.parse(data);
   }
 
-  async saveProcessSnapshot({ instanceId, seq, snapshot }: { instanceId: string; seq: number; snapshot: Record<string, unknown> }): Promise<void> {
+  async saveProcessSnapshot({ tag, seq, snapshot }: { tag: string; seq: number; snapshot: Record<string, unknown> }): Promise<void> {
     const timestamp = Date.now();
-    await this.kv.put(
-      KV_KEYS.PROCESS_SNAPSHOT(instanceId, timestamp),
-      JSON.stringify({ seq, timestamp, data: snapshot }),
-      { ttl: 60 * 60 * 2 },
-    );
+    await this.kv.put(KV_KEYS.PROCESS_SNAPSHOT(tag, timestamp), JSON.stringify({ seq, timestamp, data: snapshot }), { ttl: 60 * 60 * 2 });
   }
 
-  async getProcessSnapshot({ instanceId, timestamp }: { instanceId: string; timestamp: number }): Promise<Record<string, unknown> | null> {
-    const data = await this.kv.get(KV_KEYS.PROCESS_SNAPSHOT(instanceId, timestamp));
+  async getProcessSnapshot({ tag, timestamp }: { tag: string; timestamp: number }): Promise<Record<string, unknown> | null> {
+    const data = await this.kv.get(KV_KEYS.PROCESS_SNAPSHOT(tag, timestamp));
     if (!data) return null;
     return JSON.parse(data).data;
   }
 
-  async getLatestProcessSnapshots({ instanceId, limit = 10 }: { instanceId: string; limit?: number }): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
-    const prefix = KV_KEYS.PROCESS_SNAPSHOT(instanceId);
+  async getLatestProcessSnapshots({ tag, limit = 10 }: { tag: string; limit?: number }): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
+    const prefix = KV_KEYS.PROCESS_SNAPSHOT(tag);
     const maxLimit = Math.min(limit, 1000);
     const result = await this.kv.list({ prefix, limit: maxLimit });
 
@@ -149,17 +142,17 @@ export class InstanceCacheStore {
   }
 
   async getProcessSnapshotsByTimeRange({
-    instanceId,
+    tag,
     startTime,
     endTime,
   }: {
-    instanceId: string;
+    tag: string;
     startTime: number;
     endTime: number;
   }): Promise<Array<{ seq: number; timestamp: number; data: Record<string, unknown> }>> {
     const maxRange = 60 * 60 * 1000;
     const cappedEndTime = Math.min(endTime, startTime + maxRange);
-    const prefix = KV_KEYS.PROCESS_SNAPSHOT(instanceId);
+    const prefix = KV_KEYS.PROCESS_SNAPSHOT(tag);
     const result = await this.kv.list({ prefix, limit: 10000 });
 
     const snapshots = await Promise.all(
@@ -179,8 +172,24 @@ export class InstanceCacheStore {
       }),
     );
 
-    return snapshots
-      .filter((s): s is { seq: number; timestamp: number; data: Record<string, unknown> } => s !== null)
-      .sort((a, b) => a.timestamp - b.timestamp);
+    return snapshots.filter((s): s is { seq: number; timestamp: number; data: Record<string, unknown> } => s !== null).sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  async setFlagForDecommission({ tag }: { tag: string }): Promise<void> {
+    await this.kv.put(KV_KEYS.INSTANCE_DECOMMISSION_RECOVERY_WINDOW(tag), Date.now().toString(), { ttl: INSTANCE_STATUS_TTL });
+  }
+
+  async isInRecoveryWindow({ tag }: { tag: string }): Promise<boolean> {
+    const raw = await this.kv.get(KV_KEYS.INSTANCE_DECOMMISSION_RECOVERY_WINDOW(tag));
+    if (raw === null) return false; // never flagged
+
+    const flaggedAt = parseInt(raw, 10);
+    return Date.now() - flaggedAt < INSTANCE_DECOMMISSION_RECOVERY_WINDOW_MS;
+  }
+
+  async checkForDecommissionFlag({ instanceId }: { instanceId: string }): Promise<boolean> {
+    const raw = await this.kv.get(KV_KEYS.INSTANCE_DECOMMISSION_RECOVERY_WINDOW(instanceId));
+    if (raw === null) return false; // never flagged
+    return true;
   }
 }
