@@ -5,21 +5,12 @@ import { Instance, InstanceKind, InstanceStatus } from "@/types/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { BaseStore, type Pagination } from "./base.js";
 
-export type InstanceFilter = {
-  id?: string;
-  tag?: string;
-  clusterId?: string;
-  kind?: InstanceKind;
-};
-
-export type InstanceUpdateData = {
-  address?: string;
-  status?: InstanceStatus;
-  metadata?: Record<string, any>;
-};
+type InstanceUpdateData = Partial<Omit<Instance, "id" | "clusterId" | "managed" | "capacity" | "kind" | "region" | "createdAt" | "updatedAt">>;
+export type InstancePayload = Omit<Instance, "id" | "kind" | "clusterId" | "createdAt" | "updatedAt">;
+export type InstanceFilter = Partial<Omit<Instance, "metadata" | "createdAt" | "updatedAt">>;
 
 export class InstanceStore extends BaseStore {
-  async create({ clusterId, data }: { clusterId: string; data: Omit<Instance, "id" | "kind" | "clusterId" | "createdAt" | "updatedAt"> }): Promise<Instance> {
+  async create({ clusterId, data }: { clusterId: string; data: InstancePayload }): Promise<Instance> {
     return this.db.withTransaction(async (client) => {
       const id = this.generateId();
       const now = this.now();
@@ -27,10 +18,10 @@ export class InstanceStore extends BaseStore {
       let result;
       try {
         result = await client.query(
-          `INSERT INTO instances (id, kind, cluster_id, address, tag, status, metadata, created_at, updated_at)
-           VALUES ($1, 'dedicated', $2, $3, $4, $5::instance_status, $6::jsonb, $7, $8)
-           RETURNING id, kind, cluster_id, address, tag, status, capacity, region, metadata, created_at, updated_at`,
-          [id, clusterId, data.address ?? null, data.tag, data.status ?? "healthy", data.metadata ?? {}, now, now],
+          `INSERT INTO instances (id, kind, cluster_id, address, tag, region, managed, metadata, created_at, updated_at)
+           VALUES ($1, 'dedicated', $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+           RETURNING id, kind, cluster_id, address, tag, status, capacity, region, managed, metadata, created_at, updated_at`,
+          [id, clusterId, data.address ?? null, data.tag, data.region ?? "us-east", data.managed ?? true, data.metadata ?? {}, now, now],
         );
       } catch (error) {
         this.parsePostgresError({ error, table: "instances" });
@@ -60,12 +51,24 @@ export class InstanceStore extends BaseStore {
       bindings.push(filter.kind);
       parts.push(`kind = $${bindings.length}`);
     }
+    if (filter.address !== undefined) {
+      bindings.push(filter.address);
+      parts.push(`address = $${bindings.length}`);
+    }
+    if (filter.status !== undefined) {
+      bindings.push(filter.status);
+      parts.push(`status = $${bindings.length}`);
+    }
+    if (filter.managed !== undefined) {
+      bindings.push(filter.managed);
+      parts.push(`managed = $${bindings.length}`);
+    }
 
     if (!bindings.length) return null;
 
     const where = `WHERE ${parts.join(" AND ")}`;
     const result = await this.db
-      .prepare(`SELECT id, kind, cluster_id, address, tag, status, capacity, region, metadata, created_at, updated_at FROM instances ${where} LIMIT 1`)
+      .prepare(`SELECT id, kind, cluster_id, address, tag, status, capacity, region, managed, metadata, created_at, updated_at FROM instances ${where} LIMIT 1`)
       .bind(...bindings)
       .first();
 
@@ -221,10 +224,7 @@ export class InstanceStore extends BaseStore {
   }
 
   async getClusterIdsByPoolInstanceTag(instanceTag: string): Promise<string[]> {
-    const result = await this.db
-      .prepare(`SELECT c.id FROM clusters c JOIN instances i ON c.pool_instance_id = i.id WHERE i.tag = $1`)
-      .bind(instanceTag)
-      .all();
+    const result = await this.db.prepare(`SELECT c.id FROM clusters c JOIN instances i ON c.pool_instance_id = i.id WHERE i.tag = $1`).bind(instanceTag).all();
     return result.results.map((row) => row.id as string);
   }
 

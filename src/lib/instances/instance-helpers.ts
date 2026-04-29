@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
-import { ERROR, SUCCESS, INSTANCE_REGIONS } from "@/lib/constants/index.js";
+import { ERROR, SUCCESS } from "@/lib/constants/index.js";
 import { getBillingService, getDbStore, getInstancePoolService, getInstanceService, getKVStore } from "@/lib/config/context.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
 import { DatabaseConflictError, handleInstanceError } from "../errors/errors.js";
+import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
 
 export const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
   address: z.string().regex(/^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/, "Address must be a valid IPv4 address"),
   tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(21, "Tag must be a maximum of 21 characters"),
   region: z.enum(INSTANCE_REGIONS).optional(),
+  managed: z.boolean().optional().default(true),
 });
 
 const rotateSchema = z.object({
@@ -45,7 +47,7 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
       return c.json(createErrorResponse({ message: `Validation failed — ${message}`, code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const { clusterId, tag, address, region } = validation.data;
+    const { clusterId, tag, address, region, managed } = validation.data;
 
     try {
       const instance = await getInstanceService(c).createInstance({
@@ -54,6 +56,7 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
         address,
         userId: sessionId ?? session.userId,
         c,
+        managed,
         metadata: region ? { region } : undefined,
       });
 
