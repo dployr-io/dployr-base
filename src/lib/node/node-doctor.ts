@@ -1,6 +1,6 @@
 import { InstanceStatus, SubscriptionPlan } from "@/types/index.js";
 import { NodeUpdateV1_1 } from "@/types/node.js";
-import { HEARTBEAT_WINDOW, POOL_PROVISION_LOCK_TTL } from "../constants/duration.js";
+import { ACCEPTABLE_HEARTBEAT_WINDOW } from "../constants/duration.js";
 import { tcpReachable } from "../net.js";
 import { EventEmittable } from "@/services/notifications/emittable.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
@@ -9,11 +9,11 @@ import { VmProvider } from "@/services/vm/index.js";
 import { EVENTS, HEADLESS_EVENTS } from "../constants/events.js";
 import { ConnectionManager } from "@/services/websocket/connection-manager.js";
 import { VirtualMachine } from "@/types/vm.js";
-import { PoolCapacityExceededError } from "../errors/errors.js";
 import { INSTANCE_POOL_QUOTA } from "../constants/instances.js";
 import { KV_KEYS } from "../constants/kv.js";
-import { DEFAULT_CAPACITY } from "../constants/vm.js";
+import { DEFAULT_CAPACITY, PROVIDER_TO_INSTANCE_REGION } from "../constants/vm.js";
 import { InstancePool } from "@/services/pool.js";
+import { InstancePayload } from "../db/store/db/instances.js";
 
 export class NodeDoctor extends EventEmittable {
   protected readonly vm: VmProvider | null;
@@ -31,31 +31,44 @@ export class NodeDoctor extends EventEmittable {
 
   /** Health check based on daemon heartbeat. */
   public async nodeHeartbeat(): Promise<void> {
+    console.debug("[node-health] Starting node heartbeat...");
+
     const { instances } = await this.db.instances.list({ managed: true });
+
+    console.debug("[node-health] Found instances", instances.length);
     if (instances.length === 0) return;
 
-    const windowStart = Date.now() - HEARTBEAT_WINDOW;
-    const candidates = instances.filter((e) => !this.isStaticStatus(e.status));
+    const windowStart = Date.now() - ACCEPTABLE_HEARTBEAT_WINDOW * 1000;
 
-    for (const entry of candidates) {
+    console.debug("[node-health] Computed candidates", instances);
+    for (const entry of instances) {
       const heartbeatStatus = await this.resolveHeartbeatStatus(entry.tag, windowStart);
       if (entry.status === heartbeatStatus) continue;
 
-      const confirmedStatus = await this.confirmStatusViaTcp(entry.address!);
-
       try {
-        await this.db.instances.update({ id: entry.id }, { status: confirmedStatus });
-        await this.emit(HEADLESS_EVENTS[confirmedStatus], entry.tag);
+        const tcpStatus = await this.confirmStatusViaTcp(entry.address!);
+        console.debug("[node-health] tcp status", tcpStatus);
+        const _status = tcpStatus !== "healthy" ? tcpStatus : heartbeatStatus;
+        await this.db.instances.update({ id: entry.id }, { status: _status });
+        if (_status === "degraded") {
+          const alreadyFlagged = await this.kv.instanceCache.checkForDecommissionFlag({ instanceId: entry.tag });
+          if (!alreadyFlagged) {
+            await this.kv.instanceCache.setFlagForDecommission({ tag: entry.tag });
+            await this.emit(EVENTS.NODE.DECOMMISSIONED.code, entry.tag);
+          }
+        }
       } catch (err) {
-        console.error(`[pool-health] Failed to update ${entry.tag} to ${confirmedStatus}:`, err);
+        console.error(`[node-health] Failed to update ${entry.tag} status:`, err);
       }
     }
+    console.debug("[node-health] Completed node heartbeat");
   }
 
   /** Full synchronisation of pool state with the VM provider. */
   public async nodesSync(): Promise<void> {
+    console.debug("[node-sync] Starting node sync...");
     if (!this.vm) {
-      console.log("[pool-sync] Skipped — no VM provider configured");
+      console.log("[node-sync] Skipped — no VM provider configured");
       return;
     }
 
@@ -75,60 +88,57 @@ export class NodeDoctor extends EventEmittable {
     await this.syncDedicatedInstances(dedicatedInstances, dropletMap);
 
     this.nodesDrain(poolEntries);
-  }
-
-  /** Provider-level ping — checks droplet status and updates accordingly. */
-  public async syncStatusFromProvider(): Promise<void> {
-    if (!this.vm) return;
-
-    const { instances } = await this.db.instances.list({ managed: true });
-    if (instances.length === 0) return;
-
-    const droplets = await this.vm.list({ tagName: "managed", perPage: 200 });
-    const dropletMap = new Map(droplets.map((d) => [d.name, d]));
-
-    for (const entry of instances) {
-      const next = this.resolveProviderStatus(dropletMap.get(entry.tag));
-
-      try {
-        await this.db.instances.update({ id: entry.id }, { status: next });
-        await this.emit(HEADLESS_EVENTS[next], entry.tag);
-      } catch (err) {
-        console.error(`[pool-ping] Failed to update ${entry.tag} to ${next}:`, err);
-      }
-    }
+    console.debug("[node-sync] Completed node sync");
   }
 
   /** Phase 1: upsert each provider droplet into the DB. */
-  private async syncDropletsAndInstances(droplets: VirtualMachine[], poolMap: any): Promise<void> {
+  private async syncDropletsAndInstances(droplets: VirtualMachine[], poolMap: Map<string, InstancePayload & { id: string }>): Promise<void> {
     for (const droplet of droplets) {
       const existing = poolMap.get(droplet.name);
-      const status: InstanceStatus = droplet.status === "active" ? "healthy" : "offline";
+      const status = this.resolveProviderStatus(droplet) as InstanceStatus;
       const metadata = {
         managed: (droplet.tags ?? []).includes("managed"),
         tier: this.extractTier(droplet.tags),
       };
 
       if (!existing) {
-        await this.db.instances.addPool({
+        const added = await this.db.instances.addPool({
           tag: droplet.name,
           address: droplet.ipv4 ?? null,
           capacity: DEFAULT_CAPACITY,
-          region: droplet.region,
+          region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
           status,
           metadata,
         });
+        // update in‑memory map
+        poolMap.set(droplet.name, {
+          id: added.id, // make sure addPool returns the new instance
+          tag: droplet.name,
+          address: droplet.ipv4 ?? null,
+          status,
+          metadata,
+          capacity: DEFAULT_CAPACITY,
+        });
         await this.emit(HEADLESS_EVENTS[status], droplet.name);
-        console.log("[pool-sync] Discovered untracked instance, added to pool:", droplet.name);
+        console.log("[node-sync] Discovered untracked instance, added to pool:", droplet.name);
         continue;
       }
 
-      await this.db.instances.update({ id: existing.id }, { status, address: droplet.ipv4, metadata });
-      if (existing.status !== status) {
-        await this.emit(HEADLESS_EVENTS[status], droplet.name);
+      const addressChanged = existing.address?.trim() !== droplet.ipv4?.trim();
+      const metadataChanged = existing.metadata?.managed !== metadata.managed || existing.metadata?.tier !== metadata.tier;
+
+      if (!addressChanged && !metadataChanged) {
+        continue;
       }
-      // Keep the in-memory map fresh so later phases see the updated status.
+
+      await this.db.instances.update({ id: existing.id }, { address: droplet.ipv4 ?? null, metadata });
+
+      await this.emit(EVENTS.INSTANCE.UPDATED.code, droplet.name);
+
+      // update in‑memory map
       existing.status = status;
+      existing.address = droplet.ipv4 ?? null;
+      existing.metadata = metadata;
       poolMap.set(droplet.name, existing);
     }
   }
@@ -138,19 +148,27 @@ export class NodeDoctor extends EventEmittable {
     for (const entry of poolEntries) {
       if (!dropletMap.has(entry.tag) && entry.kind === "pool") {
         await this.db.instances.removePool(entry.id);
-        await this.emit(EVENTS.POOL.INSTANCE_DATA_CLEARED.code, entry.tag);
+        await this.emit(EVENTS.NODE.DATA_CLEARED.code, entry.tag);
       }
     }
   }
 
   /** Phase 3: mark offline / unreachable pool instances as maintenance. */
   private async demoteUnhealthyInstancesToMaintenance(poolMap: Map<string, { id: string; tag: string; status: InstanceStatus }>): Promise<void> {
-    const unhealthyStatuses = new Set<InstanceStatus>(["offline", "unreachable"]);
+    const demotableStatuses = new Set<InstanceStatus>(["offline", "unreachable", "degraded"]);
+
     for (const entry of poolMap.values()) {
-      if (unhealthyStatuses.has(entry.status) && entry.status !== "maintenance") {
-        await this.db.instances.update({ id: entry.id }, { status: "maintenance" });
-        await this.emit(EVENTS.POOL.INSTANCE_MAINTENANCE.code, entry.tag);
+      console.debug("[node-sync] Identifying node entry: ", entry);
+      if (!demotableStatuses.has(entry.status)) continue;
+
+      // Don't demote a degraded instance that is still in its recovery window
+      if (entry.status === "degraded" && (await this.kv.instanceCache.isInRecoveryWindow({ tag: entry.tag }))) {
+        console.debug("[node-sync] recovery entry, skipping...: ", entry);
+        continue;
       }
+
+      await this.db.instances.update({ id: entry.id }, { status: "maintenance" });
+      await this.emit(EVENTS.NODE.MAINTENANCE.code, entry.tag);
     }
   }
 
@@ -166,7 +184,7 @@ export class NodeDoctor extends EventEmittable {
     for (const { id: clusterId } of unassigned) {
       const plan = await this.db.billing.getEffectivePlan(clusterId);
       await this.allocateForPlan(clusterId, plan);
-      await this.emit("allocated", EVENTS.POOL.INSTANCE_ALLOCATED.code);
+      await this.emit("allocated", EVENTS.NODE.ALLOCATED.code);
     }
   }
 
@@ -192,6 +210,7 @@ export class NodeDoctor extends EventEmittable {
     if (!this.vm) return;
 
     const maintenanceInstances = poolEntries.filter((e) => e.status === "maintenance");
+    console.debug("[node-sync] Maintenance instances detected: ", maintenanceInstances);
     if (maintenanceInstances.length === 0) return;
 
     const [clusterMap, droplets] = await Promise.all([this.db.instances.getPoolClustersMap(), this.vm.list({ tagName: "managed", perPage: 200 })]);
@@ -199,6 +218,7 @@ export class NodeDoctor extends EventEmittable {
 
     for (const instance of maintenanceInstances) {
       const assignedClusterIds = clusterMap.filter((m) => m.instanceId === instance.id).map((m) => m.clusterId);
+      console.debug("[node-sync] Assigned clusterIds: ", assignedClusterIds);
 
       const allMigrated = await this.migrateClusters(assignedClusterIds);
       if (!allMigrated) continue;
@@ -209,19 +229,16 @@ export class NodeDoctor extends EventEmittable {
 
   /** Attempt to migrate all clusters off an instance. Returns true only when every cluster migrated successfully. */
   private async migrateClusters(clusterIds: string[]): Promise<boolean> {
-    if (clusterIds.length === 0) return true;
-
     let allMigrated = true;
+    if (clusterIds.length === 0) return allMigrated;
+
     for (const clusterId of clusterIds) {
       try {
-        await this.db.instances.assignPool(clusterId);
-        await this.emit(EVENTS.POOL.INSTANCE_ALLOCATED.code, clusterId);
+        await this.pool.allocateSharedPool(clusterId);
+        await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
       } catch (err) {
-        if (err instanceof PoolCapacityExceededError) {
-          allMigrated = false;
-        } else {
-          throw err;
-        }
+        console.error("[node-sync] Error while migrating clusters: ", err);
+        allMigrated = false;
       }
     }
     return allMigrated;
@@ -233,7 +250,7 @@ export class NodeDoctor extends EventEmittable {
     if (droplet?.id) {
       try {
         await this.vm!.delete(droplet.id);
-        await this.emit(EVENTS.POOL.INSTANCE_DRAINED.code, droplet.name);
+        await this.emit(EVENTS.NODE.DRAINED.code, droplet.name);
       } catch (err) {
         console.error(`[pool-drain] Failed to delete droplet ${droplet.name}:`, err);
         return; // don't remove from DB if delete failed
@@ -241,22 +258,85 @@ export class NodeDoctor extends EventEmittable {
     }
 
     await this.db.instances.removePool(instance.id);
-    await this.emit(EVENTS.POOL.INSTANCE_DATA_CLEARED.code, instance.tag);
-  }
-
-  /** Statuses that are terminal/manual and should not be touched by heartbeat checks. */
-  private isStaticStatus(status: InstanceStatus): boolean {
-    return status === "maintenance" || status === "offline" || status === "unreachable";
+    await this.emit(EVENTS.NODE.DATA_CLEARED.code, instance.tag);
   }
 
   /** Derive status from heartbeat data alone (does not touch the network). */
   private async resolveHeartbeatStatus(tag: string, windowStart: number): Promise<InstanceStatus> {
-    if (!this.conn.hasNodeConnection(tag)) return "degraded";
+    const singleCheck = async (): Promise<InstanceStatus> => {
+      // 1. Look for active connections
+      const nodeConns = this.conn.getNodeConnections(tag);
+      if (!nodeConns.length) {
+        console.debug(`[heartbeat] ${tag}: no active WebSocket connection → degraded`);
+        return "degraded";
+      }
 
-    const nodeUpdate = await this.kv.getNodeUpdate(tag);
-    const isRecent = typeof nodeUpdate?.lastUpdated === "number" && nodeUpdate.lastUpdated >= windowStart;
-    const isHealthy = (nodeUpdate as NodeUpdateV1_1)?.health?.overall === "ok";
-    return isRecent && isHealthy ? "healthy" : "degraded";
+      const now = Date.now();
+      const newestConnection = Math.max(...nodeConns.map((c) => c.connectedAt));
+      const connectionAge = now - newestConnection;
+
+      // 2. If the connection is still "fresh" (within the acceptable heartbeat window)
+      if (connectionAge < ACCEPTABLE_HEARTBEAT_WINDOW * 1000) {
+        const nodeUpdate = (await this.kv.getNodeUpdate(tag)) as NodeUpdateV1_1;
+        if (nodeUpdate?.health?.overall === "ok") {
+          console.debug(`[heartbeat] ${tag}: connection alive (${connectionAge}ms), last health ok → healthy`);
+          return "healthy";
+        } else {
+          console.debug(`[heartbeat] ${tag}: connection alive (${connectionAge}ms), but last health is "${nodeUpdate?.health?.overall}" (not ok) → falling back to KV recency`);
+          // Fall through to KV check
+        }
+      } else {
+        console.debug(`[heartbeat] ${tag}: connection age (${connectionAge}ms) exceeds window → falling back to KV recency`);
+      }
+
+      // 3. Fallback: normal KV-based recency + health check
+      const nodeUpdate = (await this.kv.getNodeUpdate(tag)) as NodeUpdateV1_1;
+      const updateTime = nodeUpdate?.timestamp ? new Date(nodeUpdate.timestamp).getTime() : 0;
+      const isRecent = updateTime >= windowStart;
+      const isHealthy = nodeUpdate?.health?.overall === "ok";
+
+      console.debug(
+        `[heartbeat] ${tag}: KV updateTime=${updateTime} (${new Date(updateTime).toISOString()}), ` +
+          `isRecent=${isRecent}, overall=${nodeUpdate?.health?.overall}, ` +
+          `windowStart=${windowStart} (${new Date(windowStart).toISOString()})`,
+      );
+
+      if (isRecent && isHealthy) {
+        console.debug(`[heartbeat] ${tag}: KV update is recent and healthy → healthy`);
+        return "healthy";
+      } else {
+        if (!isRecent && !isHealthy) {
+          console.debug(`[heartbeat] ${tag}: KV update stale AND health not ok → degraded`);
+        } else if (!isRecent) {
+          console.debug(`[heartbeat] ${tag}: KV update is stale (older than window) → degraded`);
+        } else {
+          console.debug(`[heartbeat] ${tag}: health is "${nodeUpdate?.health?.overall}" (not ok) → degraded`);
+        }
+        return "degraded";
+      }
+    };
+
+    // Immediate first attempt
+    let status = await singleCheck();
+    console.debug(`[heartbeat] ${tag}: initial check → ${status}`);
+    if (status === "healthy") return status;
+
+    // Retry loop unchanged
+    const deadline = Date.now() + 8_000;
+    let attempt = 1;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      status = await singleCheck();
+      attempt++;
+      console.debug(`[heartbeat] ${tag}: retry #${attempt} → ${status}`);
+      if (status === "healthy") {
+        console.info(`[heartbeat] ${tag}: recovered after ${attempt} attempts (${Date.now() - deadline + 8_000}ms)`);
+        return "healthy";
+      }
+    }
+
+    console.debug(`[heartbeat] ${tag}: timed out after ${attempt} retries, marking degraded`);
+    return "degraded";
   }
 
   /** Confirm a status change with a TCP probe. */
@@ -287,10 +367,10 @@ export class NodeDoctor extends EventEmittable {
         await this.pool.allocateSharedPool(clusterId);
         break;
       case "indie":
-        console.log(`[pool-sync] Indie allocation not yet implemented for cluster ${clusterId}`);
+        console.log(`[node-sync] Indie allocation not yet implemented for cluster ${clusterId}`);
         break;
       case "pro":
-        console.log(`[pool-sync] Pro dedicated instance not yet implemented for cluster ${clusterId}`);
+        console.log(`[node-sync] Pro dedicated instance not yet implemented for cluster ${clusterId}`);
         break;
     }
   }

@@ -12,8 +12,18 @@ import { BillingService } from "./billing/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { ulid } from "ulid";
 import { JWTService } from "./auth/jwt.js";
-import { DEFAULT_INSTANCE_IMAGE, DEFAULT_INSTANCE_REGION, DEFAULT_INSTANCE_SIZE, DEFAULT_INSTANCE_TAGS, buildInstallScript, DEFAULT_CAPACITY } from "@/lib/constants/vm.js";
+import {
+  DEFAULT_INSTANCE_IMAGE,
+  DEFAULT_INSTANCE_REGION,
+  DEFAULT_INSTANCE_SIZE,
+  DEFAULT_INSTANCE_TAGS,
+  buildInstallScript,
+  DEFAULT_CAPACITY,
+  PROVIDER_TO_INSTANCE_REGION,
+} from "@/lib/constants/vm.js";
 import { EventEmittable } from "./notifications/emittable.js";
+import { randomBytes } from "node:crypto";
+import { INSTANCE_NAMES } from "@/lib/constants/instances.js";
 
 export class InstancePool extends EventEmittable {
   private readonly db: DatabaseStore;
@@ -65,27 +75,30 @@ export class InstancePool extends EventEmittable {
     if (!this.vm || !this.jwt) return;
 
     const instanceId = ulid();
-    const name = `instance-pool-${Date.now()}`;
+    const name = INSTANCE_NAMES[Math.floor(Math.random() * INSTANCE_NAMES.length)];
+    const num = String(Math.floor(Math.random() * 100)).padStart(2, "0");
+    const suffix = randomBytes(4).toString("base64url").slice(0, 5);
+    const tag = `${name}${num}-${suffix}`;
 
-    const token = await this.jwt.createBootstrapToken(name);
+    const token = await this.jwt.createBootstrapToken(tag);
     const decoded = await this.jwt.verifyToken(token);
     await this.db.bootstrapTokens.create(instanceId, decoded.nonce as string);
 
     const droplet = await this.vm.create({
       image: DEFAULT_INSTANCE_IMAGE,
-      name,
+      name: tag,
       region: DEFAULT_INSTANCE_REGION,
       size: DEFAULT_INSTANCE_SIZE,
       tags: DEFAULT_INSTANCE_TAGS,
       sshKey: this.sshKey,
-      userData: buildInstallScript(token, name),
+      userData: buildInstallScript(token, tag),
     });
 
     await this.db.instances.addPool({
       address: droplet.ipv4 ?? null,
       capacity: DEFAULT_CAPACITY,
-      tag: name,
-      region: droplet.region,
+      tag,
+      region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
       status: "healthy",
     });
   }
@@ -93,23 +106,28 @@ export class InstancePool extends EventEmittable {
   public async allocateSharedPool(clusterId: string): Promise<void> {
     try {
       await this.db.instances.assignPool(clusterId);
-      await this.emit(EVENTS.POOL.INSTANCE_ALLOCATED.code, clusterId);
-      console.log(`[pool-sync] Assigned shared pool instance to cluster ${clusterId}`);
+      await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
+      console.log(`[node-sync] Assigned shared pool instance to cluster ${clusterId}`);
     } catch (err) {
       if (!(err instanceof PoolCapacityExceededError)) throw err;
 
       if (!this.vm || !this.jwt) {
-        console.log(`[pool-sync] Pool at capacity for cluster ${clusterId} — VM or JWT service not configured, cannot provision`);
+        console.log(`[node-sync] Pool at capacity for cluster ${clusterId} — VM or JWT service not configured, cannot provision`);
         return;
       }
 
-      console.log(`[pool-sync] Pool at capacity — provisioning new instance for cluster ${clusterId}`);
+      if (await this.kv.kv.get(KV_KEYS.POOL_PROVISION_LOCK)) {
+        console.warn("[node-sync] Pool allocation and scheduling ongoing. Skipping...");
+        return;
+      }
+
+      console.log(`[node-sync] Pool at capacity — provisioning new instance for cluster ${clusterId}`);
       await this.kv.kv.put(KV_KEYS.POOL_PROVISION_LOCK, "1", { ttl: POOL_PROVISION_LOCK_TTL });
       await this.createPoolInstance();
-      await this.emit(EVENTS.POOL.INSTANCE_PROVISIONED.code, clusterId);
+      await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId);
       await this.db.instances.assignPool(clusterId);
-      await this.emit(EVENTS.POOL.INSTANCE_ALLOCATED.code, clusterId);
-      console.log(`[pool-sync] Provisioned and assigned new instance to cluster ${clusterId}`);
+      await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
+      console.log(`[node-sync] Provisioned and assigned new instance to cluster ${clusterId}`);
     }
   }
 }
