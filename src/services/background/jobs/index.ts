@@ -11,5 +11,6 @@ export function registerJobs(worker: BackgroundWorker): void {
   worker
     .schedule(NODES_HEALTH_JOB, THIRTY_SECONDS_MS, nodesHealth)
     .schedule(NODES_SYNC_JOB, FIVE_MINUTES_MS, nodesSync)
+    .on(NODES_HEALTH_JOB, nodesHealth, { runImmediately: true })
     .on(NODES_SYNC_JOB, nodesSync, { runImmediately: true });
 }
