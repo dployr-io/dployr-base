@@ -1,4 +1,5 @@
 import { EventMetadataMap } from "@/services/notifications/notifier.js";
+import { InstanceStatus } from "@/types/index.js";
 
 export const EVENTS = {
   AUTH: {
@@ -74,6 +75,15 @@ export const DEFAULT_EVENTS = [
   EVENTS.CLUSTER.REMOVED_USER.code,
   EVENTS.CLUSTER.USER_ROLE_CHANGED.code,
 ];
+
+/** Maps an InstanceStatus to the corresponding event code. */
+export const HEADLESS_EVENTS: Record<InstanceStatus, string> = {
+  healthy: EVENTS.POOL.INSTANCE_HEALTHY.code,
+  degraded: EVENTS.POOL.INSTANCE_DEGRADED.code,
+  offline: EVENTS.POOL.INSTANCE_OFFLINE.code,
+  unreachable: EVENTS.POOL.INSTANCE_UNREACHABLE.code,
+  maintenance: EVENTS.POOL.INSTANCE_MAINTENANCE.code
+};
 
 export const EVENT_METADATA: EventMetadataMap = {
   // Instance events

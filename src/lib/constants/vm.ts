@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { VMSize, VMImage, VMRegion } from "@/types/vm.js";
+import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
 
 export const DEFAULT_CAPACITY = 10;
 export const DEFAULT_INSTANCE_SIZE: VMSize = "s-1vcpu-512mb-10gb";
@@ -25,17 +26,21 @@ export const VM_IMAGES: Record<VMImage, { label: string; distro: string }> = {
   "ubuntu-22-04-x64": { label: "Ubuntu 22.04 LTS", distro: "Ubuntu" },
 };
 
-export const VM_REGIONS: Record<VMRegion, { label: string; continent: string }> = {
-  nyc1: { label: "New York 1", continent: "North America" },
-  nyc3: { label: "New York 3", continent: "North America" },
-  ams3: { label: "Amsterdam 3", continent: "Europe" },
-  sfo3: { label: "San Francisco 3", continent: "North America" },
-  sgp1: { label: "Singapore 1", continent: "Asia" },
-  lon1: { label: "London 1", continent: "Europe" },
-  fra1: { label: "Frankfurt 1", continent: "Europe" },
-  tor1: { label: "Toronto 1", continent: "North America" },
-  blr1: { label: "Bangalore 1", continent: "Asia" },
-  syd1: { label: "Sydney 1", continent: "Oceania" },
+export const VM_REGIONS: string[] = ["nyc1", "nyc3", "ams3", "sfo3", "sgp1", "lon1", "fra1", "tor1", "blr1", "syd1"];
+
+export const VM_INSTANCE_REGIONS_MAPPING: Record<typeof INSTANCE_REGIONS[number], string[]> = {
+  "us-east": ["nyc1", "nyc3", "tor1"],
+  "us-west": ["sfo3"],
+  "us-central": [],
+  "eu-west": ["lon1", "ams3"],
+  "eu-central": ["fra1"],
+  "eu-north": [],
+  "ap-south": ["blr1"],
+  "ap-southeast": ["sgp1", "syd1"],
+  "ap-northeast": [],
+  "af-south": [],
+  "me-central": [],
+  "sa-east": [],
 };
 
 /** Bootstrap install script injected as user_data at droplet creation */
@@ -46,7 +51,6 @@ set -euo pipefail
 curl -sSL https://raw.githubusercontent.com/dployr-io/dployr/master/install.sh -o /tmp/dployr-install.sh
 sudo bash /tmp/dployr-install.sh --token ${token} --instance ${instanceTag} --env ${env}
 `;
-
 }
 
 /** Milliseconds to wait between polling DO action status */

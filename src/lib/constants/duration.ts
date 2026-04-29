@@ -28,12 +28,6 @@ export const THIRTY_SECONDS_MS = 30 * 1000;
 export const FIVE_MINUTES_MS = 5 * 60 * 1000;
 export const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 
-export const POOL_SYNC_JOB = "pool-sync";
-export const POOL_PING_JOB = "pool-ping";
-export const POOL_PING_DIRECT_JOB = "pool-ping-direct";
-export const POOL_HEALTH_JOB = "pool-health";
-export const POOL_DRAIN_JOB = "pool-drain";
-
 // 5 min — enough for a droplet to spin up and appear in vm.list()
 export const POOL_PROVISION_LOCK_TTL = 60 * 5;
 export const NODE_CONNECTED_TTL = 60; // 60 seconds — refreshed on every node message
