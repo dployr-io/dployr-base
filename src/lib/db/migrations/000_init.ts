@@ -4,6 +4,8 @@
 export const _000_init = `
 DO $$ BEGIN
   CREATE TYPE instance_status AS ENUM ('healthy', 'degraded', 'offline', 'unreachable', 'maintenance');
+  CREATE TYPE instance_region AS ENUM ('us-east', 'us-west', 'us-central', 'eu-west', 'eu-central', 'eu-north', 'ap-south', 'ap-southeast', 'ap-northeast', 'af-south', 'me-central', 'sa-east');
+  CREATE TYPE user_role AS ENUM ('owner', 'admin', 'developer', 'viewer', 'invited');
 EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 
@@ -30,7 +32,7 @@ CREATE TABLE IF NOT EXISTS clusters (
 CREATE TABLE IF NOT EXISTS user_clusters (
   user_id TEXT NOT NULL,
   cluster_id TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('owner', 'admin', 'developer', 'viewer', 'invited')),
+  role user_role NOT NULL DEFAULT 'viewer',
   created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
   updated_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
   PRIMARY KEY (user_id, cluster_id),
@@ -46,7 +48,8 @@ CREATE TABLE IF NOT EXISTS instances (
   tag TEXT NOT NULL UNIQUE,
   status instance_status NOT NULL DEFAULT 'healthy',
   capacity INTEGER,
-  region TEXT,
+  region instance_region NOT NULL DEFAULT 'us-east',
+  managed BOOLEAN NOT NULL DEFAULT true,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
   updated_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
@@ -113,6 +116,9 @@ CREATE INDEX IF NOT EXISTS idx_instances_pool ON instances(kind) WHERE kind = 'p
 CREATE INDEX IF NOT EXISTS idx_user_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_instances_address ON instances(address) WHERE address IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_instances_tag ON instances(tag);
+CREATE INDEX IF NOT EXISTS idx_instances_unhealthy ON instances(status) WHERE status <> 'healthy';
+CREATE INDEX IF NOT EXISTS idx_instances_region_kind ON instances(region, kind);
+CREATE INDEX IF NOT EXISTS idx_instances_unmanaged ON instances(managed) WHERE managed = false;
 CREATE INDEX IF NOT EXISTS idx_clusters_login_id ON clusters ((metadata->'gitHub'->>'loginId'));
 CREATE INDEX IF NOT EXISTS idx_clusters_installation_id ON clusters ((metadata->'gitHub'->>'installationId'));
 CREATE INDEX IF NOT EXISTS idx_clusters_pool_instance ON clusters(pool_instance_id) WHERE pool_instance_id IS NOT NULL;
@@ -120,7 +126,6 @@ CREATE INDEX IF NOT EXISTS idx_bootstrap_nonce ON bootstrap_tokens(nonce);
 CREATE INDEX IF NOT EXISTS idx_domains_instance ON domains(instance_id);
 CREATE INDEX IF NOT EXISTS idx_domains_domain ON domains(domain);
 CREATE INDEX IF NOT EXISTS idx_services_instance ON services(instance_id);
-
 CREATE INDEX IF NOT EXISTS idx_billing_polar_customer ON billing(polar_customer_id);
 CREATE INDEX IF NOT EXISTS idx_billing_polar_subscription ON billing(polar_subscription_id);
 CREATE INDEX IF NOT EXISTS idx_billing_period_end ON billing(period_end) WHERE period_end IS NOT NULL;

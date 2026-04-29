@@ -1,6 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
+import { Bindings } from "./bindings.js";
 import { IStorageAdapter } from "@/lib/config/context.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
@@ -20,7 +21,11 @@ import { IntegrationsService } from "@/services/integrations/index.js";
 import { NotificationService } from "@/services/notifications/index.js";
 import { TrafficRouter } from "@/services/proxy/traffic-router.js";
 import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
-import { Bindings } from "./bindings.js";
+import type { NotificationEvent } from "@/services/notifications/notifier.js";
+import { VmProvider } from "@/services/vm/index.js";
+import { InstancePool } from "@/services/pool.js";
+import { EmailProvider } from "@/services/notifications/email/index.js";
+import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
 
 export type { Bindings };
 
@@ -95,7 +100,7 @@ export type Variables = {
   _bitBucketService?: BitBucketService;
   _integrationsService?: IntegrationsService;
   _instanceService?: InstanceService;
-  _instancePoolService?: InstancePoolService;
+  _instancePoolService?: InstancePool;
   _dnsService?: DnsService;
   _billingService?: BillingService;
   _trafficRouter?: TrafficRouter;
@@ -132,10 +137,12 @@ export type StatusUpdateMessage = {
  * @property "healthy" - Fully available
  * @property "degraded" - Reachable but dployrd not responding
  * @property "offline" - Turned off but still provisioned on the VM provider
- * @property "unreachable" - Not reachable at all
+ * @property "unreachable" - Not reachable by TCP ping 
  * @property "maintenance" - Taken out of pool rotation
  */
 export type InstanceStatus = "healthy" | "degraded" | "offline" | "unreachable" | "maintenance";
+
+export type InstanceRegion = (typeof INSTANCE_REGIONS)[number];
 
 /** dedicated = user-managed, belongs to one cluster; pool = platform-managed, shared across many clusters */
 export type InstanceKind = "dedicated" | "pool";
@@ -153,6 +160,8 @@ export interface Instance {
   region?: string;
   /** null for pool instances (no single owning cluster) */
   clusterId?: string | null;
+  /** whether the instance is a managed instance or BYO server setup */
+  managed?: boolean;
   metadata?: Record<string, any>;
   createdAt: number;
   updatedAt: number;
@@ -284,9 +293,3 @@ export * from "./responses.js";
 
 // Export node types
 export * from "./node.js";
-
-import type { NotificationEvent } from "@/services/notifications/notifier.js";
-import { VmProvider } from "@/services/vm/index.js";
-import { InstancePoolService } from "@/services/pool.js";
-import { EmailProvider } from "@/services/notifications/email/index.js";
-
