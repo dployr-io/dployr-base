@@ -54,6 +54,7 @@ export const NodeUpdateV1Schema = z.object({
   top: z.record(z.string(), z.unknown()).optional(),
 });
 
+/** @deprecated */
 export type NodeUpdateV1 = z.infer<typeof NodeUpdateV1Schema>;
 
 // v1.1 Schema - Restructured and comprehensive
