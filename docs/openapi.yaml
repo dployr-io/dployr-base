@@ -427,45 +427,6 @@ components:
           enum: [pending, in_progress, done, failed]
       required: [ID, Type, Payload, Status]
 
-    NodeUpdateV1:
-      type: object
-      properties:
-        schema:
-          type: string
-          enum: [v1]
-        seq:
-          type: integer
-        epoch:
-          type: string
-        full:
-          type: boolean
-        instance_id:
-          type: string
-        platform:
-          type: object
-          properties:
-            os:
-              type: string
-            arch:
-              type: string
-            hostname:
-              type: string
-        status:
-          type: string
-        mode:
-          type: string
-        uptime:
-          type: string
-        services:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
-        top:
-          type: object
-          additionalProperties: true
-      required: [schema, seq, epoch, full, instance_id]
-
     NodeUpdateV1_1:
       type: object
       properties:
@@ -2777,14 +2738,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [domain, instanceId]
+              required: [domain, clusterId]
               properties:
                 domain:
                   type: string
                   example: api.example.com
-                instanceId:
+                clusterId:
                   type: string
-                  description: Instance ULID
+                  description: cluster id
       responses:
         '200':
           description: Domain created with DNS records to configure
@@ -2895,7 +2856,7 @@ paths:
                           status:
                             type: string
                             enum: [pending, active]
-                          instanceId:
+                          clusterId:
                             type: string
                           provider:
                             type: string
@@ -3004,7 +2965,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/domains/instance/{instanceId}:
+  /v1/domains:
     get:
       operationId: listInstanceDomains
       tags: [Domains]
@@ -3012,8 +2973,8 @@ paths:
       security:
         - sessionCookie: []
       parameters:
-        - in: path
-          name: instanceId
+        - in: query
+          name: clusterId
           required: true
           schema:
             type: string

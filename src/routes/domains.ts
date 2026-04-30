@@ -297,16 +297,16 @@ domains.get("/:domain", authMiddleware, resolveCluster("domain", { path: "domain
   return c.json(createSuccessResponse(response));
 });
 
-// List domains for an instance
-domains.get("/instance/:instanceId", authMiddleware, resolveCluster("instance", { path: "instanceId" }), requireClusterViewer, async (c) => {
-  const clusterId = c.req.param("clusterId");
+// List domains for a cluster
+domains.get("/", authMiddleware, resolveCluster("instance", { path: "clusterId" }), requireClusterViewer, async (c) => {
+  const clusterId = c.req.query("clusterId");
   const db = getDbStore(c);
 
   const domainsList = await db.domains.list({ clusterId });
   return c.json(createSuccessResponse({ domains: domainsList }));
 });
 
-// Remove domain from instance
+// Remove a domain
 domains.delete("/:domain", authMiddleware, resolveCluster("domain", { path: "domain" }), requireClusterDeveloper, async (c) => {
   const domain = c.req.param("domain").toLowerCase();
   const session = c.get("session")!;
