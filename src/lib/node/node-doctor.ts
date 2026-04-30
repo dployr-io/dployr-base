@@ -147,6 +147,7 @@ export class NodeDoctor extends EventEmittable {
   private async removeStaleInstances(poolEntries: Awaited<ReturnType<typeof this.db.instances.list>>["instances"], dropletMap: Map<string, VirtualMachine>): Promise<void> {
     for (const entry of poolEntries) {
       if (!dropletMap.has(entry.tag) && entry.kind === "pool") {
+        console.debug("[node-sync] removing stale entry from database: ", entry);
         await this.db.instances.removePool(entry.id);
         await this.emit(EVENTS.NODE.DATA_CLEARED.code, entry.tag);
       }
@@ -159,7 +160,10 @@ export class NodeDoctor extends EventEmittable {
 
     for (const entry of poolMap.values()) {
       console.debug("[node-sync] Identifying node entry: ", entry);
-      if (!demotableStatuses.has(entry.status)) continue;
+      if (!demotableStatuses.has(entry.status)) {
+        console.debug("[node-sync] No demotable entries. Skipping...");
+        continue;
+      }
 
       // Don't demote a degraded instance that is still in its recovery window
       if (entry.status === "degraded" && (await this.kv.instanceCache.isInRecoveryWindow({ tag: entry.tag }))) {
@@ -178,7 +182,10 @@ export class NodeDoctor extends EventEmittable {
     if (currentDropletCount >= INSTANCE_POOL_QUOTA) return;
 
     const lock = await this.kv.kv.get(KV_KEYS.POOL_PROVISION_LOCK);
-    if (lock) return;
+    if (lock) {
+      console.debug("[node-sync] Pool provisioning lock is active. Skipping...");
+      return;
+    }
 
     const unassigned = await this.db.instances.listUnassignedClusters();
     for (const { id: clusterId } of unassigned) {
@@ -197,6 +204,8 @@ export class NodeDoctor extends EventEmittable {
       if (!droplet) next = "offline";
       else if (droplet.status !== "active") next = "unreachable";
       else continue;
+
+      console.debug("[node-sync] Identifying dedicated instance: ", dedicated);
 
       if (instance.status !== next) {
         await this.db.instances.update({ id: instance.id }, { status: next });

@@ -111,7 +111,6 @@ export class ClientMessageHandler {
    * Check if a task is allowed on an instance
    */
   private isTaskAllowedOnInstance(instance: Instance, message: BaseMessage): boolean {
-    // return true; ////////////////////////////// REMOVE BEFORE COMMIT !@@@@@@@@@@@@@@@@
     if (instance.kind !== "pool") return true;
     const kind = message.kind;
     return ALLOWED_TASKS_ON_POOLED_INSTANCES.some((allowed) => (allowed.endsWith(":") ? kind.startsWith(allowed) : kind === allowed));
@@ -123,10 +122,6 @@ export class ClientMessageHandler {
   async handleMessage(conn: ClusterConnection, message: BaseMessage): Promise<void> {
     // Update activity timestamp
     this.connectionManager.updateActivity(conn.ws);
-    
-////////////////////////////// REMOVE BEFORE COMMIT !@@@@@@@@@@@@@@@@
-    if (message.kind !== "terminal") console.debug("Client message: ", message); ////////////////////////////// REMOVE BEFORE COMMIT !@@@@@@@@@@@@@@@@
-////////////////////////////// REMOVE BEFORE COMMIT !@@@@@@@@@@@@@@@@
 
     // Handle acknowledgments
     if (isAckMessage(message)) {
@@ -1506,7 +1501,7 @@ export class ClientMessageHandler {
       const end = endTime || now;
 
       // Retrieve process snapshots for the time range
-      const snapshots = await this.kv.getProcessSnapshotsByTimeRange({ instanceId, startTime: start, endTime: end });
+      const snapshots = await this.kv.getProcessSnapshotsByTimeRange({ tag: instanceId, startTime: start, endTime: end });
 
       const response: ProcessHistoryResponseMessage = {
         kind: "process_history_response",
