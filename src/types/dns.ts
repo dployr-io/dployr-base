@@ -35,7 +35,7 @@ export interface OAuthConfig {
 
 export interface CustomDomain {
   id: string;
-  instanceId: string;
+  clusterId: string;
   domain: string;
   status: "pending" | "active";
   verificationToken: string;

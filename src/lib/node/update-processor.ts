@@ -55,48 +55,45 @@ export class UpdateProcessor {
   }
 
   private async syncServices(tag: string, services: Record<string, unknown>[]): Promise<void> {
-    if (!Array.isArray(services)) {
-      return;
-    }
+    if (!Array.isArray(services)) return;
 
     try {
-      // Get instance first to get the database ID
       const instance = await this.db.instances.find({ tag });
       if (!instance) {
         console.warn(`[UpdateProcessor] Instance ${tag} not found`);
         return;
       }
 
-      const incomingServiceNames = new Set(services.map((s) => s.name as string));
+      const clusterId = instance.clusterId;
+      if (!clusterId) {
+        console.warn(`[UpdateProcessor] Instance ${tag} has no clusterId`);
+        return;
+      }
 
-      // Use instance.id (database ID) to query services
-      const existingServices = await this.db.services.list({ instanceId: instance.id });
+      const incomingServiceNames = new Set(services.map((s) => s.name as string));
+      const existingServices = await this.db.services.list({ clusterId }); // now defined
       const existingServiceNames = new Set(existingServices.map((s) => s.name));
 
       const hasChanges = existingServiceNames.size !== incomingServiceNames.size || Array.from(incomingServiceNames).some((name) => !existingServiceNames.has(name));
 
-      if (!hasChanges) {
-        return;
-      }
+      if (!hasChanges) return;
 
-      const instanceTag = instance.tag;
       const toCreate = services.filter((s) => !existingServiceNames.has(s.name as string));
       const toDelete = existingServices.filter((s) => !incomingServiceNames.has(s.name));
 
       for (const service of toCreate) {
+        const svc = service as { name: string };
         try {
-          const svc = service as { name: string };
-          await this.db.services.create({ instanceTag, name: svc.name });
+          await this.db.services.upsert({ instanceTag: tag, name: svc.name });
           console.log(`[UpdateProcessor] Created service: ${svc.name}`);
         } catch (error) {
-          const svc = service as { name: string };
           console.error(`[UpdateProcessor] Failed to create service ${svc.name}:`, error);
         }
       }
 
       for (const service of toDelete) {
         try {
-          await this.db.services.delete({ name: service.name });
+          await this.db.services.delete({ id: service.id }); // delete by id, not name
           console.log(`[UpdateProcessor] Deleted service: ${service.name}`);
         } catch (error) {
           console.error(`[UpdateProcessor] Failed to delete service ${service.name}:`, error);

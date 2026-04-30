@@ -143,7 +143,7 @@ export class NodeMessageHandler {
     });
 
     if (success && data && this.getResponseKind(message) === "deploy_response") {
-      this.db.services.create({ instanceTag: data["instance_id"], name: data["name"] });
+      this.db.services.upsert({ instanceTag: data["instance_id"], name: data["name"] });
     }
 
     if (success && data && this.getResponseKind(message) === "service_remove_response") {

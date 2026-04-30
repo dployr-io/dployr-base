@@ -394,6 +394,15 @@ export class ClientMessageHandler {
       return;
     }
 
+    const { name } = payload;
+
+    const existing = await this.db.services.find({ name });
+
+    if (existing) {
+      this.sendError(conn, requestId, WSErrorCode.CONFLICT, `Name ${name} is taken`);
+      return;
+    }
+
     const taskId = ulid();
 
     // Track pending request
@@ -511,7 +520,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const service = await this.db.services.find({ name });
+    const service = await this.db.services.find({ name, clusterId: conn.clusterId });
 
     if (!service) {
       this.connectionManager.removePendingRequest(taskId);
@@ -519,7 +528,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const instance = await this.db.instances.find({ id: service.instanceId });
+    const instance = await this.db.instances.find({ clusterId: service.clusterId, kind: "dedicated" });
     if (!instance) {
       this.connectionManager.removePendingRequest(taskId);
       this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");

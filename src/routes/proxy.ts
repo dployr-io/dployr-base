@@ -131,7 +131,7 @@ proxy.get("/services", requireClusterViewer, async (c) => {
   }> = [];
 
   for (const instance of instances) {
-    const instanceServices = await db.services.list({ instanceId: instance.id });
+    const instanceServices = await db.services.list({ clusterId });
     for (const service of instanceServices) {
       services.push({
         serviceName: service.name,

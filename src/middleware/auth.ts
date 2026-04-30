@@ -59,10 +59,7 @@ function getClusterId(c: Context<{ Bindings: Bindings; Variables: Variables }>, 
  * @param options - Where to find the entity value: `path` for path param, `body` for request body field, `query` for query string
  * @param options.lookupBy - For "instance": whether to look up by "id" (default) or "tag"
  */
-export function resolveCluster(
-  entity: "instance" | "domain",
-  options: { path?: string; body?: string; query?: string; lookupBy?: "id" | "tag" },
-) {
+export function resolveCluster(entity: "instance" | "domain", options: { path?: string; body?: string; query?: string; lookupBy?: "id" | "tag" }) {
   return async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
     const db = getDbStore(c);
 
@@ -83,10 +80,7 @@ export function resolveCluster(
         return c.json({ error: "Instance identifier is required", code: ERROR.REQUEST.BAD_REQUEST.code }, ERROR.REQUEST.BAD_REQUEST.status);
       }
 
-      const instance =
-        options.lookupBy === "tag"
-          ? await db.instances.find({ tag: value })
-          : await db.instances.find({ id: value });
+      const instance = options.lookupBy === "tag" ? await db.instances.find({ tag: value }) : await db.instances.find({ id: value });
 
       if (!instance) {
         return c.json({ error: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
@@ -105,17 +99,12 @@ export function resolveCluster(
         return c.json({ error: "Domain is required", code: ERROR.REQUEST.BAD_REQUEST.code }, ERROR.REQUEST.BAD_REQUEST.status);
       }
 
-      const record = await db.domains.get(domainName);
+      const record = await db.domains.find(domainName);
       if (!record) {
         return c.json({ error: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
       }
 
-      const instance = await db.instances.find({ id: record.instanceId });
-      if (!instance) {
-        return c.json({ error: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
-      }
-
-      c.set("resolvedClusterId", instance.clusterId ?? undefined);
+      c.set("resolvedClusterId", record.clusterId ?? undefined);
     }
 
     await next();

@@ -43,7 +43,7 @@ export type IntegrationType = (typeof integrationIds)[number];
 
 export interface Service {
   id: string;
-  instanceId: string;
+  clusterId: string;
   name: string;
   createdAt: number;
   updatedAt: number;

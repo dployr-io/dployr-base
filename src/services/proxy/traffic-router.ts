@@ -145,42 +145,39 @@ export class TrafficRouter {
    * Used when validateServiceCluster is not available
    */
   private async lookupRouteStepByStep(serviceName: string, clusterName: string): Promise<ResolvedRoute | null> {
-    try {
-      // Get service by name
-      const service = await this.db.services.find({ name: serviceName });
-      if (!service) {
-        console.debug(`[TrafficRouter] Service not found: ${serviceName}`);
-        return null;
-      }
-
-      const instance = await this.db.instances.find({ id: service.instanceId });
-      if (!instance) {
-        console.debug(`[TrafficRouter] Instance not found for service: ${serviceName}`);
-        return null;
-      }
-
-      // Verify the instance belongs to the correct cluster
-      // This requires the cluster relationship - try getByInstanceId if available
-      const cluster = await this.db.clusters.getByInstanceId?.(instance.id);
-
-      if (cluster && cluster.name.toLowerCase() !== clusterName.toLowerCase()) {
-        console.debug(`[TrafficRouter] Cluster mismatch: expected ${clusterName}, got ${cluster.name}`);
-        return null;
-      }
-
-      return {
-        serviceName,
-        clusterName,
-        instanceAddress: instance.address!,
-        instancePort: this.config.defaultPort,
-        serviceId: service.id,
-        instanceId: instance.id,
-      };
-    } catch (error) {
-      console.error(`[TrafficRouter] Error in step-by-step lookup: ${error}`);
+  try {
+    // Find cluster by name first, then look for the service within it
+    const cluster = await this.db.clusters.getByName(clusterName);
+    if (!cluster) {
+      console.debug(`[TrafficRouter] Cluster not found: ${clusterName}`);
       return null;
     }
+
+    const service = await this.db.services.find({ name: serviceName, clusterId: cluster.id });
+    if (!service) {
+      console.debug(`[TrafficRouter] Service not found: ${serviceName} in cluster ${clusterName}`);
+      return null;
+    }
+
+    const instance = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
+    if (!instance) {
+      console.debug(`[TrafficRouter] No dedicated instance for cluster: ${clusterName}`);
+      return null;
+    }
+
+    return {
+      serviceName,
+      clusterName,
+      instanceAddress: instance.address!,
+      instancePort: this.config.defaultPort,
+      serviceId: service.id,
+      instanceId: instance.id,
+    };
+  } catch (error) {
+    console.error(`[TrafficRouter] Error in step-by-step lookup: ${error}`);
+    return null;
   }
+}
 
   /**
    * Invalidate cache for a specific route
