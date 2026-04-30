@@ -4,80 +4,74 @@
 import { BaseStore } from "./base.js";
 import { Service } from "@/types/index.js";
 
-/** Fields that can be used to look up or filter services. */
 export type ServiceFilter = {
   id?: string;
   name?: string;
-  instanceId?: string;
+  clusterId?: string;
 };
 
 export class ServiceStore extends BaseStore {
   /**
-   * Creates a service record under the instance identified by `instanceTag`.
+   * Upserts a service under the cluster that owns the instance identified by `instanceTag`.
+   * No-ops if (cluster_id, name) already exists.
    * Returns `null` if no instance with that tag exists.
    */
-  async create({ instanceTag, name }: { instanceTag: string; name: string }): Promise<Service | null> {
-    const instanceResult = await this.db
-      .prepare(`SELECT id FROM instances WHERE tag = $1`)
-      .bind(instanceTag)
-      .first();
+  async upsert({ instanceTag, name }: { instanceTag: string; name: string }): Promise<Service | null> {
+    const instanceResult = await this.db.prepare(`SELECT cluster_id FROM instances WHERE tag = $1`).bind(instanceTag).first();
 
-    if (!instanceResult) return null;
+    if (!instanceResult || !instanceResult.cluster_id) return null;
 
-    const instanceId = instanceResult.id as string;
+    const clusterId = instanceResult.cluster_id as string;
     const id = this.generateId();
     const now = this.now();
 
     try {
-      await this.db
-        .prepare(`INSERT INTO services (id, instance_id, name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`)
-        .bind(id, instanceId, name, now, now)
+      const result = await this.db
+        .prepare(
+          `INSERT INTO services (id, cluster_id, name, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (cluster_id, name) DO NOTHING`,
+        )
+        .bind(id, clusterId, name, now, now)
         .run();
+
+      if (result.meta.changes > 0) return { id, clusterId, name, createdAt: now, updatedAt: now };
+      const existing = await this.db.prepare(`SELECT id, cluster_id, name, created_at, updated_at FROM services WHERE cluster_id = $1 AND name = $2`).bind(clusterId, name).first();
+      return existing ? this.toService(existing) : null;
     } catch (error) {
       this.parsePostgresError({ error, table: "services" });
     }
-
-    return { id, instanceId, name, createdAt: now, updatedAt: now };
   }
 
-  /**
-   * Returns the first service matching the given filter, or `null` if not found.
-   * At least one filter field must be set.
-   */
   async find(filter: ServiceFilter): Promise<Service | null> {
     const { clause, bindings } = this.buildWhere({
       id: filter.id,
       name: filter.name,
-      instance_id: filter.instanceId,
+      cluster_id: filter.clusterId,
     });
     if (!bindings.length) return null;
 
     const result = await this.db
-      .prepare(`SELECT id, instance_id, name, created_at, updated_at FROM services ${clause} LIMIT 1`)
+      .prepare(`SELECT id, cluster_id, name, created_at, updated_at FROM services ${clause} LIMIT 1`)
       .bind(...bindings)
       .first();
 
     return result ? this.toService(result) : null;
   }
 
-  /**
-   * Returns all services matching the given filter.
-   * Omit `filter` (or pass `{}`) to list every service.
-   */
   async list(filter?: ServiceFilter): Promise<Service[]> {
-    const { clause, bindings } = this.buildWhere({ instance_id: filter?.instanceId });
+    const { clause, bindings } = this.buildWhere({ cluster_id: filter?.clusterId });
 
     const results = bindings.length
-      ? await this.db.prepare(`SELECT id, instance_id, name, created_at, updated_at FROM services ${clause} ORDER BY name ASC`).bind(...bindings).all()
-      : await this.db.prepare(`SELECT id, instance_id, name, created_at, updated_at FROM services ORDER BY name ASC`).all();
+      ? await this.db
+          .prepare(`SELECT id, cluster_id, name, created_at, updated_at FROM services ${clause} ORDER BY name ASC`)
+          .bind(...bindings)
+          .all()
+      : await this.db.prepare(`SELECT id, cluster_id, name, created_at, updated_at FROM services ORDER BY name ASC`).all();
 
     return results.results.map((r) => this.toService(r));
   }
 
-  /**
-   * Deletes services matching the given filter.
-   * Accepts `id` or `name` as the lookup key.
-   */
   async delete(filter: Pick<ServiceFilter, "id" | "name">): Promise<void> {
     const col = filter.id !== undefined ? "id" : "name";
     const val = filter.id ?? filter.name;
@@ -88,7 +82,7 @@ export class ServiceStore extends BaseStore {
   private toService(row: any): Service {
     return {
       id: row.id as string,
-      instanceId: row.instance_id as string,
+      clusterId: row.cluster_id as string,
       name: row.name as string,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,

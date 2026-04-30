@@ -77,22 +77,24 @@ CREATE TABLE IF NOT EXISTS bootstrap_tokens (
 
 CREATE TABLE IF NOT EXISTS domains (
   id TEXT PRIMARY KEY,
-  instance_id TEXT NOT NULL,
+  cluster_id TEXT NOT NULL,
   domain TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active')),
   verification_token TEXT NOT NULL,
   provider TEXT,
   created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
   activated_at BIGINT,
-  FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
+  FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS services (
   id TEXT PRIMARY KEY,
-  instance_id TEXT NOT NULL,
+  cluster_id TEXT NOT NULL,
   name TEXT NOT NULL UNIQUE,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  UNIQUE(cluster_id, name),
+  FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS billing (
@@ -123,9 +125,9 @@ CREATE INDEX IF NOT EXISTS idx_clusters_login_id ON clusters ((metadata->'gitHub
 CREATE INDEX IF NOT EXISTS idx_clusters_installation_id ON clusters ((metadata->'gitHub'->>'installationId'));
 CREATE INDEX IF NOT EXISTS idx_clusters_pool_instance ON clusters(pool_instance_id) WHERE pool_instance_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_bootstrap_nonce ON bootstrap_tokens(nonce);
-CREATE INDEX IF NOT EXISTS idx_domains_instance ON domains(instance_id);
+CREATE INDEX IF NOT EXISTS idx_domains_instance ON domains(cluster_id);
 CREATE INDEX IF NOT EXISTS idx_domains_domain ON domains(domain);
-CREATE INDEX IF NOT EXISTS idx_services_instance ON services(instance_id);
+CREATE INDEX IF NOT EXISTS idx_services_instance ON services(cluster_id);
 CREATE INDEX IF NOT EXISTS idx_billing_polar_customer ON billing(polar_customer_id);
 CREATE INDEX IF NOT EXISTS idx_billing_polar_subscription ON billing(polar_subscription_id);
 CREATE INDEX IF NOT EXISTS idx_billing_period_end ON billing(period_end) WHERE period_end IS NOT NULL;

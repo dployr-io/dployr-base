@@ -70,6 +70,7 @@ export enum WSErrorCode {
   VALIDATION_ERROR = 1000,
   MISSING_FIELD = 1001,
   INVALID_FORMAT = 1002,
+  CONFLICT = 1003,
 
   // Permission errors (2xxx)
   PERMISSION_DENIED = 2000,

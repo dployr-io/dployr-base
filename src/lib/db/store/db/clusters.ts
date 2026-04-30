@@ -772,28 +772,28 @@ export class ClusterStore extends BaseStore {
     const result = await this.db
       .prepare(
         `
-            SELECT 
-                s.id as service_id,
-                s.name as service_name,
-                i.id as instance_id,
-                i.address as instance_address,
-                c.id as cluster_id,
-                c.name as cluster_name
-            FROM services s
-            JOIN instances i ON s.instance_id = i.id
-            JOIN clusters c ON i.cluster_id = c.id
-            WHERE LOWER(s.name) = LOWER($1) 
-              AND LOWER(c.name) = LOWER($2)
+          SELECT
+            s.id       AS service_id,
+            s.name     AS service_name,
+            c.id       AS cluster_id,
+            c.name     AS cluster_name,
+            COALESCE(ded.address, pool.address) AS instance_address
+          FROM services s
+          JOIN clusters c ON s.cluster_id = c.id
+          LEFT JOIN instances ded  ON ded.cluster_id = c.id AND ded.kind = 'dedicated'
+          LEFT JOIN instances pool ON pool.id = c.pool_instance_id
+          WHERE LOWER(s.name)    = LOWER($1)
+            AND LOWER(c.name)    = LOWER($2)
+            AND COALESCE(ded.address, pool.address) IS NOT NULL
+          LIMIT 1
         `,
       )
       .bind(serviceName, clusterName)
       .first<{
         service_id: string;
-        service_name: string;
         instance_id: string;
         instance_address: string;
         cluster_id: string;
-        cluster_name: string;
       }>();
 
     if (!result) {
