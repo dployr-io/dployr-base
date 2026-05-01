@@ -59,7 +59,7 @@ function getClusterId(c: Context<{ Bindings: Bindings; Variables: Variables }>, 
  * @param options - Where to find the entity value: `path` for path param, `body` for request body field, `query` for query string
  * @param options.lookupBy - For "instance": whether to look up by "id" (default) or "tag"
  */
-export function resolveCluster(entity: "instance" | "domain" | "service", options: { path?: string; body?: string; query?: string; lookupBy?: "id" | "tag" }) {
+export function resolveCluster(entity: "instance" | "domain" | "service" | "deployment", options: { path?: string; body?: string; query?: string; lookupBy?: "id" | "tag" }) {
   return async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
     const db = getDbStore(c);
 
@@ -101,6 +101,19 @@ export function resolveCluster(entity: "instance" | "domain" | "service", option
 
       c.set("resolvedServiceId", service.id);
       c.set("resolvedClusterId", service.clusterId);
+    } else if (entity === "deployment") {
+      const value = options.path ? c.req.param(options.path) : options.query ? c.req.query(options.query) : undefined;
+
+      if (!value) {
+        return c.json({ error: "Deployment identifier is required", code: ERROR.REQUEST.BAD_REQUEST.code }, ERROR.REQUEST.BAD_REQUEST.status);
+      }
+
+      const deployment = await db.deployments.get(value);
+      if (!deployment) {
+        return c.json({ error: "Deployment not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
+      }
+
+      c.set("resolvedClusterId", deployment.clusterId);
     } else {
       let domainName: string | undefined;
       if (options.path) {
