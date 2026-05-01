@@ -4,7 +4,7 @@
 import { Hono } from "hono";
 import { ulid } from "ulid";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { authMiddleware, requireClusterDeveloper, requireClusterViewer } from "@/middleware/auth.js";
+import { authMiddleware, requireClusterDeveloper, requireClusterViewer, resolveCluster } from "@/middleware/auth.js";
 import { getDbStore, getTrafficRouter, getWS, getJWTService } from "@/lib/config/context.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { DployrdService } from "@/services/dployrd.js";
@@ -201,10 +201,7 @@ proxy.post("/invalidate", requireClusterViewer, async (c) => {
   );
 });
 
-// ── Node proxy management ─────────────────────────────────────────────────────
-// Fire-and-return: dispatches task to node, client listens for refresh signal.
-
-proxy.get("/node/status", requireClusterDeveloper, async (c) => {
+proxy.get("/node/status", resolveCluster('proxy', { path: 'id' }), requireClusterDeveloper, async (c) => {
   const db = getDbStore(c);
   const session = c.get("session")!;
   const clusterId = c.get("resolvedClusterId")!;
@@ -229,7 +226,7 @@ proxy.get("/node/status", requireClusterDeveloper, async (c) => {
   return c.json(createSuccessResponse({ taskId, message: "Proxy status task dispatched" }));
 });
 
-proxy.post("/node/restart", requireClusterDeveloper, async (c) => {
+proxy.post("/node/restart", resolveCluster('proxy', { path: 'id' }), requireClusterDeveloper, async (c) => {
   const db = getDbStore(c);
   const session = c.get("session")!;
   const clusterId = c.get("resolvedClusterId")!;
@@ -255,7 +252,7 @@ proxy.post("/node/restart", requireClusterDeveloper, async (c) => {
   return c.json(createSuccessResponse({ taskId, message: "Proxy restart task dispatched" }));
 });
 
-proxy.post("/node/routes", requireClusterDeveloper, async (c) => {
+proxy.post("/node/routes", resolveCluster('proxy', { path: 'id' }), requireClusterDeveloper, async (c) => {
   const db = getDbStore(c);
   const session = c.get("session")!;
   const clusterId = c.get("resolvedClusterId")!;
@@ -287,7 +284,7 @@ proxy.post("/node/routes", requireClusterDeveloper, async (c) => {
   return c.json(createSuccessResponse({ taskId, message: "Proxy route add task dispatched" }), 202);
 });
 
-proxy.delete("/node/routes/:service", requireClusterDeveloper, async (c) => {
+proxy.delete("/node/routes/:service", resolveCluster('proxy', { path: 'id' }), requireClusterDeveloper, async (c) => {
   const db = getDbStore(c);
   const session = c.get("session")!;
   const clusterId = c.get("resolvedClusterId")!;

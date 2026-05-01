@@ -27,7 +27,35 @@ const setupSchema = z.object({
   clusterId: z.ulid("Invalid cluster ID"),
 });
 
-// Register instance with bootstrap token
+// Caddy verification endpoint (no auth - called by Caddy)
+domains.get("/verify", async (c) => {
+  const domain = c.req.query("domain")?.toLowerCase();
+  if (!domain) {
+    return c.text("missing domain parameter", 400);
+  }
+
+  const db = getDbStore(c);
+  const dns = getDnsService(c);
+  const record = await db.domains.find(domain);
+
+  if (!record) {
+    return c.text("domain not registered", 404);
+  }
+
+  if (record.status === "active") {
+    return c.text("ok", 200);
+  }
+
+  const verified = await dns.checkTxtRecord(domain, record.verificationToken);
+  if (!verified) {
+    return c.text("verification pending", 403);
+  }
+
+  await db.domains.activate(domain);
+  return c.text("ok", 200);
+});
+
+// Register instance with bootstrap token (this method is called by dployrd when a new node is brought online)
 domains.post("/register", async (c) => {
   try {
     const body = await c.req.json();
@@ -188,34 +216,6 @@ domains.post("/", authMiddleware, resolveCluster("instance", { body: "instanceId
       manualGuideUrl: dns.getManualGuideUrl(provider),
     }),
   );
-});
-
-// Caddy verification endpoint (no auth - called by Caddy)
-domains.get("/verify", async (c) => {
-  const domain = c.req.query("domain")?.toLowerCase();
-  if (!domain) {
-    return c.text("missing domain parameter", 400);
-  }
-
-  const db = getDbStore(c);
-  const dns = getDnsService(c);
-  const record = await db.domains.find(domain);
-
-  if (!record) {
-    return c.text("domain not registered", 404);
-  }
-
-  if (record.status === "active") {
-    return c.text("ok", 200);
-  }
-
-  const verified = await dns.checkTxtRecord(domain, record.verificationToken);
-  if (!verified) {
-    return c.text("verification pending", 403);
-  }
-
-  await db.domains.activate(domain);
-  return c.text("ok", 200);
 });
 
 // Client-initiated domain verification check
