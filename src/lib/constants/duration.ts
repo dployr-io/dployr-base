@@ -27,6 +27,8 @@ export const ACCEPTABLE_HEARTBEAT_WINDOW = 60 * 3; // 3 minutes
 export const THIRTY_SECONDS_MS = 30 * 1000;
 export const FIVE_MINUTES_MS = 5 * 60 * 1000;
 export const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+export const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+export const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 export const POOL_PROVISION_LOCK_TTL = 100; // 100 seconds
 export const NODE_CONNECTED_TTL = 60; // 60 seconds — refreshed on every node message
