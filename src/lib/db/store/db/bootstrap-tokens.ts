@@ -1,14 +1,16 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
+import { type AllowedTable } from "@/lib/constants/index.js";
 import { BaseStore } from "./base.js";
 
 export class BootstrapTokenStore extends BaseStore {
+  protected readonly storeTable: AllowedTable = "bootstrap_tokens";
   async create(instanceId: string, nonce: string): Promise<void> {
     try {
       await this.db.prepare(`INSERT INTO bootstrap_tokens (instance_id, nonce) VALUES ($1, $2)`).bind(instanceId, nonce).run();
     } catch (error) {
-      this.parsePostgresError({ error, table: "bootstrap_tokens" });
+      this.parsePostgresError(error);
     }
   }
 

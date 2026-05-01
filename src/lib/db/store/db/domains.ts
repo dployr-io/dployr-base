@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { BaseStore } from "./base.js";
+import { type AllowedTable } from "@/lib/constants/index.js";
 import type { CustomDomain, DNSProvider } from "@/types/dns.js";
 
 export class DomainStore extends BaseStore {
-  async create(clusterId: string, domain: string, token: string, provider: DNSProvider | null): Promise<CustomDomain> {
+  protected readonly storeTable: AllowedTable = "domains";
+  async create({ clusterId, domain, token, provider }: { clusterId: string; domain: string; token: string; provider: DNSProvider | null }): Promise<CustomDomain> {
     const id = this.generateId();
     const now = this.now();
 
@@ -29,7 +31,7 @@ export class DomainStore extends BaseStore {
         activatedAt: null,
       };
     } catch (error) {
-      this.parsePostgresError({ error, table: "domains" });
+      this.parsePostgresError(error);
     }
   }
 

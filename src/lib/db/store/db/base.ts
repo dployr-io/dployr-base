@@ -12,30 +12,6 @@ export type WhereValue = string | number | boolean | null;
 /** Pagination parameters shared by all list methods. */
 export type Pagination = { limit?: number; offset?: number };
 
-/**
- * Base class for database stores providing common utilities and patterns.
- *
- * This abstract class provides shared functionality for all entity stores including:
- * - JSON field merging with existing data preservation
- * - Generic entity update operations with automatic timestamps
- * - Consistent ID generation using ULID
- * - Safe database operations with proper parameter binding
- *
- * @abstract
- * @example
- * ```typescript
- * class UserStore extends BaseStore {
- *   async update(email: string, updates: Partial<User>) {
- *     const updateData: Record<string, any> = {};
- *     if (updates.name) updateData.name = updates.name;
- *     if (updates.metadata) {
- *       updateData.metadata = await this.mergeJsonField("users", email, "metadata", updates.metadata, "email");
- *     }
- *     await this.updateEntity("users", email, updateData, "email");
- *   }
- * }
- * ```
- */
 function assertAllowedTable(table: string): asserts table is AllowedTable {
   if (!(ALLOWED_TABLES as readonly string[]).includes(table)) {
     throw new ValidationError(`Disallowed table reference: ${table}`);
@@ -43,10 +19,8 @@ function assertAllowedTable(table: string): asserts table is AllowedTable {
 }
 
 export abstract class BaseStore {
-  /**
-   * Creates a new BaseStore instance.
-   * @param db - The Database instance to use for all operations
-   */
+  protected abstract readonly storeTable: AllowedTable;
+
   constructor(protected db: PostgresAdapter) {}
 
   /**
@@ -226,7 +200,7 @@ export abstract class BaseStore {
    * // for duplicate key violation
    * ```
    */
-  protected parsePostgresError({ error, table }: { error: unknown; table: AllowedTable }): never {
+  protected parsePostgresError(error: unknown): never {
     if (error instanceof Error) {
       console.error("[Postgres]: ", error);
       // Postgres unique violation
@@ -234,11 +208,11 @@ export abstract class BaseStore {
         // Extract constraint name from detail: Key (field)=(value) already exists
         const match = (error as any).detail?.match(/Key \(([^)]+)\)/);
         const field = match?.[1] ?? "unknown";
-        throw new DatabaseConflictError(field, table);
+        throw new DatabaseConflictError(field, this.storeTable);
       }
       // Postgres FK violation
       if ((error as any).code === "23503") {
-        throw new DatabaseConflictError("foreign_key", table);
+        throw new DatabaseConflictError("foreign_key", this.storeTable);
       }
     }
     throw error;

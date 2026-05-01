@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ClusterSubscription, SubscriptionPlan, SubscriptionStatus } from "@/types/index.js";
+import { type AllowedTable } from "@/lib/constants/index.js";
 import { BaseStore } from "./base.js";
 
 export class BillingStore extends BaseStore {
+  protected readonly storeTable: AllowedTable = "billing";
   async get(clusterId: string): Promise<ClusterSubscription | null> {
     const row = await this.db
       .prepare(
@@ -105,7 +107,7 @@ export class BillingStore extends BaseStore {
         .bind(params.clusterId, params.plan, params.polarCustomerId ?? null, params.polarSubscriptionId ?? null, params.status, params.canceledAt ?? null, params.periodEnd ?? null, now, now)
         .run();
     } catch (error) {
-      this.parsePostgresError({ error, table: "clusters" });
+      this.parsePostgresError(error);
     }
   }
 

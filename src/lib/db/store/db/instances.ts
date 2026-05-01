@@ -3,6 +3,7 @@
 
 import { Instance, InstanceKind, InstanceStatus } from "@/types/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
+import { type AllowedTable } from "@/lib/constants/index.js";
 import { BaseStore, type Pagination } from "./base.js";
 
 type InstanceUpdateData = Partial<Omit<Instance, "id" | "clusterId" | "managed" | "capacity" | "kind" | "region" | "createdAt" | "updatedAt">>;
@@ -10,6 +11,7 @@ export type InstancePayload = Omit<Instance, "id" | "kind" | "clusterId" | "crea
 export type InstanceFilter = Partial<Omit<Instance, "metadata" | "createdAt" | "updatedAt">>;
 
 export class InstanceStore extends BaseStore {
+  protected readonly storeTable: AllowedTable = "instances";
   async create({ clusterId, data }: { clusterId: string; data: InstancePayload }): Promise<Instance> {
     return this.db.withTransaction(async (client) => {
       const id = this.generateId();
@@ -24,7 +26,7 @@ export class InstanceStore extends BaseStore {
           [id, clusterId, data.address ?? null, data.tag, data.region ?? "us-east", data.managed ?? true, data.metadata ?? {}, now, now],
         );
       } catch (error) {
-        this.parsePostgresError({ error, table: "instances" });
+        this.parsePostgresError(error);
       }
 
       return this.toInstance(result.rows[0]);
@@ -167,7 +169,7 @@ export class InstanceStore extends BaseStore {
           [id, entry.address ?? null, entry.tag, entry.capacity ?? 10, entry.region ?? null, entry.status ?? "healthy", JSON.stringify(entry.metadata ?? {}), now, now],
         );
       } catch (error) {
-        this.parsePostgresError({ error, table: "instances" });
+        this.parsePostgresError(error);
       }
 
       return this.toInstance(result.rows[0]);
@@ -178,7 +180,7 @@ export class InstanceStore extends BaseStore {
     try {
       await this.db.prepare(`DELETE FROM instances WHERE id = $1 AND kind = 'pool'`).bind(id).run();
     } catch (error) {
-      this.parsePostgresError({ error, table: "instances" });
+      this.parsePostgresError(error);
     }
   }
 
@@ -211,7 +213,7 @@ export class InstanceStore extends BaseStore {
       try {
         await client.query(`UPDATE clusters SET pool_instance_id = $1, updated_at = $2 WHERE id = $3`, [instanceId, now, clusterId]);
       } catch (error) {
-        this.parsePostgresError({ error, table: "clusters" });
+        this.parsePostgresError(error);
       }
 
       return instanceId;
@@ -221,6 +223,17 @@ export class InstanceStore extends BaseStore {
   async getClusterPoolInstance(clusterId: string): Promise<string | null> {
     const result = await this.db.prepare(`SELECT pool_instance_id FROM clusters WHERE id = $1`).bind(clusterId).first();
     return (result?.pool_instance_id as string) ?? null;
+  }
+
+  /**
+   * Resolves the WS routing key for a cluster.
+   * Dedicated clusters route under their own ID; pool clusters route under pool:${tag}.
+   */
+  async getRoutingKey(clusterId: string): Promise<string> {
+    const poolInstanceId = await this.getClusterPoolInstance(clusterId);
+    if (!poolInstanceId) return clusterId;
+    const poolInstance = await this.find({ id: poolInstanceId });
+    return poolInstance ? `pool:${poolInstance.tag}` : clusterId;
   }
 
   async getClusterIdsByPoolInstanceTag(instanceTag: string): Promise<string[]> {
@@ -233,7 +246,7 @@ export class InstanceStore extends BaseStore {
     try {
       await this.db.prepare(`UPDATE clusters SET pool_instance_id = NULL, updated_at = $1 WHERE id = $2`).bind(now, clusterId).run();
     } catch (error) {
-      this.parsePostgresError({ error, table: "clusters" });
+      this.parsePostgresError(error);
     }
   }
 

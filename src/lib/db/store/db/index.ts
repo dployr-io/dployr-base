@@ -9,6 +9,10 @@ import { BootstrapTokenStore } from "./bootstrap-tokens.js";
 import { DomainStore } from "./domains.js";
 import { ServiceStore } from "./services.js";
 import { BillingStore } from "./billing.js";
+import { DeploymentStore } from "./deployments.js";
+import { ServiceEnvStore } from "./service-envs.js";
+import { ServiceSecretStore } from "./service-secrets.js";
+import { EncryptionService } from "@/lib/crypto/encryption.js";
 
 export class DatabaseStore {
   public users: UserStore;
@@ -17,16 +21,22 @@ export class DatabaseStore {
   public bootstrapTokens: BootstrapTokenStore;
   public domains: DomainStore;
   public services: ServiceStore;
+  public deployments: DeploymentStore;
   public billing: BillingStore;
+  public serviceEnvs: ServiceEnvStore;
+  public serviceSecrets: ServiceSecretStore | null;
 
-  constructor(db: PostgresAdapter) {
+  constructor(db: PostgresAdapter, encryptionKey: string | undefined = process.env.ENCRYPTION_KEY) {
     this.users = new UserStore(db);
     this.clusters = new ClusterStore(db);
     this.instances = new InstanceStore(db);
     this.bootstrapTokens = new BootstrapTokenStore(db);
     this.domains = new DomainStore(db);
     this.services = new ServiceStore(db);
+    this.deployments = new DeploymentStore(db);
     this.billing = new BillingStore(db);
+    this.serviceEnvs = new ServiceEnvStore(db);
+    this.serviceSecrets = encryptionKey ? new ServiceSecretStore(db, new EncryptionService(encryptionKey)) : null;
   }
 }
 
@@ -34,5 +44,6 @@ export const PostgresStore = DatabaseStore;
 export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore, DomainStore, ServiceStore, BillingStore };
 export type { InstanceFilter } from "./instances.js";
 export type { ServiceFilter } from "./services.js";
+export type { DeploymentFilter } from "./deployments.js";
 export type { UserFilter } from "./users.js";
 export * from "./base.js";

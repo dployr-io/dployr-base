@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { type OAuthProvider, User, type RequiredOnly } from "@/types/index.js";
+import { type AllowedTable } from "@/lib/constants/index.js";
 import { BaseStore } from "./base.js";
 
 /** Fields that can be used to look up a user. */
@@ -11,6 +12,7 @@ export type UserFilter = {
 };
 
 export class UserStore extends BaseStore {
+  protected readonly storeTable: AllowedTable = "users";
   /**
    * Upserts a user record. On conflict by email the name, picture, provider,
    * and metadata are merged with the existing row.
@@ -55,7 +57,7 @@ export class UserStore extends BaseStore {
 
         return this.toUser(savedUser);
       } catch (error) {
-        this.parsePostgresError({ error, table: "clusters" });
+        this.parsePostgresError(error);
       }
     });
   }
