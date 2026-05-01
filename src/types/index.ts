@@ -41,12 +41,32 @@ export const integrationIds = ["resendMail", "mailChimp", "mailerSend", "discord
 
 export type IntegrationType = (typeof integrationIds)[number];
 
+export type ServiceType = "static" | "web" | "worker" | "job";
+
 export interface Service {
   id: string;
   clusterId: string;
   name: string;
+  type: ServiceType;
+  deploymentId: string | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export type DeploymentStatus = "pending" | "running" | "success" | "failed";
+
+export interface Deployment {
+  id: string;
+  clusterId: string;
+  serviceId: string | null;
+  name: string;
+  type: ServiceType;
+  source: "remote" | "image";
+  status: DeploymentStatus;
+  blueprint: Record<string, any>;
+  logs: string | null;
+  createdAt: number;
+  finishedAt: number | null;
 }
 
 export interface User {
@@ -109,6 +129,7 @@ export type Variables = {
   emailProvider?: EmailProvider | null;
   session?: Session;
   resolvedClusterId?: string;
+  resolvedServiceId?: string;
 };
 
 export type ActorType = "user" | "headless";
@@ -137,7 +158,7 @@ export type StatusUpdateMessage = {
  * @property "healthy" - Fully available
  * @property "degraded" - Reachable but dployrd not responding
  * @property "offline" - Turned off but still provisioned on the VM provider
- * @property "unreachable" - Not reachable by TCP ping 
+ * @property "unreachable" - Not reachable by TCP ping
  * @property "maintenance" - Taken out of pool rotation
  */
 export type InstanceStatus = "healthy" | "degraded" | "offline" | "unreachable" | "maintenance";
