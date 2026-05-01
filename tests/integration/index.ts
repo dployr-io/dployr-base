@@ -58,6 +58,14 @@ function pub(path: string, init: RequestInit = {}) {
   });
 }
 
+function put(path: string, body: unknown) {
+  return fetch(`${BASE_URL}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Cookie: fx.session },
+    body: JSON.stringify(body),
+  });
+}
+
 
 async function assertOk(res: Response, status = 200) {
   const body = await res.json() as any;
@@ -453,5 +461,140 @@ describe("Notifications", () => {
       events: ["instance.created"],
     });
     assert.ok([400, 403].includes(res.status), `Expected 400 or 403 for invalid integration, got ${res.status}`);
+  });
+});
+
+describe("Services", () => {
+  const unknownId = "00000000000000000000000000";
+
+  it("GET /v1/services rejects unauthenticated", async () => {
+    const res = await pub(`/v1/services?clusterId=${fx.clusterId}`);
+    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
+  });
+
+  it("GET /v1/services rejects missing clusterId", async () => {
+    const res = await get("/v1/services");
+    assert.equal(res.status, 400, `Expected 400 for missing clusterId, got ${res.status}`);
+  });
+
+  it("GET /v1/services rejects foreign clusterId", async () => {
+    const res = await get(`/v1/services?clusterId=${fx.otherClusterId}`);
+    assert.equal(res.status, 403, `Expected 403 for foreign clusterId, got ${res.status}`);
+  });
+
+  it("GET /v1/services returns list for valid clusterId", async () => {
+    const res = await get(`/v1/services?clusterId=${fx.clusterId}`);
+    const body = await assertOk(res);
+    assert.ok(Array.isArray(body.data.services), "Expected services to be an array");
+  });
+
+  it("GET /v1/services/:id returns 404 for unknown id", async () => {
+    const res = await get(`/v1/services/${unknownId}`);
+    assert.ok([400, 404].includes(res.status), `Expected 400 or 404 for unknown service, got ${res.status}`);
+  });
+
+  it("PATCH /v1/services/:id rejects unauthenticated", async () => {
+    const res = await pub(`/v1/services/${unknownId}`, { method: "PATCH", body: JSON.stringify({}) });
+    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
+  });
+
+  it("DELETE /v1/services/:id rejects unauthenticated", async () => {
+    const res = await pub(`/v1/services/${unknownId}`, { method: "DELETE" });
+    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
+  });
+
+  it("GET /v1/services/:id/envs returns 404 for unknown id", async () => {
+    const res = await get(`/v1/services/${unknownId}/envs`);
+    assert.ok([400, 404].includes(res.status), `Expected 400 or 404 for unknown service envs, got ${res.status}`);
+  });
+
+  it("PUT /v1/services/:id/envs rejects unauthenticated", async () => {
+    const res = await pub(`/v1/services/${unknownId}/envs`, { method: "PUT", body: JSON.stringify({}) });
+    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
+  });
+
+  it("DELETE /v1/services/:id/envs/:key rejects unauthenticated", async () => {
+    const res = await pub(`/v1/services/${unknownId}/envs/SOME_KEY`, { method: "DELETE" });
+    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
+  });
+});
+
+describe("Deployments", () => {
+  const unknownId = "00000000000000000000000000";
+
+  it("GET /v1/deployments rejects unauthenticated", async () => {
+    const res = await pub(`/v1/deployments?clusterId=${fx.clusterId}`);
+    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
+  });
+
+  it("GET /v1/deployments rejects missing clusterId", async () => {
+    const res = await get("/v1/deployments");
+    assert.equal(res.status, 400, `Expected 400 for missing clusterId, got ${res.status}`);
+  });
+
+  it("GET /v1/deployments rejects foreign clusterId", async () => {
+    const res = await get(`/v1/deployments?clusterId=${fx.otherClusterId}`);
+    assert.equal(res.status, 403, `Expected 403 for foreign clusterId, got ${res.status}`);
+  });
+
+  it("GET /v1/deployments returns list for valid clusterId", async () => {
+    const res = await get(`/v1/deployments?clusterId=${fx.clusterId}`);
+    const body = await assertOk(res);
+    assert.ok(Array.isArray(body.data.deployments), "Expected deployments to be an array");
+  });
+
+  it("GET /v1/deployments/:id returns 404 for unknown id", async () => {
+    const res = await get(`/v1/deployments/${unknownId}`);
+    assert.ok([400, 404].includes(res.status), `Expected 400 or 404 for unknown deployment, got ${res.status}`);
+  });
+
+  it("POST /v1/deployments rejects missing body fields", async () => {
+    const res = await post(`/v1/deployments?clusterId=${fx.clusterId}`, {});
+    assert.equal(res.status, 400, `Expected 400 for missing body fields, got ${res.status}`);
+  });
+
+  it("POST /v1/deployments rejects invalid body (non-string serviceId)", async () => {
+    const res = await post(`/v1/deployments?clusterId=${fx.clusterId}`, { serviceId: 123 });
+    assert.equal(res.status, 400, `Expected 400 for invalid body, got ${res.status}`);
+  });
+
+  it("POST /v1/deployments rejects missing clusterId", async () => {
+    const res = await post("/v1/deployments", { serviceId: "some-service" });
+    assert.equal(res.status, 400, `Expected 400 for missing clusterId, got ${res.status}`);
+  });
+
+  it("POST /v1/deployments rejects unauthenticated", async () => {
+    const res = await pub(`/v1/deployments?clusterId=${fx.clusterId}`, {
+      method: "POST",
+      body: JSON.stringify({ serviceId: "some-service" }),
+    });
+    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
+  });
+
+  it("POST /v1/deployments with valid body returns 503 or 400 when no node connected", async () => {
+    const res = await post(`/v1/deployments?clusterId=${fx.clusterId}`, {
+      serviceId: unknownId,
+    });
+    const body = await res.json() as any;
+    // No node is connected in CI; expect either a validation 400 (unknown serviceId)
+    // or a 503 with runtime.node_not_connected
+    assert.ok(
+      [400, 503].includes(res.status),
+      `Expected 400 or 503, got ${res.status}\nBody: ${JSON.stringify(body)}`
+    );
+    if (res.status === 503) {
+      const code = body.error?.code ?? body.code;
+      assert.equal(code, "runtime.node_not_connected", `Expected runtime.node_not_connected, got: ${JSON.stringify(body)}`);
+    }
+  });
+
+  it("DELETE /v1/deployments/:id returns 404 for unknown id", async () => {
+    const res = await del(`/v1/deployments/${unknownId}`);
+    assert.ok([400, 404].includes(res.status), `Expected 400 or 404 for unknown deployment, got ${res.status}`);
+  });
+
+  it("DELETE /v1/deployments/:id rejects unauthenticated", async () => {
+    const res = await pub(`/v1/deployments/${unknownId}`, { method: "DELETE" });
+    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
   });
 });
