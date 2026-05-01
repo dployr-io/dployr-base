@@ -15,6 +15,13 @@ url = "postgresql://user:password@localhost:5432/postgres"
 # Auto-run migrations on startup
 auto_migrate = true
 
+# Connection pool tuning (all optional — defaults shown)
+# pool_max = 20                    # Max connections per process; multiply by replica count
+# pool_min = 2                     # Connections kept warm; avoids cold-start latency
+# pool_idle_timeout_ms = 10000     # Release idle connections after 10 s
+# pool_connection_timeout_ms = 5000  # Throw if no free connection after 5 s — raise under heavy load
+# pool_keep_alive = true           # TCP keep-alive; prevents stale connections on cloud hosts
+
 [kv]
 type = "redis"
 url = "redis://localhost:6379"
@@ -61,6 +68,11 @@ jwt_algorithm = "RS256"
 # Rate limiting (requests per minute)
 global_rate_limit = 100
 strict_rate_limit = 10
+# AES-256-GCM key for encrypting service secrets (KEK — key-encrypting key).
+# Generate with: openssl rand -hex 32
+# Keep this secret and back it up. Losing it makes all service secrets unrecoverable.
+# To rotate: generate a new key, run the rewrap migration, then update this value.
+# encryption_key = ""
 
 [cors]
 allowed_origins = "*.dployr.io"

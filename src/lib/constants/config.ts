@@ -14,6 +14,38 @@ export const CONFIG_SCHEMA = z.object({
     path: z.string().optional(),
     url: z.string().optional(),
     auto_migrate: z.boolean().default(true),
+    /**
+     * Max connections in the pool per process.
+     * Multiply by replica count to get total DB connections. Default: 20.
+     */
+    pool_max: z.number().int().positive().default(20),
+    /**
+     * Minimum idle connections kept warm. Avoids cold-start latency after quiet periods. Default: 2.
+     */
+    pool_min: z.number().int().nonnegative().default(2),
+    /**
+     * Milliseconds before an idle connection is released back to the OS. Default: 10000.
+     */
+    pool_idle_timeout_ms: z.number().int().positive().default(10_000),
+    /**
+     * Milliseconds to wait for a free connection before throwing. Raise this if you see
+     * timeout errors under traffic spikes. Default: 5000.
+     */
+    pool_connection_timeout_ms: z.number().int().positive().default(5_000),
+    /**
+     * Enable TCP keep-alive probes. Prevents silently stale connections on cloud hosts
+     * (RDS, Supabase, Railway, etc.) that close idle TCP connections. Default: true.
+     */
+    pool_keep_alive: z.boolean().default(true),
+    /**
+     * SSL mode for the database connection:
+     * - `false`       — no SSL (local development)
+     * - `true`        — SSL with certificate verification (recommended for production)
+     * - `"no-verify"` — SSL without certificate verification (self-signed certs / some managed hosts)
+     *
+     * Default: false. Set to `true` in any environment where the connection crosses a network.
+     */
+    pool_ssl: z.union([z.boolean(), z.literal("no-verify")]).default(false),
   }),
   kv: z.object({
     type: z.enum(["redis", "upstash", "memory"]),
@@ -83,6 +115,12 @@ export const CONFIG_SCHEMA = z.object({
     jwt_algorithm: z.string().default("RS256"),
     global_rate_limit: z.number().default(100),
     strict_rate_limit: z.number().default(10),
+    /**
+     * Hex-encoded 32-byte AES-256-GCM key used as the KEK (key-encrypting key) for service secrets.
+     * Generate with: openssl rand -hex 32
+     * Can also be set via the ENCRYPTION_KEY environment variable.
+     */
+    encryption_key: z.string().length(64).optional(),
   }),
   cors: z
     .object({
@@ -97,8 +135,8 @@ export const CONFIG_SCHEMA = z.object({
       environment: z.enum(["sandbox", "production"]).default("sandbox"),
       checkout_urls: z
         .object({
-          indie: z.string().url().optional(),
-          pro: z.string().url().optional(),
+          indie: z.url().optional(),
+          pro: z.url().optional(),
         })
         .optional(),
     })

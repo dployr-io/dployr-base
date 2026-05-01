@@ -86,7 +86,15 @@ export async function createDatabaseFromConfig(config: Config): Promise<Postgres
   if (!url) {
     throw new Error("PostgreSQL URL required in config.toml: database.url or env.DATABASE_URL");
   }
-  return new PostgresAdapter(url);
+  return new PostgresAdapter(url, {
+    max: config.database.pool_max,
+    min: config.database.pool_min,
+    idleTimeoutMillis: config.database.pool_idle_timeout_ms,
+    connectionTimeoutMillis: config.database.pool_connection_timeout_ms,
+    keepAlive: config.database.pool_keep_alive,
+    keepAliveInitialDelayMillis: 10_000,
+    ssl: config.database.pool_ssl === "no-verify" ? { rejectUnauthorized: false } : config.database.pool_ssl || undefined,
+  });
 }
 
 /**
