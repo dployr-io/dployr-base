@@ -1,21 +1,35 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import { Pool, PoolClient, PoolConfig, QueryResult, QueryResultRow } from 'pg';
+
+/** Subset of pg PoolConfig accepted at construction time (connectionString is supplied separately). */
+export type PoolOptions = Omit<PoolConfig, 'connectionString'>;
 
 /**
- * PostgreSQL database adapter 
- * This adapter wraps the pg library to provide a consistent API
+ * PostgreSQL database adapter wrapping `pg.Pool`.
+ *
+ * Default pool settings (override via `poolOptions`):
+ * - `max` — 20 connections per process
+ * - `min` — 2 warm connections kept alive at idle
+ * - `idleTimeoutMillis` — 10 000 ms (release idle connections after 10 s)
+ * - `connectionTimeoutMillis` — 5 000 ms (throw if no connection available after 5 s)
+ * - `keepAlive` — true (TCP keep-alive; prevents silent drops on cloud hosts)
+ * - `keepAliveInitialDelayMillis` — 10 000 ms
  */
 export class PostgresAdapter {
   private pool: Pool;
 
-  constructor(connectionString: string) {
+  constructor(connectionString: string, poolOptions?: PoolOptions) {
     this.pool = new Pool({
       connectionString,
       max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      min: 2,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 5_000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10_000,
+      ...poolOptions,
     });
   }
 
