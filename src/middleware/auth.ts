@@ -59,7 +59,7 @@ function getClusterId(c: Context<{ Bindings: Bindings; Variables: Variables }>, 
  * @param options - Where to find the entity value: `path` for path param, `body` for request body field, `query` for query string
  * @param options.lookupBy - For "instance": whether to look up by "id" (default) or "tag"
  */
-export function resolveCluster(entity: "instance" | "domain", options: { path?: string; body?: string; query?: string; lookupBy?: "id" | "tag" }) {
+export function resolveCluster(entity: "instance" | "domain" | "service", options: { path?: string; body?: string; query?: string; lookupBy?: "id" | "tag" }) {
   return async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
     const db = getDbStore(c);
 
@@ -83,10 +83,24 @@ export function resolveCluster(entity: "instance" | "domain", options: { path?: 
       const instance = options.lookupBy === "tag" ? await db.instances.find({ tag: value }) : await db.instances.find({ id: value });
 
       if (!instance) {
-        return c.json({ error: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
+        return c.json({ error: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, ERROR.RESOURCE.MISSING_RESOURCE.status);
       }
 
       c.set("resolvedClusterId", instance.clusterId ?? undefined);
+    } else if (entity === "service") {
+      const value = options.path ? c.req.param(options.path) : options.query ? c.req.query(options.query) : undefined;
+
+      if (!value) {
+        return c.json({ error: "Service identifier is required", code: ERROR.REQUEST.BAD_REQUEST.code }, ERROR.REQUEST.BAD_REQUEST.status);
+      }
+
+      const service = await db.services.find({ id: value });
+      if (!service) {
+        return c.json({ error: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, ERROR.RESOURCE.MISSING_RESOURCE.status);
+      }
+
+      c.set("resolvedServiceId", service.id);
+      c.set("resolvedClusterId", service.clusterId);
     } else {
       let domainName: string | undefined;
       if (options.path) {
@@ -101,7 +115,7 @@ export function resolveCluster(entity: "instance" | "domain", options: { path?: 
 
       const record = await db.domains.find(domainName);
       if (!record) {
-        return c.json({ error: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, 404);
+        return c.json({ error: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, ERROR.RESOURCE.MISSING_RESOURCE.status);
       }
 
       c.set("resolvedClusterId", record.clusterId ?? undefined);
