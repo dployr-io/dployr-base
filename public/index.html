@@ -1231,6 +1231,22 @@
           </svg>
           Events
         </button>
+        <button class="nav-item" data-view="deployments">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+            <polyline points="16 7 22 7 22 13"/>
+          </svg>
+          Deployments
+        </button>
+        <button class="nav-item" data-view="services">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="7" width="20" height="14" rx="2"/>
+            <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
+            <line x1="12" y1="12" x2="12" y2="16"/>
+            <line x1="10" y1="14" x2="14" y2="14"/>
+          </svg>
+          Services
+        </button>
         <div class="nav-divider"></div>
         <div class="nav-section-label">System</div>
         <button class="nav-item" data-view="token">
@@ -1462,6 +1478,108 @@
           </div>
         </div>
 
+        <!-- Deployments view -->
+        <div id="view-deployments" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Deployments</div>
+              <div class="page-subtitle">Recent deployment activity across all clusters</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="refresh-deployments">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Deployment Log</span>
+              <span class="text-muted" style="font-size:11px;" id="deployments-timestamp">—</span>
+            </div>
+            <div class="panel-body" style="padding:0;">
+              <div id="deployments-loading" class="empty-state hidden">
+                <div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);"></div>
+                <span>Loading deployments…</span>
+              </div>
+              <div id="deployments-empty" class="empty-state hidden">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+                  <polyline points="16 7 22 7 22 13"/>
+                </svg>
+                <span>No deployments found</span>
+              </div>
+              <div class="table-wrap">
+                <table id="deployments-table">
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Type</th>
+                      <th>Cluster</th>
+                      <th>Created</th>
+                      <th>Finished</th>
+                    </tr>
+                  </thead>
+                  <tbody id="deployments-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Services view -->
+        <div id="view-services" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Services</div>
+              <div class="page-subtitle">All deployed services across all clusters</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="refresh-services">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Service Registry</span>
+              <span class="text-muted" style="font-size:11px;" id="services-timestamp">—</span>
+            </div>
+            <div class="panel-body" style="padding:0;">
+              <div id="services-loading" class="empty-state hidden">
+                <div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);"></div>
+                <span>Loading services…</span>
+              </div>
+              <div id="services-empty" class="empty-state hidden">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="2" y="7" width="20" height="14" rx="2"/>
+                  <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
+                </svg>
+                <span>No services found</span>
+              </div>
+              <div class="table-wrap">
+                <table id="services-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Type</th>
+                      <th>Cluster</th>
+                      <th>Deployment</th>
+                      <th>Created</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody id="services-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div id="view-token" class="hidden">
           <div class="page-header">
             <div>
@@ -1650,7 +1768,10 @@
         if (activeNav) activeNav.classList.add('active');
         if (name === 'instances') loadInstances();
         if (name === 'events') loadEvents();
+        if (name === 'deployments') loadDeployments();
+        if (name === 'services') loadServices();
         if (name === 'token') populateTokenView();
+        startAutoRefresh(name);
       }
 
       async function loginApi(apiKey, otp, sessionId) {
@@ -2092,6 +2213,145 @@
         }
       }
 
+      async function fetchDeployments() {
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const body = await apiRequest(`${API_BASE}/v1/admin/deployments${sessionParam}`, {
+          headers: apiHeaders()
+        });
+        return body.data?.deployments || [];
+      }
+
+      const DEPLOYMENT_STATUS_BADGE = {
+        pending: 'pending',
+        running: 'running',
+        success: 'running',
+        failed: 'stopped',
+      };
+
+      function renderDeployments(deployments) {
+        const tbody = $('#deployments-tbody');
+        tbody.innerHTML = '';
+
+        if (!deployments.length) {
+          $('#deployments-empty').classList.remove('hidden');
+          $('#deployments-table').style.display = 'none';
+          return;
+        }
+        $('#deployments-empty').classList.add('hidden');
+        $('#deployments-table').style.display = '';
+
+        deployments.forEach(dep => {
+          const badgeCls = DEPLOYMENT_STATUS_BADGE[dep.status] || 'stopped';
+          const statusBadge = `<span class="badge ${badgeCls}">${escHtml(dep.status || '—')}</span>`;
+          const createdMs = parseInt(dep.createdAt, 10);
+          const finishedMs = dep.finishedAt ? parseInt(dep.finishedAt, 10) : null;
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${statusBadge}</td>
+            <td class="cell-tag">${escHtml(dep.name || '—')}</td>
+            <td class="dim">${escHtml(dep.type || '—')}</td>
+            <td class="cell-id">${escHtml((dep.clusterId || '—').slice(0, 12))}${dep.clusterId && dep.clusterId.length > 12 ? '…' : ''}</td>
+            <td class="dim" style="white-space:nowrap;">${createdMs ? relTime(createdMs) : '—'}</td>
+            <td class="dim" style="white-space:nowrap;">${finishedMs ? relTime(finishedMs) : '<span class="text-muted">—</span>'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      async function loadDeployments() {
+        const loading = $('#deployments-loading');
+        const empty = $('#deployments-empty');
+        loading.classList.remove('hidden');
+        empty.classList.add('hidden');
+        $('#deployments-table').style.display = 'none';
+        try {
+          const deployments = await fetchDeployments();
+          renderDeployments(deployments);
+          $('#deployments-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
+        } catch (err) {
+          empty.classList.remove('hidden');
+          toast(`Failed to load deployments: ${err.message}`, 'error');
+        } finally {
+          loading.classList.add('hidden');
+        }
+      }
+
+      async function fetchServices() {
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const body = await apiRequest(`${API_BASE}/v1/admin/services${sessionParam}`, {
+          headers: apiHeaders()
+        });
+        return body.data?.services || [];
+      }
+
+      function renderServices(services) {
+        const tbody = $('#services-tbody');
+        tbody.innerHTML = '';
+
+        if (!services.length) {
+          $('#services-empty').classList.remove('hidden');
+          $('#services-table').style.display = 'none';
+          return;
+        }
+        $('#services-empty').classList.add('hidden');
+        $('#services-table').style.display = '';
+
+        services.forEach(svc => {
+          const createdMs = parseInt(svc.createdAt, 10);
+          const updatedMs = parseInt(svc.updatedAt, 10);
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="cell-tag">${escHtml(svc.name || '—')}</td>
+            <td class="dim">${escHtml(svc.type || '—')}</td>
+            <td class="cell-id">${escHtml((svc.clusterId || '—').slice(0, 12))}${svc.clusterId && svc.clusterId.length > 12 ? '…' : ''}</td>
+            <td class="cell-id">${svc.deploymentId ? escHtml(svc.deploymentId.slice(0, 8)) + '…' : '<span class="text-muted">—</span>'}</td>
+            <td class="dim" style="white-space:nowrap;">${createdMs ? relTime(createdMs) : '—'}</td>
+            <td class="dim" style="white-space:nowrap;">${updatedMs ? relTime(updatedMs) : '—'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      async function loadServices() {
+        const loading = $('#services-loading');
+        const empty = $('#services-empty');
+        loading.classList.remove('hidden');
+        empty.classList.add('hidden');
+        $('#services-table').style.display = 'none';
+        try {
+          const services = await fetchServices();
+          renderServices(services);
+          $('#services-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
+        } catch (err) {
+          empty.classList.remove('hidden');
+          toast(`Failed to load services: ${err.message}`, 'error');
+        } finally {
+          loading.classList.add('hidden');
+        }
+      }
+
+      // auto-refresh: every 10s re-load whatever view is currently active
+      let _autoRefreshTimer = null;
+      const VIEW_LOADERS = {
+        instances: loadInstances,
+        events: loadEvents,
+        deployments: loadDeployments,
+        services: loadServices,
+      };
+
+      function startAutoRefresh(viewName) {
+        stopAutoRefresh();
+        const fn = VIEW_LOADERS[viewName];
+        if (!fn) return;
+        _autoRefreshTimer = setInterval(fn, 10000);
+      }
+
+      function stopAutoRefresh() {
+        if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+      }
+
       function setEventsFilter(filter) {
         state.eventsFilter = filter;
         $$('.toggle-btn').forEach(b => b.classList.remove('active'));
@@ -2147,6 +2407,7 @@
 
           startExpiryTimer(expiresIn);
           loadInstances();
+          startAutoRefresh('instances');
           toast('Authenticated successfully', 'success');
         } catch (err) {
           errEl.textContent = err.message || 'Authentication failed.';
@@ -2161,6 +2422,7 @@
 
       function logout(expired = false) {
         stopExpiryTimer();
+        stopAutoRefresh();
         Object.assign(state, { jwt: null, sessionId: null, expiresAt: null });
         clearSession();
         $('#login-screen').style.display = 'flex';
@@ -2201,6 +2463,8 @@
         // refresh buttons
         $('#refresh-instances').addEventListener('click', loadInstances);
         $('#refresh-events').addEventListener('click', loadEvents);
+        $('#refresh-deployments').addEventListener('click', loadDeployments);
+        $('#refresh-services').addEventListener('click', loadServices);
 
         // add instance
         $('#add-btn').addEventListener('click', addInstance);
@@ -2234,6 +2498,7 @@
         $('#session-id-display').textContent = state.sessionId;
         startExpiryTimer(remainingSecs);
         loadInstances();
+        startAutoRefresh('instances');
       }
     })();
   </script>
