@@ -51,6 +51,9 @@ tags:
     description: Notification integrations and event subscriptions.
   - name: Billing
     description: Subscription plans, checkout, and webhook events.
+
+  - name: Services
+    description: Deployed service management — list, update, delete, envs and secrets.
   - name: Proxy
     description: Traffic routing and service discovery.
   - name: Runtime
@@ -695,6 +698,63 @@ components:
           type: integer
         unackedMessages:
           type: integer
+
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+        clusterId:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [docker, nixpacks, static]
+        deploymentId:
+          type: string
+          nullable: true
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+
+    Deployment:
+      type: object
+      properties:
+        id:
+          type: string
+        clusterId:
+          type: string
+        serviceId:
+          type: string
+          nullable: true
+        name:
+          type: string
+        type:
+          type: string
+          enum: [docker, nixpacks, static]
+        source:
+          type: string
+          enum: [remote, image]
+        status:
+          type: string
+          enum: [pending, running, success, failed]
+        blueprint:
+          type: object
+          additionalProperties: true
+        logs:
+          type: string
+          nullable: true
+        createdAt:
+          type: integer
+          format: int64
+        finishedAt:
+          type: integer
+          nullable: true
+          format: int64
 
     # WebSocket client message types
     WSClientSubscribeMessage:
@@ -1512,6 +1572,9 @@ paths:
                 provider:
                   type: string
                   enum: [google, github, microsoft, email]
+                metadata:
+                  type: object
+                  additionalProperties: true
       responses:
         '200':
           description: Updated user
@@ -2567,9 +2630,6 @@ paths:
         | kind | description |
         |------|-------------|
         | `client_subscribe` | Subscribe to cluster status updates |
-        | `deploy` | Deploy an application |
-        | `deployment_list` | List deployments on an instance |
-        | `service_remove` | Remove a service |
         | `log_subscribe` | Subscribe to log stream |
         | `log_unsubscribe` | Unsubscribe from log stream |
         | `log_stream` | Start a log stream with a token |
@@ -2581,13 +2641,6 @@ paths:
         | `file_watch` | Watch for filesystem changes |
         | `file_unwatch` | Stop watching filesystem |
         | `instance_token_rotate` | Rotate bootstrap token |
-        | `instance_system_install` | Install dployr version |
-        | `instance_system_reboot` | Reboot instance |
-        | `instance_system_restart` | Restart daemon |
-        | `proxy_status` | Get proxy status |
-        | `proxy_restart` | Restart proxy |
-        | `proxy_add` | Add proxy route |
-        | `proxy_remove` | Remove proxy route |
         | `process_history` | Get process snapshots |
         | `terminal_open` | Open terminal session |
         | `terminal` | Send terminal input/resize/close |
@@ -2732,6 +2785,12 @@ paths:
       description: Requires developer role on the instance's cluster.
       security:
         - sessionCookie: []
+      parameters:
+        - in: query
+          name: instanceId
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -3069,6 +3128,12 @@ paths:
       description: Deployment listing is not yet fully implemented. Returns empty list.
       security:
         - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: Deployments
@@ -3076,6 +3141,621 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+
+    post:
+      operationId: createDeployment
+      tags: [Deployments]
+      summary: Create a new deployment (fire-and-return)
+      description: |
+        Creates a new deployment and dispatches it to the target node as a background task.
+        Returns immediately with the deployment record and a task ID — the client should
+        listen for a WS refresh signal to know when the deployment completes.
+
+        Returns `409` if a service with that name already exists (either with a different
+        type, suggesting a conflict, or the same type, suggesting a `PATCH` redeploy instead).
+
+        > **Note:** The previous WebSocket `deploy` message is deprecated in favour of this endpoint.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [instanceName, payload]
+              properties:
+                instanceName:
+                  type: string
+                  description: Target instance tag/name
+                payload:
+                  type: object
+                  required: [name, type, source]
+                  properties:
+                    name:
+                      type: string
+                    type:
+                      type: string
+                      enum: [docker, nixpacks, static]
+                    source:
+                      type: string
+                      enum: [remote, image]
+                  additionalProperties: true
+                  description: Full DeploymentSchema payload
+      responses:
+        '201':
+          description: Deployment created and dispatched
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deployment:
+                            $ref: '#/components/schemas/Deployment'
+                          taskId:
+                            type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Service already exists — use PATCH /v1/services/{serviceId} to redeploy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  message: Service already exists
+                  code: resource.conflict
+        '503':
+          description: Node not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── Services ──────────────────────────────────────────────────────────────
+
+  /v1/services:
+    get:
+      operationId: listServices
+      tags: [Services]
+      summary: List services for a cluster
+      description: Requires viewer role on the cluster.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Services retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          services:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Service'
+        '400':
+          description: Missing or invalid clusterId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/services/{serviceId}:
+    get:
+      operationId: getService
+      tags: [Services]
+      summary: Get a single service
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Service retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          service:
+                            $ref: '#/components/schemas/Service'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      operationId: redeployService
+      tags: [Services]
+      summary: Redeploy an existing service (fire-and-return)
+      description: |
+        Triggers a redeployment of the service with a new payload. Dispatched as a
+        background node task — returns immediately with the updated service, a new
+        deployment record, and a task ID. The client should listen for a WS refresh
+        signal to track completion. Requires developer role on the cluster.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [instanceName, payload]
+              properties:
+                instanceName:
+                  type: string
+                  description: Target instance tag/name
+                payload:
+                  type: object
+                  description: DeploymentPayload — same shape as POST /v1/deployments body payload
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Redeploy dispatched
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          service:
+                            $ref: '#/components/schemas/Service'
+                          deployment:
+                            $ref: '#/components/schemas/Deployment'
+                          taskId:
+                            type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Node not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      operationId: deleteService
+      tags: [Services]
+      summary: Remove a service
+      description: Deletes the service record and dispatches a node task to stop and clean up the workload. Requires developer role.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Service removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/services/{serviceId}/envs:
+    get:
+      operationId: listServiceEnvs
+      tags: [Services]
+      summary: List environment variables for a service
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment variables retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          envs:
+                            type: object
+                            additionalProperties:
+                              type: string
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: setServiceEnvs
+      tags: [Services]
+      summary: Set environment variables for a service
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [envs]
+              properties:
+                envs:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        '200':
+          description: Environment variables updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/services/{serviceId}/envs/{key}:
+    delete:
+      operationId: deleteServiceEnv
+      tags: [Services]
+      summary: Delete a single environment variable
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment variable deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service or key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/services/{serviceId}/secrets:
+    get:
+      operationId: listServiceSecrets
+      tags: [Services]
+      summary: List secret keys for a service (values masked)
+      description: Returns only the secret key names — values are never returned. Requires developer role.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Secret keys retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          secrets:
+                            type: object
+                            additionalProperties:
+                              type: string
+                              example: '***'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: setServiceSecrets
+      tags: [Services]
+      summary: Set secrets for a service
+      description: Requires developer role.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [secrets]
+              properties:
+                secrets:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        '200':
+          description: Secrets updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/services/{serviceId}/secrets/{key}:
+    delete:
+      operationId: deleteServiceSecret
+      tags: [Services]
+      summary: Delete a single secret key
+      description: Requires developer role.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Secret deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service or key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ─── Integrations ──────────────────────────────────────────────────────────
 
@@ -4421,3 +5101,295 @@ paths:
                 error:
                   message: Specify serviceName+clusterName, clusterName, or all:true
                   code: validation.missing_fields
+
+  # ─── Proxy Node Management ─────────────────────────────────────────────────
+
+  /v1/proxy/node/status:
+    get:
+      operationId: getProxyNodeStatus
+      tags: [Proxy]
+      summary: Get proxy status on a node (fire-and-return)
+      description: |
+        Dispatches a proxy status task to the target node and returns immediately
+        with a task ID. The client should listen for a WS refresh signal for the result.
+        Requires developer role on the cluster.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: instanceName
+          required: true
+          schema:
+            type: string
+          description: Target instance tag/name
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task dispatched
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          taskId:
+                            type: string
+                          message:
+                            type: string
+        '400':
+          description: Missing instanceName
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Node not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/proxy/node/restart:
+    post:
+      operationId: restartProxyNode
+      tags: [Proxy]
+      summary: Restart proxy on a node (fire-and-return)
+      description: |
+        Dispatches a proxy restart task to the target node and returns immediately.
+        Requires developer role on the cluster.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [instanceName]
+              properties:
+                instanceName:
+                  type: string
+                  description: Target instance tag/name
+                force:
+                  type: boolean
+                  default: false
+                  description: Force restart even if proxy is healthy
+      responses:
+        '200':
+          description: Restart task dispatched
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          taskId:
+                            type: string
+                          message:
+                            type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Node not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/proxy/node/routes:
+    post:
+      operationId: addProxyNodeRoute
+      tags: [Proxy]
+      summary: Add a proxy route on a node (fire-and-return)
+      description: |
+        Dispatches a proxy route add task to the target node and returns immediately.
+        Requires developer role on the cluster.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [instanceName, serviceName, upstream]
+              properties:
+                instanceName:
+                  type: string
+                  description: Target instance tag/name
+                serviceName:
+                  type: string
+                upstream:
+                  type: string
+                  description: Upstream address (host:port)
+                domain:
+                  type: string
+                  nullable: true
+                  description: Optional custom domain
+                template:
+                  type: string
+                  nullable: true
+                  description: Optional proxy template name
+      responses:
+        '202':
+          description: Route add task dispatched
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          taskId:
+                            type: string
+                          message:
+                            type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Node not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/proxy/node/routes/{service}:
+    delete:
+      operationId: deleteProxyNodeRoute
+      tags: [Proxy]
+      summary: Delete a proxy route on a node (fire-and-return)
+      description: |
+        Dispatches a proxy route removal task to the target node and returns immediately.
+        Requires developer role on the cluster.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: service
+          required: true
+          schema:
+            type: string
+          description: Service name whose route should be removed
+        - in: query
+          name: instanceName
+          required: true
+          schema:
+            type: string
+          description: Target instance tag/name
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Route removal task dispatched
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          taskId:
+                            type: string
+                          message:
+                            type: string
+        '400':
+          description: Missing instanceName or service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Node not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
