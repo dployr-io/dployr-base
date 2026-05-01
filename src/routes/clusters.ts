@@ -185,7 +185,7 @@ clusters.get("/:id/users", requireClusterViewer, async (c) => {
 
   const showInvites = c.req.queries("showInvites");
 
-  const { users, total } = showInvites ? await db.clusters.listClusterInvites(clusterId, pageSize, offset) : await db.clusters.listClusterUsers(clusterId, pageSize, offset);
+  const { users, total } = await db.clusters.listUsers(clusterId, { invited: !!showInvites, limit: pageSize, offset });
 
   const paginatedData = createPaginatedResponse(users, page, pageSize, total);
 

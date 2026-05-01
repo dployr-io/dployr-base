@@ -1,7 +1,7 @@
 // routes/admin/admin.ts
 import { Hono } from "hono";
 import { Bindings, createErrorResponse, createSuccessResponse, Variables } from "@/types/index.js";
-import { getKVStore } from "@/lib/config/context.js";
+import { getKVStore, getDbStore } from "@/lib/config/context.js";
 import { requireDployrAdministrator, requireDployrAdministratorIPAddress } from "@/middleware/auth.js";
 import instances from "./instances/index.js";
 import * as OTPAuth from "otpauth";
@@ -89,6 +89,18 @@ admin.get("/events", async (c) => {
   const kv = getKVStore(c);
   const events = await kv.getAllEvents();
   return c.json(createSuccessResponse({ events }));
+});
+
+admin.get("/deployments", async (c) => {
+  const db = getDbStore(c);
+  const deployments = await db.deployments.list({});
+  return c.json(createSuccessResponse({ deployments }));
+});
+
+admin.get("/services", async (c) => {
+  const db = getDbStore(c);
+  const services = await db.services.list();
+  return c.json(createSuccessResponse({ services }));
 });
 
 admin.route("/instances", instances);

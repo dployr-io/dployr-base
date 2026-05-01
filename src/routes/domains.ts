@@ -165,7 +165,7 @@ domains.post("/", authMiddleware, resolveCluster("instance", { body: "instanceId
   let domainRecord = existing;
   if (!domainRecord) {
     const token = dns.generateToken();
-    domainRecord = await db.domains.create(clusterId, normalizedDomain, token, provider);
+    domainRecord = await db.domains.create({ clusterId, domain: normalizedDomain, token, provider });
   }
 
   const { record, verification } = dns.buildRecordsFromStored(normalizedDomain, instance.address!, domainRecord.verificationToken);

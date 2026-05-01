@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
+import { ulid } from "ulid";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { authMiddleware, requireClusterViewer } from "@/middleware/auth.js";
-import { getDbStore, getTrafficRouter } from "@/lib/config/context.js";
+import { authMiddleware, requireClusterDeveloper, requireClusterViewer } from "@/middleware/auth.js";
+import { getDbStore, getTrafficRouter, getWS, getJWTService } from "@/lib/config/context.js";
 import { ERROR } from "@/lib/constants/index.js";
+import { DployrdService } from "@/services/dployrd.js";
+
+const dployrdService = new DployrdService();
 
 const proxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -195,6 +199,118 @@ proxy.post("/invalidate", requireClusterViewer, async (c) => {
     }),
     ERROR.VALIDATION.MISSING_FIELDS.status,
   );
+});
+
+// ── Node proxy management ─────────────────────────────────────────────────────
+// Fire-and-return: dispatches task to node, client listens for refresh signal.
+
+proxy.get("/node/status", requireClusterDeveloper, async (c) => {
+  const db = getDbStore(c);
+  const session = c.get("session")!;
+  const clusterId = c.get("resolvedClusterId")!;
+  const instanceName = c.req.query("instanceName");
+
+  if (!instanceName) {
+    return c.json(createErrorResponse({ message: "instanceName is required", code: ERROR.VALIDATION.MISSING_FIELDS.code }), ERROR.VALIDATION.MISSING_FIELDS.status);
+  }
+
+  const instance = await db.instances.find({ tag: instanceName });
+  if (!instance) {
+    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  }
+
+  const jwtService = getJWTService(c);
+  const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
+  const taskId = ulid();
+  const task = dployrdService.createProxyStatusTask(taskId, token);
+  const routingKey = await db.instances.getRoutingKey(clusterId);
+  getWS(c).sendTask(routingKey, task);
+
+  return c.json(createSuccessResponse({ taskId, message: "Proxy status task dispatched" }));
+});
+
+proxy.post("/node/restart", requireClusterDeveloper, async (c) => {
+  const db = getDbStore(c);
+  const session = c.get("session")!;
+  const clusterId = c.get("resolvedClusterId")!;
+  const body = await c.req.json().catch(() => ({} as any));
+  const { instanceName, force = false } = body as { instanceName?: string; force?: boolean };
+
+  if (!instanceName) {
+    return c.json(createErrorResponse({ message: "instanceName is required", code: ERROR.VALIDATION.MISSING_FIELDS.code }), ERROR.VALIDATION.MISSING_FIELDS.status);
+  }
+
+  const instance = await db.instances.find({ tag: instanceName });
+  if (!instance) {
+    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  }
+
+  const jwtService = getJWTService(c);
+  const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
+  const taskId = ulid();
+  const task = dployrdService.createProxyRestartTask(taskId, force, token);
+  const routingKey = await db.instances.getRoutingKey(clusterId);
+  getWS(c).sendTask(routingKey, task);
+
+  return c.json(createSuccessResponse({ taskId, message: "Proxy restart task dispatched" }));
+});
+
+proxy.post("/node/routes", requireClusterDeveloper, async (c) => {
+  const db = getDbStore(c);
+  const session = c.get("session")!;
+  const clusterId = c.get("resolvedClusterId")!;
+  const body = await c.req.json().catch(() => ({} as any));
+  const { instanceName, serviceName, upstream, domain, template } = body as {
+    instanceName?: string;
+    serviceName?: string;
+    upstream?: string;
+    domain?: string;
+    template?: string;
+  };
+
+  if (!instanceName || !serviceName || !upstream) {
+    return c.json(createErrorResponse({ message: "instanceName, serviceName, and upstream are required", code: ERROR.VALIDATION.MISSING_FIELDS.code }), ERROR.VALIDATION.MISSING_FIELDS.status);
+  }
+
+  const instance = await db.instances.find({ tag: instanceName });
+  if (!instance) {
+    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  }
+
+  const jwtService = getJWTService(c);
+  const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
+  const taskId = ulid();
+  const task = dployrdService.createProxyAddTask(taskId, serviceName, upstream, domain, template, token);
+  const routingKey = await db.instances.getRoutingKey(clusterId);
+  getWS(c).sendTask(routingKey, task);
+
+  return c.json(createSuccessResponse({ taskId, message: "Proxy route add task dispatched" }), 202);
+});
+
+proxy.delete("/node/routes/:service", requireClusterDeveloper, async (c) => {
+  const db = getDbStore(c);
+  const session = c.get("session")!;
+  const clusterId = c.get("resolvedClusterId")!;
+  const serviceName = c.req.param("service");
+  const instanceName = c.req.query("instanceName");
+
+  if (!instanceName) {
+    return c.json(createErrorResponse({ message: "instanceName is required", code: ERROR.VALIDATION.MISSING_FIELDS.code }), ERROR.VALIDATION.MISSING_FIELDS.status);
+  }
+
+  const instance = await db.instances.find({ tag: instanceName });
+  if (!instance) {
+    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  }
+
+  const jwtService = getJWTService(c);
+  const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
+  const taskId = ulid();
+  const task = dployrdService.createProxyRemoveTask(taskId, serviceName, token);
+  const routingKey = await db.instances.getRoutingKey(clusterId);
+  getWS(c).sendTask(routingKey, task);
+
+  return c.json(createSuccessResponse({ taskId, message: "Proxy route remove task dispatched" }));
 });
 
 export default proxy;
