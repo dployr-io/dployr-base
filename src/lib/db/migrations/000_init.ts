@@ -6,6 +6,7 @@ DO $$ BEGIN
   CREATE TYPE instance_status AS ENUM ('healthy', 'degraded', 'offline', 'unreachable', 'maintenance');
   CREATE TYPE instance_region AS ENUM ('us-east', 'us-west', 'us-central', 'eu-west', 'eu-central', 'eu-north', 'ap-south', 'ap-southeast', 'ap-northeast', 'af-south', 'me-central', 'sa-east');
   CREATE TYPE user_role AS ENUM ('owner', 'admin', 'developer', 'viewer', 'invited');
+  CREATE TYPE service_type AS ENUM ('static', 'web', 'worker', 'job');
 EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 
@@ -88,13 +89,59 @@ CREATE TABLE IF NOT EXISTS domains (
 );
 
 CREATE TABLE IF NOT EXISTS services (
-  id TEXT PRIMARY KEY,
-  cluster_id TEXT NOT NULL,
-  name TEXT NOT NULL UNIQUE,
-  created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL,
+  id            TEXT PRIMARY KEY,
+  cluster_id    TEXT NOT NULL,
+  name          TEXT NOT NULL UNIQUE,
+  type          service_type NOT NULL,
+  deployment_id TEXT,
+  created_at    BIGINT NOT NULL,
+  updated_at    BIGINT NOT NULL,
   UNIQUE(cluster_id, name),
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS deployments (
+  id          TEXT PRIMARY KEY,
+  cluster_id  TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+  service_id  TEXT REFERENCES services(id) ON DELETE SET NULL,
+  name        TEXT NOT NULL,
+  type        service_type NOT NULL,
+  source      TEXT NOT NULL CHECK (source IN ('remote', 'image')),
+  status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'success', 'failed')),
+  blueprint   JSONB NOT NULL,
+  logs        TEXT,
+  created_at  BIGINT NOT NULL,
+  finished_at BIGINT,
+  UNIQUE (cluster_id, name)
+);
+
+DO $$ BEGIN
+  ALTER TABLE services
+    ADD CONSTRAINT services_deployment_fkey
+    FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE SET NULL
+    NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS service_envs (
+  id         TEXT PRIMARY KEY,
+  service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  key        TEXT NOT NULL,
+  value      TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE (service_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS service_secrets (
+  id              TEXT PRIMARY KEY,
+  service_id      TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  key             TEXT NOT NULL,
+  value_encrypted BYTEA NOT NULL,
+  dek_encrypted   BYTEA NOT NULL,
+  created_at      BIGINT NOT NULL,
+  updated_at      BIGINT NOT NULL,
+  UNIQUE (service_id, key)
 );
 
 CREATE TABLE IF NOT EXISTS billing (
@@ -128,6 +175,10 @@ CREATE INDEX IF NOT EXISTS idx_bootstrap_nonce ON bootstrap_tokens(nonce);
 CREATE INDEX IF NOT EXISTS idx_domains_instance ON domains(cluster_id);
 CREATE INDEX IF NOT EXISTS idx_domains_domain ON domains(domain);
 CREATE INDEX IF NOT EXISTS idx_services_instance ON services(cluster_id);
+CREATE INDEX IF NOT EXISTS idx_deployments_cluster_status ON deployments(cluster_id, status);
+CREATE INDEX IF NOT EXISTS idx_deployments_service ON deployments(service_id);
+CREATE INDEX IF NOT EXISTS idx_service_envs_service ON service_envs(service_id);
+CREATE INDEX IF NOT EXISTS idx_service_secrets_service ON service_secrets(service_id);
 CREATE INDEX IF NOT EXISTS idx_billing_polar_customer ON billing(polar_customer_id);
 CREATE INDEX IF NOT EXISTS idx_billing_polar_subscription ON billing(polar_subscription_id);
 CREATE INDEX IF NOT EXISTS idx_billing_period_end ON billing(period_end) WHERE period_end IS NOT NULL;
