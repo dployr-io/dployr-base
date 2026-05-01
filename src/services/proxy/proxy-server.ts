@@ -208,7 +208,7 @@ export async function startProxyServer(config?: Partial<ProxyServerConfig>): Pro
   const proxyConfig: Partial<ProxyServerConfig> = {
     ...config,
     baseDomain: appConfig.proxy?.base_domain ?? config?.baseDomain ?? "dployr.io",
-    port: appConfig.proxy?.port ?? config?.port ?? 8080,
+    port: appConfig.proxy?.port ?? config?.port ?? 7878,
   };
 
   const server = new ProxyServer(db, kv, proxyConfig);
