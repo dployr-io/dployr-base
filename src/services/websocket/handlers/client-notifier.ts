@@ -21,6 +21,24 @@ export class ClientNotifier {
   ) {}
 
   /**
+   * Emit a lightweight revalidation signal to all clients in a cluster.
+   * Clients invalidate the relevant http client query cache (e.g Tanstack) and refetch via HTTP.
+   */
+  notifyRefresh(clusterId: string, entity: "services" | "deployments"): void {
+    const clients = this.conn.getClientConnections(clusterId);
+    if (clients.length === 0) return;
+
+    const payload = JSON.stringify({ kind: "refresh", entity, clusterId });
+    for (const client of clients) {
+      try {
+        client.ws.send(payload);
+      } catch (err) {
+        console.error(`[WS] Failed to send refresh signal to client:`, err);
+      }
+    }
+  }
+
+  /**
    * Broadcast status updates to all client connections in a cluster.
    */
   async broadcast(clusterId: string, message: UpdateMessage): Promise<void> {

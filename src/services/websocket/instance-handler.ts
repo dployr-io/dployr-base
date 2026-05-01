@@ -51,10 +51,10 @@ export class WebSocketHandler {
 
     this.clientNotifier = new ClientNotifier(this.connectionManager, this.kvStore);
 
-    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore);
-
     const jwtService = new JWTService(this.kvStore);
     const dployrdService = new DployrdService();
+
+    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore, jwtService, dployrdService);
 
     this.terminalManager = new TerminalManager(300000);
     this.clientHandler = new ClientMessageHandler({
@@ -153,10 +153,18 @@ export class WebSocketHandler {
       if (conn.instanceTag) {
         this.kvStore.refreshNodeConnected(conn.instanceTag).catch(() => {});
       }
-      await this.dployrdHandler.handleMessage(conn, message);
+      await this.dployrdHandler.handleMessage({ conn, message });
     } else {
       await this.clientHandler.handleMessage(conn, message);
     }
+  }
+
+  /**
+   * Send a task using a pre-resolved routing key (clusterId or pool:tag).
+   * Use this from HTTP routes where pool routing must be pre-computed.
+   */
+  public sendTask(routingKey: string, task: NodeTask): boolean {
+    return this.connectionManager.sendTask(routingKey, task);
   }
 
   /**

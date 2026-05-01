@@ -7,8 +7,6 @@ import { KVStore } from "@/lib/db/store/kv/index.js";
 import type {
   ClusterConnection,
   BaseMessage,
-  DeployMessage,
-  DeploymentListMessage,
   LogSubscribeMessage,
   LogStreamMessage,
   FileReadMessage,
@@ -17,17 +15,8 @@ import type {
   FileDeleteMessage,
   FileTreeMessage,
   AckMessage,
-  InstanceTokenRotateMessage,
-  InstanceSystemInstallMessage,
-  InstanceSystemRebootMessage,
-  InstanceSystemRestartMessage,
   FileWatchMessage,
   FileUnwatchMessage,
-  ServiceRemoveMessage,
-  ProxyStatusMessage,
-  ProxyRestartMessage,
-  ProxyAddMessage,
-  ProxyRemoveMessage,
   ProcessHistoryMessage,
   ProcessHistoryResponseMessage,
   TerminalMessage,
@@ -35,8 +24,6 @@ import type {
 } from "../../../types/websocket-message.js";
 import {
   isClientSubscribeMessage,
-  isDeployMessage,
-  isDeploymentListMessage,
   isFileReadMessage,
   isFileWriteMessage,
   isFileCreateMessage,
@@ -46,19 +33,10 @@ import {
   isLogUnsubscribeMessage,
   isLogStreamMessage,
   isAckMessage,
-  isInstanceTokenRotateMessage,
-  isInstanceSystemInstallMessage,
-  isInstanceSystemRebootMessage,
-  isInstanceSystemRestartMessage,
   isFileWatchMessage,
   isFileUnwatchMessage,
   validateRequestMessage,
   createWSError,
-  isServiceRemoveMessage,
-  isProxyStatusMessage,
-  isProxyRestartMessage,
-  isProxyAddMessage,
-  isProxyRemoveMessage,
   isProcessHistoryMessage,
   isTerminalMessage,
   isTerminalOpenMessage,
@@ -68,7 +46,7 @@ import { JWTService } from "@/services/auth/jwt.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { TerminalManager } from "@/services/websocket/terminal-manager.js";
-import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
+import { WSErrorCode } from "@/lib/constants/websocket.js";
 import { ALLOWED_TASKS_ON_POOLED_INSTANCES } from "@/lib/constants/instances.js";
 
 export interface ClientHandlerDependencies {
@@ -84,12 +62,12 @@ export interface ClientHandlerDependencies {
  * Handles messages from client connections.
  */
 export class ClientMessageHandler {
-  private connectionManager: ConnectionManager;
   private kv: KVStore;
   private db: DatabaseStore;
   private jwtService: JWTService;
   private dployrdService: DployrdService;
   private terminalManager: TerminalManager;
+  private connectionManager: ConnectionManager;
 
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
@@ -98,13 +76,6 @@ export class ClientMessageHandler {
     this.jwtService = deps.jwtService;
     this.dployrdService = deps.dployrdService;
     this.terminalManager = deps.terminalManager;
-  }
-
-  private async getClusterRoutingKey(clusterId: string): Promise<string> {
-    const poolInstanceId = await this.db.instances.getClusterPoolInstance(clusterId);
-    if (!poolInstanceId) return clusterId;
-    const poolInstance = await this.db.instances.find({ id: poolInstanceId });
-    return poolInstance ? `pool:${poolInstance.tag}` : clusterId;
   }
 
   /**
@@ -157,21 +128,6 @@ export class ClientMessageHandler {
       return;
     }
 
-    if (isDeployMessage(message)) {
-      this.handleDeploy(conn, message);
-      return;
-    }
-
-    if (isDeploymentListMessage(message)) {
-      await this.handleDeploymentList(conn, message);
-      return;
-    }
-
-    if (isServiceRemoveMessage(message)) {
-      this.handleServiceRemove(conn, message);
-      return;
-    }
-
     if (isLogStreamMessage(message)) {
       await this.handleLogStream(conn, message);
       return;
@@ -202,26 +158,6 @@ export class ClientMessageHandler {
       return;
     }
 
-    if (isInstanceTokenRotateMessage(message)) {
-      await this.handleInstanceTokenRotate(conn, message);
-      return;
-    }
-
-    if (isInstanceSystemInstallMessage(message)) {
-      await this.handleInstanceSystemInstall(conn, message);
-      return;
-    }
-
-    if (isInstanceSystemRebootMessage(message)) {
-      await this.handleInstanceSystemReboot(conn, message);
-      return;
-    }
-
-    if (isInstanceSystemRestartMessage(message)) {
-      await this.handleInstanceSystemRestart(conn, message);
-      return;
-    }
-
     if (isFileWatchMessage(message)) {
       await this.handleFileWatch(conn, message);
       return;
@@ -229,26 +165,6 @@ export class ClientMessageHandler {
 
     if (isFileUnwatchMessage(message)) {
       await this.handleFileUnwatch(conn, message);
-      return;
-    }
-
-    if (isProxyStatusMessage(message)) {
-      await this.handleProxyStatus(conn, message);
-      return;
-    }
-
-    if (isProxyRestartMessage(message)) {
-      await this.handleProxyRestart(conn, message);
-      return;
-    }
-
-    if (isProxyAddMessage(message)) {
-      await this.handleProxyAdd(conn, message);
-      return;
-    }
-
-    if (isProxyRemoveMessage(message)) {
-      await this.handleProxyRemove(conn, message);
       return;
     }
 
@@ -358,7 +274,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
+    this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
 
     console.log("Token", token);
 
@@ -376,183 +292,6 @@ export class ClientMessageHandler {
     try {
       conn.ws.send(JSON.stringify({ kind: "log_unsubscribe_response", requestId, success: true }));
     } catch {}
-  }
-
-  /**
-   * Handle deploy message
-   */
-  private async handleDeploy(conn: ClusterConnection, message: DeployMessage): Promise<void> {
-    const { instanceName, payload, requestId } = message;
-
-    if (!instanceName || !payload) {
-      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceId and payload are required");
-      return;
-    }
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required for deploy");
-      return;
-    }
-
-    const { name } = payload;
-
-    const existing = await this.db.services.find({ name });
-
-    if (existing) {
-      this.sendError(conn, requestId, WSErrorCode.CONFLICT, `Name ${name} is taken`);
-      return;
-    }
-
-    const taskId = ulid();
-
-    // Track pending request
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.DEPLOY);
-
-    if (!added) {
-      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
-      return;
-    }
-
-    const instance = await this.db.instances.find({ tag: instanceName });
-
-    if (!instance) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "No instance with matching name was found!");
-      return;
-    }
-
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
-    const task = this.dployrdService.createDeployTask(taskId, payload, token);
-
-    if (!this.isTaskAllowedOnInstance(instance, message)) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-      return;
-    }
-
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-
-    if (!sent) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-      return;
-    }
-
-    console.log(`[WS] Created deploy task ${taskId} (requestId: ${requestId})`);
-  }
-
-  /**
-   * Handle deployment list request
-   */
-  private async handleDeploymentList(conn: ClusterConnection, message: DeploymentListMessage): Promise<void> {
-    const { instanceName, requestId } = message;
-
-    if (!instanceName) {
-      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceName is required");
-      return;
-    }
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
-      return;
-    }
-
-    const taskId = ulid();
-
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.DEPLOYMENT_LIST);
-
-    if (!added) {
-      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
-      return;
-    }
-
-    const instance = await this.db.instances.find({ tag: instanceName });
-
-    if (!instance) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "No instance with matching name was found!");
-      return;
-    }
-
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
-    const task = this.dployrdService.createDeploymentListTask(taskId, token);
-
-    if (!this.isTaskAllowedOnInstance(instance, message)) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-      return;
-    }
-
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-
-    if (!sent) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-      return;
-    }
-
-    console.log(`[WS] Created deployment list task ${taskId} (requestId: ${requestId})`);
-  }
-
-  /**
-   * Handle service remove
-   */
-  private async handleServiceRemove(conn: ClusterConnection, message: ServiceRemoveMessage): Promise<void> {
-    const { name, requestId } = message;
-
-    if (!name || !requestId) {
-      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "name and requestId is required");
-      return;
-    }
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required for deploy");
-      return;
-    }
-
-    const taskId = ulid();
-
-    // Track pending request
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.SERVICE_REMOVE);
-
-    if (!added) {
-      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
-      return;
-    }
-
-    const service = await this.db.services.find({ name, clusterId: conn.clusterId });
-
-    if (!service) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, `Service '${name}' not found`);
-      return;
-    }
-
-    const instance = await this.db.instances.find({ clusterId: service.clusterId, kind: "dedicated" });
-    if (!instance) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-      return;
-    }
-
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
-    const task = this.dployrdService.createServiceRemoveTask(taskId, service.name, token);
-
-    if (!this.isTaskAllowedOnInstance(instance, message)) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-      return;
-    }
-
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-
-    if (!sent) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-      return;
-    }
-
-    console.log(`[WS] Created service remove task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -602,7 +341,7 @@ export class ClientMessageHandler {
       duration,
       token: nodeToken,
     });
-    const routingKey = await this.getClusterRoutingKey(conn.clusterId);
+    const routingKey = await this.db.instances.getRoutingKey(conn.clusterId);
     this.connectionManager.sendTask(routingKey, task);
 
     console.log(`[WS] Created log stream ${streamId} for path ${path} in cluster ${conn.clusterId}`);
@@ -649,7 +388,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -701,7 +440,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -753,7 +492,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -805,7 +544,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -857,7 +596,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -875,170 +614,6 @@ export class ClientMessageHandler {
     const offsetKey = startOffset ?? 0;
     const limitKey = limit ?? -1;
     return `${clusterId}:${path}:${offsetKey}:${limitKey}:${duration}`;
-  }
-
-  /**
-   * Handle instance token rotate request
-   */
-  private async handleInstanceTokenRotate(conn: ClusterConnection, message: InstanceTokenRotateMessage): Promise<void> {
-    const { instanceName, token, requestId } = message;
-
-    try {
-      const instance = await this.db.instances.find({ tag: instanceName });
-      if (!instance) {
-        this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-        return;
-      }
-
-      let payload: any;
-      try {
-        payload = await this.jwtService.verifyTokenIgnoringExpiry(token);
-      } catch {
-        this.sendError(conn, requestId, WSErrorCode.VALIDATION_ERROR, "Invalid token signature");
-        return;
-      }
-
-      if (payload.token_type !== "bootstrap" || payload.instance_id !== instance.id) {
-        this.sendError(conn, requestId, WSErrorCode.VALIDATION_ERROR, "Invalid bootstrap token for instance");
-        return;
-      }
-
-      const nonce = payload.nonce as string | undefined;
-      if (!nonce) {
-        this.sendError(conn, requestId, WSErrorCode.VALIDATION_ERROR, "Invalid bootstrap token payload");
-        return;
-      }
-
-      const rotated = await this.jwtService.rotateBootstrapToken(instance.id, nonce, "5m");
-
-      conn.ws.send(
-        JSON.stringify({
-          kind: "instance_token_rotate_response",
-          requestId,
-          success: true,
-          data: {
-            token: rotated,
-          },
-        }),
-      );
-    } catch (error) {
-      console.error("[WS] Failed to rotate token:", error);
-      this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to rotate token");
-    }
-  }
-
-  /**
-   * Handle instance system install request
-   */
-  private async handleInstanceSystemInstall(conn: ClusterConnection, message: InstanceSystemInstallMessage): Promise<void> {
-    const { instanceName, clusterId, version, requestId } = message;
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
-      return;
-    }
-
-    try {
-      const instance = await this.db.instances.find({ tag: instanceName });
-
-      if (!instance) {
-        this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-        return;
-      }
-
-      if (instance.kind !== "pool" && instance.clusterId !== clusterId) {
-        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
-        return;
-      }
-
-      const taskId = ulid();
-      const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
-      const task = this.dployrdService.createSystemInstallTask(taskId, version, token);
-
-      if (!this.isTaskAllowedOnInstance(instance, message)) {
-        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-        return;
-      }
-
-      const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-      if (!sent) {
-        this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-        return;
-      }
-
-      conn.ws.send(
-        JSON.stringify({
-          kind: "instance_system_install_response",
-          requestId,
-          success: true,
-          data: {
-            status: "accepted",
-            taskId,
-            message: version ? `Install task sent for version ${version}` : "Install task sent for latest version",
-          },
-        }),
-      );
-    } catch (error) {
-      console.error("[WS] Failed to send system install task:", error);
-      this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system install task");
-    }
-  }
-
-  /**
-   * Handle instance system reboot request
-   */
-  private async handleInstanceSystemReboot(conn: ClusterConnection, message: InstanceSystemRebootMessage): Promise<void> {
-    const { instanceName, clusterId, force = false, requestId } = message;
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
-      return;
-    }
-
-    try {
-      const instance = await this.db.instances.find({ tag: instanceName });
-
-      if (!instance) {
-        this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-        return;
-      }
-
-      if (instance.kind !== "pool" && instance.clusterId !== clusterId) {
-        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
-        return;
-      }
-
-      const taskId = ulid();
-      const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
-      const task = this.dployrdService.createSystemRebootTask(taskId, force, token);
-
-      if (!this.isTaskAllowedOnInstance(instance, message)) {
-        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-        return;
-      }
-
-      const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-      if (!sent) {
-        this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-        return;
-      }
-
-      conn.ws.send(
-        JSON.stringify({
-          kind: "instance_system_reboot_response",
-          requestId,
-          success: true,
-          data: {
-            status: "accepted",
-            taskId,
-            message: force ? "Reboot task sent (force mode - bypassing pending tasks check)" : "Reboot task sent (will wait for pending tasks to complete)",
-          },
-        }),
-      );
-    } catch (error) {
-      console.error("[WS] Failed to send system reboot task:", error);
-      this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system reboot task");
-    }
   }
 
   /**
@@ -1072,7 +647,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
     if (!sent) {
       this.connectionManager.removeFileWatch(watchKey, conn.connectionId);
       this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
@@ -1117,7 +692,7 @@ export class ClientMessageHandler {
       const task = this.dployrdService.createFileUnwatchTask(taskId, instanceId, path, requestId, token);
 
       if (this.isTaskAllowedOnInstance(instance, message)) {
-        this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
+        this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
       }
     }
 
@@ -1175,7 +750,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
     if (!sent) {
       this.terminalManager.removeExpectedSession(sessionId);
       this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No node available");
@@ -1195,281 +770,6 @@ export class ClientMessageHandler {
     }
 
     this.terminalManager.handleClientMessage(conn.ws, message);
-  }
-
-  /**
-   * Handle instance system restart request
-   */
-  private async handleInstanceSystemRestart(conn: ClusterConnection, message: InstanceSystemRestartMessage): Promise<void> {
-    const { instanceName, clusterId, force = false, requestId } = message;
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
-      return;
-    }
-
-    try {
-      const instance = await this.db.instances.find({ tag: instanceName });
-
-      if (!instance) {
-        this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-        return;
-      }
-
-      if (instance.kind !== "pool" && instance.clusterId !== clusterId) {
-        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
-        return;
-      }
-
-      const taskId = ulid();
-      const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, clusterId);
-      const task = this.dployrdService.createDaemonRestartTask(taskId, force, token);
-
-      if (!this.isTaskAllowedOnInstance(instance, message)) {
-        this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-        return;
-      }
-
-      const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-      if (!sent) {
-        this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-        return;
-      }
-
-      conn.ws.send(
-        JSON.stringify({
-          kind: "instance_system_restart_response",
-          requestId,
-          success: true,
-          data: {
-            status: "accepted",
-            taskId,
-            message: force ? "Restart task sent (force mode - bypassing pending tasks check)" : "Restart task sent (will wait for pending tasks to complete)",
-          },
-        }),
-      );
-    } catch (error) {
-      console.error("[WS] Failed to send system restart task:", error);
-      this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to send system restart task");
-    }
-  }
-
-  /**
-   * Handle proxy status request
-   */
-  private async handleProxyStatus(conn: ClusterConnection, message: ProxyStatusMessage): Promise<void> {
-    const { instanceName, requestId } = message;
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
-      return;
-    }
-
-    const taskId = ulid();
-
-    const instance = await this.db.instances.find({ tag: instanceName });
-
-    if (!instance) {
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-      return;
-    }
-
-    if (instance.kind !== "pool" && instance.clusterId !== conn.clusterId) {
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
-      return;
-    }
-
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.PROXY_STATUS);
-
-    if (!added) {
-      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
-      return;
-    }
-
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
-    const task = this.dployrdService.createProxyStatusTask(taskId, token);
-
-    if (!this.isTaskAllowedOnInstance(instance, message)) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-      return;
-    }
-
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-
-    if (!sent) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-      return;
-    }
-
-    console.log(`[WS] Created proxy status task ${taskId} (requestId: ${requestId})`);
-  }
-
-  /**
-   * Handle proxy restart request
-   */
-  private async handleProxyRestart(conn: ClusterConnection, message: ProxyRestartMessage): Promise<void> {
-    const { instanceName, force = false, requestId } = message;
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
-      return;
-    }
-
-    const taskId = ulid();
-
-    const instance = await this.db.instances.find({ tag: instanceName });
-
-    if (!instance) {
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-      return;
-    }
-
-    if (instance.kind !== "pool" && instance.clusterId !== conn.clusterId) {
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
-      return;
-    }
-
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.PROXY_RESTART);
-
-    if (!added) {
-      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
-      return;
-    }
-
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
-    const task = this.dployrdService.createProxyRestartTask(taskId, force, token);
-
-    if (!this.isTaskAllowedOnInstance(instance, message)) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-      return;
-    }
-
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-
-    if (!sent) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-      return;
-    }
-
-    console.log(`[WS] Created proxy restart task ${taskId} (requestId: ${requestId})`);
-  }
-
-  /**
-   * Handle proxy add request
-   */
-  private async handleProxyAdd(conn: ClusterConnection, message: ProxyAddMessage): Promise<void> {
-    const { instanceName, serviceName, upstream, domain, template, requestId } = message;
-
-    if (!serviceName || !upstream) {
-      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "serviceName and upstream are required");
-      return;
-    }
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
-      return;
-    }
-
-    const taskId = ulid();
-
-    const instance = await this.db.instances.find({ tag: instanceName });
-
-    if (!instance) {
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-      return;
-    }
-
-    if (instance.kind !== "pool" && instance.clusterId !== conn.clusterId) {
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
-      return;
-    }
-
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.PROXY_ADD);
-
-    if (!added) {
-      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
-      return;
-    }
-
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
-    const task = this.dployrdService.createProxyAddTask(taskId, serviceName, upstream, domain, template, token);
-
-    if (!this.isTaskAllowedOnInstance(instance, message)) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-      return;
-    }
-
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-
-    if (!sent) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-      return;
-    }
-
-    console.log(`[WS] Created proxy add task ${taskId} for service ${serviceName} (requestId: ${requestId})`);
-  }
-
-  /**
-   * Handle proxy remove request
-   */
-  private async handleProxyRemove(conn: ClusterConnection, message: ProxyRemoveMessage): Promise<void> {
-    const { instanceName, serviceName, requestId } = message;
-
-    if (!serviceName) {
-      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "serviceName is required");
-      return;
-    }
-
-    if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
-      return;
-    }
-
-    const taskId = ulid();
-
-    const instance = await this.db.instances.find({ tag: instanceName });
-
-    if (!instance) {
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-      return;
-    }
-
-    if (instance.kind !== "pool" && instance.clusterId !== conn.clusterId) {
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
-      return;
-    }
-
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, MESSAGE_KIND.PROXY_REMOVE);
-
-    if (!added) {
-      this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
-      return;
-    }
-
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instanceName, conn.clusterId);
-    const task = this.dployrdService.createProxyRemoveTask(taskId, serviceName, token);
-
-    if (!this.isTaskAllowedOnInstance(instance, message)) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-      return;
-    }
-
-    const sent = this.connectionManager.sendTask(await this.getClusterRoutingKey(conn.clusterId), task);
-
-    if (!sent) {
-      this.connectionManager.removePendingRequest(taskId);
-      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
-      return;
-    }
-
-    console.log(`[WS] Created proxy remove task ${taskId} for service ${serviceName} (requestId: ${requestId})`);
   }
 
   /**

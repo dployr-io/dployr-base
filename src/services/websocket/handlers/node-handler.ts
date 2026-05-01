@@ -10,45 +10,63 @@ import { ClientNotifier } from "./client-notifier.js";
 import { UpdateProcessor } from "@/lib/node/update-processor.js";
 import { NodeUpdate } from "@/types/node.js";
 import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
+import type { JWTService } from "@/services/auth/jwt.js";
+import type { DployrdService } from "@/services/dployrd.js";
 
 /**
  * Handles messages from dployrd connections.
  */
 export class NodeMessageHandler {
-  private updateProcessor: UpdateProcessor;
-
   constructor(
     private connectionManager: ConnectionManager,
     private clientNotifier: ClientNotifier,
     private db: DatabaseStore,
     private kv: KVStore,
-  ) {
-    this.updateProcessor = new UpdateProcessor(db, kv);
-  }
+    private jwtService?: JWTService,
+    private dployrdService?: DployrdService,
+  ) {}
 
   /**
    * Process a message from an node
    */
-  async handleMessage(conn: ClusterConnection, message: BaseMessage): Promise<void> {
+  async handleMessage({ conn, message }: { conn: ClusterConnection; message: BaseMessage }): Promise<void> {
     this.connectionManager.updateActivity(conn.ws);
 
     if (isTaskResponseMessage(message)) {
-      await this.handleTaskResponse(message);
+      await this.handleTaskResponse({ conn, message });
       return;
     }
 
     if (isNodeBroadcastMessage(message)) {
       const update = (message as any).update as NodeUpdate;
+      let changedFlags = { servicesChanged: false, deploymentsChanged: false };
+
       if (update?.instance_id) {
-        await this.updateProcessor.processUpdate(update.instance_id, update);
+        changedFlags = await new UpdateProcessor({
+          db: this.db,
+          kv: this.kv,
+          tag: update.instance_id,
+          message: update,
+          connectionManager: this.connectionManager,
+          jwtService: this.jwtService,
+          dployrdService: this.dployrdService,
+        }).processUpdate();
       }
 
       if (conn.clusterId.startsWith("pool:")) {
         const instanceTag = conn.clusterId.slice("pool:".length);
         const clusterIds = await this.db.instances.getClusterIdsByPoolInstanceTag(instanceTag);
-        await Promise.all(clusterIds.map((id) => this.clientNotifier.broadcast(id, message)));
+        await Promise.all(
+          clusterIds.map(async (id) => {
+            await this.clientNotifier.broadcast(id, message);
+            if (changedFlags.servicesChanged) this.clientNotifier.notifyRefresh(id, "services");
+            if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(id, "deployments");
+          }),
+        );
       } else {
         await this.clientNotifier.broadcast(conn.clusterId, message);
+        if (changedFlags.servicesChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "services");
+        if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "deployments");
       }
       return;
     }
@@ -67,7 +85,7 @@ export class NodeMessageHandler {
   /**
    * Handle task response messages from node - route to specific client
    */
-  private async handleTaskResponse(message: TaskResponseMessage): Promise<void> {
+  private async handleTaskResponse({ conn, message }: { conn: ClusterConnection; message: TaskResponseMessage }): Promise<void> {
     const { taskId, success, data, error } = message;
 
     if (!taskId) {
@@ -134,24 +152,48 @@ export class NodeMessageHandler {
       }
     }
 
-    // Route response directly to the requesting client
-    const routed = this.connectionManager.routeResponseToClient(taskId, {
-      kind: this.getResponseKind(message),
-      success,
-      data,
-      error,
-    });
+    const responseKind = this.getResponseKind(message);
 
-    if (success && data && this.getResponseKind(message) === "deploy_response") {
-      this.db.services.upsert({ instanceTag: data["instance_id"], name: data["name"] });
+    // Route response directly to the requesting client
+    const routed = this.connectionManager.routeResponseToClient(taskId, { kind: responseKind, success, data, error });
+
+    if (responseKind === "deploy_response" && data) {
+      const instanceTag = data["instance_id"] as string;
+      const serviceName = data["name"] as string;
+      await this.db.services.upsert({ instanceTag, name: serviceName, type: data["type"] as any });
+      await this.completeDeployment({ instanceTag, serviceName, success, logs: (data["logs"] as string) ?? "" });
     }
 
-    if (success && data && this.getResponseKind(message) === "service_remove_response") {
+    if (success && responseKind === "service_remove_response" && data) {
       this.db.services.delete({ name: data["name"] });
     }
 
     if (!routed) {
       console.warn(`[WS] Could not route response for taskId: ${taskId} (request may have timed out)`);
+    }
+  }
+
+  private async completeDeployment({ instanceTag, serviceName, success, logs }: { instanceTag: string; serviceName: string; success: boolean; logs: string }): Promise<void> {
+    try {
+      const instance = await this.db.instances.find({ tag: instanceTag });
+      if (!instance?.clusterId) return;
+
+      const { clusterId } = instance;
+      const pending = await this.db.deployments.list({ clusterId, status: "pending" });
+      const deployment = pending.find((d) => d.name === serviceName);
+
+      if (deployment) {
+        if (success) {
+          const service = await this.db.services.find({ name: serviceName, clusterId });
+          await this.db.deployments.complete({ id: deployment.id, serviceId: service?.id ?? undefined, logs, status: "success" });
+        } else {
+          await this.db.deployments.updateStatus(deployment.id, "failed");
+        }
+      }
+
+      this.clientNotifier.notifyRefresh(clusterId, "deployments");
+    } catch (err) {
+      console.error(`[WS] Failed to complete deployment for ${serviceName}:`, err);
     }
   }
 
