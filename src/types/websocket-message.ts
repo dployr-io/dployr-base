@@ -81,11 +81,11 @@ export interface ClientSubscribeMessage extends BaseRequestMessage {
 
 export interface LogSubscribeMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.LOG_SUBSCRIBE;
-  instanceName: string;
+  token: string;
   path: string;
-  startOffset?: number;
-  limit?: number;
-  duration?: string;
+  streamId: string;
+  startFrom: number;
+  duration: string;
 }
 
 export interface LogUnsubscribeMessage extends BaseRequestMessage {
@@ -93,35 +93,30 @@ export interface LogUnsubscribeMessage extends BaseRequestMessage {
   path?: string;
 }
 
+/** @deprecated */
 export interface DeployMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.DEPLOY;
   instanceName: string;
   payload: DeploymentPayload;
 }
 
+/** @deprecated */
 export interface ServiceCreateMessage extends BaseMessage {
   kind: typeof MESSAGE_KIND.SERVICE_CREATE;
   instanceName: string;
   name: string;
 }
 
+/** @deprecated */
 export interface ServiceRemoveMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.SERVICE_REMOVE;
   name: string;
 }
 
+/** @deprecated */
 export interface DeploymentListMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.DEPLOYMENT_LIST;
   instanceName: string;
-}
-
-export interface LogStreamMessage extends BaseRequestMessage {
-  kind: typeof MESSAGE_KIND.LOG_STREAM;
-  token: string;
-  path: string;
-  streamId: string;
-  startFrom: number;
-  duration: string;
 }
 
 /**
@@ -285,12 +280,14 @@ export type FileOperationResponse = FileReadResponseMessage | FileWriteResponseM
 /**
  * Instance operation messages
  */
+/** @deprecated */
 export interface InstanceTokenRotateMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.INSTANCE_TOKEN_ROTATE;
   instanceName: string;
   token: string;
 }
 
+/** @deprecated */
 export interface InstanceSystemInstallMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.INSTANCE_SYSTEM_INSTALL;
   instanceName: string;
@@ -298,13 +295,14 @@ export interface InstanceSystemInstallMessage extends BaseRequestMessage {
   version?: string;
 }
 
+/** @deprecated */
 export interface InstanceSystemRebootMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.INSTANCE_SYSTEM_REBOOT;
   instanceName: string;
   clusterId: string;
   force?: boolean;
 }
-
+/** @deprecated */
 export interface InstanceSystemRestartMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.INSTANCE_SYSTEM_RESTART;
   instanceName: string;
@@ -315,12 +313,14 @@ export interface InstanceSystemRestartMessage extends BaseRequestMessage {
 /**
  * Proxy operation messages
  */
+/** @deprecated */
 export interface ProxyStatusMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.PROXY_STATUS;
   instanceName: string;
   clusterId: string;
 }
 
+/** @deprecated */
 export interface ProxyRestartMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.PROXY_RESTART;
   instanceName: string;
@@ -328,6 +328,7 @@ export interface ProxyRestartMessage extends BaseRequestMessage {
   force?: boolean;
 }
 
+/** @deprecated */
 export interface ProxyAddMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.PROXY_ADD;
   instanceName: string;
@@ -337,7 +338,7 @@ export interface ProxyAddMessage extends BaseRequestMessage {
   domain?: string;
   template?: string;
 }
-
+/** @deprecated */
 export interface ProxyRemoveMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.PROXY_REMOVE;
   instanceName: string;
@@ -345,6 +346,7 @@ export interface ProxyRemoveMessage extends BaseRequestMessage {
   serviceName: string;
 }
 
+/** @deprecated */
 export interface ProcessHistoryMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.PROCESS_HISTORY;
   instanceId: string;
@@ -355,6 +357,7 @@ export interface ProcessHistoryMessage extends BaseRequestMessage {
 /**
  * Instance operation response messages
  */
+/** @deprecated */
 export interface InstanceListResponseMessage extends BaseMessage {
   kind: "instance_list_response";
   requestId: string;
@@ -370,7 +373,7 @@ export interface InstanceListResponseMessage extends BaseMessage {
     message: string;
   };
 }
-
+/** @deprecated */
 export interface InstanceCreateResponseMessage extends BaseMessage {
   kind: "instance_create_response";
   requestId: string;
@@ -384,7 +387,7 @@ export interface InstanceCreateResponseMessage extends BaseMessage {
     message: string;
   };
 }
-
+/** @deprecated */
 export interface InstanceDeleteResponseMessage extends BaseMessage {
   kind: "instance_delete_response";
   requestId: string;
@@ -394,7 +397,7 @@ export interface InstanceDeleteResponseMessage extends BaseMessage {
     message: string;
   };
 }
-
+/** @deprecated */
 export interface InstanceTokenRotateResponseMessage extends BaseMessage {
   kind: "instance_token_rotate_response";
   requestId: string;
@@ -407,7 +410,7 @@ export interface InstanceTokenRotateResponseMessage extends BaseMessage {
     message: string;
   };
 }
-
+/** @deprecated */
 export interface InstanceSystemInstallResponseMessage extends BaseMessage {
   kind: "instance_system_install_response";
   requestId: string;
@@ -422,7 +425,7 @@ export interface InstanceSystemInstallResponseMessage extends BaseMessage {
     message: string;
   };
 }
-
+/** @deprecated */
 export interface InstanceSystemRebootResponseMessage extends BaseMessage {
   kind: "instance_system_reboot_response";
   requestId: string;
@@ -437,7 +440,7 @@ export interface InstanceSystemRebootResponseMessage extends BaseMessage {
     message: string;
   };
 }
-
+/** @deprecated */
 export interface InstanceSystemRestartResponseMessage extends BaseMessage {
   kind: "instance_system_restart_response";
   requestId: string;
@@ -456,6 +459,7 @@ export interface InstanceSystemRestartResponseMessage extends BaseMessage {
 /**
  * Proxy operation response messages
  */
+/** @deprecated */
 export interface ProxyStatusResponseMessage extends BaseMessage {
   kind: "proxy_status_response";
   requestId: string;
@@ -470,7 +474,7 @@ export interface ProxyStatusResponseMessage extends BaseMessage {
     message: string;
   };
 }
-
+/** @deprecated */
 export interface ProxyRestartResponseMessage extends BaseMessage {
   kind: "proxy_restart_response";
   requestId: string;
@@ -484,7 +488,7 @@ export interface ProxyRestartResponseMessage extends BaseMessage {
     message: string;
   };
 }
-
+/** @deprecated */
 export interface ProxyAddResponseMessage extends BaseMessage {
   kind: "proxy_add_response";
   requestId: string;
@@ -499,7 +503,7 @@ export interface ProxyAddResponseMessage extends BaseMessage {
     message: string;
   };
 }
-
+/** @deprecated */
 export interface ProxyRemoveResponseMessage extends BaseMessage {
   kind: "proxy_remove_response";
   requestId: string;
@@ -528,6 +532,7 @@ export interface ProcessHistoryResponseMessage extends BaseMessage {
   error?: { code: WSErrorCode; message: string };
 }
 
+/** @deprecated */
 export type InstanceOperationResponse =
   | InstanceListResponseMessage
   | InstanceCreateResponseMessage
@@ -537,6 +542,7 @@ export type InstanceOperationResponse =
   | InstanceSystemRebootResponseMessage
   | InstanceSystemRestartResponseMessage;
 
+/** @deprecated */
 export type ProxyOperationResponse = ProxyStatusResponseMessage | ProxyRestartResponseMessage | ProxyAddResponseMessage | ProxyRemoveResponseMessage;
 
 export type ClientMessage =
@@ -544,7 +550,6 @@ export type ClientMessage =
   | LogSubscribeMessage
   | LogUnsubscribeMessage
   | DeployMessage
-  | LogStreamMessage
   | FileReadMessage
   | FileWriteMessage
   | FileCreateMessage
@@ -702,27 +707,22 @@ export function isLogSubscribeMessage(msg: BaseMessage): msg is LogSubscribeMess
 export function isLogUnsubscribeMessage(msg: BaseMessage): msg is LogUnsubscribeMessage {
   return msg.kind === MESSAGE_KIND.LOG_UNSUBSCRIBE;
 }
-
+/** @deprecated */
 export function isDeployMessage(msg: BaseMessage): msg is DeployMessage {
   return msg.kind === MESSAGE_KIND.DEPLOY;
 }
-
+/** @deprecated */
 export function isServiceCreateMessage(msg: BaseMessage): msg is ServiceCreateMessage {
   return msg.kind === MESSAGE_KIND.SERVICE_CREATE;
 }
-
+/** @deprecated */
 export function isServiceRemoveMessage(msg: BaseMessage): msg is ServiceRemoveMessage {
   return msg.kind === MESSAGE_KIND.SERVICE_REMOVE;
 }
-
+/** @deprecated */
 export function isDeploymentListMessage(msg: BaseMessage): msg is DeploymentListMessage {
   return msg.kind === MESSAGE_KIND.DEPLOYMENT_LIST;
 }
-
-export function isLogStreamMessage(msg: BaseMessage): msg is LogStreamMessage {
-  return msg.kind === MESSAGE_KIND.LOG_STREAM;
-}
-
 export function isFileReadMessage(msg: BaseMessage): msg is FileReadMessage {
   return msg.kind === MESSAGE_KIND.FILE_READ;
 }
@@ -758,35 +758,35 @@ export function isFileUpdateMessage(msg: BaseMessage): msg is FileUpdateMessage 
 export function isAckMessage(msg: BaseMessage): msg is AckMessage {
   return msg.kind === MESSAGE_KIND.ACK;
 }
-
+/** @deprecated */
 export function isInstanceTokenRotateMessage(msg: BaseMessage): msg is InstanceTokenRotateMessage {
   return msg.kind === MESSAGE_KIND.INSTANCE_TOKEN_ROTATE;
 }
-
+/** @deprecated */
 export function isInstanceSystemInstallMessage(msg: BaseMessage): msg is InstanceSystemInstallMessage {
   return msg.kind === MESSAGE_KIND.INSTANCE_SYSTEM_INSTALL;
 }
-
+/** @deprecated */
 export function isInstanceSystemRebootMessage(msg: BaseMessage): msg is InstanceSystemRebootMessage {
   return msg.kind === MESSAGE_KIND.INSTANCE_SYSTEM_REBOOT;
 }
-
+/** @deprecated */
 export function isInstanceSystemRestartMessage(msg: BaseMessage): msg is InstanceSystemRestartMessage {
   return msg.kind === MESSAGE_KIND.INSTANCE_SYSTEM_RESTART;
 }
-
+/** @deprecated */
 export function isProxyStatusMessage(msg: BaseMessage): msg is ProxyStatusMessage {
   return msg.kind === MESSAGE_KIND.PROXY_STATUS;
 }
-
+/** @deprecated */
 export function isProxyRestartMessage(msg: BaseMessage): msg is ProxyRestartMessage {
   return msg.kind === MESSAGE_KIND.PROXY_RESTART;
 }
-
+/** @deprecated */
 export function isProxyAddMessage(msg: BaseMessage): msg is ProxyAddMessage {
   return msg.kind === MESSAGE_KIND.PROXY_ADD;
 }
-
+/** @deprecated */
 export function isProxyRemoveMessage(msg: BaseMessage): msg is ProxyRemoveMessage {
   return msg.kind === MESSAGE_KIND.PROXY_REMOVE;
 }
