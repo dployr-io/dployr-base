@@ -123,8 +123,8 @@ export class ConnectionManager {
    */
   getNodeConnections(key: string): ClusterConnection[] {
     const conns = this.connections.get(key) || this.connections.get(`pool:${key}`);
-    if (!conns) return [];
-    return Array.from(conns).filter((c) => c.role === "node");
+    const found = conns ? Array.from(conns).filter((c) => c.role === "node") : [];
+    return found;
   }
 
   /**
@@ -161,9 +161,11 @@ export class ConnectionManager {
    * Returns true if sent to at least one node.
    */
   sendTask(routingKey: string, task: NodeTask): boolean {
+    console.debug(`[LOG-DEBUG] sendTask: attempting to send task to routing key ${routingKey}`);
     const nodeConns = this.getNodeConnections(routingKey);
     if (nodeConns.length === 0) {
       console.warn(`[WS] No node connections for routing key ${routingKey}`);
+      console.debug(`[LOG-DEBUG] Available connection keys:`, Array.from(this.connections.keys()));
       return false;
     }
 

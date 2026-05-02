@@ -93,14 +93,14 @@ admin.get("/events", async (c) => {
 
 admin.get("/deployments", async (c) => {
   const db = getDbStore(c);
-  const deployments = await db.deployments.list({});
-  return c.json(createSuccessResponse({ deployments }));
+  const { deployments, total } = await db.deployments.list({});
+  return c.json(createSuccessResponse({ deployments, total }));
 });
 
 admin.get("/services", async (c) => {
   const db = getDbStore(c);
-  const services = await db.services.list();
-  return c.json(createSuccessResponse({ services }));
+  const { services, total } = await db.services.list();
+  return c.json(createSuccessResponse({ services, total }));
 });
 
 admin.route("/instances", instances);

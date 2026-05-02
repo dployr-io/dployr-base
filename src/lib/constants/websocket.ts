@@ -20,7 +20,6 @@ export const MESSAGE_KIND = {
   CLIENT_SUBSCRIBE: "client_subscribe",
   LOG_SUBSCRIBE: "log_subscribe",
   LOG_UNSUBSCRIBE: "log_unsubscribe",
-  LOG_STREAM: "log_stream",
   DEPLOY: "deploy",
   DEPLOYMENT_LIST: "deployment_list",
   SERVICE_CREATE: "service_create",

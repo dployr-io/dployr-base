@@ -3,12 +3,7 @@
 
 import { z } from "zod";
 
-export type HttpMethod =
-  | "get"
-  | "post"
-  | "put"
-  | "patch"
-  | "delete";
+export type HttpMethod = "get" | "post" | "put" | "patch" | "delete";
 
 // Canonical task address: path + ":" + lowercase HTTP method
 // Examples:
@@ -59,12 +54,14 @@ export const DeploymentSchema = z.object({
 // WebSocket message types for node communication
 export const NodeTaskSchema = z.object({
   kind: z.literal("task"),
-  items: z.array(z.object({
-    ID: z.string(),
-    Type: z.string(),
-    Payload: z.any(),
-    Status: z.string(),
-  })),
+  items: z.array(
+    z.object({
+      ID: z.string(),
+      Type: z.string(),
+      Payload: z.any(),
+      Status: z.string(),
+    }),
+  ),
 });
 
 export const NodePullSchema = z.object({

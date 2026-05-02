@@ -93,7 +93,7 @@ export function attachListInstances(app: Hono<{ Bindings: Bindings; Variables: V
     const instancePoolService = getInstancePoolService(c);
     const [{ instances, total }, instance] = await Promise.all([
       instanceService.listInstances({ c, clusterId, limit: pageSize, offset }),
-      instancePoolService.resolveInstancePool({ db: getDbStore(c), billingService: getBillingService(c), clusterId }),
+      instancePoolService.resolveInstancePool({ db: getDbStore(c), clusterId }),
     ]);
 
     const finalInstances = instance ? [instance, ...instances] : instances;

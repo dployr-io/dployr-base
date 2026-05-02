@@ -50,25 +50,13 @@ export class InstancePool extends EventEmittable {
   }
 
   /** Return a pool instance object for a hobby cluster (used by admin API). */
-  public async resolveInstancePool({ db, billingService, clusterId }: { db: DatabaseStore; billingService: BillingService | null; clusterId?: string }): Promise<Instance | null> {
-    if (!clusterId || !billingService) return null;
-
-    const status = await billingService.getStatus({ clusterId, db });
-    if (status.plan !== "hobby") return null;
-
+  public async resolveInstancePool({ db, clusterId }: { db: DatabaseStore; clusterId?: string }): Promise<Instance | null> {
+    if (!clusterId) return null;
+    
     const instanceId = await db.instances.getClusterPoolInstance(clusterId);
     if (!instanceId) return null;
-
-    const instance = await db.instances.find({ id: instanceId, kind: "pool" });
-    if (!instance) return null;
-
-    const now = Date.now();
-    return {
-      ...instance,
-      metadata: { ...instance.metadata, managed: true },
-      createdAt: now,
-      updatedAt: now,
-    };
+    
+    return await db.instances.find({ id: instanceId, kind: "pool" });
   }
 
   private async createPoolInstance(): Promise<void> {
