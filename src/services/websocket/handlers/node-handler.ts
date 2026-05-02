@@ -55,12 +55,12 @@ export class NodeMessageHandler {
 
       if (conn.clusterId.startsWith("pool:")) {
         const instanceTag = conn.clusterId.slice("pool:".length);
-        const clusterIds = await this.db.instances.getClusterIdsByPoolInstanceTag(instanceTag);
+        const { clusters } = await this.db.clusters.list({ instanceTag: instanceTag });
         await Promise.all(
-          clusterIds.map(async (id) => {
-            await this.clientNotifier.broadcast(id, message);
-            if (changedFlags.servicesChanged) this.clientNotifier.notifyRefresh(id, "services");
-            if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(id, "deployments");
+          clusters.map(async (cluster) => {
+            await this.clientNotifier.broadcast(cluster.id, message);
+            if (changedFlags.servicesChanged) this.clientNotifier.notifyRefresh(cluster.id, "services");
+            if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(cluster.id, "deployments");
           }),
         );
       } else {
@@ -161,7 +161,6 @@ export class NodeMessageHandler {
       const instanceTag = data["instance_id"] as string;
       const serviceName = data["name"] as string;
       await this.db.services.upsert({ instanceTag, name: serviceName, type: data["type"] as any });
-      await this.completeDeployment({ instanceTag, serviceName, success, logs: (data["logs"] as string) ?? "" });
     }
 
     if (success && responseKind === "service_remove_response" && data) {
@@ -170,30 +169,6 @@ export class NodeMessageHandler {
 
     if (!routed) {
       console.warn(`[WS] Could not route response for taskId: ${taskId} (request may have timed out)`);
-    }
-  }
-
-  private async completeDeployment({ instanceTag, serviceName, success, logs }: { instanceTag: string; serviceName: string; success: boolean; logs: string }): Promise<void> {
-    try {
-      const instance = await this.db.instances.find({ tag: instanceTag });
-      if (!instance?.clusterId) return;
-
-      const { clusterId } = instance;
-      const pending = await this.db.deployments.list({ clusterId, status: "pending" });
-      const deployment = pending.find((d) => d.name === serviceName);
-
-      if (deployment) {
-        if (success) {
-          const service = await this.db.services.find({ name: serviceName, clusterId });
-          await this.db.deployments.complete({ id: deployment.id, serviceId: service?.id ?? undefined, logs, status: "success" });
-        } else {
-          await this.db.deployments.updateStatus(deployment.id, "failed");
-        }
-      }
-
-      this.clientNotifier.notifyRefresh(clusterId, "deployments");
-    } catch (err) {
-      console.error(`[WS] Failed to complete deployment for ${serviceName}:`, err);
     }
   }
 
