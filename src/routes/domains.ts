@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
+import { Bindings, Variables, createErrorResponse, createSuccessResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import type { DNSProvider } from "@/types/dns.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware, requireClusterViewer, requireClusterDeveloper, resolveCluster } from "@/middleware/auth.js";
@@ -298,12 +298,15 @@ domains.get("/:domain", authMiddleware, resolveCluster("domain", { path: "domain
 });
 
 // List domains for a cluster
-domains.get("/", authMiddleware, resolveCluster("instance", { path: "clusterId" }), requireClusterViewer, async (c) => {
+domains.get("/", authMiddleware, resolveCluster("instance", { query: "clusterId" }), requireClusterViewer, async (c) => {
   const clusterId = c.req.query("clusterId");
   const db = getDbStore(c);
+  const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
 
-  const domainsList = await db.domains.list({ clusterId });
-  return c.json(createSuccessResponse({ domains: domainsList }));
+  const { domains: domainsList, total } = await db.domains.list({ clusterId, limit: pageSize, offset });
+  const paginatedData = createPaginatedResponse(domainsList, page, pageSize, total);
+
+  return c.json(createSuccessResponse(paginatedData));
 });
 
 // Remove a domain

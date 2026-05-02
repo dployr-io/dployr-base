@@ -8,7 +8,7 @@ import type { Bindings, Variables } from "@/types/index.js";
 import { resolveCluster, requireClusterViewer, requireClusterDeveloper, authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getDbStore, getWS, getJWTService } from "@/lib/config/context.js";
-import { createSuccessResponse, createErrorResponse } from "@/types/index.js";
+import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { DeploymentSchema } from "@/lib/tasks/types.js";
 
@@ -41,9 +41,12 @@ services.use("*", authMiddleware);
 services.get("/", requireClusterViewer, async (c) => {
   const db = getDbStore(c);
   const clusterId = c.get("resolvedClusterId")!;
+  const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
 
-  const list = await db.services.list({ clusterId });
-  return c.json(createSuccessResponse({ services: list }));
+  const { services: list, total } = await db.services.list({ clusterId, limit: pageSize, offset });
+  const paginatedData = createPaginatedResponse(list, page, pageSize, total);
+
+  return c.json(createSuccessResponse(paginatedData));
 });
 
 services.get("/:id", resolveCluster("service", { path: "id" }), requireClusterViewer, async (c) => {
