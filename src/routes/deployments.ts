@@ -3,31 +3,106 @@
 
 import { Hono } from "hono";
 import { ulid } from "ulid";
+import { z } from "zod";
 import type { Bindings, Variables } from "@/types/index.js";
 import { requireClusterViewer, requireClusterDeveloper, authMiddleware, resolveCluster } from "@/middleware/auth.js";
-import { ERROR } from "@/lib/constants/index.js";
+import { ERROR, SUCCESS } from "@/lib/constants/index.js";
 import { getDbStore, getWS, getJWTService } from "@/lib/config/context.js";
-import { createSuccessResponse, createErrorResponse } from "@/types/index.js";
+import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
-import { DeploymentSchema } from "@/lib/tasks/types.js";
+import { DeploymentPayload, DeploymentSchema } from "@/lib/tasks/types.js";
 
 const deployments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const dployrdService = new DployrdService();
 
+const finishDeploymentSchema = z.object({
+  token: z.string().min(1, "Token is required"),
+  id: z.ulid("Invalid deployment ID"),
+  logs: z.string().min(1, "Logs are required"),
+});
+
+// Finish deployment via token (called by dployrd to sync logs)
+deployments.post("/finish", async (c) => {
+  try {
+    const body = await c.req.json();
+    const validation = finishDeploymentSchema.safeParse(body);
+    if (!validation.success) {
+      const errors = validation.error.issues.map((err) => ({
+        field: err.path.join("."),
+        message: err.message,
+      }));
+      return c.json(
+        createErrorResponse({
+          message: "Validation failed " + JSON.stringify(errors),
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
+
+    const { token, id, logs } = validation.data;
+    const jwtService = getJWTService(c);
+    const decoded = await jwtService.verifyToken(token);
+    if (!decoded) {
+      return c.json(
+        createErrorResponse({
+          message: "Invalid or expired token",
+          code: ERROR.AUTH.BAD_TOKEN.code,
+        }),
+        ERROR.AUTH.BAD_TOKEN.status,
+      );
+    }
+
+    const db = getDbStore(c);
+    const deployment = await db.deployments.get(id);
+    if (!deployment) {
+      return c.json(
+        createErrorResponse({
+          message: "Deployment not found",
+          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+        }),
+        ERROR.RESOURCE.MISSING_RESOURCE.status,
+      );
+    }
+
+    // Update deployment logs
+    const updated = await db.deployments.updateLogs(id, logs);
+    if (!updated) {
+      return c.json(
+        createErrorResponse({
+          message: "Failed to update deployment logs",
+          code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+        }),
+        ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+      );
+    }
+
+    return c.json(createSuccessResponse({ deployment: updated }));
+  } catch (error) {
+    console.error("[Deployments] Failed to finish deployment", error);
+    return c.json(
+      createErrorResponse({
+        message: "Failed to update deployment logs",
+        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
+});
+
 deployments.use("*", authMiddleware);
-// Create a deployment — fire-and-return. Client polls GET /v1/deployments/:id
-// or listens for { kind: "refresh", entity: "deployments" } on WS.
+// Create a deployment — dispatch-and-return
 deployments.post("/", requireClusterDeveloper, async (c) => {
   const db = getDbStore(c);
   const session = c.get("session")!;
-  const clusterId = c.get("resolvedClusterId")!;
+  const clusterId = c.req.query("clusterId")!;
 
   const body = await c.req.json().catch(() => null);
   if (!body) {
     return c.json(createErrorResponse({ message: "Request body is required", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const { instanceName, payload } = body as { instanceName?: string; payload?: unknown };
+  const { instanceName, payload } = body as { instanceName?: string; payload?: DeploymentPayload };
   if (!instanceName || !payload) {
     return c.json(createErrorResponse({ message: "instanceName and payload are required", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
   }
@@ -48,7 +123,10 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     if (existing) {
       if (existing.type !== deployPayload.type) {
         return c.json(
-          createErrorResponse({ message: `Service '${deployPayload.name}' already exists as type '${existing.type}'. Undeploy it before deploying a different type.`, code: ERROR.RESOURCE.CONFLICT.code }),
+          createErrorResponse({
+            message: `Service '${deployPayload.name}' already exists as type '${existing.type}'. Undeploy it before deploying a different type.`,
+            code: ERROR.RESOURCE.CONFLICT.code,
+          }),
           ERROR.RESOURCE.CONFLICT.status,
         );
       }
@@ -63,29 +141,17 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
       return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
     }
 
-    const deployment = await db.deployments.upsert({
-      clusterId,
-      name: deployPayload.name,
-      type: deployPayload.type,
-      source: deployPayload.source,
-      blueprint: deployPayload,
-    });
-
-    if (!deployment) {
-      return c.json(createErrorResponse({ message: "Failed to create deployment record", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
-    }
-
+    const taskId = ulid();
     const jwtService = getJWTService(c);
     const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
-    const taskId = ulid();
     const task = dployrdService.createDeployTask(taskId, deployPayload, token);
     const routingKey = await db.instances.getRoutingKey(clusterId);
-
     let dispatched = false;
     try {
       dispatched = getWS(c).sendTask(routingKey, task);
-    } catch {
+    } catch (error) {
       // WS handler unavailable
+      console.error("[Deployments] Failed to dispatch deployment task: ", error);
     }
 
     if (!dispatched) {
@@ -94,47 +160,50 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     }
 
     console.log(`[Deployments] Dispatched deploy task ${taskId} for cluster ${clusterId}`);
-    return c.json(createSuccessResponse({ deployment, taskId }), 201);
+    return c.json(createSuccessResponse({ deployPayload, taskId }), SUCCESS.ACCEPTED.status);
   } catch (error) {
     console.error("[Deployments] Unable to deploy task: ", error);
     return c.json(createErrorResponse({ message: "Failed to create deployment", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
 
-// List deployments for a cluster — optional ?serviceId and ?status filters
+// List deployments for a cluster
 deployments.get("/", requireClusterViewer, async (c) => {
   const db = getDbStore(c);
-  const clusterId = c.get("resolvedClusterId")!;
+  const clusterId = c.req.query("clusterId")!;
   const serviceId = c.req.query("serviceId");
   const status = c.req.query("status") as any;
+  const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
 
-  const list = await db.deployments.list({ clusterId, serviceId, status });
-  return c.json(createSuccessResponse({ deployments: list }));
+  const { deployments, total } = await db.deployments.list({ clusterId, serviceId, status, limit: pageSize, offset });
+  const paginatedData = createPaginatedResponse(deployments, page, pageSize, total);
+
+  return c.json(createSuccessResponse(paginatedData));
 });
 
-// Get single deployment by ID — cluster ownership enforced post-fetch
-deployments.get("/:id", resolveCluster('deployment', { path: 'id' }), requireClusterViewer, async (c) => {
+// Get single deployment by ID
+deployments.get("/:id", requireClusterViewer, async (c) => {
   const db = getDbStore(c);
-  const clusterId = c.get("resolvedClusterId")!;
+  const clusterId = c.req.query("clusterId")!;
   const id = c.req.param("id");
 
   const deployment = await db.deployments.get(id);
   if (!deployment || deployment.clusterId !== clusterId) {
-    return c.json(createErrorResponse({ message: "Deployment not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
+    return c.json(createErrorResponse({ message: "Deployment not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
   }
 
   return c.json(createSuccessResponse({ deployment }));
 });
 
-// Delete a deployment record — running deployments cannot be deleted
-deployments.delete("/:id", resolveCluster('deployment', { path: 'id' }), requireClusterDeveloper, async (c) => {
+// Delete a deployment record
+deployments.delete("/:id", requireClusterDeveloper, async (c) => {
   const db = getDbStore(c);
-  const clusterId = c.get("resolvedClusterId")!;
+  const clusterId = c.req.query("clusterId")!;
   const id = c.req.param("id");
 
   const deployment = await db.deployments.get(id);
   if (!deployment || deployment.clusterId !== clusterId) {
-    return c.json(createErrorResponse({ message: "Deployment not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
+    return c.json(createErrorResponse({ message: "Deployment not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
   }
 
   if (deployment.status === "running") {
