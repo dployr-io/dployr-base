@@ -113,39 +113,31 @@ export class UpdateProcessor {
     }
   }
 
-  /** Resolves the cluster ID for this tag, or returns null with a warning if not found. */
-  private async resolveClusterId(): Promise<string | null> {
-    const instance = await this.db.instances.find({ tag: this.tag });
-    if (!instance) {
-      console.warn(`[UpdateProcessor] Instance ${this.tag} not found`);
-      return null;
-    }
-    if (!instance.clusterId) {
-      console.warn(`[UpdateProcessor] Instance ${this.tag} has no clusterId`);
-      return null;
-    }
-    return instance.clusterId;
-  }
-
   private async syncServices(services: Record<string, unknown>[]): Promise<void> {
     if (!Array.isArray(services)) return;
 
     try {
-      const clusterId = await this.resolveClusterId();
-      if (!clusterId) return;
+      const { clusters } = await this.db.clusters.list({ instanceTag: this.tag });
+      if (!clusters.length) return;
 
       const incomingServiceNames = new Set(services.map((s) => s.name as string));
-      const existingServices = await this.db.services.list({ clusterId });
-      const existingServiceNames = new Set(existingServices.map((s) => s.name));
+      const existingServices: Record<string, Service[]> = {};
 
-      const hasChanges =
-        existingServiceNames.size !== incomingServiceNames.size || Array.from(incomingServiceNames).some((name) => !existingServiceNames.has(name));
+      for (const cluster of clusters) {
+        const { services: clusterServices } = await this.db.services.list({ clusterId: cluster.id });
+        existingServices[cluster.id] = clusterServices;
+      }
+
+      const allExistingServices = Object.values(existingServices).flat();
+      const existingServiceNames = new Set(allExistingServices.map((s) => s.name));
+
+      const hasChanges = existingServiceNames.size !== incomingServiceNames.size || Array.from(incomingServiceNames).some((name) => !existingServiceNames.has(name));
 
       if (!hasChanges) return;
       this.servicesChanged = true;
 
       const toCreate = services.filter((s) => !existingServiceNames.has(s.name as string));
-      const toReprovision = existingServices.filter((s) => !incomingServiceNames.has(s.name));
+      const toReprovision = allExistingServices.filter((s) => !incomingServiceNames.has(s.name));
 
       await Promise.all([
         ...toCreate.map(async (service) => {
@@ -157,7 +149,7 @@ export class UpdateProcessor {
             console.error(`[UpdateProcessor] Failed to create service ${svc.name}:`, error);
           }
         }),
-        ...toReprovision.map((service) => this.reprovisionService(service, clusterId)),
+        ...toReprovision.map((service) => this.reprovisionService(service, clusters[0].id)),
       ]);
     } catch (error) {
       console.error(`[UpdateProcessor] Failed to sync services:`, error);
@@ -195,10 +187,7 @@ export class UpdateProcessor {
 
         if (missing.length > 0) {
           // If failed to re-provision due to missing secret, prompt user to re-renter values
-          console.error(
-            `[UpdateProcessor] Cannot reprovision ${service.name}: secrets expired or missing — [${missing.join(", ")}]. ` +
-              `User must supply these values again.`,
-          );
+          console.error(`[UpdateProcessor] Cannot reprovision ${service.name}: secrets expired or missing — [${missing.join(", ")}]. ` + `User must supply these values again.`);
           return;
         }
 
@@ -224,18 +213,39 @@ export class UpdateProcessor {
   }
 
   private async syncDeployments(deployments: Record<string, unknown>[]): Promise<void> {
-    if (!Array.isArray(deployments)) return;
+    if (!Array.isArray(deployments)) {
+      console.error("[UpdateProcessor] Invalid format ", typeof deployments, deployments);
+      return;
+    }
 
     try {
-      const clusterId = await this.resolveClusterId();
-      if (!clusterId) return;
-
       if (deployments.length > 0) this.deploymentsChanged = true;
       await Promise.all(
         deployments.map(async (deployment) => {
           const d = deployment as any;
+          const cluster = await this.db.clusters.find({ ownerId: d.user_id });
+
+          if (!d.name || !d.type || !d.source || !cluster) {
+            console.warn(`[UpdateProcessor] Skipping incomplete deployment ${d.id}: missing required fields`, d);
+            return;
+          }
+
           try {
-            await this.db.deployments.upsert({ ...d });
+            const createdAtMs = d.created_at ? new Date(d.created_at).getTime() : undefined;
+            const finishedAtMs = (d.status === "failed" || d.status === "success") && d.updated_at ? new Date(d.updated_at).getTime() : undefined;
+            await this.db.deployments.upsert({
+              clusterId: cluster.id,
+              id: d.id,
+              name: d.name,
+              type: d.type,
+              source: d.source,
+              status: d.status,
+              blueprint: d,
+              logs: d.logs ?? null,
+              createdAt: createdAtMs,
+              finishedAt: finishedAtMs,
+            });
+
           } catch (error) {
             console.error(`[UpdateProcessor] Failed to sync deployment ${d.id}:`, error);
           }
