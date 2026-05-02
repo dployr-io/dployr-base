@@ -33,6 +33,19 @@ export class InstanceStore extends BaseStore {
     });
   }
 
+  /**
+   * Find a single instance matching the provided filter.
+   *
+   * @param filter - Filter criteria
+   * @param filter.id - Instance ID (exact match)
+   * @param filter.tag - Instance tag (exact match)
+   * @param filter.clusterId - Cluster ID to filter by
+   * @param filter.kind - Instance kind (dedicated, pool)
+   * @param filter.address - Instance address (exact match)
+   * @param filter.status - Instance status (ready, busy, down, draining)
+   * @param filter.managed - Whether the instance is managed (true/false)
+   * @returns The instance, or null if not found
+   */
   async find(filter: InstanceFilter): Promise<Instance | null> {
     const parts: string[] = [];
     const bindings: any[] = [];
@@ -77,6 +90,21 @@ export class InstanceStore extends BaseStore {
     return result ? this.toInstance(result) : null;
   }
 
+  /**
+   * List instances with optional filtering and pagination.
+   *
+   * @param filter - Optional filter and pagination criteria
+   * @param filter.clusterId - Cluster ID to filter instances by
+   * @param filter.kind - Instance kind to filter by (dedicated, pool)
+   * @param filter.id - Instance ID (exact match)
+   * @param filter.tag - Instance tag (exact match)
+   * @param filter.address - Instance address (exact match)
+   * @param filter.status - Instance status to filter by
+   * @param filter.managed - Whether the instance is managed
+   * @param filter.limit - Maximum number of results to return
+   * @param filter.offset - Number of results to skip (for pagination)
+   * @returns Object containing array of instances and total count (before pagination)
+   */
   async list(filter?: InstanceFilter & Pagination): Promise<{ instances: Instance[]; total: number }> {
     const parts: string[] = [];
     const bindings: any[] = [];
@@ -231,15 +259,14 @@ export class InstanceStore extends BaseStore {
    */
   async getRoutingKey(clusterId: string): Promise<string> {
     const poolInstanceId = await this.getClusterPoolInstance(clusterId);
-    if (!poolInstanceId) return clusterId;
+    if (!poolInstanceId) {
+      return clusterId;
+    }
     const poolInstance = await this.find({ id: poolInstanceId });
-    return poolInstance ? `pool:${poolInstance.tag}` : clusterId;
+    const routingKey = poolInstance ? `pool:${poolInstance.tag}` : clusterId;
+    return routingKey;
   }
 
-  async getClusterIdsByPoolInstanceTag(instanceTag: string): Promise<string[]> {
-    const result = await this.db.prepare(`SELECT c.id FROM clusters c JOIN instances i ON c.pool_instance_id = i.id WHERE i.tag = $1`).bind(instanceTag).all();
-    return result.results.map((row) => row.id as string);
-  }
 
   async releasePoolInstance(clusterId: string): Promise<void> {
     const now = this.now();
@@ -250,6 +277,7 @@ export class InstanceStore extends BaseStore {
     }
   }
 
+  /** Returns a map of all pooled instances and assigned clusters */
   async getPoolClustersMap(): Promise<Array<{ clusterId: string; instanceId: string }>> {
     const result = await this.db.prepare(`SELECT id AS cluster_id, pool_instance_id AS instance_id FROM clusters WHERE pool_instance_id IS NOT NULL`).all();
     return result.results.map((row) => ({

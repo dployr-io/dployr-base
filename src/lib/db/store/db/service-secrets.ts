@@ -82,7 +82,12 @@ export class ServiceSecretStore extends BaseStore {
     return { values, missing };
   }
 
-  /** Returns metadata only — no decrypted values. Use `get` or `getDecrypted` for values. */
+  /**
+   * List secrets for a service. Returns metadata only — no decrypted values. Use `get` or `getDecrypted` for values.
+   *
+   * @param serviceId - Service ID to list secrets for
+   * @returns Array of secrets with metadata
+   */
   async list({ serviceId }: { serviceId: string }): Promise<ServiceSecret[]> {
     const results = await this.db
       .prepare(`SELECT id, service_id, key, created_at, updated_at FROM service_secrets WHERE service_id = $1 ORDER BY key ASC`)

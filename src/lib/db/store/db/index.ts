@@ -42,6 +42,7 @@ export class DatabaseStore {
 
 export const PostgresStore = DatabaseStore;
 export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore, DomainStore, ServiceStore, BillingStore };
+export type { ClusterFilter } from "./clusters.js";
 export type { InstanceFilter } from "./instances.js";
 export type { ServiceFilter } from "./services.js";
 export type { DeploymentFilter } from "./deployments.js";

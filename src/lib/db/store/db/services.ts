@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { BaseStore } from "./base.js";
+import { BaseStore, type Pagination } from "./base.js";
 import { type AllowedTable } from "@/lib/constants/index.js";
 import { Service, ServiceType } from "@/types/index.js";
 
@@ -60,6 +60,16 @@ export class ServiceStore extends BaseStore {
     }
   }
 
+  /**
+   * Find a single service matching the provided filter.
+   *
+   * @param filter - Filter criteria
+   * @param filter.id - Service ID (exact match)
+   * @param filter.name - Service name (exact match)
+   * @param filter.type - Service type to filter by
+   * @param filter.clusterId - Cluster ID to filter services by
+   * @returns The service, or null if not found
+   */
   async find(filter: ServiceFilter): Promise<Service | null> {
     const { clause, bindings } = this.buildWhere({
       id: filter.id,
@@ -77,15 +87,44 @@ export class ServiceStore extends BaseStore {
     return result ? this.toService(result) : null;
   }
 
-  async list(filter?: ServiceFilter): Promise<Service[]> {
+  /**
+   * List services with optional filtering and pagination.
+   *
+   * @param filter - Optional filter and pagination criteria
+   * @param filter.clusterId - Cluster ID to filter services by
+   * @param filter.type - Service type to filter by
+   * @param filter.id - Service ID (exact match)
+   * @param filter.name - Service name (exact match)
+   * @param filter.limit - Maximum number of results to return
+   * @param filter.offset - Number of results to skip (for pagination)
+   * @returns Object containing array of services and total count (before pagination)
+   */
+  async list(filter?: ServiceFilter & Pagination): Promise<{ services: Service[]; total: number }> {
     const { clause, bindings } = this.buildWhere({ cluster_id: filter?.clusterId, type: filter?.type });
 
-    const results = await this.db
-      .prepare(`SELECT id, cluster_id, name, type, deployment_id, created_at, updated_at FROM services ${clause} ORDER BY name ASC`)
-      .bind(...bindings)
-      .all();
+    const countResult = bindings.length
+      ? await this.db.prepare(`SELECT COUNT(*) as count FROM services ${clause}`).bind(...bindings).first()
+      : await this.db.prepare(`SELECT COUNT(*) as count FROM services`).first();
 
-    return results.results.map((r) => this.toService(r));
+    const total = Number(countResult?.count ?? 0);
+
+    let sql = `SELECT id, cluster_id, name, type, deployment_id, created_at, updated_at FROM services ${clause} ORDER BY name ASC`;
+    const dataBindings = [...bindings];
+
+    if (filter?.limit !== undefined) {
+      dataBindings.push(filter.limit);
+      sql += ` LIMIT $${dataBindings.length}`;
+    }
+    if (filter?.offset !== undefined) {
+      dataBindings.push(filter.offset);
+      sql += ` OFFSET $${dataBindings.length}`;
+    }
+
+    const results = dataBindings.length
+      ? await this.db.prepare(sql).bind(...dataBindings).all()
+      : await this.db.prepare(sql).all();
+
+    return { services: results.results.map((r) => this.toService(r)), total };
   }
 
   async delete(filter: Pick<ServiceFilter, "id" | "name">): Promise<void> {

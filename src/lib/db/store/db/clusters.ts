@@ -2,10 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Cluster, OAuthProvider, Role as UserRole, User, Integrations, GitHubIntegration } from "@/types/index.js";
-import { BaseStore } from "./base.js";
+import { BaseStore, Pagination } from "./base.js";
 import { EVENTS, type AllowedTable } from "@/lib/constants/index.js";
 import type { PreparedStatement } from "@/lib/db/pg-adapter.js";
 import { ResourceNotFoundError, ValidationError } from "@/lib/errors/errors.js";
+
+export type ClusterFilter = {
+  id?: string;
+  name?: string;
+  instanceTag?: string;
+  userId?: string;
+  ownerId?: string;
+  instanceId?: string;
+};
 
 export class ClusterStore extends BaseStore {
   protected readonly storeTable: AllowedTable = "clusters";
@@ -16,6 +25,224 @@ export class ClusterStore extends BaseStore {
     admin: 3,
     owner: 4,
   };
+
+  /**
+   * Find a single cluster matching the provided filter.
+   *
+   * @param filter - Filter criteria
+   * @param filter.id - Cluster ID (exact match)
+   * @param filter.name - Cluster name (case-insensitive match)
+   * @param filter.userId - User ID that is an active member of the cluster (excludes invited users)
+   * @param filter.ownerId - User ID that owns the cluster
+   * @param filter.instanceTag - Tag of the pool instance assigned to the cluster
+   * @param filter.instanceId - Instance ID associated with the cluster
+   * @returns The cluster with full user roles, or null if not found
+   */
+  async find(filter: ClusterFilter): Promise<Cluster | null> {
+    const parts: string[] = [];
+    const joins: string[] = [];
+    const bindings: any[] = [];
+
+    if (filter.id !== undefined) {
+      bindings.push(filter.id);
+      parts.push(`c.id = $${bindings.length}`);
+    }
+    if (filter.name !== undefined) {
+      bindings.push(filter.name);
+      parts.push(`LOWER(c.name) = LOWER($${bindings.length})`);
+    }
+    if (filter.instanceTag !== undefined) {
+      joins.push(`JOIN instances i ON c.pool_instance_id = i.id`);
+      bindings.push(filter.instanceTag);
+      parts.push(`i.tag = $${bindings.length}`);
+    }
+    if (filter.userId !== undefined) {
+      joins.push(`JOIN user_clusters uc ON uc.cluster_id = c.id AND uc.role != 'invited'`);
+      bindings.push(filter.userId);
+      parts.push(`uc.user_id = $${bindings.length}`);
+    }
+    if (filter.ownerId !== undefined) {
+      joins.push(`JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'`);
+      bindings.push(filter.ownerId);
+      parts.push(`owner_uc.user_id = $${bindings.length}`);
+    }
+    if (filter.instanceId !== undefined) {
+      joins.push(`JOIN instances inst ON inst.cluster_id = c.id`);
+      bindings.push(filter.instanceId);
+      parts.push(`inst.id = $${bindings.length}`);
+    }
+
+    if (!bindings.length) return null;
+
+    let sql = `SELECT c.id, c.name, c.metadata, c.pool_instance_id, c.created_at, c.updated_at FROM clusters c`;
+    if (joins.length) {
+      sql += ` ${joins.join(" ")}`;
+    }
+    sql += ` WHERE ${parts.join(" AND ")} LIMIT 1`;
+
+    const cluster = await this.db.prepare(sql).bind(...bindings).first();
+    if (!cluster) return null;
+
+    const usersStmt = this.db.prepare(`
+      SELECT user_id, role FROM user_clusters WHERE cluster_id = $1
+    `);
+
+    const userRoles = await usersStmt.bind(cluster.id as string).all();
+    const users: string[] = [];
+    const roles: Record<UserRole, string[]> = {
+      owner: [],
+      admin: [],
+      developer: [],
+      viewer: [],
+      invited: [],
+    };
+
+    for (const userRole of userRoles.results) {
+      const userId = userRole.user_id as string;
+      const role = userRole.role as UserRole;
+
+      if (!users.includes(userId)) {
+        users.push(userId);
+      }
+
+      if (!roles[role]) {
+        roles[role] = [];
+      }
+      roles[role].push(userId);
+    }
+
+    return {
+      id: cluster.id as string,
+      name: cluster.name as string,
+      users,
+      roles,
+      poolInstanceId: (cluster.pool_instance_id as string) ?? null,
+      metadata: (cluster as any).metadata || {},
+      createdAt: cluster.created_at as number,
+      updatedAt: cluster.updated_at as number,
+    };
+  }
+
+  /**
+   * List clusters with optional filtering and pagination.
+   *
+   * @param filter - Optional filter and pagination criteria
+   * @param filter.id - Cluster ID (exact match)
+   * @param filter.name - Cluster name (case-insensitive match)
+   * @param filter.userId - User ID that is an active member of the clusters (excludes invited users)
+   * @param filter.ownerId - User ID that owns the clusters
+   * @param filter.instanceTag - Tag of the pool instance assigned to the cluster
+   * @param filter.instanceId - Instance ID associated with the clusters
+   * @param filter.limit - Maximum number of results to return
+   * @param filter.offset - Number of results to skip (for pagination)
+   * @returns Object containing array of clusters and total count (before pagination)
+   */
+  async list(filter?: ClusterFilter & Pagination): Promise<{ clusters: Cluster[]; total: number }> {
+    const parts: string[] = [];
+    const joins: string[] = [];
+    const bindings: any[] = [];
+
+    if (filter?.id !== undefined) {
+      bindings.push(filter.id);
+      parts.push(`c.id = $${bindings.length}`);
+    }
+    if (filter?.name !== undefined) {
+      bindings.push(filter.name);
+      parts.push(`LOWER(c.name) = LOWER($${bindings.length})`);
+    }
+    if (filter?.instanceTag !== undefined) {
+      joins.push(`JOIN instances i ON c.pool_instance_id = i.id`);
+      bindings.push(filter.instanceTag);
+      parts.push(`i.tag = $${bindings.length}`);
+    }
+    if (filter?.userId !== undefined) {
+      joins.push(`JOIN user_clusters uc ON uc.cluster_id = c.id AND uc.role != 'invited'`);
+      bindings.push(filter.userId);
+      parts.push(`uc.user_id = $${bindings.length}`);
+    }
+    if (filter?.ownerId !== undefined) {
+      joins.push(`JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'`);
+      bindings.push(filter.ownerId);
+      parts.push(`owner_uc.user_id = $${bindings.length}`);
+    }
+    if (filter?.instanceId !== undefined) {
+      joins.push(`JOIN instances inst ON inst.cluster_id = c.id`);
+      bindings.push(filter.instanceId);
+      parts.push(`inst.id = $${bindings.length}`);
+    }
+
+    let baseSql = `FROM clusters c`;
+    if (joins.length) {
+      baseSql += ` ${joins.join(" ")}`;
+    }
+    if (parts.length) {
+      baseSql += ` WHERE ${parts.join(" AND ")}`;
+    }
+
+    const countResult = await this.db
+      .prepare(`SELECT COUNT(*) as count ${baseSql}`)
+      .bind(...bindings)
+      .first();
+    const total = Number(countResult?.count ?? 0);
+
+    let sql = `SELECT c.id, c.name, c.metadata, c.pool_instance_id, c.created_at, c.updated_at ${baseSql} ORDER BY c.created_at DESC`;
+    const dataBindings = [...bindings];
+
+    if (filter?.limit !== undefined) {
+      dataBindings.push(filter.limit);
+      sql += ` LIMIT $${dataBindings.length}`;
+    }
+    if (filter?.offset !== undefined) {
+      dataBindings.push(filter.offset);
+      sql += ` OFFSET $${dataBindings.length}`;
+    }
+
+    const clusters = await this.db.prepare(sql).bind(...dataBindings).all();
+
+    const result: Cluster[] = [];
+    for (const cluster of clusters.results) {
+      const usersStmt = this.db.prepare(`
+        SELECT user_id, role FROM user_clusters WHERE cluster_id = $1
+      `);
+
+      const userRoles = await usersStmt.bind(cluster.id as string).all();
+      const users: string[] = [];
+      const roles: Record<UserRole, string[]> = {
+        owner: [],
+        admin: [],
+        developer: [],
+        viewer: [],
+        invited: [],
+      };
+
+      for (const userRole of userRoles.results) {
+        const userId = userRole.user_id as string;
+        const role = userRole.role as UserRole;
+
+        if (!users.includes(userId)) {
+          users.push(userId);
+        }
+
+        if (!roles[role]) {
+          roles[role] = [];
+        }
+        roles[role].push(userId);
+      }
+
+      result.push({
+        id: cluster.id as string,
+        name: cluster.name as string,
+        users,
+        roles,
+        poolInstanceId: (cluster.pool_instance_id as string) ?? null,
+        metadata: (cluster as any).metadata || {},
+        createdAt: cluster.created_at as number,
+        updatedAt: cluster.updated_at as number,
+      });
+    }
+
+    return { clusters: result, total };
+  }
 
   async get(id: string): Promise<Cluster | null> {
     const clusterStmt = this.db.prepare(`
@@ -414,27 +641,9 @@ export class ClusterStore extends BaseStore {
    * @returns A cluster
    */
   async getUserOwnedCluster(userId: string): Promise<Pick<Cluster, "id" | "name" | "metadata"> | null> {
-    const stmt = this.db.prepare(`
-      SELECT 
-        c.id,
-        c.name,
-        c.metadata,
-        owner_u.name as owner
-      FROM user_clusters uc
-      JOIN clusters c ON uc.cluster_id = c.id
-      JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'
-      JOIN users owner_u ON owner_uc.user_id = owner_u.id
-      WHERE uc.user_id = $1 AND uc.role != 'invited'
-    `);
-    const result = await stmt.bind(userId).first();
-
-    return result
-      ? {
-          id: result.id as string,
-          name: result.name as string,
-          metadata: result.metadata as Record<string, any>,
-        }
-      : null;
+    const cluster = await this.find({ userId });
+    if (!cluster) return null;
+    return { id: cluster.id, name: cluster.name, metadata: cluster.metadata };
   }
 
   async listUnassigned(): Promise<{ id: string }[]> {
@@ -673,11 +882,7 @@ export class ClusterStore extends BaseStore {
    * @returns The cluster if found, null otherwise
    */
   async getByInstanceId(instanceId: string): Promise<Cluster | null> {
-    const result = await this.db.prepare(`SELECT cluster_id FROM instances WHERE id = $1`).bind(instanceId).first<{ cluster_id: string }>();
-
-    if (!result) return null;
-
-    return this.get(result.cluster_id);
+    return this.find({ instanceId });
   }
 
   /**

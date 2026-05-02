@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { BaseStore } from "./base.js";
+import { BaseStore, Pagination } from "./base.js";
 import { type AllowedTable } from "@/lib/constants/index.js";
 import type { CustomDomain, DNSProvider } from "@/types/dns.js";
 
@@ -35,6 +35,12 @@ export class DomainStore extends BaseStore {
     }
   }
 
+  /**
+   * Find a domain by its domain name.
+   *
+   * @param domain - The domain name to search for (exact match)
+   * @returns The domain, or null if not found
+   */
   async find(domain: string): Promise<CustomDomain | null> {
     const row = await this.db
       .prepare(
@@ -48,17 +54,44 @@ export class DomainStore extends BaseStore {
     return this.toDomain(row);
   }
 
-  async list(filter?: { clusterId?: string }): Promise<CustomDomain[]> {
+  /**
+   * List domains with optional filtering and pagination.
+   *
+   * @param filter - Optional filter and pagination criteria
+   * @param filter.clusterId - Cluster ID to filter domains by
+   * @param filter.limit - Maximum number of results to return
+   * @param filter.offset - Number of results to skip (for pagination)
+   * @returns Object containing array of domains and total count (before pagination)
+   */
+  async list(filter?: { clusterId?: string } & Pagination): Promise<{ domains: CustomDomain[]; total: number }> {
     const { clause, bindings } = this.buildWhere({ cluster_id: filter?.clusterId });
 
-    const results = bindings.length
+    const countResult = bindings.length
       ? await this.db
-          .prepare(`SELECT id, cluster_id, domain, status, verification_token, provider, created_at, activated_at FROM domains ${clause} ORDER BY created_at DESC`)
+          .prepare(`SELECT COUNT(*) as count FROM domains ${clause}`)
           .bind(...bindings)
-          .all()
-      : await this.db.prepare(`SELECT id, cluster_id, domain, status, verification_token, provider, created_at, activated_at FROM domains ORDER BY created_at DESC`).all();
+          .first()
+      : await this.db.prepare(`SELECT COUNT(*) as count FROM domains`).first();
 
-    return results.results.map((row: any) => this.toDomain(row));
+    const total = Number(countResult?.count ?? 0);
+
+    let sql = `SELECT id, cluster_id, domain, status, verification_token, provider, created_at, activated_at FROM domains ${clause} ORDER BY created_at DESC`;
+    const dataBindings = [...bindings];
+
+    if (filter?.limit !== undefined) {
+      dataBindings.push(filter.limit);
+      sql += ` LIMIT $${dataBindings.length}`;
+    }
+    if (filter?.offset !== undefined) {
+      dataBindings.push(filter.offset);
+      sql += ` OFFSET $${dataBindings.length}`;
+    }
+
+    const results = dataBindings.length
+      ? await this.db.prepare(sql).bind(...dataBindings).all()
+      : await this.db.prepare(sql).all();
+
+    return { domains: results.results.map((row: any) => this.toDomain(row)), total };
   }
 
   async activate(domain: string): Promise<void> {

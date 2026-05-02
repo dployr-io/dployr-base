@@ -44,6 +44,12 @@ export class ServiceEnvStore extends BaseStore {
     return row ? this.toEnv(row) : null;
   }
 
+  /**
+   * List environment variables for a service.
+   *
+   * @param serviceId - Service ID to list environment variables for
+   * @returns Array of environment variables
+   */
   async list({ serviceId }: { serviceId: string }): Promise<ServiceEnv[]> {
     const results = await this.db
       .prepare(`SELECT id, service_id, key, value, created_at, updated_at FROM service_envs WHERE service_id = $1 ORDER BY key ASC`)
