@@ -3235,6 +3235,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/deployments/finish:
+    post:
+      operationId: finishDeployment
+      tags: [Deployments]
+      summary: Update deployment with logs (from node)
+      description: |
+        Called by dployrd to sync deployment logs after completion.
+        Updates logs and updated_at timestamp. Once a deployment is finished
+        (has finished_at set), only logs and updated_at can be updated — all
+        other fields are immutable to prevent stale data overwrites.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, id, logs]
+              properties:
+                token:
+                  type: string
+                  description: Node access token for authentication
+                id:
+                  type: string
+                  description: Deployment ID (ULID)
+                logs:
+                  type: string
+                  description: Deployment execution logs
+      responses:
+        '200':
+          description: Deployment logs updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deployment:
+                            $ref: '#/components/schemas/Deployment'
+        '400':
+          description: Validation error (missing or invalid fields)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Deployment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Failed to update deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   # ─── Services ──────────────────────────────────────────────────────────────
 
   /v1/services:
