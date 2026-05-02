@@ -69,9 +69,15 @@ export class WebSocketHandler {
 
   /**
    * Register a new WebSocket connection for a cluster.
+   * @param connectionKey - The key to register under (instance tag for dedicated nodes, pool:tag for pool, clusterId for clients)
+   * @param ws - The WebSocket connection
+   * @param role - Whether this is a node or client
+   * @param session - Optional session for clients
+   * @param instanceTag - Instance tag (set for nodes)
+   * @param clusterId - Actual cluster ID (set for nodes to find clients for notifications)
    */
-  acceptWebSocket(clusterId: string, ws: WebSocket, role: "node" | "client", session?: Session, instanceTag?: string): void {
-    const conn = this.connectionManager.addConnection(clusterId, ws, role, session);
+  acceptWebSocket(connectionKey: string, ws: WebSocket, role: "node" | "client", session?: Session, instanceTag?: string, clusterId?: string): void {
+    const conn = this.connectionManager.addConnection(connectionKey, ws, role, session, clusterId);
 
     if (role === "node" && instanceTag) {
       conn.instanceTag = instanceTag;
@@ -82,7 +88,7 @@ export class WebSocketHandler {
     if (role === "client" && session) {
       const previousConnectionId = this.sessionConnections.get(session.userId);
       if (previousConnectionId) {
-        this.clientNotifier.replayUnackedMessages(clusterId, conn.connectionId);
+        this.clientNotifier.replayUnackedMessages(conn.connectionKey, conn.connectionId);
       }
       this.sessionConnections.set(session.userId, conn.connectionId);
     }
@@ -135,7 +141,7 @@ export class WebSocketHandler {
       if (conn.instanceTag) {
         this.kvStore.deleteNodeConnected(conn.instanceTag).catch(() => {});
       }
-      this.dployrdHandler.handleNodeDisconnect(conn.clusterId);
+      this.dployrdHandler.handleNodeDisconnect(conn.clusterId || conn.connectionKey);
     }
   }
 

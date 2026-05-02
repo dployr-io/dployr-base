@@ -374,7 +374,8 @@ export class InstanceService {
       throw new PermissionError("owner");
     }
     const ws = getWS(c);
-    if (!ws.hasNodeConnection(clusterId)) {
+    const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
+    if (!ws.hasNodeConnection(routingKey)) {
       throw new InstanceNotConnectedError(instanceId);
     }
 
@@ -387,7 +388,7 @@ export class InstanceService {
     const taskId = ulid();
     const task = dployrd.createSystemInstallTask(taskId, version, token);
 
-    const sent = ws.sendTaskToCluster(clusterId, task);
+    const sent = ws.sendTask(routingKey, task);
     if (!sent) {
       throw new InstanceConnectionFailureError(instanceId);
     }
@@ -422,7 +423,8 @@ export class InstanceService {
       throw new PermissionError("admin");
     }
     const ws = getWS(c);
-    if (!ws.hasNodeConnection(clusterId)) {
+    const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
+    if (!ws.hasNodeConnection(routingKey)) {
       throw new InstanceNotConnectedError(instanceId);
     }
 
@@ -435,7 +437,7 @@ export class InstanceService {
     const taskId = ulid();
     const task = dployrd.createDaemonRestartTask(taskId, force, token);
 
-    const sent = ws.sendTaskToCluster(clusterId, task);
+    const sent = ws.sendTask(routingKey, task);
     if (!sent) {
       throw new InstanceConnectionFailureError(instanceId);
     }
@@ -469,7 +471,8 @@ export class InstanceService {
       throw new PermissionError("admin");
     }
     const ws = getWS(c);
-    if (!ws.hasNodeConnection(clusterId)) {
+    const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
+    if (!ws.hasNodeConnection(routingKey)) {
       throw new InstanceNotConnectedError(instanceId);
     }
 
@@ -482,7 +485,7 @@ export class InstanceService {
     const taskId = ulid();
     const task = dployrd.createDaemonRestartTask(taskId, force, token);
 
-    const sent = ws.sendTaskToCluster(clusterId, task);
+    const sent = ws.sendTask(routingKey, task);
     if (!sent) {
       throw new InstanceConnectionFailureError(instanceId);
     }

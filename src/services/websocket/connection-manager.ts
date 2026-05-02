@@ -54,28 +54,34 @@ export class ConnectionManager {
   }
 
   /**
-   * Add a new websocket connection for a cluster
+   * Add a new websocket connection
+   * @param connectionKey - The key to register the connection under (instance tag for nodes, clusterId for clients)
+   * @param ws - The WebSocket connection
+   * @param role - Whether this is a node or client connection
+   * @param session - Optional session info for clients
+   * @param clusterId - Optional actual cluster ID (for nodes that need to notify clients)
    */
-  addConnection(clusterId: string, ws: WebSocket, role: ConnectionRole, session?: Session): ClusterConnection {
-    if (!this.connections.has(clusterId)) {
-      this.connections.set(clusterId, new Set());
+  addConnection(connectionKey: string, ws: WebSocket, role: ConnectionRole, session?: Session, clusterId?: string): ClusterConnection {
+    if (!this.connections.has(connectionKey)) {
+      this.connections.set(connectionKey, new Set());
     }
 
     const connectionId = ulid();
     const conn: ClusterConnection = {
       ws,
       role,
+      connectionKey,
       clusterId,
       session,
       connectionId,
       connectedAt: Date.now(),
     };
 
-    this.connections.get(clusterId)!.add(conn);
+    this.connections.get(connectionKey)!.add(conn);
     this.lastActivityMap.set(ws, Date.now());
     this.requestsByClient.set(ws, new Set());
 
-    console.log(`[WS] ${role} connected to cluster ${clusterId} (connId: ${connectionId})`);
+    console.log(`[WS] ${role} connected to ${connectionKey} (connId: ${connectionId})`);
     return conn;
   }
 
@@ -83,11 +89,11 @@ export class ConnectionManager {
    * Remove a websocket connection
    */
   removeConnection(conn: ClusterConnection): void {
-    const conns = this.connections.get(conn.clusterId);
+    const conns = this.connections.get(conn.connectionKey);
     if (conns) {
       conns.delete(conn);
       if (conns.size === 0) {
-        this.connections.delete(conn.clusterId);
+        this.connections.delete(conn.connectionKey);
       }
     }
 
@@ -101,7 +107,7 @@ export class ConnectionManager {
     this.lastActivityMap.delete(conn.ws);
     this.requestsByClient.delete(conn.ws);
 
-    console.log(`[WS] ${conn.role} disconnected from cluster ${conn.clusterId}`);
+    console.log(`[WS] ${conn.role} disconnected from ${conn.connectionKey}`);
   }
 
   /**
@@ -161,11 +167,9 @@ export class ConnectionManager {
    * Returns true if sent to at least one node.
    */
   sendTask(routingKey: string, task: NodeTask): boolean {
-    console.debug(`[LOG-DEBUG] sendTask: attempting to send task to routing key ${routingKey}`);
     const nodeConns = this.getNodeConnections(routingKey);
     if (nodeConns.length === 0) {
       console.warn(`[WS] No node connections for routing key ${routingKey}`);
-      console.debug(`[LOG-DEBUG] Available connection keys:`, Array.from(this.connections.keys()));
       return false;
     }
 

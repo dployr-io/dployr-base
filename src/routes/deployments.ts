@@ -145,7 +145,7 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     const jwtService = getJWTService(c);
     const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
     const task = dployrdService.createDeployTask(taskId, deployPayload, token);
-    const routingKey = await db.instances.getRoutingKey(clusterId);
+    const routingKey = instance.kind === "pool" ? `pool:${instanceName}` : instanceName;
     let dispatched = false;
     try {
       dispatched = getWS(c).sendTask(routingKey, task);

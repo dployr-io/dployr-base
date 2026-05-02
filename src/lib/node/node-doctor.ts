@@ -42,7 +42,7 @@ export class NodeDoctor extends EventEmittable {
 
     console.debug("[node-health] Computed candidates", instances);
     for (const entry of instances) {
-      const heartbeatStatus = await this.resolveHeartbeatStatus(entry.tag, windowStart, entry.kind, entry.clusterId ?? null);
+      const heartbeatStatus = await this.resolveHeartbeatStatus(entry.tag, windowStart, entry.kind);
       if (entry.status === heartbeatStatus) continue;
 
       try {
@@ -271,10 +271,10 @@ export class NodeDoctor extends EventEmittable {
   }
 
   /** Derive status from heartbeat data alone (does not touch the network). */
-  private async resolveHeartbeatStatus(tag: string, windowStart: number, kind: string, clusterId: string | null): Promise<InstanceStatus> {
+  private async resolveHeartbeatStatus(tag: string, windowStart: number, kind: string): Promise<InstanceStatus> {
     const singleCheck = async (): Promise<InstanceStatus> => {
       // 1. Look for active connections
-      const connKey = kind === "dedicated" && clusterId ? clusterId : tag;
+      const connKey = kind === "pool" ? `pool:${tag}` : tag;
       const nodeConns = this.conn.getNodeConnections(connKey);
       if (!nodeConns.length) {
         console.debug(`[heartbeat] ${tag}: no active WebSocket connection → degraded`);

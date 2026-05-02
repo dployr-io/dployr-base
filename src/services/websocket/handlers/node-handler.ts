@@ -53,8 +53,8 @@ export class NodeMessageHandler {
         }).processUpdate();
       }
 
-      if (conn.clusterId.startsWith("pool:")) {
-        const instanceTag = conn.clusterId.slice("pool:".length);
+      if (conn.connectionKey.startsWith("pool:")) {
+        const instanceTag = conn.connectionKey.slice("pool:".length);
         const { clusters } = await this.db.clusters.list({ instanceTag: instanceTag });
         await Promise.all(
           clusters.map(async (cluster) => {
@@ -63,7 +63,7 @@ export class NodeMessageHandler {
             if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(cluster.id, "deployments");
           }),
         );
-      } else {
+      } else if (conn.clusterId) {
         await this.clientNotifier.broadcast(conn.clusterId, message);
         if (changedFlags.servicesChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "services");
         if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "deployments");
@@ -265,9 +265,7 @@ export class NodeMessageHandler {
   /**
    * Handle node disconnection - fail pending requests
    */
-  handleNodeDisconnect(clusterId: string): void {
-    // This is handled by connection cleanup in ConnectionManager
-    // Pending requests will timeout and send errors to clients
-    console.log(`[WS] Node disconnected from cluster ${clusterId}`);
+  handleNodeDisconnect(connectionKey: string): void {
+    console.log("[WS] Node disconnected from base: ", connectionKey);
   }
 }

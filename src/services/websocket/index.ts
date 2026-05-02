@@ -153,7 +153,8 @@ export class WebSocketService {
       if (url.pathname.match(/\/v1\/(instances\/stream|node\/ws)$/)) {
         const role = url.pathname.includes("/node/ws") ? "node" : "client";
 
-        let clusterId: string | null = null;
+        let connectionKey: string | null = null;
+        let actualClusterId: string | undefined;
         let instanceTag: string | undefined;
 
         if (role === "node") {
@@ -175,15 +176,20 @@ export class WebSocketService {
             return;
           }
 
-          // Pool instances have no owning cluster; key their WS connection by tag.
-          // Dedicated instances are keyed by their cluster ID as before.
-          clusterId = instance.kind === "pool" ? `pool:${instance.tag}` : instance.clusterId ?? null;
+          // For nodes: register under instance tag (for task routing)
+          // Store actual cluster ID separately (for client notifications)
+          if (instance.kind === "pool") {
+            connectionKey = `pool:${instance.tag}`;
+          } else {
+            connectionKey = instance.tag;
+            actualClusterId = instance.clusterId ?? undefined;
+          }
           instanceTag = instance.tag;
         } else {
-          clusterId = url.searchParams.get("clusterId");
+          connectionKey = url.searchParams.get("clusterId");
         }
 
-        if (!clusterId || !this.adapters?.ws) {
+        if (!connectionKey || !this.adapters?.ws) {
           socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
           socket.destroy();
           return;
@@ -217,7 +223,7 @@ export class WebSocketService {
         }
 
         this.wss.handleUpgrade(message, socket, head, (ws: WebSocket) => {
-          this.adapters!.ws.acceptWebSocket(clusterId, ws, role, session, instanceTag);
+          this.adapters!.ws.acceptWebSocket(connectionKey, ws, role, session, instanceTag, actualClusterId);
         });
       } else {
         socket.destroy();

@@ -254,8 +254,8 @@ export class InstanceStore extends BaseStore {
   }
 
   /**
-   * Resolves the WS routing key for a cluster.
-   * Dedicated clusters route under their own ID; pool clusters route under pool:${tag}.
+   * Resolves the WS routing key for a cluster pool clusters 
+   * @returns `pool:${tag}`.
    */
   async getRoutingKey(clusterId: string): Promise<string> {
     const poolInstanceId = await this.getClusterPoolInstance(clusterId);
