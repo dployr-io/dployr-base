@@ -8,7 +8,6 @@ import type {
   ClusterConnection,
   BaseMessage,
   LogSubscribeMessage,
-  LogStreamMessage,
   FileReadMessage,
   FileWriteMessage,
   FileCreateMessage,
@@ -31,7 +30,6 @@ import {
   isFileTreeMessage,
   isLogSubscribeMessage,
   isLogUnsubscribeMessage,
-  isLogStreamMessage,
   isAckMessage,
   isFileWatchMessage,
   isFileUnwatchMessage,
@@ -106,18 +104,6 @@ export class ClientMessageHandler {
       return;
     }
 
-    // Validate requestId for all other operations
-    if (!validateRequestMessage(message)) {
-      this.sendError(conn, "", WSErrorCode.MISSING_FIELD, "requestId is required");
-      return;
-    }
-
-    // Check rate limiting
-    if (!this.connectionManager.canAcceptRequest(conn.ws)) {
-      this.sendError(conn, message.requestId!, WSErrorCode.RATE_LIMITED, `Too many pending requests (max: ${this.connectionManager.getPendingCountForClient(conn.ws)})`);
-      return;
-    }
-
     if (isLogSubscribeMessage(message)) {
       await this.handleLogSubscribe(conn, message);
       return;
@@ -128,8 +114,15 @@ export class ClientMessageHandler {
       return;
     }
 
-    if (isLogStreamMessage(message)) {
-      await this.handleLogStream(conn, message);
+    // Validate requestId for all other operations
+    if (!validateRequestMessage(message)) {
+      this.sendError(conn, "", WSErrorCode.MISSING_FIELD, "requestId is required");
+      return;
+    }
+
+    // Check rate limiting
+    if (!this.connectionManager.canAcceptRequest(conn.ws)) {
+      this.sendError(conn, message.requestId!, WSErrorCode.RATE_LIMITED, `Too many pending requests (max: ${this.connectionManager.getPendingCountForClient(conn.ws)})`);
       return;
     }
 
@@ -225,94 +218,16 @@ export class ClientMessageHandler {
   }
 
   /**
-   * Handle log stream subscription
-   */
-  private async handleLogSubscribe(conn: ClusterConnection, message: LogSubscribeMessage): Promise<void> {
-    const { instanceName, path, startOffset, limit, duration, requestId } = message;
-
-    if (!instanceName || !path) {
-      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "instanceName and path are required");
-      return;
-    }
-
-    const instance = await this.db.instances.find({ tag: instanceName });
-    if (!instance) {
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
-      return;
-    }
-
-    const streamId = this.buildStreamId(conn.clusterId, path, startOffset, limit, duration);
-
-    // Check for existing stream
-    if (this.connectionManager.updateLogStreamClient(streamId, conn.ws)) {
-      return;
-    }
-
-    // Create new subscription
-    this.connectionManager.addLogStream({
-      streamId,
-      path,
-      ws: conn.ws,
-      startOffset,
-      limit,
-      duration,
-    });
-
-    // Create and send task to nodes in cluster
-    const token = await this.jwtService.createNodeAccessToken(instance.tag);
-    const task = this.dployrdService.createLogStreamTask({
-      streamId,
-      path,
-      startOffset,
-      limit,
-      duration,
-      token,
-    });
-
-    if (!this.isTaskAllowedOnInstance(instance, message)) {
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-      return;
-    }
-
-    this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
-
-    console.log("Token", token);
-
-    console.log(`[WS] Created log stream task ${streamId} for cluster ${conn.clusterId}`);
-  }
-
-  /**
-   * Handle log stream unsubscription
-   */
-  private handleLogUnsubscribe(conn: ClusterConnection, path: string | undefined, requestId: string): void {
-    if (path) {
-      this.connectionManager.removeLogStreamsByPath(path, conn.ws);
-    }
-    // Send acknowledgment
-    try {
-      conn.ws.send(JSON.stringify({ kind: "log_unsubscribe_response", requestId, success: true }));
-    } catch {}
-  }
-
-  /**
    * Handle log stream for deployments and services
    * path formats:
    *   - "<deployment-id>" for deployment logs
    *   - "service:<service-name>" for service logs
    */
-  private async handleLogStream(conn: ClusterConnection, message: LogStreamMessage): Promise<void> {
-    const { token, path, streamId, duration, startFrom, requestId } = message;
+  private async handleLogSubscribe(conn: ClusterConnection, message: LogSubscribeMessage): Promise<void> {
+    const { path, streamId, duration, startFrom } = message;
 
-    if (!token || !path || !streamId || !duration) {
-      this.sendError(conn, requestId, WSErrorCode.MISSING_FIELD, "token, path, streamId, and duration are required");
-      return;
-    }
-
-    // Validate token
-    try {
-      await this.jwtService.verifyToken(token);
-    } catch {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Invalid token");
+    if (!path || !streamId || !duration) {
+      this.sendError(conn, streamId, WSErrorCode.MISSING_FIELD, "token, path, streamId, and duration are required");
       return;
     }
 
@@ -332,8 +247,17 @@ export class ClientMessageHandler {
       duration,
     });
 
+    // Find which instance has the deployment/service by checking NODE_UPDATE in KV
+    let instance = await this.findInstanceWithWorkload(conn.clusterId, path);
+
+    if (!instance) {
+      console.error(`[ConnectionManager] No instance found with deployment/service at path ${path}`);
+      this.sendError(conn, streamId, WSErrorCode.INTERNAL_ERROR, "Deployment or service not found on any instance");
+      return;
+    }
+
     // Create and send task to nodes in cluster
-    const nodeToken = await this.jwtService.createNodeAccessToken(conn.clusterId);
+    const nodeToken = await this.jwtService.createNodeAccessToken(instance.tag);
     const task = this.dployrdService.createLogStreamTask({
       streamId,
       path,
@@ -341,10 +265,71 @@ export class ClientMessageHandler {
       duration,
       token: nodeToken,
     });
-    const routingKey = await this.db.instances.getRoutingKey(conn.clusterId);
-    this.connectionManager.sendTask(routingKey, task);
+
+    // Determine routing key based on instance type
+    let routingKey: string;
+    if (instance.kind === "dedicated") {
+      routingKey = instance.clusterId!;
+    } else {
+      // Pool instance - use pool:${tag} format
+      routingKey = `pool:${instance.tag}`;
+    }
+
+    const sent = this.connectionManager.sendTask(routingKey, task);
+
+    if (!sent) {
+      console.error(`[ClientMessageHandler] Failed to send log task - no node connections for routing key ${routingKey}`);
+    }
 
     console.log(`[WS] Created log stream ${streamId} for path ${path} in cluster ${conn.clusterId}`);
+  }
+
+  /**
+   * Find which instance has the deployment/service by checking NODE_UPDATE in KV
+   */
+  private async findInstanceWithWorkload(clusterId: string, path: string): Promise<Instance | null> {
+    const instances: Instance[] = [];
+    const dedicated = await this.db.instances.find({ clusterId });
+    if (dedicated) instances.push(dedicated);
+
+    const poolInstanceId = await this.db.instances.getClusterPoolInstance(clusterId);
+    if (poolInstanceId) {
+      const pool = await this.db.instances.find({ id: poolInstanceId });
+      if (pool) instances.push(pool);
+    }
+
+    for (const instance of instances) {
+      const updateJson = await this.kv.kv.get(`node:${instance.tag}:update`);
+      if (!updateJson) continue;
+
+      try {
+        const update = JSON.parse(updateJson);
+        const workloads = update.workloads;
+        const isDeployment = workloads?.deployments?.some((d: any) => d.id === path);
+        const isService = path.startsWith("service:") && workloads?.services?.some((s: any) => s.name === path.slice(8));
+
+        if (isDeployment || isService) {
+          return instance;
+        }
+      } catch (err) {
+        console.error(`[ClientMessageHandler] Failed to parse NODE_UPDATE for ${instance.tag}:`, err);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Handle log stream unsubscription
+   */
+  private handleLogUnsubscribe(conn: ClusterConnection, path: string | undefined, requestId: string): void {
+    if (path) {
+      this.connectionManager.removeLogStreamsByPath(path, conn.ws);
+    }
+    // Send acknowledgment
+    try {
+      conn.ws.send(JSON.stringify({ kind: "log_unsubscribe_response", requestId, success: true }));
+    } catch {}
   }
 
   /**
