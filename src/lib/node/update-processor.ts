@@ -233,13 +233,14 @@ export class UpdateProcessor {
           try {
             const createdAtMs = d.created_at ? new Date(d.created_at).getTime() : undefined;
             const finishedAtMs = (d.status === "failed" || d.status === "success") && d.updated_at ? new Date(d.updated_at).getTime() : undefined;
+            const normalizedStatus = d.status === "in_progress" ? "running" : d.status;
             await this.db.deployments.upsert({
               clusterId: cluster.id,
               id: d.id,
               name: d.name,
               type: d.type,
               source: d.source,
-              status: d.status,
+              status: normalizedStatus,
               blueprint: d,
               logs: d.logs ?? null,
               createdAt: createdAtMs,
