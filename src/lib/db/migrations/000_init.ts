@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS deployments (
   logs        TEXT,
   created_at  BIGINT NOT NULL,
   finished_at BIGINT,
-  UNIQUE (cluster_id, name)
+  updated_at  BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
 );
 
 DO $$ BEGIN
