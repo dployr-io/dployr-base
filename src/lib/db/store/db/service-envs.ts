@@ -16,21 +16,23 @@ export interface ServiceEnv {
 export class ServiceEnvStore extends BaseStore {
   protected readonly storeTable: AllowedTable = "service_envs";
 
-  /** Upserts one or more env vars for a service. Pass `{ KEY: "value", ... }`. */
-  async set({ serviceId, envs }: { serviceId: string; envs: Record<string, string> }): Promise<void> {
+  /** Upserts one or more env vars for a service or deployment. Pass `{ KEY: "value", ... }`. */
+  async set({ serviceId, deploymentId, envs }: { serviceId?: string; deploymentId?: string; envs: Record<string, string> }): Promise<void> {
     const entries = Object.entries(envs);
     if (!entries.length) return;
+    if (!serviceId && !deploymentId) throw new Error("Either serviceId or deploymentId must be provided");
 
     const now = this.now();
+    const conflictTarget = serviceId ? "(service_id, key)" : "(deployment_id, key)";
     const statements = entries.map(([key, value]) => {
       const id = this.generateId();
       return this.db
         .prepare(
-          `INSERT INTO service_envs (id, service_id, key, value, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (service_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+          `INSERT INTO service_envs (id, service_id, deployment_id, key, value, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT ${conflictTarget} DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
         )
-        .bind(id, serviceId, key, value, now, now);
+        .bind(id, serviceId ?? null, deploymentId ?? null, key, value, now, now);
     });
 
     await this.db.batch(statements);

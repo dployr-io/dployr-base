@@ -23,25 +23,27 @@ export class ServiceSecretStore extends BaseStore {
     super(db);
   }
 
-  /** Upserts one or more secrets for a service. Pass `{ KEY: "value", ... }`. */
-  async set({ serviceId, secrets }: { serviceId: string; secrets: Record<string, string> }): Promise<void> {
+  /** Upserts one or more secrets for a service or deployment. Pass `{ KEY: "value", ... }`. */
+  async set({ serviceId, deploymentId, secrets }: { serviceId?: string; deploymentId?: string; secrets: Record<string, string> }): Promise<void> {
     const entries = Object.entries(secrets);
     if (!entries.length) return;
+    if (!serviceId && !deploymentId) throw new Error("Either serviceId or deploymentId must be provided");
 
     const now = this.now();
+    const conflictTarget = serviceId ? "(service_id, key)" : "(deployment_id, key)";
     const statements = entries.map(([key, value]) => {
       const id = this.generateId();
       const { valueCipher, dekCipher } = this.encryption.encrypt(value);
       return this.db
         .prepare(
-          `INSERT INTO service_secrets (id, service_id, key, value_encrypted, dek_encrypted, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (service_id, key) DO UPDATE
+          `INSERT INTO service_secrets (id, service_id, deployment_id, key, value_encrypted, dek_encrypted, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT ${conflictTarget} DO UPDATE
              SET value_encrypted = EXCLUDED.value_encrypted,
                  dek_encrypted   = EXCLUDED.dek_encrypted,
                  updated_at      = EXCLUDED.updated_at`,
         )
-        .bind(id, serviceId, key, valueCipher, dekCipher, now, now);
+        .bind(id, serviceId ?? null, deploymentId ?? null, key, valueCipher, dekCipher, now, now);
     });
 
     await this.db.batch(statements);

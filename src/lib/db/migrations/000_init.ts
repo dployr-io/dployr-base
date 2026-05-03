@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS domains (
 CREATE TABLE IF NOT EXISTS services (
   id            TEXT PRIMARY KEY,
   cluster_id    TEXT NOT NULL,
-  name          TEXT NOT NULL UNIQUE,
+  name          TEXT NOT NULL,
   type          service_type NOT NULL,
   deployment_id TEXT,
   created_at    BIGINT NOT NULL,
@@ -117,31 +117,43 @@ CREATE TABLE IF NOT EXISTS deployments (
 
 DO $$ BEGIN
   ALTER TABLE services
-    ADD CONSTRAINT services_deployment_fkey
-    FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE SET NULL
+    ADD CONSTRAINT services_deployment_cluster_check
+    CHECK (
+      deployment_id IS NULL OR
+      EXISTS (
+        SELECT 1 FROM deployments d
+        WHERE d.id = deployment_id AND d.cluster_id = cluster_id
+      )
+    )
     NOT VALID;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 CREATE TABLE IF NOT EXISTS service_envs (
-  id         TEXT PRIMARY KEY,
-  service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
-  key        TEXT NOT NULL,
-  value      TEXT NOT NULL,
-  created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL,
-  UNIQUE (service_id, key)
+  id              TEXT PRIMARY KEY,
+  service_id      TEXT REFERENCES services(id) ON DELETE CASCADE,
+  deployment_id   TEXT REFERENCES deployments(id) ON DELETE CASCADE,
+  key             TEXT NOT NULL,
+  value           TEXT NOT NULL,
+  created_at      BIGINT NOT NULL,
+  updated_at      BIGINT NOT NULL,
+  UNIQUE (service_id, key),
+  UNIQUE (deployment_id, key),
+  CHECK (service_id IS NOT NULL OR deployment_id IS NOT NULL)
 );
 
 CREATE TABLE IF NOT EXISTS service_secrets (
   id              TEXT PRIMARY KEY,
-  service_id      TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  service_id      TEXT REFERENCES services(id) ON DELETE CASCADE,
+  deployment_id   TEXT REFERENCES deployments(id) ON DELETE CASCADE,
   key             TEXT NOT NULL,
   value_encrypted BYTEA NOT NULL,
   dek_encrypted   BYTEA NOT NULL,
   created_at      BIGINT NOT NULL,
   updated_at      BIGINT NOT NULL,
-  UNIQUE (service_id, key)
+  UNIQUE (service_id, key),
+  UNIQUE (deployment_id, key),
+  CHECK (service_id IS NOT NULL OR deployment_id IS NOT NULL)
 );
 
 CREATE TABLE IF NOT EXISTS billing (
@@ -271,4 +283,23 @@ CREATE OR REPLACE TRIGGER enforce_single_owner_on_update
 BEFORE UPDATE OF role ON user_clusters
 FOR EACH ROW
 EXECUTE FUNCTION enforce_single_owner_on_update();
+
+CREATE OR REPLACE FUNCTION enforce_service_name_global_uniqueness()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM services
+    WHERE name = NEW.name
+      AND cluster_id != NEW.cluster_id
+  ) THEN
+    RAISE EXCEPTION 'service name has been taken by another cluster';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER enforce_service_name_global_uniqueness
+BEFORE INSERT OR UPDATE ON services
+FOR EACH ROW
+EXECUTE FUNCTION enforce_service_name_global_uniqueness();
 `;
