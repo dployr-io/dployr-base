@@ -9,6 +9,8 @@ import { getKVStore, getJWTService, getWS, getDbStore, getVMService } from "@/li
 import { InstanceConnectionFailureError, InstanceNotConnectedError, PermissionError, ResourceNotFoundError } from "@/lib/errors/errors.js";
 import { DployrdService } from "./dployrd.js";
 import { InstancePayload } from "@/lib/db/store/db/instances.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
+import { KVStore } from "@/lib/db/store/kv/index.js";
 
 /**
  * Service for managing dployr instances.
@@ -491,5 +493,77 @@ export class InstanceService {
     }
 
     return task.ID;
+  }
+
+  /**
+   * Resolve a deployment or service to the instance managing it.
+   *
+   * Handles two cases:
+   * - Deployment logs (failed or succeeded): returns the pool or dedicated instance for the cluster
+   * - Service logs: searches which node currently has it running
+   *
+   * @param path Deployment ID, service ID, or "service:NAME" to look up
+   * @param clusterId Cluster to search in (required for service lookups)
+   * @param db Database for fetching deployment/service/cluster info
+   * @param kv KV for checking which nodes have services running
+   * @returns The instance to stream logs from, or null if not found
+   */
+  static async findInstanceWithWorkload({
+    path,
+    clusterId: initialClusterId,
+    db,
+    kv,
+  }: {
+    path: string;
+    clusterId?: string;
+    db: DatabaseStore;
+    kv: KVStore;
+  }): Promise<Instance | null> {
+    const isService = path.startsWith("service:");
+    let clusterId = initialClusterId;
+    let deployment: any = null;
+
+    if (isService) {
+      const service = await db.services.find({ name: path.slice(8), clusterId });
+      if (!service) return null;
+      clusterId = service.clusterId;
+    } else {
+      deployment = await db.deployments.get(path);
+      if (!deployment) return null;
+      clusterId = deployment.clusterId;
+    }
+
+    if (!clusterId) return null;
+
+    const { instances: dedicated } = await db.instances.list({ clusterId });
+    const poolInstanceId = await db.instances.getClusterPoolInstance(clusterId);
+    const pool = poolInstanceId ? await db.instances.find({ id: poolInstanceId }) : null;
+    const instances = [...dedicated, ...(pool ? [pool] : [])];
+    if (instances.length === 0) return null;
+
+    const matches = async (instance: Instance): Promise<boolean> => {
+      const update = await kv.instanceCache.getNodeUpdate(instance.tag);
+      const workloads = (update as any)?.workloads;
+      if (isService) return workloads?.services?.some((s: any) => s.name === path.slice(8)) ?? false;
+      return workloads?.deployments?.some((d: any) => d.id === path) ?? false;
+    };
+
+    const connected: Instance[] = [];
+    const disconnected: Instance[] = [];
+    for (const instance of instances) {
+      if (await kv.instanceCache.isNodeConnected(instance.tag)) connected.push(instance);
+      else disconnected.push(instance);
+    }
+
+    for (const instance of [...connected, ...disconnected]) {
+      if (await matches(instance)) return instance;
+    }
+
+    // Deployment not in any update yet — if still in progress, route to any available instance
+    if (deployment?.status === "pending" || deployment?.status === "running") {
+      return connected[0] ?? disconnected[0] ?? null;
+    }
+
+    return null;
   }
 }
