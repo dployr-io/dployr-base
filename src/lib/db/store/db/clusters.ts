@@ -151,9 +151,9 @@ export class ClusterStore extends BaseStore {
       parts.push(`LOWER(c.name) = LOWER($${bindings.length})`);
     }
     if (filter?.instanceTag !== undefined) {
-      joins.push(`JOIN instances i ON c.pool_instance_id = i.id`);
       bindings.push(filter.instanceTag);
-      parts.push(`i.tag = $${bindings.length}`);
+      const tagParam = `$${bindings.length}`;
+      parts.push(`(c.id = (SELECT cluster_id FROM instances WHERE tag = ${tagParam}) OR c.pool_instance_id = (SELECT id FROM instances WHERE tag = ${tagParam}))`);
     }
     if (filter?.userId !== undefined) {
       joins.push(`JOIN user_clusters uc ON uc.cluster_id = c.id AND uc.role != 'invited'`);

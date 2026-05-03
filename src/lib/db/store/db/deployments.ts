@@ -59,7 +59,7 @@ export class DeploymentStore extends BaseStore {
              type = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.type ELSE $4 END,
              source = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.source ELSE $5 END,
              status = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.status ELSE $6 END,
-             logs = $9,
+             logs = CASE WHEN $9 IS NOT NULL THEN $9 ELSE deployments.logs END,
              finished_at = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.finished_at ELSE $10 END,
              service_id = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.service_id ELSE $11 END,
              updated_at = $12
@@ -147,10 +147,9 @@ export class DeploymentStore extends BaseStore {
     const result = await this.db
       .prepare(`UPDATE deployments SET logs = $1, updated_at = $2 WHERE id = $3 RETURNING id, cluster_id, service_id, name, type, source, status, blueprint, logs, created_at, finished_at`)
       .bind(logs, this.now(), id)
-      .all();
+      .first();
 
-    const row = result.results?.[0];
-    return row ? this.toDeployment(row) : null;
+    return result ? this.toDeployment(result) : null;
   }
 
   async delete({ id }: { id: string }): Promise<void> {

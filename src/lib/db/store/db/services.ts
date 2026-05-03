@@ -20,41 +20,22 @@ export class ServiceStore extends BaseStore {
    * No-ops if (cluster_id, name) already exists.
    * Returns `null` if no instance with that tag exists.
    */
-  async upsert({ instanceTag, name, type }: { instanceTag: string; name: string; type: ServiceType }): Promise<Service | null> {
+  async upsert({ clusterId, name, type, deploymentId }: { clusterId: string; name: string; type: ServiceType; deploymentId?: string }): Promise<Service | null> {
     const id = this.generateId();
     const now = this.now();
 
     try {
-      return await this.db.withTransaction(async (client) => {
-        const instanceResult = await this.db
-          .prepare(`SELECT cluster_id FROM instances WHERE tag = $1`)
-          .bind(instanceTag)
-          .executeWithClient(client);
+      const result = await this.db
+        .prepare(
+          `INSERT INTO services (id, cluster_id, name, type, deployment_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (cluster_id, name) DO UPDATE SET deployment_id = COALESCE(EXCLUDED.deployment_id, services.deployment_id), updated_at = EXCLUDED.updated_at
+           RETURNING id, cluster_id, name, type, deployment_id, created_at, updated_at`,
+        )
+        .bind(id, clusterId, name, type, deploymentId || null, now, now)
+        .first();
 
-        if (!instanceResult.rows.length || !instanceResult.rows[0].cluster_id) return null;
-
-        const clusterId = instanceResult.rows[0].cluster_id as string;
-
-        const insertResult = await this.db
-          .prepare(
-            `INSERT INTO services (id, cluster_id, name, type, created_at, updated_at)
-              VALUES ($1, $2, $3, $4, $5, $6)
-              ON CONFLICT (cluster_id, name) DO NOTHING`,
-          )
-          .bind(id, clusterId, name, type, now, now)
-          .executeWithClient(client);
-
-        if (insertResult.rowCount && insertResult.rowCount > 0) {
-          return { id, clusterId, name, type, deploymentId: null, createdAt: now, updatedAt: now };
-        }
-
-        const existing = await this.db
-          .prepare(`SELECT id, cluster_id, name, type, deployment_id, created_at, updated_at FROM services WHERE cluster_id = $1 AND name = $2`)
-          .bind(clusterId, name)
-          .executeWithClient(client);
-
-        return existing.rows[0] ? this.toService(existing.rows[0]) : null;
-      });
+      return result ? this.toService(result) : null;
     } catch (error) {
       this.parsePostgresError(error);
     }
