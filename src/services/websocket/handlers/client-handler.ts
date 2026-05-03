@@ -38,9 +38,10 @@ import {
   isProcessHistoryMessage,
   isTerminalMessage,
   isTerminalOpenMessage,
-} from "../../../types/websocket-message.js";
+} from "@/types/websocket-message.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { JWTService } from "@/services/auth/jwt.js";
+import { InstanceService } from "@/services/instances.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { TerminalManager } from "@/services/websocket/terminal-manager.js";
@@ -238,7 +239,6 @@ export class ClientMessageHandler {
 
     // Create new subscription
     const startOffset = startFrom === -1 ? undefined : startFrom;
-
     this.connectionManager.addLogStream({
       streamId,
       path,
@@ -247,16 +247,13 @@ export class ClientMessageHandler {
       duration,
     });
 
-    // Find which instance has the deployment/service by checking NODE_UPDATE in KV
-    let instance = await this.findInstanceWithWorkload(conn.connectionKey, path);
-
+    let instance = await InstanceService.findInstanceWithWorkload({ path, clusterId: conn.clusterId, db: this.db, kv: this.kv });
     if (!instance) {
       console.error(`[ConnectionManager] No instance found with deployment/service at path ${path}`);
       this.sendError(conn, streamId, WSErrorCode.INTERNAL_ERROR, "Deployment or service not found on any instance");
       return;
     }
 
-    // Create and send task to nodes in cluster
     const nodeToken = await this.jwtService.createNodeAccessToken(instance.tag);
     const task = this.dployrdService.createLogStreamTask({
       streamId,
@@ -266,7 +263,6 @@ export class ClientMessageHandler {
       token: nodeToken,
     });
 
-    // Determine routing key based on instance type
     const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
     const sent = this.connectionManager.sendTask(routingKey, task);
 
@@ -274,42 +270,7 @@ export class ClientMessageHandler {
       console.error(`[ClientMessageHandler] Failed to send log task - no node connections for routing key ${routingKey}`);
     }
 
-    console.log(`[WS] Created log stream ${streamId} for path ${path} in cluster ${conn.connectionKey}`);
-  }
-
-  /**
-   * Find which instance has the deployment/service by checking NODE_UPDATE in KV
-   */
-  private async findInstanceWithWorkload(clusterId: string, path: string): Promise<Instance | null> {
-    const instances: Instance[] = [];
-    const dedicated = await this.db.instances.find({ clusterId });
-    if (dedicated) instances.push(dedicated);
-
-    const poolInstanceId = await this.db.instances.getClusterPoolInstance(clusterId);
-    if (poolInstanceId) {
-      const pool = await this.db.instances.find({ id: poolInstanceId });
-      if (pool) instances.push(pool);
-    }
-
-    for (const instance of instances) {
-      const updateJson = await this.kv.kv.get(`node:${instance.tag}:update`);
-      if (!updateJson) continue;
-
-      try {
-        const update = JSON.parse(updateJson);
-        const workloads = update.workloads;
-        const isDeployment = workloads?.deployments?.some((d: any) => d.id === path);
-        const isService = path.startsWith("service:") && workloads?.services?.some((s: any) => s.name === path.slice(8));
-
-        if (isDeployment || isService) {
-          return instance;
-        }
-      } catch (err) {
-        console.error(`[ClientMessageHandler] Failed to parse NODE_UPDATE for ${instance.tag}:`, err);
-      }
-    }
-
-    return null;
+    console.log(`[WS] Created log stream ${streamId} for path ${path}, in instance ${conn.instanceTag}, ID: ${conn.connectionKey}`);
   }
 
   /**

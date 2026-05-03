@@ -30,9 +30,9 @@ export interface WebSocketHandlerConfig {
  */
 export class WebSocketHandler {
   public readonly connectionManager: ConnectionManager;
+  public readonly clientNotifier: ClientNotifier;
   private dployrdHandler: NodeMessageHandler;
   private clientHandler: ClientMessageHandler;
-  private clientNotifier: ClientNotifier;
   private terminalManager: TerminalManager;
   private sessionConnections = new Map<string, string>();
   private dbStore: DatabaseStore;
@@ -54,7 +54,7 @@ export class WebSocketHandler {
     const jwtService = new JWTService(this.kvStore);
     const dployrdService = new DployrdService();
 
-    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore, jwtService, dployrdService);
+    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore);
 
     this.terminalManager = new TerminalManager(300000);
     this.clientHandler = new ClientMessageHandler({
@@ -141,7 +141,9 @@ export class WebSocketHandler {
       if (conn.instanceTag) {
         this.kvStore.deleteNodeConnected(conn.instanceTag).catch(() => {});
       }
-      this.dployrdHandler.handleNodeDisconnect(conn.clusterId || conn.connectionKey);
+      this.dployrdHandler.handleNodeDisconnect(conn).catch((err) => {
+        console.error(`[WS] Error deregistering node on disconnect:`, err);
+      });
     }
   }
 

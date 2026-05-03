@@ -10,8 +10,6 @@ import { ClientNotifier } from "./client-notifier.js";
 import { UpdateProcessor } from "@/lib/node/update-processor.js";
 import { NodeUpdate } from "@/types/node.js";
 import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
-import type { JWTService } from "@/services/auth/jwt.js";
-import type { DployrdService } from "@/services/dployrd.js";
 
 /**
  * Handles messages from dployrd connections.
@@ -22,8 +20,6 @@ export class NodeMessageHandler {
     private clientNotifier: ClientNotifier,
     private db: DatabaseStore,
     private kv: KVStore,
-    private jwtService?: JWTService,
-    private dployrdService?: DployrdService,
   ) {}
 
   /**
@@ -39,17 +35,15 @@ export class NodeMessageHandler {
 
     if (isNodeBroadcastMessage(message)) {
       const update = (message as any).update as NodeUpdate;
-      let changedFlags = { servicesChanged: false, deploymentsChanged: false };
+      let changedFlags = { deploymentsChanged: false };
 
       if (update?.instance_id) {
+        (conn as any).nodeInstanceId = update.instance_id;
         changedFlags = await new UpdateProcessor({
           db: this.db,
           kv: this.kv,
           tag: update.instance_id,
           message: update,
-          connectionManager: this.connectionManager,
-          jwtService: this.jwtService,
-          dployrdService: this.dployrdService,
         }).processUpdate();
       }
 
@@ -59,14 +53,18 @@ export class NodeMessageHandler {
         await Promise.all(
           clusters.map(async (cluster) => {
             await this.clientNotifier.broadcast(cluster.id, message);
-            if (changedFlags.servicesChanged) this.clientNotifier.notifyRefresh(cluster.id, "services");
             if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(cluster.id, "deployments");
+            if (update?.instance_id) {
+              await this.kv.instanceCache.registerClusterNode(cluster.id, update.instance_id);
+            }
           }),
         );
       } else if (conn.clusterId) {
         await this.clientNotifier.broadcast(conn.clusterId, message);
-        if (changedFlags.servicesChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "services");
         if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "deployments");
+        if (update?.instance_id) {
+          await this.kv.instanceCache.registerClusterNode(conn.clusterId, update.instance_id);
+        }
       }
       return;
     }
@@ -249,9 +247,29 @@ export class NodeMessageHandler {
   }
 
   /**
-   * Handle node disconnection - fail pending requests
+   * Handle node disconnection - cleanup cluster registrations
    */
-  handleNodeDisconnect(connectionKey: string): void {
-    console.log("[WS] Node disconnected from base: ", connectionKey);
+  async handleNodeDisconnect(conn: ClusterConnection): Promise<void> {
+    console.log("[WS] Node disconnected from base: ", conn.connectionKey);
+
+    const nodeInstanceId = (conn as any).nodeInstanceId || conn.instanceTag;
+    if (!nodeInstanceId) {
+      return;
+    }
+
+    try {
+      // Deregister node from cluster(s)
+      if (conn.connectionKey.startsWith("pool:")) {
+        const instanceTag = conn.connectionKey.slice("pool:".length);
+        const { clusters } = await this.db.clusters.list({ instanceTag });
+        for (const cluster of clusters) {
+          await this.kv.instanceCache.deregisterClusterNode(cluster.id, nodeInstanceId);
+        }
+      } else if (conn.clusterId) {
+        await this.kv.instanceCache.deregisterClusterNode(conn.clusterId, nodeInstanceId);
+      }
+    } catch (err) {
+      console.error(`[WS] Error deregistering node ${nodeInstanceId}:`, err);
+    }
   }
 }
