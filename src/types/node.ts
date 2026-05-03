@@ -23,19 +23,22 @@ export const NodeStatusReportSchema = z.object({
 export type NodeStatusReport = z.infer<typeof NodeStatusReportSchema>;
 export type CompletedTask = z.infer<typeof CompletedTaskSchema>;
 
-// WebSocket message schemas
+/** WebSocket message schemas
+ * @deprecated */
 export const NodeUpdateV1Schema = z.object({
   schema: z.literal("v1"),
   seq: z.number(),
   epoch: z.string(),
   full: z.boolean(),
   instance_id: z.string(),
-  build_info: z.object({
-    version: z.string(),
-    commit: z.string(),
-    date: z.string(),
-    go_version: z.string(),
-  }).optional(),
+  build_info: z
+    .object({
+      version: z.string(),
+      commit: z.string(),
+      date: z.string(),
+      go_version: z.string(),
+    })
+    .optional(),
   platform: z.object({
     os: z.string(),
     arch: z.string(),
@@ -66,173 +69,217 @@ export const NodeUpdateV1_1Schema = z.object({
   timestamp: z.string(),
   is_full_sync: z.boolean(),
 
-  node: z.object({
-    version: z.string(),
-    commit: z.string(),
-    build_date: z.string(),
-    go_version: z.string(),
-    os: z.string(),
-    arch: z.string(),
-  }).optional(),
+  node: z
+    .object({
+      version: z.string(),
+      commit: z.string(),
+      build_date: z.string(),
+      go_version: z.string(),
+      os: z.string(),
+      arch: z.string(),
+    })
+    .optional(),
 
-  status: z.object({
-    state: z.string(),
-    mode: z.string(),
-    uptime_seconds: z.number(),
-  }).optional(),
-
-  health: z.object({
-    overall: z.string(),
-    websocket: z.string().optional(),
-    tasks: z.string().optional(),
-    proxy: z.string().optional(),
-    auth: z.string().optional(),
-  }).optional(),
-
-  resources: z.object({
-    cpu: z.object({
-      count: z.number(),
-      user_percent: z.number(),
-      system_percent: z.number(),
-      idle_percent: z.number(),
-      iowait_percent: z.number(),
-      load_average: z.object({
-        one_minute: z.number(),
-        five_minute: z.number(),
-        fifteen_minute: z.number(),
-      }),
-    }).optional(),
-    memory: z.object({
-      total_bytes: z.number(),
-      used_bytes: z.number(),
-      free_bytes: z.number(),
-      available_bytes: z.number(),
-      buffer_cache_bytes: z.number(),
-    }).optional(),
-    swap: z.object({
-      total_bytes: z.number(),
-      used_bytes: z.number(),
-      free_bytes: z.number(),
-      available_bytes: z.number(),
-    }).optional(),
-    disks: z.array(z.object({
-      filesystem: z.string(),
-      mount_point: z.string(),
-      total_bytes: z.number(),
-      used_bytes: z.number(),
-      available_bytes: z.number(),
-    })).optional(),
-  }).optional(),
-
-  workloads: z.object({
-    deployments: z.array(z.record(z.string(), z.unknown())).optional(),
-    services: z.array(z.record(z.string(), z.unknown())).optional(),
-  }).optional(),
-
-  proxy: z.object({
-    type: z.string(),
-    status: z.string(),
-    version: z.string().optional(),
-    route_count: z.number().optional(),
-    routes: z.array(z.object({
-      domain: z.string(),
-      upstream: z.string(),
-      template: z.string(),
-      root: z.string().nullable().optional(),
-      status: z.string(),
-    })).optional(),
-  }).optional(),
-
-  processes: z.object({
-    summary: z.object({
-      total: z.number(),
-      running: z.number(),
-      sleeping: z.number(),
-      stopped: z.number(),
-      zombie: z.number(),
-    }).optional(),
-    list: z.array(z.object({
-      pid: z.number(),
-      user: z.string(),
-      priority: z.number(),
-      nice: z.number(),
-      virtual_memory_bytes: z.number(),
-      resident_memory_bytes: z.number(),
-      shared_memory_bytes: z.number(),
+  status: z
+    .object({
       state: z.string(),
-      cpu_percent: z.number(),
-      memory_percent: z.number(),
-      cpu_time: z.string(),
-      command: z.string(),
-    })).optional(),
-  }).optional(),
+      mode: z.string(),
+      uptime_seconds: z.number(),
+    })
+    .optional(),
 
-  filesystem: z.object({
-    generated_at: z.string(),
-    is_stale: z.boolean(),
-    roots: z.array(z.object({
-      path: z.string(),
-      name: z.string(),
+  health: z
+    .object({
+      overall: z.string(),
+      websocket: z.string().optional(),
+      tasks: z.string().optional(),
+      proxy: z.string().optional(),
+      auth: z.string().optional(),
+    })
+    .optional(),
+
+  resources: z
+    .object({
+      cpu: z
+        .object({
+          count: z.number(),
+          user_percent: z.number(),
+          system_percent: z.number(),
+          idle_percent: z.number(),
+          iowait_percent: z.number(),
+          load_average: z.object({
+            one_minute: z.number(),
+            five_minute: z.number(),
+            fifteen_minute: z.number(),
+          }),
+        })
+        .optional(),
+      memory: z
+        .object({
+          total_bytes: z.number(),
+          used_bytes: z.number(),
+          free_bytes: z.number(),
+          available_bytes: z.number(),
+          buffer_cache_bytes: z.number(),
+        })
+        .optional(),
+      swap: z
+        .object({
+          total_bytes: z.number(),
+          used_bytes: z.number(),
+          free_bytes: z.number(),
+          available_bytes: z.number(),
+        })
+        .optional(),
+      disks: z
+        .array(
+          z.object({
+            filesystem: z.string(),
+            mount_point: z.string(),
+            total_bytes: z.number(),
+            used_bytes: z.number(),
+            available_bytes: z.number(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
+
+  workloads: z
+    .object({
+      deployments: z.array(z.record(z.string(), z.unknown())).optional(),
+      services: z.array(z.record(z.string(), z.unknown())).optional(),
+    })
+    .optional(),
+
+  proxy: z
+    .object({
       type: z.string(),
-      size_bytes: z.number(),
-      modified_at: z.string(),
-      permissions: z.object({
-        mode: z.string(),
-        owner: z.string(),
-        group: z.string(),
-        uid: z.number(),
-        gid: z.number(),
-        readable: z.boolean(),
-        writable: z.boolean(),
-        executable: z.boolean(),
-      }),
-      children: z.array(z.any()).nullable().optional(),
-      is_truncated: z.boolean(),
-      total_children: z.number(),
-    })),
-  }).optional(),
+      status: z.string(),
+      version: z.string().optional(),
+      route_count: z.number().optional(),
+      routes: z
+        .array(
+          z.object({
+            domain: z.string(),
+            upstream: z.string(),
+            template: z.string(),
+            root: z.string().nullable().optional(),
+            status: z.string(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
 
-  diagnostics: z.object({
-    websocket: z.object({
-      is_connected: z.boolean(),
-      last_connected_at: z.string(),
-      reconnect_count: z.number(),
-      last_error: z.string().nullable(),
-    }).optional(),
-    tasks: z.object({
-      inflight_count: z.number(),
-      unsent_count: z.number(),
-      last_task_id: z.string().optional(),
-      last_task_status: z.string().optional(),
-      last_task_duration_ms: z.number().optional(),
-      last_task_at: z.string().optional(),
-    }).optional(),
-    auth: z.object({
-      token_age_seconds: z.number(),
-      token_expires_in_seconds: z.number(),
-      bootstrap_token_preview: z.string().optional(),
-    }).optional(),
-    worker: z.object({
-      max_concurrent: z.number(),
-      active_jobs: z.number(),
-    }).optional(),
-    cert: z.object({
-      not_after: z.string(),
-      days_remaining: z.number(),
-    }).optional(),
-  }).optional(),
+  processes: z
+    .object({
+      summary: z
+        .object({
+          total: z.number(),
+          running: z.number(),
+          sleeping: z.number(),
+          stopped: z.number(),
+          zombie: z.number(),
+        })
+        .optional(),
+      list: z
+        .array(
+          z.object({
+            pid: z.number(),
+            user: z.string(),
+            priority: z.number(),
+            nice: z.number(),
+            virtual_memory_bytes: z.number(),
+            resident_memory_bytes: z.number(),
+            shared_memory_bytes: z.number(),
+            state: z.string(),
+            cpu_percent: z.number(),
+            memory_percent: z.number(),
+            cpu_time: z.string(),
+            command: z.string(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
+
+  filesystem: z
+    .object({
+      generated_at: z.string(),
+      is_stale: z.boolean(),
+      roots: z.array(
+        z.object({
+          path: z.string(),
+          name: z.string(),
+          type: z.string(),
+          size_bytes: z.number(),
+          modified_at: z.string(),
+          permissions: z.object({
+            mode: z.string(),
+            owner: z.string(),
+            group: z.string(),
+            uid: z.number(),
+            gid: z.number(),
+            readable: z.boolean(),
+            writable: z.boolean(),
+            executable: z.boolean(),
+          }),
+          children: z.array(z.any()).nullable().optional(),
+          is_truncated: z.boolean(),
+          total_children: z.number(),
+        }),
+      ),
+    })
+    .optional(),
+
+  diagnostics: z
+    .object({
+      websocket: z
+        .object({
+          is_connected: z.boolean(),
+          last_connected_at: z.string(),
+          reconnect_count: z.number(),
+          last_error: z.string().nullable(),
+        })
+        .optional(),
+      tasks: z
+        .object({
+          inflight_count: z.number(),
+          unsent_count: z.number(),
+          last_task_id: z.string().optional(),
+          last_task_status: z.string().optional(),
+          last_task_duration_ms: z.number().optional(),
+          last_task_at: z.string().optional(),
+        })
+        .optional(),
+      auth: z
+        .object({
+          token_age_seconds: z.number(),
+          token_expires_in_seconds: z.number(),
+          bootstrap_token_preview: z.string().optional(),
+        })
+        .optional(),
+      worker: z
+        .object({
+          max_concurrent: z.number(),
+          active_jobs: z.number(),
+        })
+        .optional(),
+      cert: z
+        .object({
+          not_after: z.string(),
+          days_remaining: z.number(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export type NodeUpdateV1_1 = z.infer<typeof NodeUpdateV1_1Schema>;
 
-// Union type for all node update versions
-export const NodeUpdateSchema = z.discriminatedUnion("schema", [
-  NodeUpdateV1Schema,
-  NodeUpdateV1_1Schema,
-]);
+export type NodeUpdate = NodeUpdateV1_1;
 
-export type NodeUpdate = z.infer<typeof NodeUpdateSchema>;
-
-export type WSHandshakeResponse = 
+export type WSHandshakeResponse =
   | { kind: "hello"; status: "accepted"; upgrade_available?: { level: "major" | "minor"; latest: string } }
   | { kind: "hello"; status: "rejected"; reason: "incompatible"; required: string; received: string };
