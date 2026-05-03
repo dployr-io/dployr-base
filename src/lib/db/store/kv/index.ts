@@ -76,6 +76,9 @@ export class KVStore {
   getProcessSnapshot = (...args: Parameters<InstanceCacheStore["getProcessSnapshot"]>) => this.instanceCache.getProcessSnapshot(...args);
   getLatestProcessSnapshots = (...args: Parameters<InstanceCacheStore["getLatestProcessSnapshots"]>) => this.instanceCache.getLatestProcessSnapshots(...args);
   getProcessSnapshotsByTimeRange = (...args: Parameters<InstanceCacheStore["getProcessSnapshotsByTimeRange"]>) => this.instanceCache.getProcessSnapshotsByTimeRange(...args);
+  registerClusterNode = (...args: Parameters<InstanceCacheStore["registerClusterNode"]>) => this.instanceCache.registerClusterNode(...args);
+  getClusterNodes = (...args: Parameters<InstanceCacheStore["getClusterNodes"]>) => this.instanceCache.getClusterNodes(...args);
+  deregisterClusterNode = (...args: Parameters<InstanceCacheStore["deregisterClusterNode"]>) => this.instanceCache.deregisterClusterNode(...args);
 
   // IntegrationsStore delegation
   setPendingGitHubInstall = (...args: Parameters<IntegrationsStore["setPendingGitHubInstall"]>) => this.integrations.setPendingGitHubInstall(...args);
