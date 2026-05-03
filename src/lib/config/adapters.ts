@@ -193,6 +193,10 @@ export function createVmProvider(config: Config): DigitalOceanVMService | null {
  * Initialize all adapters from config (one-liner setup)
  */
 export async function initializeFromConfig(config: Config) {
+  if (config.security?.encryption_key) {
+    process.env.ENCRYPTION_KEY = config.security.encryption_key;
+  }
+
   const kv = await createKVFromConfig(config);
   const db = await createDatabaseFromConfig(config);
   const storage = await createStorageFromConfig(config);
