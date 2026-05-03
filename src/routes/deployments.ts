@@ -18,6 +18,8 @@ const dployrdService = new DployrdService();
 const finishDeploymentSchema = z.object({
   token: z.string().min(1, "Token is required"),
   id: z.ulid("Invalid deployment ID"),
+  blueprint: z.record(z.string(), z.any()),
+  userId: z.ulid(),
   logs: z.string().min(1, "Logs are required"),
 });
 
@@ -40,7 +42,7 @@ deployments.post("/finish", async (c) => {
       );
     }
 
-    const { token, id, logs } = validation.data;
+    const { token, id, logs, userId, blueprint } = validation.data;
     const jwtService = getJWTService(c);
     const decoded = await jwtService.verifyToken(token);
     if (!decoded) {
@@ -56,13 +58,26 @@ deployments.post("/finish", async (c) => {
     const db = getDbStore(c);
     const deployment = await db.deployments.get(id);
     if (!deployment) {
-      return c.json(
-        createErrorResponse({
-          message: "Deployment not found",
-          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-        }),
-        ERROR.RESOURCE.MISSING_RESOURCE.status,
-      );
+      const cluster = await db.clusters.find({ userId });
+      if (!cluster) {
+        return c.json(
+          createErrorResponse({
+            message: "Cluster not found",
+            code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+          }),
+          ERROR.RESOURCE.MISSING_RESOURCE.status,
+        );
+      }
+
+      await db.deployments.upsert({
+        clusterId: cluster.id,
+        id,
+        name: blueprint.name,
+        type: blueprint.type,
+        source: blueprint.source,
+        blueprint: blueprint,
+        logs,
+      });
     }
 
     // Update deployment logs

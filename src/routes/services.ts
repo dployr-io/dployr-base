@@ -92,8 +92,8 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
 
   try {
     // Merge envs and secrets (upsert only — existing keys not in the payload are untouched)
-    if (deployPayload.envVars && Object.keys(deployPayload.envVars).length > 0) {
-      await db.serviceEnvs.set({ serviceId, envs: deployPayload.envVars });
+    if (deployPayload.env_vars && Object.keys(deployPayload.env_vars).length > 0) {
+      await db.serviceEnvs.set({ serviceId, envs: deployPayload.env_vars });
     }
     if (deployPayload.secrets && Object.keys(deployPayload.secrets).length > 0 && db.serviceSecrets) {
       await db.serviceSecrets.set({ serviceId, secrets: deployPayload.secrets });
