@@ -156,20 +156,6 @@ export class NodeMessageHandler {
 
     // Route response directly to the requesting client
     const routed = this.connectionManager.routeResponseToClient(taskId, { kind: responseKind, success, data, error });
-
-    if (responseKind === "deploy_response" && data) {
-      const instanceTag = data["instance_id"] as string;
-      const serviceName = data["name"] as string;
-      await this.db.services.upsert({ instanceTag, name: serviceName, type: data["type"] as any });
-    }
-
-    if (success && responseKind === "service_remove_response" && data) {
-      this.db.services.delete({ name: data["name"] });
-    }
-
-    if (!routed) {
-      console.warn(`[WS] Could not route response for taskId: ${taskId} (request may have timed out)`);
-    }
   }
 
   /**

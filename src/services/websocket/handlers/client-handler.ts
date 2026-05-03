@@ -203,7 +203,7 @@ export class ClientMessageHandler {
    * Handle client subscription - send cached status
    */
   private async handleClientSubscribe(conn: ClusterConnection, requestId?: string): Promise<void> {
-    const cached = await this.kv.kv.get(`cluster:${conn.clusterId}:status`);
+    const cached = await this.kv.kv.get(`cluster:${conn.connectionKey}:status`);
     if (cached) {
       try {
         const response = {
@@ -248,7 +248,7 @@ export class ClientMessageHandler {
     });
 
     // Find which instance has the deployment/service by checking NODE_UPDATE in KV
-    let instance = await this.findInstanceWithWorkload(conn.clusterId, path);
+    let instance = await this.findInstanceWithWorkload(conn.connectionKey, path);
 
     if (!instance) {
       console.error(`[ConnectionManager] No instance found with deployment/service at path ${path}`);
@@ -267,21 +267,14 @@ export class ClientMessageHandler {
     });
 
     // Determine routing key based on instance type
-    let routingKey: string;
-    if (instance.kind === "dedicated") {
-      routingKey = instance.clusterId!;
-    } else {
-      // Pool instance - use pool:${tag} format
-      routingKey = `pool:${instance.tag}`;
-    }
-
+    const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
     const sent = this.connectionManager.sendTask(routingKey, task);
 
     if (!sent) {
       console.error(`[ClientMessageHandler] Failed to send log task - no node connections for routing key ${routingKey}`);
     }
 
-    console.log(`[WS] Created log stream ${streamId} for path ${path} in cluster ${conn.clusterId}`);
+    console.log(`[WS] Created log stream ${streamId} for path ${path} in cluster ${conn.connectionKey}`);
   }
 
   /**
@@ -357,14 +350,14 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_read");
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.connectionKey, "file_read");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.connectionKey);
     const task = this.dployrdService.createFileReadTask(taskId, path, token);
 
     if (!this.isTaskAllowedOnInstance(instance, message)) {
@@ -373,7 +366,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.connectionKey), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -409,14 +402,14 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_write");
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.connectionKey, "file_write");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.connectionKey);
     const task = this.dployrdService.createFileWriteTask(taskId, path, content, encoding, token);
 
     if (!this.isTaskAllowedOnInstance(instance, message)) {
@@ -425,7 +418,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.connectionKey), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -461,14 +454,14 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_create");
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.connectionKey, "file_create");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.connectionKey);
     const task = this.dployrdService.createFileCreateTask(taskId, path, type, token);
 
     if (!this.isTaskAllowedOnInstance(instance, message)) {
@@ -477,7 +470,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.connectionKey), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -513,14 +506,14 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_delete");
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.connectionKey, "file_delete");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.connectionKey);
     const task = this.dployrdService.createFileDeleteTask(taskId, path, token);
 
     if (!this.isTaskAllowedOnInstance(instance, message)) {
@@ -529,7 +522,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.connectionKey), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -565,14 +558,14 @@ export class ClientMessageHandler {
     const taskId = ulid();
 
     // Track pending request
-    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.clusterId, "file_tree");
+    const added = this.connectionManager.addPendingRequest(taskId, requestId, conn.ws, conn.connectionKey, "file_tree");
 
     if (!added) {
       this.sendError(conn, requestId, WSErrorCode.TOO_MANY_PENDING, "Too many pending requests");
       return;
     }
 
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.connectionKey);
     const task = this.dployrdService.createFileTreeTask(taskId, path, token);
 
     if (!this.isTaskAllowedOnInstance(instance, message)) {
@@ -581,7 +574,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.connectionKey), task);
 
     if (!sent) {
       this.connectionManager.removePendingRequest(taskId);
@@ -622,7 +615,7 @@ export class ClientMessageHandler {
     this.connectionManager.addFileWatch(watchKey, conn.connectionId);
 
     const taskId = ulid();
-    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
+    const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.connectionKey);
 
     const task = this.dployrdService.createFileWatchTask(taskId, instanceId, path, recursive, requestId, token);
 
@@ -632,7 +625,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.connectionKey), task);
     if (!sent) {
       this.connectionManager.removeFileWatch(watchKey, conn.connectionId);
       this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No nodes available");
@@ -673,11 +666,11 @@ export class ClientMessageHandler {
     // Only send unwatch task to node if no more subscribers
     if (!this.connectionManager.hasFileWatchSubscribers(watchKey)) {
       const taskId = ulid();
-      const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.clusterId);
+      const token = await this.jwtService.createInstanceAccessToken(conn.session, instance.tag, conn.connectionKey);
       const task = this.dployrdService.createFileUnwatchTask(taskId, instanceId, path, requestId, token);
 
       if (this.isTaskAllowedOnInstance(instance, message)) {
-        this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
+        this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.connectionKey), task);
       }
     }
 
@@ -709,7 +702,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const clusterId = instance.kind === "pool" ? conn.clusterId : instance.clusterId;
+    const clusterId = instance.kind === "pool" ? conn.connectionKey : instance.clusterId;
     if (!clusterId) {
       this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
       return;
@@ -735,7 +728,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.clusterId), task);
+    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.connectionKey), task);
     if (!sent) {
       this.terminalManager.removeExpectedSession(sessionId);
       this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No node available");
@@ -782,7 +775,7 @@ export class ClientMessageHandler {
       }
 
       // Verify user has access to this instance's cluster
-      const effectiveClusterId = instance.kind === "pool" ? conn.clusterId : instance.clusterId;
+      const effectiveClusterId = instance.kind === "pool" ? conn.connectionKey : instance.clusterId;
       const userClusters = conn.session.clusters.map((c) => c.id);
       if (!effectiveClusterId || !userClusters.includes(effectiveClusterId)) {
         this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
