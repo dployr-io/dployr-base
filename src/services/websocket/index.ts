@@ -110,6 +110,42 @@ export class WebSocketService {
     });
   }
 
+  /**
+   * Resolve connection details for nodes or clients
+   * Returns { connectionKey, clusterId, instanceTag }
+   * - connectionKey: key to register under in connections map
+   * - clusterId: actual cluster ID (for notifications, undefined for pool nodes)
+   * - instanceTag: instance tag (only for nodes)
+   */
+  private async resolveConnectionDetails(
+    role: "node" | "client",
+    url: URL,
+  ): Promise<{ connectionKey: string; clusterId?: string; instanceTag?: string } | null> {
+    if (role === "node") {
+      if (!this.adapters?.db) return null;
+
+      const instanceId = url.searchParams.get("instanceId");
+      const instanceName = url.searchParams.get("instanceName");
+
+      if (!instanceId && !instanceName) return null;
+
+      const db = new DatabaseStore(this.adapters.db);
+      const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName! });
+
+      if (!instance) return null;
+
+      return {
+        connectionKey: instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag,
+        clusterId: instance.kind === "dedicated" ? instance.clusterId || undefined : undefined,
+        instanceTag: instance.tag,
+      };
+    } else {
+      // Client connection
+      const clusterId = url.searchParams.get("clusterId");
+      return clusterId ? { connectionKey: clusterId, clusterId } : null;
+    }
+  }
+
   private setupUpgradeHandler(): void {
     this.server.on("upgrade", async (message: IncomingMessage, socket: Socket, head: Buffer) => {
       const url = new URL(message.url || "", `http://${message.headers.host}`);
@@ -153,47 +189,15 @@ export class WebSocketService {
       if (url.pathname.match(/\/v1\/(instances\/stream|node\/ws)$/)) {
         const role = url.pathname.includes("/node/ws") ? "node" : "client";
 
-        let connectionKey: string | null = null;
-        let actualClusterId: string | undefined;
-        let instanceTag: string | undefined;
-
-        if (role === "node") {
-          const instanceId = url.searchParams.get("instanceId");
-          const instanceName = url.searchParams.get("instanceName");
-
-          if ((!instanceId && !instanceName) || !this.adapters?.db) {
-            socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
-            socket.destroy();
-            return;
-          }
-
-          const db = new DatabaseStore(this.adapters.db);
-          const instance = await db.instances.find(instanceId ? { id: instanceId } : { tag: instanceName! });
-
-          if (!instance) {
-            socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
-            socket.destroy();
-            return;
-          }
-
-          // For nodes: register under instance tag (for task routing)
-          // Store actual cluster ID separately (for client notifications)
-          if (instance.kind === "pool") {
-            connectionKey = `pool:${instance.tag}`;
-          } else {
-            connectionKey = instance.tag;
-            actualClusterId = instance.clusterId ?? undefined;
-          }
-          instanceTag = instance.tag;
-        } else {
-          connectionKey = url.searchParams.get("clusterId");
-        }
-
-        if (!connectionKey || !this.adapters?.ws) {
-          socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+        const connectionDetails = await this.resolveConnectionDetails(role, url);
+        if (!connectionDetails || !this.adapters?.ws) {
+          const statusCode = !connectionDetails ? (role === "node" ? "404" : "400") : "400";
+          socket.write(`HTTP/1.1 ${statusCode} ${statusCode === "404" ? "Not Found" : "Bad Request"}\r\n\r\n`);
           socket.destroy();
           return;
         }
+
+        const { connectionKey, clusterId, instanceTag } = connectionDetails;
 
         // Validate auth token for node endpoint
         if (role === "node") {
@@ -223,7 +227,7 @@ export class WebSocketService {
         }
 
         this.wss.handleUpgrade(message, socket, head, (ws: WebSocket) => {
-          this.adapters!.ws.acceptWebSocket(connectionKey, ws, role, session, instanceTag, actualClusterId);
+          this.adapters!.ws.acceptWebSocket(connectionKey, ws, role, session, instanceTag, clusterId);
         });
       } else {
         socket.destroy();
