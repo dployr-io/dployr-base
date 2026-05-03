@@ -24,6 +24,8 @@ export const ADMIN_JWT_REFRESH_WINDOW = 60 * 29.5; // 29.5 minutes
 export const ACCEPTABLE_HEARTBEAT_WINDOW = 60 * 3; // 3 minutes
 
 // Jobs (milliseconds — used with setInterval)
+export const TEN_SECONDS_MS = 10 * 1000;
+export const TWELVE_SECONDS_MS = 12 * 1000;
 export const THIRTY_SECONDS_MS = 30 * 1000;
 export const FIVE_MINUTES_MS = 5 * 60 * 1000;
 export const THIRTY_MINUTES_MS = 30 * 60 * 1000;
