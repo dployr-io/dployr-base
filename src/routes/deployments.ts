@@ -11,6 +11,7 @@ import { getDbStore, getWS, getJWTService } from "@/lib/config/context.js";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { DeploymentPayload, DeploymentSchema } from "@/lib/tasks/types.js";
+import { DatabaseConflictError } from "@/lib/errors/errors.js";
 
 const deployments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const dployrdService = new DployrdService();
@@ -94,6 +95,16 @@ deployments.post("/finish", async (c) => {
 
     return c.json(createSuccessResponse({ deployment: updated }));
   } catch (error) {
+    // Service name conflict with another cluster
+    if (error instanceof DatabaseConflictError && error.field === "name") {
+      return c.json(
+        createErrorResponse({
+          message: `Service name is already in use by another cluster. Service names must be globally unique.`,
+          code: ERROR.RESOURCE.CONFLICT.code,
+        }),
+        ERROR.RESOURCE.CONFLICT.status,
+      );
+    }
     console.error("[Deployments] Failed to finish deployment", error);
     return c.json(
       createErrorResponse({
@@ -112,6 +123,7 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
   const session = c.get("session")!;
   const clusterId = c.req.query("clusterId")!;
 
+  // Parse and validate request
   const body = await c.req.json().catch(() => null);
   if (!body) {
     return c.json(createErrorResponse({ message: "Request body is required", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
@@ -133,24 +145,45 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
 
   const deployPayload = validation.data;
 
+  // Create deployment record and set envs/secrets
+  let deployment: any;
   try {
-    const existing = await db.services.find({ name: deployPayload.name, clusterId });
-    if (existing) {
-      if (existing.type !== deployPayload.type) {
-        return c.json(
-          createErrorResponse({
-            message: `Service '${deployPayload.name}' already exists as type '${existing.type}'. Undeploy it before deploying a different type.`,
-            code: ERROR.RESOURCE.CONFLICT.code,
-          }),
-          ERROR.RESOURCE.CONFLICT.status,
-        );
+    deployment = await db.deployments.upsert({
+      clusterId,
+      name: deployPayload.name,
+      type: deployPayload.type,
+      source: deployPayload.source,
+      blueprint: deployPayload,
+    });
+
+    if (deployment) {
+      if (deployPayload.env_vars && typeof deployPayload.env_vars === "object") {
+        await db.serviceEnvs.set({ deploymentId: deployment.id, envs: deployPayload.env_vars }).catch((error) => {
+          console.error(`[Deployments] Failed to set envs for deployment ${deployment.id}:`, error);
+        });
       }
+
+      if (deployPayload.secrets && typeof deployPayload.secrets === "object" && db.serviceSecrets) {
+        await db.serviceSecrets.set({ deploymentId: deployment.id, secrets: deployPayload.secrets }).catch((error) => {
+          console.error(`[Deployments] Failed to set secrets for deployment ${deployment.id}:`, error);
+        });
+      }
+    }
+  } catch (error) {
+    if (error instanceof DatabaseConflictError && error.field === "name") {
       return c.json(
-        createErrorResponse({ message: `Service '${deployPayload.name}' is already deployed. Use PATCH /v1/services/:id to update it.`, code: ERROR.RESOURCE.CONFLICT.code }),
+        createErrorResponse({
+          message: `Service name '${deployPayload.name}' is already in use by another cluster. Service names must be globally unique.`,
+          code: ERROR.RESOURCE.CONFLICT.code,
+        }),
         ERROR.RESOURCE.CONFLICT.status,
       );
     }
+    throw error;
+  }
 
+  // Dispatch task to instance
+  try {
     const instance = await db.instances.find({ tag: instanceName });
     if (!instance) {
       return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
@@ -161,12 +194,12 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
     const task = dployrdService.createDeployTask(taskId, deployPayload, token);
     const routingKey = instance.kind === "pool" ? `pool:${instanceName}` : instanceName;
+
     let dispatched = false;
     try {
       dispatched = getWS(c).sendTask(routingKey, task);
     } catch (error) {
-      // WS handler unavailable
-      console.error("[Deployments] Failed to dispatch deployment task: ", error);
+      console.error("[Deployments] Failed to dispatch deployment task:", error);
     }
 
     if (!dispatched) {
@@ -177,7 +210,7 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     console.log(`[Deployments] Dispatched deploy task ${taskId} for cluster ${clusterId}`);
     return c.json(createSuccessResponse({ deployPayload, taskId }), SUCCESS.ACCEPTED.status);
   } catch (error) {
-    console.error("[Deployments] Unable to deploy task: ", error);
+    console.error("[Deployments] Unable to deploy task:", error);
     return c.json(createErrorResponse({ message: "Failed to create deployment", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
