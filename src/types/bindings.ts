@@ -21,6 +21,7 @@ export type Bindings = {
   TLD?: string;
   EMAIL_FROM?: string;
   CORS_ALLOWED_ORIGINS?: string;
+  ENCRYPTION_KEY: string;
 
   ADMIN_API_KEY: string;
   ALLOWED_DPLOYR_ADMINISTRATORS: string;
