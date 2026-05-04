@@ -1,53 +1,54 @@
 # Dployr Base
 
-This is the control plane for [dployr](https://github.com/dployr-io/dployr).
-
-Self-host your control plane for restricted networks or custom requirements.
+The management server for dployr. Run this on your infrastructure to control deployments, manage users, and handle billing.
 
 ---
 
-## Quick start (self‑hosting)
+## Installation
 
-### Option 1: Docker (simple, recommended)
+### Docker (recommended)
 
 ```bash
-# Download example compose file
 curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/docker-compose.example.yml -o docker-compose.yml
 
-# Edit a few values (domains, OAuth keys, etc.)
 nano docker-compose.yml
 
-# Start
 docker compose up -d
 ```
 
-Base will be available on `http://localhost:7878` by default.  
-See [DOCKER.md](./DOCKER.md) for more examples.
+Base will run on `http://localhost:7878` by default.  
 
-### Option 2: Shell installer (no Docker)
+### Shell installer
 
 ```bash
-# Basic install (interactive)
-curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh \
-  | sudo bash -s --
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/install.sh | sudo bash
 
-# Non‑interactive install (accepts all defaults)
-curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh \
-  | sudo bash -s -- --non-interactive
-
-# Install a specific version
-curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh \
-  | sudo bash -s -- --version v0.1.0
-
-# Start the service
 sudo systemctl start dployr-base
+```
+
+Or non-interactive:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/install.sh | sudo bash -s -- --non-interactive
 ```
 
 ---
 
-## Config basics
+## Traffic Router (Traefik)
 
-Self‑hosted setups share the same `config.toml` layout:
+Deploy the traffic routing layer to handle customer domains on `*.dployr.run`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/scripts/traefik/install-traefik.sh | sudo bash
+```
+
+See [scripts/traefik/README.md](./scripts/traefik/README.md) for configuration, scaling, and troubleshooting.
+
+---
+
+## Configuration
+
+Edit `config.toml` to set:
 
 ```toml
 [database]
@@ -62,7 +63,7 @@ type = "filesystem"
 path = "/var/lib/dployr-base/storage"
 ```
 
-See `config.example.toml` for all fields.
+See `config.example.toml` for all available options.
 
 ---
 
@@ -74,8 +75,8 @@ npm run dev
 
 ---
 
-## Links
+## Documentation
 
-- Self‑hosting guide: https://docs.dployr.io/installation/self-hosting
+- Self-hosting: https://docs.dployr.io/installation/self-hosting
 
 License: Apache 2.0
