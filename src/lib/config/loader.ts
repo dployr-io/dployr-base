@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 import { CONFIG_SCHEMA } from "@/lib/constants/config.js";
@@ -32,6 +32,11 @@ export function loadConfig(path?: string): Config {
   }
 
   const configPath = path || process.env.CONFIG_PATH || defaultPath;
+
+  // If config file doesn't exist, use environment variables instead
+  if (!existsSync(configPath)) {
+    return loadConfigFromEnv();
+  }
 
   const content = readFileSync(configPath, "utf-8");
   const raw = parseToml(content);
