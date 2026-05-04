@@ -23,6 +23,7 @@ export interface Adapters {
   config: Config;
   billingProvider: BillingProvider | null;
   vmProvider: VmProvider | null;
+  traefikRedis: any | null;
 }
 
 let adapters: Adapters | null = null;
@@ -71,6 +72,7 @@ export function buildBindings(a: Adapters): Bindings {
   const billingConfig = a.config?.billing;
   const vmConfig = a.config?.virtual_machines;
   const securityConfig = a.config?.security;
+  const traefikConfig = a.config?.traefik;
 
   return {
     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
@@ -98,6 +100,8 @@ export function buildBindings(a: Adapters): Bindings {
     BILLING_CHECKOUT_URLS: billingConfig?.checkout_urls,
     DO_API_TOKEN: vmConfig?.do_api_token,
     SSH_KEY: vmConfig?.ssh_key,
+    TRAEFIK_ENABLED: traefikConfig?.enabled,
+    TRAEFIK_TLD: traefikConfig?.tld,
   };
 }
 
@@ -118,6 +122,7 @@ export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Varia
   c.set("billingProvider", adapters!.billingProvider);
   c.set("vmProvider", adapters!.vmProvider);
   c.set("emailProvider", adapters!.email);
+  c.set("traefikRedisClient", adapters!.traefikRedis ?? undefined);
 
   c.env = buildBindings(adapters!) as unknown as Bindings;
 

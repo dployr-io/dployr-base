@@ -70,8 +70,8 @@ configure() {
   info "Configuring..."
 
   prompt "instance.name"      "Instance name (e.g. nyc1, ams1)"
-  prompt "domains.customer"   "Customer domain"
-  prompt "domains.infra"      "Infrastructure domain"
+  prompt "domains.tld"        "Customer domain (e.g. dployr.run)"
+  prompt "domains.base"       "Base server (e.g. dployr.io)"
   prompt "redis.host"         "Redis host"
   prompt "redis.port"         "Redis port"
   prompt "redis.password"     "Redis password"           true
@@ -85,13 +85,13 @@ configure() {
   local pass
   printf "Dashboard password: "
   read -rs pass; echo
-  [ -n "$pass" ] && tset "dashboard.password_hash" "$(openssl passwd -apr1 "$pass")"
+  [ -n "$pass" ] && tset "dashboard.password_hash" "$(htpasswd -nbB admin "$pass" | cut -d: -f2)"
 }
 
 generate_traefik_yml() {
   local instance; instance="$(tget 'instance.name')"
-  local customer; customer="$(tget 'domains.customer')"
-  local infra; infra="$(tget 'domains.infra')"
+  local tld; tld="$(tget 'domains.tld')"
+  local base; base="$(tget 'domains.base')"
   local redis_host; redis_host="$(tget 'redis.host')"
   local redis_port; redis_port="$(tget 'redis.port')"
   local redis_pass; redis_pass="$(tget 'redis.password')"
@@ -123,9 +123,9 @@ entryPoints:
       tls:
         certResolver: cloudflare
         domains:
-          - main: "${customer}"
+          - main: "${tld}"
             sans:
-              - "*.${customer}"
+              - "*.${tld}"
 
 providers:
   redis:
@@ -174,7 +174,7 @@ EOF
   local user; user="$(tget 'dashboard.username')"
   local hash; hash="$(tget 'dashboard.password_hash')"
   local escaped_hash; escaped_hash="${hash//\$/\$\$}"
-  local dashboard_domain="traefik-${instance}.${infra}"
+  local dashboard_domain="traefik-${instance}.${base}"
 
   mkdir -p "$CONFIG_DIR/dynamic"
   cat > "$CONFIG_DIR/dynamic/dashboard.yml" <<EOF

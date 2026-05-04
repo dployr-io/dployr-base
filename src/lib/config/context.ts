@@ -22,6 +22,7 @@ import { InstanceService } from "@/services/instances.js";
 import { DnsService } from "@/services/dns/index.js";
 import { BillingService } from "@/services/billing/index.js";
 import { TrafficRouter } from "@/services/proxy/traffic-router.js";
+import { TraefikRouterService as TraefikService } from "@/services/traefik-router.js";
 import { VmProvider } from "@/services/vm/index.js";
 import { InstancePool } from "@/services/pool.js";
 import { EmailProvider } from "@/services/notifications/email/index.js";
@@ -240,4 +241,26 @@ export function getEmailService(c: AppContext): EmailProvider {
     throw new Error("Email provider not configured");
   }
   return provider;
+}
+
+export function getTraefikRouterService(c: AppContext): TraefikService | null {
+  const existing = c.get("_traefikRouter");
+  if (existing !== undefined) return existing;
+
+  if (!c.env?.TRAEFIK_ENABLED) {
+    c.set("_traefikRouter", null);
+    return null;
+  }
+
+  const redisClient = c.get("traefikRedisClient");
+  if (!redisClient) {
+    console.warn("Traefik enabled but Redis client not configured");
+    c.set("_traefikRouter", null);
+    return null;
+  }
+
+  const baseDomain = c.env.TRAEFIK_TLD ?? "dployr.run";
+  const service = new TraefikService(baseDomain, redisClient);
+  c.set("_traefikRouter", service);
+  return service;
 }

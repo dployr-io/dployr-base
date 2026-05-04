@@ -243,6 +243,59 @@ export function createVmProvider(config: Config): DigitalOceanVMService | null {
 }
 
 /**
+ * Create Traefik Redis client from config
+ */
+export async function createTraefikRedisFromConfig(config: Config): Promise<any | null> {
+  if (!config.traefik?.enabled) {
+    return null;
+  }
+
+  let host: string | undefined = config.traefik.redis_host;
+  let port: number | undefined = config.traefik.redis_port;
+
+  // If URL is provided, parse it to extract host and port
+  if (!host || !port) {
+    if (config.traefik.redis_url) {
+      let urlString = config.traefik.redis_url;
+      if (!urlString.includes("://")) {
+        urlString = `redis://${urlString}`;
+      }
+      const url = new URL(urlString);
+      host = url.hostname;
+      port = parseInt(url.port) || 6379;
+      // Handle authentication from URL if present
+      if (url.username && !config.traefik.redis_username) {
+        config.traefik.redis_username = url.username;
+      }
+      if (url.password && !config.traefik.redis_password) {
+        config.traefik.redis_password = url.password;
+      }
+    } else {
+      console.warn("Traefik enabled but no Redis configuration found; Traefik routing will be disabled");
+      return null;
+    }
+  }
+
+  const { createClient } = await import("redis");
+
+  const client = createClient({
+    socket: {
+      host: host!,
+      port: port!,
+    },
+    ...(config.traefik.redis_username ? { username: config.traefik.redis_username } : {}),
+    ...(config.traefik.redis_password ? { password: config.traefik.redis_password } : {}),
+  });
+
+  client.on("error", (err: any) => console.error("Traefik Redis Client Error", err));
+
+  await client.connect();
+  console.log(`[Traefik] Connected to Redis at ${host}:${port}`);
+
+  return client;
+}
+
+/**
  * Initialize all adapters from config (one-liner setup)
  */
 export async function initializeFromConfig(config: Config) {
@@ -256,7 +309,8 @@ export async function initializeFromConfig(config: Config) {
   const email = createEmailProvider(config);
   const billingProvider = createBillingProvider(config);
   const vmProvider = createVmProvider(config);
+  const traefikRedis = await createTraefikRedisFromConfig(config);
   const wsHandler = new WebSocketHandler(kv, db);
 
-  return { kv, db, storage, ws: wsHandler, email, config, billingProvider, vmProvider };
+  return { kv, db, storage, ws: wsHandler, email, config, billingProvider, vmProvider, traefikRedis };
 }
