@@ -106,9 +106,11 @@ function loadConfigFromEnv(): Config {
       microsoft_client_secret: process.env.MICROSOFT_CLIENT_SECRET,
     },
     admin: {
-      admin_api_key: process.env.ADMIN_API_KEY,
-      allowed_ips: process.env.ALLOWED_DPLOYR_ADMINISTRATORS,
-      totp_secret: process.env.ADMIN_TOTP_SECRET,
+      ...(process.env.ADMIN_API_KEY ? { admin_api_key: process.env.ADMIN_API_KEY } : {}),
+      allowed_ips: process.env.ALLOWED_DPLOYR_ADMINISTRATORS
+        ? process.env.ALLOWED_DPLOYR_ADMINISTRATORS.split(",").map((ip) => ip.trim()).filter(Boolean)
+        : [],
+      ...(process.env.ADMIN_TOTP_SECRET ? { totp_secret: process.env.ADMIN_TOTP_SECRET } : {}),
     },
     integrations: {
       github_app_id: process.env.GITHUB_APP_ID,
@@ -155,7 +157,7 @@ function loadConfigFromEnv(): Config {
     virtual_machines: {
       provider: (process.env.VM_PROVIDER as "digitalocean") || "digitalocean",
       do_api_token: process.env.DO_API_TOKEN,
-      ssh_key: process.env.SSH_KEY,
+      ssh_key: process.env.SSH_KEY ? parseInt(process.env.SSH_KEY) : undefined,
     },
   });
 }
