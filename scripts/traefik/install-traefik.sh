@@ -3,7 +3,7 @@
 # Copyright 2025 Emmanuel Madehin
 # SPDX-License-Identifier: Apache-2.0
 
-set -euo pipefail
+set -eu
 
 TRAEFIK_VERSION="${TRAEFIK_VERSION:-3.3.4}"
 TOMATO_VERSION="${TOMATO_VERSION:-1.0.0}"
@@ -39,16 +39,16 @@ install_tomato() {
   if command -v tomato >/dev/null 2>&1; then return; fi
   info "Installing tomato v${TOMATO_VERSION}..."
   local url="https://github.com/ceejbot/tomato/releases/download/v${TOMATO_VERSION}/tomato-x86_64-unknown-linux-gnu.tar.gz"
-  local tmp; tmp="$(mktemp -d)"
-  curl -fsSL "$url" -o "$tmp/tomato.tar.gz" || error "Failed to download tomato"
-  tar -xzf "$tmp/tomato.tar.gz" -C "$tmp"
-  mv "$tmp/tomato" /usr/local/bin/tomato
+  local tmp; tmp="$(mktemp -d -p /var/lib/traefik)" || error "Failed to create temp directory"
+  curl -fsSL "$url" -o "$tmp/tomato.tar.gz" || { rm -rf "$tmp"; error "Failed to download tomato"; }
+  tar -xzf "$tmp/tomato.tar.gz" -C "$tmp" || { rm -rf "$tmp"; error "Failed to extract tomato"; }
+  mv "$tmp/target/release/tomato" /usr/local/bin/tomato || { rm -rf "$tmp"; error "Failed to install tomato binary"; }
   chmod +x /usr/local/bin/tomato
   rm -rf "$tmp"
 }
 
-tget() { tomato get "$CONFIG_PATH" "$1" 2>/dev/null || echo ""; }
-tset() { tomato set "$CONFIG_PATH" "$1" "$2" >/dev/null; }
+tget() { tomato get "$1" "$CONFIG_PATH" 2>/dev/null || echo ""; }
+tset() { tomato set "$1" "$2" "$CONFIG_PATH" >/dev/null 2>&1; }
 
 prompt() {
   local key="$1" label="$2" secret="${3:-false}"
@@ -56,22 +56,26 @@ prompt() {
 
   $SKIP_PROMPTS && return
 
-  local display="$current"
-  $secret && [ -n "$current" ] && display="[set]"
-  [ -n "$display" ] && printf "%s [%s]: " "$label" "$display" || printf "%s: " "$label"
+  if [ -n "$current" ]; then
+    local display="$current"
+    $secret && display="[set]"
+    printf "%s [%s] Keep this value? (y/n): " "$label" "$display"
+    local choice
+    read -r choice
+    [ "$choice" = "n" ] || return 0
+  fi
 
+  printf "%s: " "$label"
   local val
   if $secret; then read -rs val; echo; else read -r val; fi
-  val="${val:-$current}"
   [ -n "$val" ] && tset "$key" "$val"
 }
 
 configure() {
   info "Configuring..."
 
-  prompt "instance.name"      "Instance name (e.g. nyc1, ams1)"
+  prompt "instance.name"      "Instance name (e.g. us-east, eu-south)"
   prompt "domains.tld"        "Customer domain (e.g. dployr.run)"
-  prompt "domains.base"       "Base server (e.g. dployr.io)"
   prompt "redis.host"         "Redis host"
   prompt "redis.port"         "Redis port"
   prompt "redis.password"     "Redis password"           true
@@ -80,24 +84,30 @@ configure() {
   prompt "tls.cf_api_token"   "Cloudflare API token"     true
   prompt "dashboard.username" "Dashboard username"
 
-  if $SKIP_PROMPTS || [ -n "$(tget 'dashboard.password_hash')" ]; then return; fi
+  local current_pass; current_pass="$(tget 'dashboard.password_hash')"
+  if ! $SKIP_PROMPTS; then
+    if [ -n "$current_pass" ]; then
+      printf "Dashboard password [set] Keep this value? (y/n): "
+      local choice
+      read -r choice
+      [ "$choice" = "n" ] || return 0
+    fi
 
-  local pass
-  printf "Dashboard password: "
-  read -rs pass; echo
-  [ -n "$pass" ] && tset "dashboard.password_hash" "$(htpasswd -nbB admin "$pass" | cut -d: -f2)"
+    local pass
+    printf "Dashboard password: "
+    read -rs pass; echo
+    [ -n "$pass" ] && tset "dashboard.password_hash" "$(htpasswd -nbB admin "$pass" | cut -d: -f2)"
+  fi
 }
 
 generate_traefik_yml() {
   local instance; instance="$(tget 'instance.name')"
   local tld; tld="$(tget 'domains.tld')"
-  local base; base="$(tget 'domains.base')"
   local redis_host; redis_host="$(tget 'redis.host')"
   local redis_port; redis_port="$(tget 'redis.port')"
   local redis_pass; redis_pass="$(tget 'redis.password')"
   local redis_tls; redis_tls="$(tget 'redis.tls')"
   local redis_key; redis_key="$(tget 'redis.root_key')"
-  local poll; poll="$(tget 'redis.poll_interval')"
   local email; email="$(tget 'tls.acme_email')"
 
   local tls_block=""
@@ -134,7 +144,6 @@ providers:
     password: "${redis_pass}"
 ${tls_block}
     rootKey: "${redis_key}"
-    pollInterval: "${poll}s"
   file:
     directory: "${CONFIG_DIR}/dynamic"
     watch: true
@@ -173,8 +182,10 @@ EOF
 
   local user; user="$(tget 'dashboard.username')"
   local hash; hash="$(tget 'dashboard.password_hash')"
+  # strip any leading "user:" prefix if the hash was stored with it
+  hash="${hash#*:}"
   local escaped_hash; escaped_hash="${hash//\$/\$\$}"
-  local dashboard_domain="traefik-${instance}.${base}"
+  local dashboard_domain="traefik-${instance}.${tld}"
 
   mkdir -p "$CONFIG_DIR/dynamic"
   cat > "$CONFIG_DIR/dynamic/dashboard.yml" <<EOF
@@ -187,10 +198,7 @@ http:
         - websecure
       middlewares:
         - dashboard-auth
-      tls:
-        certResolver: cloudflare
-        domains:
-          - main: "${dashboard_domain}"
+      tls: {}
 
   middlewares:
     dashboard-auth:
@@ -203,13 +211,12 @@ EOF
 install_traefik() {
   info "Downloading Traefik v${TRAEFIK_VERSION}..."
   local url="https://github.com/traefik/traefik/releases/download/v${TRAEFIK_VERSION}/traefik_v${TRAEFIK_VERSION}_linux_amd64.tar.gz"
-  local tmp; tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL "$url" -o "$tmp/traefik.tar.gz" || error "Failed to download Traefik"
-  tar -xzf "$tmp/traefik.tar.gz" -C "$tmp"
-  mv "$tmp/traefik" /usr/local/bin/traefik
+  local tmp; tmp="$(mktemp -d -p /var/lib/traefik)" || error "Failed to create temp directory"
+  curl -fsSL "$url" -o "$tmp/traefik.tar.gz" || { rm -rf "$tmp"; error "Failed to download Traefik"; }
+  tar -xzf "$tmp/traefik.tar.gz" -C "$tmp" || { rm -rf "$tmp"; error "Failed to extract Traefik"; }
+  mv "$tmp/traefik" /usr/local/bin/traefik || { rm -rf "$tmp"; error "Failed to install Traefik binary"; }
   chmod +x /usr/local/bin/traefik
-  setcap 'cap_net_bind_service=+ep' /usr/local/bin/traefik
+  rm -rf "$tmp"
 }
 
 setup_service() {
@@ -239,6 +246,8 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=${DATA_DIR} ${LOG_DIR}
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target
@@ -297,8 +306,7 @@ main() {
   sleep 2
 
   local instance; instance="$(tget 'instance.name')"
-  local infra; infra="$(tget 'domains.infra')"
-  local customer; customer="$(tget 'domains.customer')"
+  local tld; tld="$(tget 'domains.tld')"
   local this_ip; this_ip="$(curl -fsSL --max-time 3 ifconfig.me 2>/dev/null || echo '<this-server-ip>')"
 
   if systemctl is-active --quiet traefik; then
@@ -308,15 +316,15 @@ main() {
   fi
 
   echo ""
-  echo "Done"
+  echo "Installation complete"
   echo ""
-  echo "  Dashboard : https://traefik-${instance}.${infra}/dashboard/"
+  echo "  Dashboard : https://traefik-${instance}.${tld}/dashboard/"
   echo "  Config    : ${CONFIG_PATH}"
   echo "  Logs      : journalctl -u traefik -f"
   echo ""
   echo "DNS records required (Cloudflare):"
-  echo "  A  *.${customer}                             → ${this_ip}  (proxied ON)"
-  echo "  A  traefik-${instance}.${infra}              → ${this_ip}  (proxied OFF)"
+  echo "  A  *.${tld}                             → ${this_ip}  (proxied ON)"
+  echo "  A  traefik-${instance}.${tld}           → ${this_ip}  (proxied OFF)"
   echo ""
   echo "To reconfigure: sudo bash $0"
 }

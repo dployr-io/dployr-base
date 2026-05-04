@@ -3,7 +3,7 @@
 # Copyright 2025 Emmanuel Madehin
 # SPDX-License-Identifier: Apache-2.0
 
-set -euo pipefail
+set -eu
 
 VERSION="${VERSION:-latest}"
 TOMATO_VERSION="${TOMATO_VERSION:-1.0.0}"
@@ -36,16 +36,16 @@ install_tomato() {
   if command -v tomato >/dev/null 2>&1; then return; fi
   info "Installing tomato v${TOMATO_VERSION}..."
   local url="https://github.com/ceejbot/tomato/releases/download/v${TOMATO_VERSION}/tomato-x86_64-unknown-linux-gnu.tar.gz"
-  local tmp; tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL "$url" -o "$tmp/tomato.tar.gz" || error "Failed to download tomato"
-  tar -xzf "$tmp/tomato.tar.gz" -C "$tmp"
-  mv "$tmp/tomato" /usr/local/bin/tomato
+  local tmp; tmp="$(mktemp -d)" || error "Failed to create temp directory"
+  curl -fsSL "$url" -o "$tmp/tomato.tar.gz" || { rm -rf "$tmp"; error "Failed to download tomato"; }
+  tar -xzf "$tmp/tomato.tar.gz" -C "$tmp" || { rm -rf "$tmp"; error "Failed to extract tomato"; }
+  mv "$tmp/target/release/tomato" /usr/local/bin/tomato || { rm -rf "$tmp"; error "Failed to install tomato binary"; }
   chmod +x /usr/local/bin/tomato
+  rm -rf "$tmp"
 }
 
-tget() { tomato get "$CONFIG_PATH" "$1" 2>/dev/null || echo ""; }
-tset() { tomato set "$CONFIG_PATH" "$1" "$2" >/dev/null; }
+tget() { tomato get "$1" "$CONFIG_PATH" 2>/dev/null || echo ""; }
+tset() { tomato set "$1" "$2" "$CONFIG_PATH" >/dev/null 2>&1; }
 
 prompt() {
   local key="$1" label="$2" secret="${3:-false}"
@@ -53,13 +53,18 @@ prompt() {
 
   $SKIP_PROMPTS && return
 
-  local display="$current"
-  $secret && [ -n "$current" ] && display="[set]"
-  [ -n "$display" ] && printf "%s [%s]: " "$label" "$display" || printf "%s: " "$label"
+  if [ -n "$current" ]; then
+    local display="$current"
+    $secret && display="[set]"
+    printf "%s [%s] Keep this value? (y/n): " "$label" "$display"
+    local choice
+    read -r choice
+    [ "$choice" = "n" ] || return 0
+  fi
 
+  printf "%s: " "$label"
   local val
   if $secret; then read -rs val; echo; else read -r val; fi
-  val="${val:-$current}"
   [ -n "$val" ] && tset "$key" "$val"
 }
 
