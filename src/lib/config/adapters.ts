@@ -24,9 +24,14 @@ export async function createKVFromConfig(config: Config): Promise<IKVAdapter> {
        // If URL is provided, parse it to extract host and port
        if (!host || !port) {
          if (config.kv.url) {
-           const url = new URL(config.kv.url);
+           // Ensure URL has a protocol; if not, prepend redis://
+           let urlString = config.kv.url;
+           if (!urlString.includes("://")) {
+             urlString = `redis://${urlString}`;
+           }
+           const url = new URL(urlString);
            host = url.hostname;
-           port = parseInt(url.port);
+           port = parseInt(url.port) || 6379;
            // Handle authentication from URL if present
            if (url.username) {
              config.kv.username = url.username;
