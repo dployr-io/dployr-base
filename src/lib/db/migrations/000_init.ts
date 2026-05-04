@@ -115,19 +115,25 @@ CREATE TABLE IF NOT EXISTS deployments (
   updated_at  BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
 );
 
-DO $$ BEGIN
-  ALTER TABLE services
-    ADD CONSTRAINT services_deployment_cluster_check
-    CHECK (
-      deployment_id IS NULL OR
-      EXISTS (
-        SELECT 1 FROM deployments d
-        WHERE d.id = deployment_id AND d.cluster_id = cluster_id
-      )
-    )
-    NOT VALID;
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+CREATE OR REPLACE FUNCTION validate_service_deployment_cluster()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.deployment_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM deployments d
+      WHERE d.id = NEW.deployment_id AND d.cluster_id = NEW.cluster_id
+    ) THEN
+      RAISE EXCEPTION 'deployment must belong to the same cluster as the service';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER validate_service_deployment_cluster
+BEFORE INSERT OR UPDATE ON services
+FOR EACH ROW
+EXECUTE FUNCTION validate_service_deployment_cluster();
 
 CREATE TABLE IF NOT EXISTS service_envs (
   id              TEXT PRIMARY KEY,
