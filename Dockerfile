@@ -39,6 +39,7 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 RUN mkdir -p /data/storage
 
 ENV BASE_VERSION=${BASE_VERSION}
+ENV PLATFORM=docker
 
 RUN addgroup -g 1001 -S dployr && \
     adduser -S dployr -u 1001 && \
