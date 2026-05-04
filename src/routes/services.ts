@@ -7,7 +7,7 @@ import z from "zod";
 import type { Bindings, Variables } from "@/types/index.js";
 import { resolveCluster, requireClusterViewer, requireClusterDeveloper, authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getDbStore, getWS, getJWTService } from "@/lib/config/context.js";
+import { getDbStore, getWS, getJWTService, getTraefikRouterService } from "@/lib/config/context.js";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { DeploymentSchema } from "@/lib/tasks/types.js";
@@ -139,6 +139,7 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
 // Delete service — dispatches remove task to node, then removes from DB.
 services.delete("/:id", resolveCluster("service", { path: "id" }), requireClusterDeveloper, async (c) => {
   const db = getDbStore(c);
+  const traefik = getTraefikRouterService(c);
   const session = c.get("session")!;
   const serviceId = c.get("resolvedServiceId")!;
   const clusterId = c.get("resolvedClusterId")!;
@@ -160,6 +161,16 @@ services.delete("/:id", resolveCluster("service", { path: "id" }), requireCluste
       getWS(c).sendTask(routingKey, task);
     } catch {
       // Fire-and-forget — proceed with DB deletion regardless
+    }
+  }
+
+  // Unregister the route from Traefik
+  if (traefik) {
+    try {
+      await traefik.unregisterRoute(service.name);
+      console.log(`[Services] Unregistered Traefik route for service ${service.name}`);
+    } catch (err) {
+      console.error(`[Services] Failed to unregister Traefik route for ${service.name}:`, err);
     }
   }
 
