@@ -9,7 +9,7 @@ The management server for dployr. Run this on your infrastructure to control dep
 ### Docker (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/docker-compose.example.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/docker-compose.example.yml -o docker-compose.yml
 
 nano docker-compose.yml
 
@@ -21,7 +21,7 @@ Base will run on `http://localhost:7878` by default.
 ### Shell installer
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh | sudo bash
 
 sudo systemctl start dployr-base
 ```
@@ -29,7 +29,7 @@ sudo systemctl start dployr-base
 Or non-interactive:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/install.sh | sudo bash -s -- --non-interactive
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/install.sh | sudo bash -s -- --non-interactive
 ```
 
 ---
@@ -39,7 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/install.
 Deploy the traffic routing layer to handle customer domains on `*.dployr.run`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/main/scripts/traefik/install-traefik.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/dployr-io/dployr-base/refs/heads/main/scripts/traefik/install-traefik.sh | sudo bash
 ```
 
 See [scripts/traefik/README.md](./scripts/traefik/README.md) for configuration, scaling, and troubleshooting.
