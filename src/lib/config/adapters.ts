@@ -106,10 +106,16 @@ export async function createDatabaseFromConfig(config: Config): Promise<Postgres
  * Create storage adapter from config
  */
 export async function createStorageFromConfig(config: Config): Promise<any> {
+  const isProd = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "prod";
+
   switch (config.storage.type) {
     case "filesystem": {
       if (!config.storage.path) {
-        throw new Error("Filesystem path required: storage.path");
+        if (isProd) {
+          throw new Error("Filesystem path required in production: storage.path");
+        }
+        console.warn("Storage not configured; skipping filesystem storage initialization");
+        return null;
       }
       const { mkdir } = await import("fs/promises");
       await mkdir(config.storage.path, { recursive: true });
@@ -119,7 +125,11 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
     case "s3":
     case "digitalocean": {
       if (!config.storage.bucket || !config.storage.region) {
-        throw new Error("S3 config required: storage.bucket, storage.region");
+        if (isProd) {
+          throw new Error("S3/DigitalOcean storage requires bucket and region in production");
+        }
+        console.warn("S3/DigitalOcean storage not fully configured; skipping storage initialization");
+        return null;
       }
       const { S3Client } = await import("@aws-sdk/client-s3");
       return new S3Client({
@@ -134,7 +144,11 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
     }
 
     default:
-      throw new Error(`Unknown storage type: ${(config.storage as any).type}`);
+      if (isProd) {
+        throw new Error(`Unknown storage type in production: ${(config.storage as any).type}`);
+      }
+      console.warn(`Unknown storage type: ${(config.storage as any).type}; skipping storage initialization`);
+      return null;
   }
 }
 
@@ -142,7 +156,15 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
    * Create email provider from config
    */
   export function createEmailProvider(config: Config): EmailProvider | null {
-    if (!config.email) return null;
+    const isProd = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "prod";
+
+    if (!config.email?.zepto_api_key) {
+      if (isProd) {
+        throw new Error("Email provider requires API key in production");
+      }
+      return null;
+    }
+
     switch (config.email?.provider ?? "zepto") {
       case "zepto": {
         const env: Partial<Bindings> = {
@@ -152,7 +174,11 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
         return new ZeptoProvider(env as Bindings);
        }
        default:
-         throw new Error(`Unknown billing provider: ${config.billing?.provider}`);
+         if (isProd) {
+           throw new Error(`Unknown email provider in production: ${config.email?.provider}`);
+         }
+         console.warn(`Unknown email provider: ${config.email?.provider}; email notifications will be disabled`);
+         return null;
      }
    }
 
@@ -161,7 +187,15 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
  * Create billing provider from config
  */
 export function createBillingProvider(config: Config): BillingProvider | null {
-  if (!config.billing?.polar_access_token) return null;
+  const isProd = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "prod";
+
+  if (!config.billing?.polar_access_token) {
+    if (isProd) {
+      throw new Error("Billing provider requires API token in production");
+    }
+    return null;
+  }
+
   switch (config.billing?.provider ?? "polar") {
     case "polar": {
       const env: Partial<Bindings> = {
@@ -173,24 +207,38 @@ export function createBillingProvider(config: Config): BillingProvider | null {
       return new PolarService(env as Bindings);
     }
     default:
-      throw new Error(`Unknown billing provider: ${config.billing?.provider}`);
+      if (isProd) {
+        throw new Error(`Unknown billing provider in production: ${config.billing?.provider}`);
+      }
+      console.warn(`Unknown billing provider: ${config.billing?.provider}; billing will be disabled`);
+      return null;
   }
 }
 
 export function createVmProvider(config: Config): DigitalOceanVMService | null {
-  if (!config.virtual_machines?.do_api_token) return null;
+  const isProd = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "prod";
+
+  if (!config.virtual_machines?.do_api_token) {
+    if (isProd) {
+      throw new Error("VM provider requires API token in production");
+    }
+    return null;
+  }
+
   switch (config.virtual_machines?.provider ?? "digitalocean") {
     case "digitalocean": {
-      const env: Partial<Bindings> = {
-        DO_API_TOKEN: config.virtual_machines.do_api_token,
-      };
-      const apiToken = env.DO_API_TOKEN;
+      const apiToken = config.virtual_machines.do_api_token;
       if (apiToken) {
         return new DigitalOceanVMService(apiToken);
       }
+      return null;
     }
     default:
-      throw new Error(`Unknown VM provider: ${config.billing?.provider}`);
+      if (isProd) {
+        throw new Error(`Unknown VM provider in production: ${config.virtual_machines?.provider}`);
+      }
+      console.warn(`Unknown VM provider: ${config.virtual_machines?.provider}; VM provisioning will be disabled`);
+      return null;
   }
 }
 

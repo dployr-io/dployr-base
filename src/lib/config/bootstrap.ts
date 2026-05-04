@@ -17,7 +17,7 @@ import { EmailProvider } from "@/services/notifications/email/index.js";
 export interface Adapters {
   kv: IKVAdapter;
   db: PostgresAdapter;
-  storage: IStorageAdapter;
+  storage: IStorageAdapter | null;
   ws: WebSocketHandler;
   email: EmailProvider | null;
   config: Config;
@@ -113,7 +113,7 @@ export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Varia
   // Inject adapters into context
   c.set("kvAdapter", adapters!.kv);
   c.set("dbAdapter", adapters!.db);
-  c.set("storageAdapter", adapters!.storage);
+  c.set("storageAdapter", adapters!.storage ?? undefined);
   c.set("wsHandler", adapters!.ws);
   c.set("billingProvider", adapters!.billingProvider);
   c.set("vmProvider", adapters!.vmProvider);
