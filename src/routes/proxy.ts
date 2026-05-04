@@ -17,83 +17,7 @@ const proxy = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 proxy.use("*", authMiddleware);
 
 /**
- * Resolve a hostname to its route (for debugging/testing)
- * GET /v1/proxy/resolve?hostname=service.cluster.dployr.io
- */
-proxy.get("/resolve", async (c) => {
-  const hostname = c.req.query("hostname");
-
-  if (!hostname) {
-    return c.json(
-      createErrorResponse({
-        message: "hostname query parameter is required",
-        code: ERROR.VALIDATION.MISSING_FIELDS.code,
-      }),
-      ERROR.VALIDATION.MISSING_FIELDS.status,
-    );
-  }
-
-  const baseDomain = c.env?.TLD ?? "dployr.io";
-  const router = getTrafficRouter(c);
-
-  const parsed = router.parseHostname(hostname);
-  if (!parsed) {
-    return c.json(
-      createErrorResponse({
-        message: `Invalid hostname format. Expected: service.cluster.${baseDomain}`,
-        code: ERROR.VALIDATION.INVALID_FORMAT.code,
-      }),
-      ERROR.VALIDATION.INVALID_FORMAT.status,
-    );
-  }
-
-  const route = await router.resolveRoute(hostname);
-
-  if (!route) {
-    return c.json(
-      createErrorResponse({
-        message: "Service not found",
-        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-      }),
-      ERROR.RESOURCE.MISSING_RESOURCE.status,
-    );
-  }
-
-  return c.json(
-    createSuccessResponse({
-      hostname,
-      parsed,
-      route: {
-        serviceName: route.serviceName,
-        clusterName: route.clusterName,
-        instanceAddress: route.instanceAddress,
-        instancePort: route.instancePort,
-        serviceId: route.serviceId,
-        instanceId: route.instanceId,
-      },
-    }),
-  );
-});
-
-/**
- * Get proxy server statistics
- * GET /v1/proxy/stats
- */
-proxy.get("/stats", async (c) => {
-  const baseDomain = c.env?.TLD ?? "dployr.io";
-  const router = getTrafficRouter(c);
-
-  return c.json(
-    createSuccessResponse({
-      router: router.getStats(),
-      baseDomain,
-    }),
-  );
-});
-
-/**
  * List all routable services for a cluster
- * GET /v1/proxy/services?clusterId=xxx
  */
 proxy.get("/services", requireClusterViewer, async (c) => {
   const clusterId = c.req.query("clusterId");
@@ -158,7 +82,6 @@ proxy.get("/services", requireClusterViewer, async (c) => {
 
 /**
  * Invalidate proxy cache for a service
- * POST /v1/proxy/invalidate
  */
 proxy.post("/invalidate", requireClusterViewer, async (c) => {
   const body = await c.req.json<{
