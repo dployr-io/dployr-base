@@ -141,14 +141,15 @@ export const CONFIG_SCHEMA = z.object({
         .optional(),
     })
     .optional(),
-  proxy: z
+  traefik: z
     .object({
       enabled: z.boolean().default(false),
-      port: z.number().default(7878),
-      host: z.string().default("0.0.0.0"),
-      base_domain: z.string().default("dployr.io"),
-      timeout_ms: z.number().default(30000),
-      cache_ttl_seconds: z.number().default(30),
+      tld: z.string().default("dployr.run"),
+      redis_url: z.string().optional(),
+      redis_host: z.string().optional(),
+      redis_port: z.number().int().positive().optional(),
+      redis_username: z.string().optional(),
+      redis_password: z.string().optional(),
     })
     .optional(),
   virtual_machines: z
