@@ -3,122 +3,157 @@
 # Copyright 2025 Emmanuel Madehin
 # SPDX-License-Identifier: Apache-2.0
 
-set -e
-
-# Dployr Base Installer
+set -euo pipefail
 
 VERSION="${VERSION:-latest}"
+TOMATO_VERSION="${TOMATO_VERSION:-1.0.0}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/dployr-base}"
 CONFIG_DIR="/etc/dployr-base"
+CONFIG_PATH="$CONFIG_DIR/config.toml"
 SERVICE_USER="dployr"
+REPO="dployr-io/dployr-base"
+RAW="https://raw.githubusercontent.com/${REPO}"
 
-if [ -t 0 ]; then
-  INTERACTIVE="${INTERACTIVE:-true}"
-else
-  INTERACTIVE="${INTERACTIVE:-false}"
-fi
-SKIP_PROMPTS="${SKIP_PROMPTS:-false}"
+SKIP_PROMPTS=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --non-interactive|-y)
-      INTERACTIVE="false"
-      SKIP_PROMPTS="true"
-      shift
-      ;;
-    -v|--version)
-      VERSION="$2"
-      shift 2
-      ;;
-    *)
-      shift
-      ;;
+    --non-interactive|-y) SKIP_PROMPTS=true; shift ;;
+    -v|--version) VERSION="$2"; shift 2 ;;
+    *) shift ;;
   esac
 done
 
-download_template() {
-  local version="$1"
-  local out="$2"
+[ ! -t 0 ] && SKIP_PROMPTS=true
 
-  local url="https://raw.githubusercontent.com/dployr-io/dployr-base/${version}/config.example.toml"
+info()  { echo "[INFO]  $*"; }
+warn()  { echo "[WARN]  $*"; }
+error() { echo "[ERROR] $*"; exit 1; }
 
-  curl -fsSL "$url" -o "$out" || {
-    echo "[WARN] Falling back to main template"
-    curl -fsSL "https://raw.githubusercontent.com/dployr-io/dployr-base/main/config.example.toml" -o "$out" || {
-      echo "[ERROR] Failed to download config template"
-      exit 1
-    }
-  }
+require() { command -v "$1" >/dev/null 2>&1 || error "$1 is required but not installed"; }
+
+install_tomato() {
+  if command -v tomato >/dev/null 2>&1; then return; fi
+  info "Installing tomato v${TOMATO_VERSION}..."
+  local url="https://github.com/ceejbot/tomato/releases/download/v${TOMATO_VERSION}/tomato-x86_64-unknown-linux-gnu.tar.gz"
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL "$url" -o "$tmp/tomato.tar.gz" || error "Failed to download tomato"
+  tar -xzf "$tmp/tomato.tar.gz" -C "$tmp"
+  mv "$tmp/tomato" /usr/local/bin/tomato
+  chmod +x /usr/local/bin/tomato
 }
 
-echo "Dployr Base Installer"
-echo "====================="
-echo "[INFO] Installing to $INSTALL_DIR"
+tget() { tomato get "$CONFIG_PATH" "$1" 2>/dev/null || echo ""; }
+tset() { tomato set "$CONFIG_PATH" "$1" "$2" >/dev/null; }
 
-if [ "$EUID" -ne 0 ]; then
-  echo "[ERROR] Run as root"
-  exit 1
-fi
+prompt() {
+  local key="$1" label="$2" secret="${3:-false}"
+  local current; current="$(tget "$key")"
 
-if [ "$INTERACTIVE" = "true" ] && [ ! -t 0 ]; then
-  echo "[ERROR] Interactive mode requires a terminal (TTY)"
-  echo "       Run without pipe, or use --non-interactive"
-  exit 1
-fi
+  $SKIP_PROMPTS && return
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "[ERROR] Node.js is required but not installed"
-  exit 1
-fi
+  local display="$current"
+  $secret && [ -n "$current" ] && display="[set]"
+  [ -n "$display" ] && printf "%s [%s]: " "$label" "$display" || printf "%s: " "$label"
 
-OS="$(uname -s)"
-ARCH="$(uname -m)"
+  local val
+  if $secret; then read -rs val; echo; else read -r val; fi
+  val="${val:-$current}"
+  [ -n "$val" ] && tset "$key" "$val"
+}
 
-case "$OS" in
-  Linux) PLATFORM="linux" ;;
-  Darwin) PLATFORM="darwin" ;;
-  *) echo "[ERROR] Unsupported OS"; exit 1 ;;
-esac
+configure() {
+  info "Configuring..."
 
-case "$ARCH" in
-  x86_64|amd64) ARCH="x86_64" ;;
-  aarch64|arm64) ARCH="aarch64" ;;
-  *) echo "[ERROR] Unsupported arch"; exit 1 ;;
-esac
+  prompt "server.base_url"               "Base URL (e.g. https://base.dployr.io)"
+  prompt "server.app_url"                "App URL (e.g. https://app.dployr.io)"
+  prompt "server.port"                   "Server port"
 
-if ! id "$SERVICE_USER" &>/dev/null; then
-  useradd --system --no-create-home --shell /bin/false "$SERVICE_USER"
-fi
+  prompt "database.url"                  "PostgreSQL connection string"             true
 
-mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" /var/log/dployr-base /var/lib/dployr-base/storage
+  prompt "kv.url"                        "Redis URL (e.g. redis://host:6379)"       true
 
-if [ "$VERSION" = "latest" ]; then
-  VERSION="$(curl -fsSL https://api.github.com/repos/dployr-io/dployr-base/releases/latest \
-    | grep -m1 '"tag_name"' \
-    | sed 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/')"
+  prompt "storage.type"                  "Storage type (filesystem/s3)"
+  prompt "storage.path"                  "Storage path (if filesystem)"
 
-  [ -z "$VERSION" ] && { echo "[ERROR] Failed to resolve version"; exit 1; }
-fi
+  prompt "auth.github_client_id"         "GitHub OAuth client ID"
+  prompt "auth.github_client_secret"     "GitHub OAuth client secret"               true
+  prompt "auth.google_client_id"         "Google OAuth client ID"
+  prompt "auth.google_client_secret"     "Google OAuth client secret"               true
 
-echo "[INFO] Version: $VERSION"
+  prompt "admin.admin_api_key"           "Admin API key"                            true
+  prompt "admin.totp_secret"             "Admin TOTP secret"                        true
+  prompt "admin.allowed_ips"             "Allowed admin IPs (TOML array)"
 
-DOWNLOAD_URL="https://github.com/dployr-io/dployr-base/releases/download/${VERSION}/dployr-base-${VERSION}.tar.gz"
+  prompt "integrations.github_token"     "GitHub personal access token"             true
 
-curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
+  prompt "email.provider"                "Email provider"
+  prompt "email.from_address"            "From address"
+  prompt "email.zepto_api_key"           "Zepto API key"                            true
 
-temp_template=$(mktemp)
-download_template "$VERSION" "$temp_template"
+  prompt "security.encryption_key"       "Encryption key (AES-256, hex 32 bytes)"   true
+  prompt "security.session_ttl"          "Session TTL (seconds)"
 
-echo "[INFO] Installing dependencies..."
+  prompt "cors.allowed_origins"          "CORS allowed origins"
 
-cd "$INSTALL_DIR"
-npm install --omit=dev
+  prompt "billing.polar_access_token"    "Polar access token"                       true
+  prompt "billing.polar_webhook_secret"  "Polar webhook secret"                     true
+  prompt "billing.polar_environment"     "Polar environment (sandbox/production)"
 
-echo "[INFO] Creating systemd service..."
+  prompt "virtual_machines.provider"     "VM provider (digitalocean)"
+  prompt "virtual_machines.do_api_token" "DigitalOcean API token"                   true
+  prompt "virtual_machines.ssh_key"      "DigitalOcean SSH key ID"
+}
 
-cat > /etc/systemd/system/dployr-base.service <<EOF
+main() {
+  echo ""
+  echo "Dployr Base Installer"
+  echo ""
+
+  [ "$EUID" -ne 0 ] && error "Run as root"
+  [ ! -t 0 ] && ! $SKIP_PROMPTS && error "Interactive mode requires a terminal. Use --non-interactive."
+  require curl
+  require node
+
+  install_tomato
+
+  if [ "$VERSION" = "latest" ]; then
+    VERSION="$(curl -fsSL https://api.github.com/repos/${REPO}/releases/latest \
+      | grep -m1 '"tag_name"' \
+      | sed 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/')"
+    [ -z "$VERSION" ] && error "Failed to resolve latest version"
+  fi
+
+  info "Version: $VERSION"
+  info "Installing to $INSTALL_DIR"
+
+  id "$SERVICE_USER" &>/dev/null || useradd --system --no-create-home --shell /bin/false "$SERVICE_USER"
+  mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" /var/log/dployr-base /var/lib/dployr-base/storage
+
+  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/dployr-base-${VERSION}.tar.gz"
+  curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
+
+  info "Installing dependencies..."
+  cd "$INSTALL_DIR"
+  npm install --omit=dev
+
+  if [ ! -f "$CONFIG_PATH" ]; then
+    info "Downloading config template..."
+    curl -fsSL "${RAW}/${VERSION}/config.example.toml" -o "$CONFIG_PATH" \
+      || curl -fsSL "${RAW}/main/config.example.toml" -o "$CONFIG_PATH" \
+      || error "Failed to download config template"
+  fi
+
+  configure
+
+  info "Creating systemd service..."
+
+  cat > /etc/systemd/system/dployr-base.service <<EOF
 [Unit]
 Description=Dployr Base
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -137,20 +172,28 @@ StandardError=append:/var/log/dployr-base/output.log
 WantedBy=multi-user.target
 EOF
 
-echo "[INFO] Processing configuration..."
+  chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR" "$CONFIG_DIR" /var/log/dployr-base /var/lib/dployr-base
+  chmod 600 "$CONFIG_PATH"
 
-node "$INSTALL_DIR/scripts/process-config.mjs" "$temp_template" "$CONFIG_DIR/config.toml" "$SKIP_PROMPTS"
+  systemctl daemon-reload
+  systemctl enable dployr-base >/dev/null 2>&1 || true
+  systemctl restart dployr-base 2>/dev/null || systemctl start dployr-base
 
-chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR" "$CONFIG_DIR" /var/log/dployr-base /var/lib/dployr-base
-chmod 600 "$CONFIG_DIR/config.toml"
+  sleep 2
 
-systemctl daemon-reload
-systemctl enable dployr-base >/dev/null 2>&1 || true
-systemctl restart dployr-base || systemctl start dployr-base
+  if systemctl is-active --quiet dployr-base; then
+    info "dployr-base is running"
+  else
+    warn "dployr-base failed to start — check: journalctl -u dployr-base -n 50"
+  fi
 
-echo ""
-echo "Installation completed"
-echo ""
-echo "For interactive re-configuration:"
-echo "  sudo node $INSTALL_DIR/scripts/process-config.mjs \\"
-echo "    $CONFIG_DIR/config.example.toml $CONFIG_DIR/config.toml"
+  echo ""
+  echo "Installation complete"
+  echo ""
+  echo "  Config : $CONFIG_PATH"
+  echo "  Logs   : journalctl -u dployr-base -f"
+  echo ""
+  echo "To reconfigure: sudo bash $0"
+}
+
+main
