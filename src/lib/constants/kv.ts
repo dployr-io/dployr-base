@@ -32,4 +32,8 @@ export const KV_KEYS = {
   INSTANCE_DECOMMISSION_RECOVERY_WINDOW: (instanceId: string) => `recovery_window:${instanceId}`,
   CLUSTER_NODE: (clusterId: string, instanceId: string) => `cluster:${clusterId}:nodes:${instanceId}`,
   CLUSTER_NODES_PREFIX: (clusterId: string) => `cluster:${clusterId}:nodes:`,
+  TRAEFIK_ROUTER_RULE: (routeKey: string) => `traefik/http/routers/${routeKey}/rule`,
+  TRAEFIK_ROUTER_ENTRYPOINTS: (routeKey: string) => `traefik/http/routers/${routeKey}/entrypoints`,
+  TRAEFIK_ROUTER_SERVICE: (routeKey: string) => `traefik/http/routers/${routeKey}/service`,
+  TRAEFIK_SERVICE_URL: (routeKey: string) => `traefik/http/services/${routeKey}/loadbalancer/servers/0/url`,
 } as const;
