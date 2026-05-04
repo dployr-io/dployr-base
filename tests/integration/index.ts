@@ -5,6 +5,9 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { setupFixtures, type TestFixtures } from "./fixtures.js";
 
+const TIMEOUT_FIXTURE_SETUP = 180_000;
+const TIMEOUT_CLEANUP = 60_000;
+
 
 let fx: TestFixtures;
 let BASE_URL: string;
@@ -13,12 +16,12 @@ before(async () => {
   fx = await setupFixtures();
   BASE_URL = fx.baseUrl;
   console.log("[test] Fixtures ready");
-});
+}, { timeout: TIMEOUT_FIXTURE_SETUP });
 
 after(async () => {
   await fx?.cleanup();
   console.log("[test] Cleanup done");
-});
+}, { timeout: TIMEOUT_CLEANUP });
 
 
 function get(path: string) {

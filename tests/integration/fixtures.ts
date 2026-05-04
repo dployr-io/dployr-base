@@ -14,6 +14,17 @@ import { runMigrations } from "@/lib/db/migrate.js";
 const TEST_EMAIL = process.env.TEST_EMAIL ?? "ci-test@example.com";
 const OTHER_EMAIL = "ci-test-other@example.com";
 
+// Timeouts for fixture setup operations (in milliseconds)
+const TIMEOUT_POSTGRES_STARTUP = 60_000;
+const TIMEOUT_MIGRATIONS = 30_000;
+const TIMEOUT_REDIS_STARTUP = 20_000;
+const TIMEOUT_SERVER_STARTUP = 20_000;
+const TIMEOUT_SERVER_HEALTH = 30_000;
+const TIMEOUT_SESSION = 10_000;
+const TIMEOUT_CLUSTER = 10_000;
+const TIMEOUT_FIXTURE_SETUP = 180_000;
+const TIMEOUT_CLEANUP = 60_000;
+
 function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = createServer();
@@ -84,6 +95,15 @@ async function spawnServer(connectionString: string, redisConnectionString: stri
    return { proc, port };
  }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms: ${label}`)), timeoutMs)
+    ),
+  ]);
+}
+
 async function waitForHealth(baseUrl: string, maxWaitMs = 30_000): Promise<void> {
   const deadline = Date.now() + maxWaitMs;
   while (Date.now() < deadline) {
@@ -141,32 +161,44 @@ async function resolveCluster(baseUrl: string, authCookie: string): Promise<stri
 
 export async function setupFixtures(): Promise<TestFixtures> {
    console.log("[fixtures] Starting embedded PostgreSQL...");
-   const { pg, connectionString } = await startPostgres();
+   const { pg, connectionString } = await withTimeout(startPostgres(), TIMEOUT_POSTGRES_STARTUP, "PostgreSQL startup");
 
    console.log("[fixtures] Running migrations...");
    const db = new PostgresAdapter(connectionString);
-   await runMigrations(db);
+   await withTimeout(runMigrations(db), TIMEOUT_MIGRATIONS, "Database migrations");
    await db.close();
 
    console.log("[fixtures] Starting embedded Redis...");
-   const { server: redisServer, connectionString: redisConnectionString } = await startRedis();
+   const { server: redisServer, connectionString: redisConnectionString } = await withTimeout(
+     startRedis(),
+     TIMEOUT_REDIS_STARTUP,
+     "Redis startup"
+   );
 
    console.log("[fixtures] Spawning server...");
-   const { proc, port } = await spawnServer(connectionString, redisConnectionString);
+   const { proc, port } = await withTimeout(
+     spawnServer(connectionString, redisConnectionString),
+     TIMEOUT_SERVER_STARTUP,
+     "Server startup"
+   );
    const baseUrl = `http://localhost:${port}`;
 
    console.log("[fixtures] Waiting for server to be healthy...");
-   await waitForHealth(baseUrl);
+   await withTimeout(waitForHealth(baseUrl), TIMEOUT_SERVER_HEALTH, "Server health check");
    console.log("[fixtures] Server ready");
 
-   const sessionCookie = await getSession(baseUrl);
+   const sessionCookie = await withTimeout(getSession(baseUrl), TIMEOUT_SESSION, "Session creation");
    console.log("[fixtures] Session obtained");
 
-   const clusterId = await resolveCluster(baseUrl, sessionCookie);
+   const clusterId = await withTimeout(resolveCluster(baseUrl, sessionCookie), TIMEOUT_CLUSTER, "Cluster resolution");
    console.log(`[fixtures] Using cluster: ${clusterId}`);
 
-   const otherSessionCookie = await getSession(baseUrl, OTHER_EMAIL);
-   const otherClusterId = await resolveCluster(baseUrl, otherSessionCookie);
+   const otherSessionCookie = await withTimeout(getSession(baseUrl, OTHER_EMAIL), TIMEOUT_SESSION, "Other session creation");
+   const otherClusterId = await withTimeout(
+     resolveCluster(baseUrl, otherSessionCookie),
+     TIMEOUT_CLUSTER,
+     "Other cluster resolution"
+   );
    console.log(`[fixtures] Other cluster: ${otherClusterId}`);
 
    return {
