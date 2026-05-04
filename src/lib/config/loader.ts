@@ -82,6 +82,10 @@ function loadConfigFromEnv(): Config {
     kv: {
       type: process.env.KV_TYPE || "redis",
       url: process.env.KV_URL,
+      host: process.env.KV_HOST,
+      port: process.env.KV_PORT ? parseInt(process.env.KV_PORT) : undefined,
+      username: process.env.KV_USERNAME,
+      password: process.env.KV_PASSWORD,
       rest_url: process.env.KV_REST_URL,
       rest_token: process.env.KV_REST_TOKEN,
     },
