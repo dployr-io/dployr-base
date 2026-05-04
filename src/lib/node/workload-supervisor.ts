@@ -8,6 +8,7 @@ import type { ConnectionManager } from "@/services/websocket/connection-manager.
 import type { JWTService } from "@/services/auth/jwt.js";
 import type { DployrdService } from "@/services/dployrd.js";
 import type { ClientNotifier } from "@/services/websocket/handlers/client-notifier.js";
+import type { TraefikService } from "@/services/traefik-router.js";
 import type { Service, Cluster, ServiceType } from "@/types/index.js";
 import { DatabaseConflictError } from "../errors/errors.js";
 
@@ -19,6 +20,7 @@ export class WorkloadSupervisor {
     private jwtService: JWTService,
     private dployrdService: DployrdService,
     private clientNotifier: ClientNotifier,
+    private traefik: TraefikService | null = null,
   ) {}
 
   async run(): Promise<void> {
@@ -77,6 +79,26 @@ export class WorkloadSupervisor {
 
           await this.db.services.upsert({ clusterId: cluster.id, name: svc.name, type: svc.type, deploymentId: svc.deploymentId });
           console.log(`[WorkloadSupervisor] Created service ${svc.name} for cluster ${cluster.name}`);
+
+          // Register the route with Traefik
+          if (this.traefik) {
+            try {
+              const instance = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
+              if (instance?.address) {
+                await this.traefik.registerRoute({
+                  serviceName: svc.name,
+                  instanceAddress: instance.address,
+                  instancePort: 80,
+                });
+                console.log(`[WorkloadSupervisor] Registered Traefik route for service ${svc.name}`);
+              } else {
+                console.warn(`[WorkloadSupervisor] No dedicated instance address found for cluster ${cluster.name}, skipping Traefik registration`);
+              }
+            } catch (err) {
+              console.error(`[WorkloadSupervisor] Failed to register Traefik route for ${svc.name}:`, err);
+            }
+          }
+
           changed = true;
         } catch (error) {
           if (error instanceof DatabaseConflictError) {

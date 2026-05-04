@@ -44,4 +44,7 @@ export type Bindings = {
 
   DO_API_TOKEN?: string;
   SSH_KEY?: number;
+
+  TRAEFIK_ENABLED?: boolean;
+  TRAEFIK_TLD?: string;
 };

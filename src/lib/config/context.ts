@@ -22,7 +22,7 @@ import { InstanceService } from "@/services/instances.js";
 import { DnsService } from "@/services/dns/index.js";
 import { BillingService } from "@/services/billing/index.js";
 import { TrafficRouter } from "@/services/proxy/traffic-router.js";
-import { TraefikRouterService as TraefikService } from "@/services/traefik-router.js";
+import { TraefikService } from "@/services/traefik-router.js";
 import { VmProvider } from "@/services/vm/index.js";
 import { InstancePool } from "@/services/pool.js";
 import { EmailProvider } from "@/services/notifications/email/index.js";
