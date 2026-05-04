@@ -75,9 +75,9 @@ export const CONFIG_SCHEMA = z.object({
     microsoft_client_secret: z.string().optional(),
   }),
   admin: z.object({
-    admin_api_key: z.string(),
-    allowed_ips: z.array(z.string()),
-    totp_secret: z.string(),
+    admin_api_key: z.string().optional().default(""),
+    allowed_ips: z.array(z.string()).default([]),
+    totp_secret: z.string().optional().default(""),
   }),
   integrations: z
     .object({
@@ -155,7 +155,7 @@ export const CONFIG_SCHEMA = z.object({
     .object({
       provider: z.enum(["digitalocean"]).default("digitalocean"),
       do_api_token: z.string().optional(),
-      ssh_key: z.number().int().positive(),
+      ssh_key: z.number().int().positive().optional(),
     })
     .optional(),
 });
