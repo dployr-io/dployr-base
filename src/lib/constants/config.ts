@@ -159,4 +159,14 @@ export const CONFIG_SCHEMA = z.object({
       ssh_key: z.number().int().positive().optional(),
     })
     .optional(),
+}).superRefine((val, ctx) => {
+  const isTest = process.env.NODE_ENV === "test";
+
+  if (!isTest && (!val.traefik?.enabled)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["traefik"],
+      message: "traefik.enabled must be true in non-test environments",
+    });
+  }
 });
