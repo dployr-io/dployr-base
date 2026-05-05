@@ -40,10 +40,10 @@ export class TraefikService {
     const backendUrl = `http://${instanceAddress}:${instancePort}`;
 
     await Promise.all([
-      this.redis.put(KV_KEYS.TRAEFIK_ROUTER_RULE(routeKey), `Host(\`${hostname}\`)`),
-      this.redis.put(KV_KEYS.TRAEFIK_ROUTER_ENTRYPOINTS(routeKey), "websecure"),
-      this.redis.put(KV_KEYS.TRAEFIK_ROUTER_SERVICE(routeKey), routeKey),
-      this.redis.put(KV_KEYS.TRAEFIK_SERVICE_URL(routeKey), backendUrl),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_RULE(routeKey), `Host(\`${hostname}\`)`),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_ENTRYPOINTS(routeKey), "websecure"),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_SERVICE(routeKey), routeKey),
+      this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(routeKey), backendUrl),
     ]);
   }
 
@@ -57,10 +57,10 @@ export class TraefikService {
     const routeKey = serviceName;
 
     await Promise.all([
-      this.redis.delete(KV_KEYS.TRAEFIK_ROUTER_RULE(routeKey)),
-      this.redis.delete(KV_KEYS.TRAEFIK_ROUTER_ENTRYPOINTS(routeKey)),
-      this.redis.delete(KV_KEYS.TRAEFIK_ROUTER_SERVICE(routeKey)),
-      this.redis.delete(KV_KEYS.TRAEFIK_SERVICE_URL(routeKey)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_RULE(routeKey)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_ENTRYPOINTS(routeKey)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_SERVICE(routeKey)),
+      this.redis.delete(KV_KEYS.TRAEFIK.SERVICE_URL(routeKey)),
     ]);
   }
 }

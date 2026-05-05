@@ -181,7 +181,7 @@ export class NodeDoctor extends EventEmittable {
   private async allocateUnassignedCapacity(currentDropletCount: number): Promise<void> {
     if (currentDropletCount >= INSTANCE_POOL_QUOTA) return;
 
-    const lock = await this.kv.kv.get(KV_KEYS.POOL_PROVISION_LOCK);
+    const lock = await this.kv.kv.get(KV_KEYS.POOL.PROVISION_LOCK);
     if (lock) {
       console.debug("[node-sync] Pool provisioning lock is active. Skipping...");
       return;

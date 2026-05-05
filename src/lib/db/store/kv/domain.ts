@@ -16,7 +16,7 @@ export class DomainStore {
    * @param address - The IPv4 address the domain resolves to.
    */
   async saveDomain({ domain, address }: { domain: string; address: string }): Promise<void> {
-    await this.kv.put(KV_KEYS.DOMAIN(domain), address);
+    await this.kv.put(KV_KEYS.DOMAIN.BY_NAME(domain), address);
   }
 
   /**
@@ -26,7 +26,7 @@ export class DomainStore {
    * @returns The IPv4 address string, or `null` if not found.
    */
   async getDomain(domain: string): Promise<string | null> {
-    const data = await this.kv.get(KV_KEYS.DOMAIN(domain));
+    const data = await this.kv.get(KV_KEYS.DOMAIN.BY_NAME(domain));
     if (!data) return null;
     return data;
   }

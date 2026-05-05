@@ -33,7 +33,7 @@ export class SessionStore {
 
     const ttl = SESSION_TTL;
 
-    await Promise.all([this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(session), { ttl }), this.kv.put(KV_KEYS.SESSION_BY_USER(user.id), sessionId, { ttl })]);
+    await Promise.all([this.kv.put(KV_KEYS.SESSION.BY_ID(sessionId), JSON.stringify(session), { ttl }), this.kv.put(KV_KEYS.SESSION.BY_USER(user.id), sessionId, { ttl })]);
 
     return session;
   }
@@ -46,7 +46,7 @@ export class SessionStore {
    * @returns The `Session` if valid, or `null`.
    */
   async getSession(sessionId: string): Promise<Session | null> {
-    const data = await this.kv.get(KV_KEYS.SESSION(sessionId));
+    const data = await this.kv.get(KV_KEYS.SESSION.BY_ID(sessionId));
     if (!data) return null;
 
     const session = JSON.parse(data) as Session;
@@ -67,7 +67,7 @@ export class SessionStore {
    * @returns The session ID string, or `null` if no active session exists.
    */
   async getSessionIdByUserId(userId: string): Promise<string | null> {
-    return await this.kv.get(KV_KEYS.SESSION_BY_USER(userId));
+    return await this.kv.get(KV_KEYS.SESSION.BY_USER(userId));
   }
 
   /**
@@ -90,7 +90,7 @@ export class SessionStore {
     const remainingMs = existing.expiresAt - Date.now();
     const ttl = Math.ceil(remainingMs / 1000);
 
-    await Promise.all([this.kv.put(KV_KEYS.SESSION(sessionId), JSON.stringify(refreshed), { ttl }), this.kv.put(KV_KEYS.SESSION_BY_USER(existing.userId), sessionId, { ttl })]);
+    await Promise.all([this.kv.put(KV_KEYS.SESSION.BY_ID(sessionId), JSON.stringify(refreshed), { ttl }), this.kv.put(KV_KEYS.SESSION.BY_USER(existing.userId), sessionId, { ttl })]);
   }
 
   /**
@@ -103,9 +103,9 @@ export class SessionStore {
   async deleteSession(sessionId: string): Promise<void> {
     const session = await this.getSession(sessionId);
     if (session) {
-      await Promise.all([this.kv.delete(KV_KEYS.SESSION(sessionId)), this.kv.delete(KV_KEYS.SESSION_BY_USER(session.userId))]);
+      await Promise.all([this.kv.delete(KV_KEYS.SESSION.BY_ID(sessionId)), this.kv.delete(KV_KEYS.SESSION.BY_USER(session.userId))]);
     } else {
-      await this.kv.delete(KV_KEYS.SESSION(sessionId));
+      await this.kv.delete(KV_KEYS.SESSION.BY_ID(sessionId));
     }
   }
 
@@ -118,7 +118,7 @@ export class SessionStore {
    */
   async createState({ state, redirectUrl }: { state: string; redirectUrl: string }): Promise<void> {
     await this.kv.put(
-      KV_KEYS.STATE(state),
+      KV_KEYS.WORKFLOW.STATE(state),
       JSON.stringify({
         state,
         redirectUrl,
@@ -140,7 +140,7 @@ export class SessionStore {
    */
   async validateState(state: string): Promise<string | null> {
     try {
-      const data = await this.kv.get(KV_KEYS.STATE(state));
+      const data = await this.kv.get(KV_KEYS.WORKFLOW.STATE(state));
       if (!data) {
         console.error(`[OAuth] State validation failed: state not found in KV store (state: ${state})`);
         return null;
@@ -153,7 +153,7 @@ export class SessionStore {
       };
 
       console.log(`[OAuth] State validated successfully (redirectUrl: ${stateData.redirectUrl})`);
-      await this.kv.delete(KV_KEYS.STATE(state));
+      await this.kv.delete(KV_KEYS.WORKFLOW.STATE(state));
       return stateData.redirectUrl;
     } catch (error) {
       console.error(`[OAuth] State validation error:`, error);
@@ -173,7 +173,7 @@ export class SessionStore {
     const code = this.generateOTP();
 
     await this.kv.put(
-      KV_KEYS.OTP(email),
+      KV_KEYS.OTP.BY_EMAIL(email),
       JSON.stringify({
         code,
         email,
@@ -199,7 +199,7 @@ export class SessionStore {
    * @returns `true` if the code is correct, `false` otherwise.
    */
   async validateOTP({ email, code }: { email: string; code: string }): Promise<boolean> {
-    const data = await this.kv.get(KV_KEYS.OTP(email));
+    const data = await this.kv.get(KV_KEYS.OTP.BY_EMAIL(email));
     if (!data) return false;
 
     const otpData = JSON.parse(data) as {
@@ -210,17 +210,17 @@ export class SessionStore {
     };
 
     if (otpData.attempts >= 3) {
-      await this.kv.delete(KV_KEYS.OTP(email));
+      await this.kv.delete(KV_KEYS.OTP.BY_EMAIL(email));
       return false;
     }
 
     otpData.attempts++;
-    await this.kv.put(KV_KEYS.OTP(email), JSON.stringify(otpData), {
+    await this.kv.put(KV_KEYS.OTP.BY_EMAIL(email), JSON.stringify(otpData), {
       ttl: OTP_TTL,
     });
 
     if (otpData.code === code) {
-      await this.kv.delete(KV_KEYS.OTP(email));
+      await this.kv.delete(KV_KEYS.OTP.BY_EMAIL(email));
       return true;
     }
 

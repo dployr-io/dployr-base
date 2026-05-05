@@ -1,6 +1,6 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
-import { PENDING_GITHUB_INSTALL_TTL, RELEASE_CACHE_TTL } from "@/lib/constants/index.js";
+import { PENDING_GITHUB_INSTALL_TTL, TTL_10_MINUTES } from "@/lib/constants/index.js";
 
 /**
  * Third-party integrations: GitHub app install state and version cache.
@@ -21,7 +21,7 @@ export class IntegrationsStore {
    * @param clusterId - The cluster they were linking the GitHub App to.
    */
   async setPendingGitHubInstall(userId: string, clusterId: string): Promise<void> {
-    await this.kv.put(KV_KEYS.PENDING_GITHUB_INSTALL(userId), clusterId, {
+    await this.kv.put(KV_KEYS.GITHUB.PENDING_INSTALL(userId), clusterId, {
       ttl: PENDING_GITHUB_INSTALL_TTL,
     });
   }
@@ -34,7 +34,7 @@ export class IntegrationsStore {
    * @returns The cluster ID string, or `null`.
    */
   async getPendingGitHubInstall(userId: string): Promise<string | null> {
-    return this.kv.get(KV_KEYS.PENDING_GITHUB_INSTALL(userId));
+    return this.kv.get(KV_KEYS.GITHUB.PENDING_INSTALL(userId));
   }
 
   /**
@@ -44,7 +44,7 @@ export class IntegrationsStore {
    * @param userId - The user whose pending installation to remove.
    */
   async deletePendingGitHubInstall(userId: string): Promise<void> {
-    await this.kv.delete(KV_KEYS.PENDING_GITHUB_INSTALL(userId));
+    await this.kv.delete(KV_KEYS.GITHUB.PENDING_INSTALL(userId));
   }
 
   // Retrieves the latest dployrd version from cache
@@ -62,7 +62,7 @@ export class IntegrationsStore {
    */
   private async getCachedLatestVersion(): Promise<string | null> {
     try {
-      const raw = await this.kv.get(KV_KEYS.VERSION_LATEST);
+      const raw = await this.kv.get(KV_KEYS.VERSION.LATEST);
       if (!raw) return null;
       const data = JSON.parse(raw) as { tag?: string } | null;
       if (data && typeof data.tag === "string" && data.tag.length > 0) {
@@ -74,7 +74,7 @@ export class IntegrationsStore {
 
   /**
    * Fetches the latest dployrd release tag from the GitHub API and caches it
-   * for `RELEASE_CACHE_TTL` (10 minutes). Uses the configured GitHub token if
+   * for 10 minutes (TTL_10_MINUTES). Uses the configured GitHub token if
    * available to avoid rate limits. Returns `null` on any network or parse error.
    *
    * @returns A semver tag string (e.g. `"v0.5.1"`), or `null`.
@@ -98,8 +98,8 @@ export class IntegrationsStore {
       const tag = (body as any).tag_name as string | undefined;
       if (!tag) return null;
 
-      await this.kv.put(KV_KEYS.VERSION_LATEST, JSON.stringify({ tag }), {
-        ttl: RELEASE_CACHE_TTL,
+      await this.kv.put(KV_KEYS.VERSION.LATEST, JSON.stringify({ tag }), {
+        ttl: TTL_10_MINUTES,
       });
 
       return tag;

@@ -23,7 +23,7 @@ export class KeyStore {
     publicKeyJwk: JsonWebKey;
     privateKey: string;
   }> {
-    const data = await this.kv.get(KV_KEYS.JWT_KEYS);
+    const data = await this.kv.get(KV_KEYS.AUTH.JWT_KEYS);
     let existing: { publicKeyJwk: JsonWebKey; privateKey: string } | null = null;
     if (data) {
       existing = JSON.parse(data);
@@ -32,7 +32,7 @@ export class KeyStore {
     if (!existing) {
       const generated = await generateKeyPair();
       existing = generated;
-      await this.kv.put(KV_KEYS.JWT_KEYS, JSON.stringify(generated));
+      await this.kv.put(KV_KEYS.AUTH.JWT_KEYS, JSON.stringify(generated));
     }
 
     return existing;
@@ -50,7 +50,7 @@ export class KeyStore {
 
     if (!(keys.publicKeyJwk as any).kid) {
       (keys.publicKeyJwk as any).kid = "base-key";
-      await this.kv.put(KV_KEYS.JWT_KEYS, JSON.stringify(keys));
+      await this.kv.put(KV_KEYS.AUTH.JWT_KEYS, JSON.stringify(keys));
     }
 
     return keys.publicKeyJwk;
@@ -91,7 +91,7 @@ export class KeyStore {
    * @returns The JWT string, or `null` if absent or near expiry.
    */
   async getAdminJWT(sessionId: string): Promise<string | null> {
-    const data = await this.kv.get(KV_KEYS.ADMIN_JWT(sessionId));
+    const data = await this.kv.get(KV_KEYS.AUTH.ADMIN_JWT(sessionId));
     if (!data) return null;
     try {
       const parsed = JSON.parse(data);
@@ -117,6 +117,6 @@ export class KeyStore {
    */
   async saveAdminJWT({ sessionId, token, ttl = ADMIN_JWT_TTL }: { sessionId: string; token: string; ttl?: number }): Promise<void> {
     const expiresAt = Date.now() + ttl * 1000;
-    await this.kv.put(`admin_jwt:${sessionId}`, JSON.stringify({ token, expiresAt }), { ttl });
+    await this.kv.put(KV_KEYS.AUTH.ADMIN_JWT(sessionId), JSON.stringify({ token, expiresAt }), { ttl });
   }
 }

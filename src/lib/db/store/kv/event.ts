@@ -47,7 +47,7 @@ export class EventStore {
           .sort()
           .join(",")
       : "";
-    const idemKey = KV_KEYS.EVENT_IDEM(type, actor.id, ray, targetScope);
+    const idemKey = KV_KEYS.EVENT.IDEM(type, actor.id, ray, targetScope);
     if (ray) {
       const exists = await this.kv.get(idemKey);
       if (exists) {
@@ -64,7 +64,7 @@ export class EventStore {
         targets,
       };
 
-      const actorKey = KV_KEYS.ACTOR_EVENT(actor.id, id);
+      const actorKey = KV_KEYS.EVENT.ACTOR(actor.id, id);
       const writes: Promise<any>[] = [this.kv.put(actorKey, JSON.stringify(actorEvent), { ttl: EVENT_TTL })];
 
       for (const target of targets) {
@@ -73,7 +73,7 @@ export class EventStore {
           id,
           targets: [target],
         };
-        const targetKey = KV_KEYS.TARGET_EVENT(target.id, id);
+        const targetKey = KV_KEYS.EVENT.TARGET(target.id, id);
         writes.push(this.kv.put(targetKey, JSON.stringify(event), { ttl: EVENT_TTL }));
       }
 
@@ -84,7 +84,7 @@ export class EventStore {
         id: ulid(),
       };
 
-      const actorKey = KV_KEYS.ACTOR_EVENT(actor.id, event.id);
+      const actorKey = KV_KEYS.EVENT.ACTOR(actor.id, event.id);
       await this.kv.put(actorKey, JSON.stringify(event), { ttl: EVENT_TTL });
     }
   }
@@ -97,7 +97,7 @@ export class EventStore {
    * @returns An array of event objects, sorted by `timestamp` descending.
    */
   async getEvents(userId: string): Promise<any[]> {
-    const prefix = KV_KEYS.ACTOR_EVENT(userId, "");
+    const prefix = KV_KEYS.EVENT.ACTOR(userId, "");
     const result = await this.kv.list({ prefix });
     const events = await Promise.all(
       result.map(async (key) => {
@@ -145,7 +145,7 @@ export class EventStore {
   }
 
   async getClusterEvents(clusterId: string): Promise<any[]> {
-    const prefix = KV_KEYS.TARGET_EVENT(clusterId, "");
+    const prefix = KV_KEYS.EVENT.TARGET(clusterId, "");
     const result = await this.kv.list({ prefix });
     const events = await Promise.all(
       result.map(async (key) => {
@@ -179,20 +179,20 @@ export class EventStore {
 
     if (targets && targets.length > 0) {
       const id = ulid();
-      const writes: Promise<any>[] = [this.kv.put(KV_KEYS.ACTOR_EVENT(actor.id, id), JSON.stringify({ ...base, id, targets }), { ttl: EVENT_TTL })];
+      const writes: Promise<any>[] = [this.kv.put(KV_KEYS.EVENT.ACTOR(actor.id, id), JSON.stringify({ ...base, id, targets }), { ttl: EVENT_TTL })];
       for (const target of targets) {
-        writes.push(this.kv.put(KV_KEYS.TARGET_EVENT(target.id, id), JSON.stringify({ ...base, id, targets: [target] }), { ttl: EVENT_TTL }));
+        writes.push(this.kv.put(KV_KEYS.EVENT.TARGET(target.id, id), JSON.stringify({ ...base, id, targets: [target] }), { ttl: EVENT_TTL }));
       }
       await Promise.all(writes);
     } else {
       const id = ulid();
-      await this.kv.put(KV_KEYS.ACTOR_EVENT(actor.id, id), JSON.stringify({ ...base, id }), { ttl: EVENT_TTL });
+      await this.kv.put(KV_KEYS.EVENT.ACTOR(actor.id, id), JSON.stringify({ ...base, id }), { ttl: EVENT_TTL });
     }
   }
 
   // Workflow failure tracking
   async createWorkflowFailedEvent(id: string, data: Record<string, unknown>): Promise<void> {
-    await this.kv.put(KV_KEYS.WORKFLOW(id), JSON.stringify(data), {
+    await this.kv.put(KV_KEYS.WORKFLOW.BY_ID(id), JSON.stringify(data), {
       ttl: FAILED_WORKFLOW_EVENT_TTL,
     });
   }

@@ -104,13 +104,13 @@ export class InstancePool extends EventEmittable {
         return;
       }
 
-      if (await this.kv.kv.get(KV_KEYS.POOL_PROVISION_LOCK)) {
+      if (await this.kv.kv.get(KV_KEYS.POOL.PROVISION_LOCK)) {
         console.warn("[node-sync] Pool allocation and scheduling ongoing. Skipping...");
         return;
       }
 
       console.log(`[node-sync] Pool at capacity — provisioning new instance for cluster ${clusterId}`);
-      await this.kv.kv.put(KV_KEYS.POOL_PROVISION_LOCK, "1", { ttl: POOL_PROVISION_LOCK_TTL });
+      await this.kv.kv.put(KV_KEYS.POOL.PROVISION_LOCK, "1", { ttl: POOL_PROVISION_LOCK_TTL });
       await this.createPoolInstance();
       await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId);
       await this.db.instances.assignPool(clusterId);

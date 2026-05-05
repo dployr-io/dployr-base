@@ -7,6 +7,8 @@ import { ConnectionManager } from "@/services/websocket/connection-manager.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { ulid } from "ulid";
 import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
+import { INSTANCE_STATUS_TTL } from "@/lib/constants/duration.js";
 
 /**
  * Handles broadcasting messages to connected clients.
@@ -62,7 +64,7 @@ export class ClientNotifier {
       }
     }
 
-    await this.cacheStatusIfNeeded(clusterId, message, payload);
+    await this.cacheUpdate(clusterId, message, payload);
   }
 
   /**
@@ -105,10 +107,10 @@ export class ClientNotifier {
     return replayed;
   }
 
-  private async cacheStatusIfNeeded(clusterId: string, message: BaseMessage, payload: string): Promise<void> {
+  private async cacheUpdate(clusterId: string, message: BaseMessage, payload: string): Promise<void> {
     if (message.kind === MESSAGE_KIND.UPDATE) {
       try {
-        await this.kv.kv.put(`cluster:${clusterId}:status`, payload, { ttl: 300 });
+        await this.kv.kv.put(KV_KEYS.CLUSTER.STATUS(clusterId), payload, { ttl: INSTANCE_STATUS_TTL });
       } catch (err) {
         console.error(`[WS] Failed to cache status:`, err);
       }

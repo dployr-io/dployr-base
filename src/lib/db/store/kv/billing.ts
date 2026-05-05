@@ -17,7 +17,7 @@ export class BillingStore {
    * @returns `"1"` if a notification was recently sent, or `null`.
    */
   async getbillingNotification({ clusterId }: { clusterId: string }): Promise<String | null> {
-    return await this.kv.get(KV_KEYS.BILLING_NOTIFICATION(clusterId));
+    return await this.kv.get(KV_KEYS.BILLING.NOTIFICATION(clusterId));
   }
 
   /**
@@ -28,7 +28,7 @@ export class BillingStore {
    * @param clusterId - The cluster that was notified.
    */
   async setReminderNotification({ clusterId }: { clusterId: string }): Promise<void> {
-    await this.kv.put(KV_KEYS.BILLING_NOTIFICATION(clusterId), "1", {
+    await this.kv.put(KV_KEYS.BILLING.NOTIFICATION(clusterId), "1", {
       ttl: BILLING_NOTIFICATION_TTL,
     });
   }
