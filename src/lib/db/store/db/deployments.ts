@@ -1,7 +1,6 @@
 import { Deployment, DeploymentStatus, ServiceType } from "@/types/index.js";
 import { type AllowedTable } from "@/lib/constants/index.js";
 import { BaseStore, Pagination } from "./base.js";
-import { maskBlueprintSecrets } from "@/lib/crypto/masking.js";
 
 export type DeploymentFilter = {
   id?: string;
@@ -15,23 +14,49 @@ export class DeploymentStore extends BaseStore {
 
   async upsert({
     clusterId,
+    userId,
     id,
     name,
     type,
     source,
     status,
-    blueprint,
+    description,
+    runCmd,
+    buildCmd,
+    port,
+    workingDir,
+    staticDir,
+    image,
+    domain,
+    runtimeType,
+    runtimeVersion,
+    remoteUrl,
+    remoteBranch,
+    remoteCommitHash,
     logs,
     createdAt,
     finishedAt,
     serviceId,
   }: {
     clusterId: string;
+    userId: string;
     name: string;
     type: ServiceType;
     source: "remote" | "image";
     status?: DeploymentStatus;
-    blueprint: Record<string, any>;
+    description?: string | null;
+    runCmd?: string | null;
+    buildCmd?: string | null;
+    port?: number | null;
+    workingDir?: string | null;
+    staticDir?: string | null;
+    image?: string | null;
+    domain?: string | null;
+    runtimeType?: string | null;
+    runtimeVersion?: string | null;
+    remoteUrl?: string | null;
+    remoteBranch?: string | null;
+    remoteCommitHash?: string | null;
     id?: string | null;
     logs?: string | null;
     createdAt?: number | null;
@@ -44,28 +69,60 @@ export class DeploymentStore extends BaseStore {
     if (!finishedAt && (status === "success" || status === "failed")) finishedAt = this.now();
 
     try {
-      const safeBlueprint = maskBlueprintSecrets(blueprint);
       return await this.db.withTransaction(async (client) => {
         const now = this.now();
 
-        // only update logs if finished_at is set
         const insertResult = await this.db
           .prepare(
-            `INSERT INTO deployments (id, cluster_id, name, type, source, status, blueprint, created_at, logs, finished_at, service_id, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
+            `INSERT INTO deployments (id, cluster_id, user_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, created_at, logs, finished_at, service_id, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
            ON CONFLICT (id) DO UPDATE SET
-             blueprint = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.blueprint ELSE $7::jsonb END,
-             name = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.name ELSE $3 END,
-             type = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.type ELSE $4 END,
-             source = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.source ELSE $5 END,
-             status = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.status ELSE $6 END,
-             logs = CASE WHEN $9 IS NOT NULL THEN $9 ELSE deployments.logs END,
-             finished_at = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.finished_at ELSE $10 END,
-             service_id = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.service_id ELSE $11 END,
-             updated_at = $12
-           RETURNING id, cluster_id, service_id, name, type, source, status, blueprint, logs, created_at, finished_at`,
+             description = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.description ELSE $8 END,
+             run_cmd = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.run_cmd ELSE $9 END,
+             build_cmd = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.build_cmd ELSE $10 END,
+             port = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.port ELSE $11 END,
+             working_dir = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.working_dir ELSE $12 END,
+             static_dir = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.static_dir ELSE $13 END,
+             image = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.image ELSE $14 END,
+             domain = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.domain ELSE $15 END,
+             runtime_type = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.runtime_type ELSE $16 END,
+             runtime_version = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.runtime_version ELSE $17 END,
+             remote_url = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.remote_url ELSE $18 END,
+             remote_branch = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.remote_branch ELSE $19 END,
+             remote_commit_hash = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.remote_commit_hash ELSE $20 END,
+             logs = CASE WHEN $22 IS NOT NULL THEN $22 ELSE deployments.logs END,
+             finished_at = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.finished_at ELSE $23 END,
+             service_id = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.service_id ELSE $24 END,
+             updated_at = $25
+           RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, created_at, finished_at`,
           )
-          .bind(id, clusterId, name, type, source, status ?? "pending", safeBlueprint, createdAt, logs, finishedAt ?? null, serviceId ?? null, now)
+          .bind(
+            id,
+            clusterId,
+            userId,
+            name,
+            type,
+            source,
+            status ?? "pending",
+            description ?? null,
+            runCmd ?? null,
+            buildCmd ?? null,
+            port ?? null,
+            workingDir ?? null,
+            staticDir ?? null,
+            image ?? null,
+            domain ?? null,
+            runtimeType ?? null,
+            runtimeVersion ?? null,
+            remoteUrl ?? null,
+            remoteBranch ?? null,
+            remoteCommitHash ?? null,
+            createdAt,
+            logs,
+            finishedAt ?? null,
+            serviceId ?? null,
+            now,
+          )
           .executeWithClient(client);
 
         const row = insertResult.rows?.[0];
@@ -83,7 +140,7 @@ export class DeploymentStore extends BaseStore {
   }
 
   async get(id: string): Promise<Deployment | null> {
-    const row = await this.db.prepare(`SELECT id, cluster_id, service_id, name, type, source, status, blueprint, logs, created_at, finished_at FROM deployments WHERE id = $1`).bind(id).first();
+    const row = await this.db.prepare(`SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, created_at, finished_at FROM deployments WHERE id = $1`).bind(id).first();
     return row ? this.toDeployment(row) : null;
   }
 
@@ -112,7 +169,7 @@ export class DeploymentStore extends BaseStore {
 
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT id, cluster_id, service_id, name, type, source, status, blueprint, logs, created_at, finished_at FROM deployments ${clause} ORDER BY created_at DESC`;
+    let sql = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, created_at, finished_at FROM deployments ${clause} ORDER BY created_at DESC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -160,12 +217,25 @@ export class DeploymentStore extends BaseStore {
     return {
       id: row.id as string,
       clusterId: row.cluster_id as string,
+      userId: row.user_id as string,
       serviceId: row.service_id as string | null,
       name: row.name as string,
       type: row.type as ServiceType,
       source: row.source as "remote" | "image",
       status: row.status as DeploymentStatus,
-      blueprint: row.blueprint ?? {},
+      description: row.description as string | null,
+      runCmd: row.run_cmd as string | null,
+      buildCmd: row.build_cmd as string | null,
+      port: row.port as number | null,
+      workingDir: row.working_dir as string | null,
+      staticDir: row.static_dir as string | null,
+      image: row.image as string | null,
+      domain: row.domain as string | null,
+      runtimeType: row.runtime_type as string | null,
+      runtimeVersion: row.runtime_version as string | null,
+      remoteUrl: row.remote_url as string | null,
+      remoteBranch: row.remote_branch as string | null,
+      remoteCommitHash: row.remote_commit_hash as string | null,
       logs: row.logs as string | null,
       createdAt: row.created_at as number,
       finishedAt: row.finished_at as number | null,

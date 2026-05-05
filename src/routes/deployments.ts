@@ -5,13 +5,14 @@ import { Hono } from "hono";
 import { ulid } from "ulid";
 import { z } from "zod";
 import type { Bindings, Variables } from "@/types/index.js";
-import { requireClusterViewer, requireClusterDeveloper, authMiddleware, resolveCluster } from "@/middleware/auth.js";
+import { requireClusterViewer, requireClusterDeveloper, authMiddleware } from "@/middleware/auth.js";
 import { ERROR, SUCCESS } from "@/lib/constants/index.js";
 import { getDbStore, getWS, getJWTService } from "@/lib/config/context.js";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { DeploymentPayload, DeploymentSchema } from "@/lib/tasks/types.js";
 import { DatabaseConflictError } from "@/lib/errors/errors.js";
+import { validateString } from "@/lib/validators/string-sanitizer.js";
 
 const deployments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const dployrdService = new DployrdService();
@@ -72,11 +73,11 @@ deployments.post("/finish", async (c) => {
 
       await db.deployments.upsert({
         clusterId: cluster.id,
+        userId: blueprint.user_id,
         id,
         name: blueprint.name,
         type: blueprint.type,
         source: blueprint.source,
-        blueprint: blueprint,
         logs,
       });
     }
@@ -145,15 +146,34 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
 
   const deployPayload = validation.data;
 
+  // Validate deployment name
+  const nameValidation = validateString(deployPayload.name, "name");
+  if (!nameValidation.valid) {
+    return c.json(createErrorResponse({ message: nameValidation.error || "This name is not allowed", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
+  }
+
   // Create deployment record and set envs/secrets
   let deployment: any;
   try {
     deployment = await db.deployments.upsert({
       clusterId,
+      userId: deployPayload.user_id,
       name: deployPayload.name,
       type: deployPayload.type,
       source: deployPayload.source,
-      blueprint: deployPayload,
+      description: deployPayload.description,
+      runCmd: deployPayload.run_cmd,
+      buildCmd: deployPayload.build_cmd,
+      port: deployPayload.port,
+      workingDir: deployPayload.working_dir,
+      staticDir: deployPayload.static_dir,
+      image: deployPayload.image,
+      domain: deployPayload.domain,
+      runtimeType: deployPayload.runtime,
+      runtimeVersion: deployPayload.version,
+      remoteUrl: deployPayload.remote?.url,
+      remoteBranch: deployPayload.remote?.branch,
+      remoteCommitHash: deployPayload.remote?.commit_hash,
     });
 
     if (deployment) {

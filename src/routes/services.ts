@@ -101,10 +101,23 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
 
     const deployment = await db.deployments.upsert({
       clusterId,
+      userId: deployPayload.user_id,
       name: service.name,
       type: service.type,
       source: deployPayload.source,
-      blueprint: deployPayload,
+      description: deployPayload.description,
+      runCmd: deployPayload.run_cmd,
+      buildCmd: deployPayload.build_cmd,
+      port: deployPayload.port,
+      workingDir: deployPayload.working_dir,
+      staticDir: deployPayload.static_dir,
+      image: deployPayload.image,
+      domain: deployPayload.domain,
+      runtimeType: deployPayload.runtime,
+      runtimeVersion: deployPayload.version,
+      remoteUrl: deployPayload.remote?.url,
+      remoteBranch: deployPayload.remote?.branch,
+      remoteCommitHash: deployPayload.remote?.commit_hash,
     });
 
     if (!deployment) {

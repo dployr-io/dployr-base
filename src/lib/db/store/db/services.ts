@@ -20,19 +20,31 @@ export class ServiceStore extends BaseStore {
    * No-ops if (cluster_id, name) already exists.
    * Returns `null` if no instance with that tag exists.
    */
-  async upsert({ clusterId, name, type, deploymentId }: { clusterId: string; name: string; type: ServiceType; deploymentId?: string }): Promise<Service | null> {
+  async upsert({
+    clusterId,
+    name,
+    label,
+    type,
+    deploymentId,
+  }: {
+    clusterId: string;
+    name: string;
+    label?: string | null;
+    type: ServiceType;
+    deploymentId?: string;
+  }): Promise<Service | null> {
     const id = this.generateId();
     const now = this.now();
 
     try {
       const result = await this.db
         .prepare(
-          `INSERT INTO services (id, cluster_id, name, type, deployment_id, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (cluster_id, name) DO UPDATE SET deployment_id = COALESCE(EXCLUDED.deployment_id, services.deployment_id), updated_at = EXCLUDED.updated_at
-           RETURNING id, cluster_id, name, type, deployment_id, created_at, updated_at`,
+          `INSERT INTO services (id, cluster_id, name, label, type, deployment_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (name) DO UPDATE SET label = COALESCE(EXCLUDED.label, services.label), deployment_id = COALESCE(EXCLUDED.deployment_id, services.deployment_id), updated_at = EXCLUDED.updated_at
+           RETURNING id, cluster_id, name, label, type, deployment_id, created_at, updated_at`,
         )
-        .bind(id, clusterId, name, type, deploymentId || null, now, now)
+        .bind(id, clusterId, name, label || null, type, deploymentId || null, now, now)
         .first();
 
       return result ? this.toService(result) : null;
@@ -61,7 +73,7 @@ export class ServiceStore extends BaseStore {
     if (!bindings.length) return null;
 
     const result = await this.db
-      .prepare(`SELECT id, cluster_id, name, type, deployment_id, created_at, updated_at FROM services ${clause} LIMIT 1`)
+      .prepare(`SELECT id, cluster_id, name, label, type, deployment_id, created_at, updated_at FROM services ${clause} LIMIT 1`)
       .bind(...bindings)
       .first();
 
@@ -89,7 +101,7 @@ export class ServiceStore extends BaseStore {
 
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT id, cluster_id, name, type, deployment_id, created_at, updated_at FROM services ${clause} ORDER BY name ASC`;
+    let sql = `SELECT id, cluster_id, name, label, type, deployment_id, created_at, updated_at FROM services ${clause} ORDER BY name ASC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -119,9 +131,10 @@ export class ServiceStore extends BaseStore {
     return {
       id: row.id as string,
       clusterId: row.cluster_id as string,
+      name: row.name as string,
+      label: (row.label as string) ?? null,
       type: row.type as ServiceType,
       deploymentId: (row.deployment_id as string) ?? null,
-      name: row.name as string,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
     };

@@ -91,28 +91,43 @@ CREATE TABLE IF NOT EXISTS domains (
 CREATE TABLE IF NOT EXISTS services (
   id            TEXT PRIMARY KEY,
   cluster_id    TEXT NOT NULL,
-  name          TEXT NOT NULL,
+  name          TEXT NOT NULL UNIQUE,
+  label         TEXT,
   type          service_type NOT NULL,
   deployment_id TEXT,
   created_at    BIGINT NOT NULL,
   updated_at    BIGINT NOT NULL,
-  UNIQUE(cluster_id, name),
-  FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
+  FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE,
+  CONSTRAINT check_service_name_format CHECK (name ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$' AND length(name) >= 2 AND length(name) <= 63)
 );
 
 CREATE TABLE IF NOT EXISTS deployments (
-  id          TEXT PRIMARY KEY,
-  cluster_id  TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
-  service_id  TEXT REFERENCES services(id) ON DELETE SET NULL,
-  name        TEXT NOT NULL,
-  type        service_type NOT NULL,
-  source      TEXT NOT NULL CHECK (source IN ('remote', 'image')),
-  status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'success', 'failed')),
-  blueprint   JSONB NOT NULL,
-  logs        TEXT,
-  created_at  BIGINT NOT NULL,
-  finished_at BIGINT,
-  updated_at  BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
+  id                 TEXT PRIMARY KEY,
+  cluster_id         TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+  service_id         TEXT REFERENCES services(id) ON DELETE SET NULL,
+  user_id            TEXT NOT NULL,
+  name               TEXT NOT NULL UNIQUE,
+  type               service_type NOT NULL,
+  source             TEXT NOT NULL CHECK (source IN ('remote', 'image')),
+  status             TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'success', 'failed')),
+  description        TEXT,
+  run_cmd            TEXT,
+  build_cmd          TEXT,
+  port               INTEGER,
+  working_dir        TEXT,
+  static_dir         TEXT,
+  image              TEXT,
+  domain             TEXT,
+  runtime_type       TEXT,
+  runtime_version    TEXT,
+  remote_url         TEXT,
+  remote_branch      TEXT,
+  remote_commit_hash TEXT,
+  logs               TEXT,
+  created_at         BIGINT NOT NULL,
+  finished_at        BIGINT,
+  updated_at         BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+  CONSTRAINT check_deployment_name_format CHECK (name ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$' AND length(name) >= 2 AND length(name) <= 63)
 );
 
 CREATE OR REPLACE FUNCTION validate_service_deployment_cluster()

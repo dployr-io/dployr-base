@@ -10,6 +10,7 @@ import type { DployrdService } from "@/services/dployrd.js";
 import type { ClientNotifier } from "@/services/websocket/handlers/client-notifier.js";
 import type { TraefikService } from "@/services/traefik-router.js";
 import type { Service, Cluster, ServiceType } from "@/types/index.js";
+import type { DeploymentPayload } from "@/lib/tasks/types.js";
 import { DatabaseConflictError } from "../errors/errors.js";
 
 export class WorkloadSupervisor {
@@ -71,24 +72,39 @@ export class WorkloadSupervisor {
       // Create missing services
       for (const svc of toCreate) {
         try {
+          let deployment;
           // Verify deployment belongs to this cluster if specified
           if (svc.deploymentId) {
-            const deployment = await this.db.deployments.get(svc.deploymentId);
+            deployment = await this.db.deployments.get(svc.deploymentId);
             if (!deployment || deployment.clusterId !== cluster.id) continue;
+          } else {
+            // Try to find an existing deployment by name (names are now globally unique)
+            const existingDeployments = await this.db.deployments.list({ clusterId: cluster.id, limit: 100, offset: 0 });
+            deployment = existingDeployments.deployments.find((d) => d.name === svc.name);
           }
 
-          await this.db.services.upsert({ clusterId: cluster.id, name: svc.name, type: svc.type, deploymentId: svc.deploymentId });
-          console.log(`[WorkloadSupervisor] Created service ${svc.name} for cluster ${cluster.name}`);
+          await this.db.services.upsert({
+            clusterId: cluster.id,
+            name: svc.name,
+            type: svc.type,
+            deploymentId: deployment?.id,
+          });
+          console.log(`[WorkloadSupervisor] ${deployment ? "Updated" : "Created"} service ${svc.name} for cluster ${cluster.name}`);
 
           // Register the route with Traefik
-          if (this.traefik) {
+          if (this.traefik && deployment) {
             try {
               const instance = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
               if (instance?.address) {
+                if (!deployment.port) {
+                  console.error("[WorkloadSupervisor] Port is not set. Unable to register route.", deployment.name)
+                  return;
+                }
+
                 await this.traefik.registerRoute({
                   serviceName: svc.name,
                   instanceAddress: instance.address,
-                  instancePort: 80,
+                  instancePort: deployment.port,
                 });
                 console.log(`[WorkloadSupervisor] Registered Traefik route for service ${svc.name}`);
               } else {
@@ -140,7 +156,30 @@ export class WorkloadSupervisor {
         return;
       }
 
-      const blueprint = { ...deployment.blueprint } as Record<string, any>;
+      const blueprint: DeploymentPayload = {
+        name: deployment.name,
+        description: deployment.description ?? undefined,
+        user_id: deployment.userId,
+        type: deployment.type,
+        source: deployment.source,
+        runtime: deployment.runtimeType as any,
+        version: deployment.runtimeVersion ?? undefined,
+        run_cmd: deployment.runCmd ?? undefined,
+        build_cmd: deployment.buildCmd ?? undefined,
+        port: deployment.port ?? undefined,
+        working_dir: deployment.workingDir ?? undefined,
+        static_dir: deployment.staticDir ?? undefined,
+        image: deployment.image ?? undefined,
+        domain: deployment.domain ?? undefined,
+        remote: deployment.remoteUrl
+          ? {
+              url: deployment.remoteUrl,
+              branch: deployment.remoteBranch,
+              commit_hash: deployment.remoteCommitHash,
+            }
+          : undefined,
+      };
+
       const secretKeys = Object.keys(blueprint.secrets ?? {});
 
       if (secretKeys.length > 0) {
@@ -161,7 +200,7 @@ export class WorkloadSupervisor {
 
       const taskId = ulid();
       const token = await this.jwtService.createNodeAccessToken(routingKey);
-      const task = this.dployrdService.createDeployTask(taskId, blueprint as any, token);
+      const task = this.dployrdService.createDeployTask(taskId, blueprint, token);
 
       const sent = this.connectionManager.sendTask(routingKey, task);
       if (sent) {
