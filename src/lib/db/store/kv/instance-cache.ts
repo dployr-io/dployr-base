@@ -108,8 +108,9 @@ export class InstanceCacheStore {
   }
 
   async saveNodeUpdate({ tag, update }: { tag: string; update: Record<string, unknown> }): Promise<void> {
-    const data = { ...update, lastUpdated: Date.now() };
-    await this.kv.put(KV_KEYS.NODE.UPDATE(tag), JSON.stringify(data), { ttl: NODE_UPDATE_TTL });
+    const existing = await this.getNodeUpdate(tag);
+    const merged = { ...(existing || {}), ...update, lastUpdated: Date.now() };
+    await this.kv.put(KV_KEYS.NODE.UPDATE(tag), JSON.stringify(merged), { ttl: NODE_UPDATE_TTL });
   }
 
   async getNodeUpdate(tag: string): Promise<Record<string, unknown> | null> {

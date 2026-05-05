@@ -52,6 +52,9 @@ export const MESSAGE_KIND = {
   // Process history
   PROCESS_HISTORY: "process_history",
 
+  // Heartbeat
+  HEARTBEAT: "heartbeat",
+
   // Server -> Client
   TASK: "task",
   ERROR: "error",

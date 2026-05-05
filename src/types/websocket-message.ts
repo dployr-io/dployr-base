@@ -354,6 +354,11 @@ export interface ProcessHistoryMessage extends BaseRequestMessage {
   endTime?: number; // Unix ms, defaults to now
 }
 
+export interface HeartbeatMessage extends BaseRequestMessage {
+  kind: typeof MESSAGE_KIND.HEARTBEAT;
+  instanceId: string;
+}
+
 /**
  * Instance operation response messages
  */
@@ -549,7 +554,6 @@ export type ClientMessage =
   | ClientSubscribeMessage
   | LogSubscribeMessage
   | LogUnsubscribeMessage
-  | DeployMessage
   | FileReadMessage
   | FileWriteMessage
   | FileCreateMessage
@@ -557,6 +561,10 @@ export type ClientMessage =
   | FileTreeMessage
   | FileWatchMessage
   | FileUnwatchMessage
+  | TerminalOpenMessage
+  | HeartbeatMessage
+  | AckMessage
+  | DeployMessage
   | InstanceTokenRotateMessage
   | InstanceSystemInstallMessage
   | InstanceSystemRebootMessage
@@ -565,9 +573,7 @@ export type ClientMessage =
   | ProxyRestartMessage
   | ProxyAddMessage
   | ProxyRemoveMessage
-  | ProcessHistoryMessage
-  | TerminalOpenMessage
-  | AckMessage;
+  | ProcessHistoryMessage;
 
 /**
  * All inbound messages
@@ -794,6 +800,10 @@ export function isProxyRemoveMessage(msg: BaseMessage): msg is ProxyRemoveMessag
 
 export function isProcessHistoryMessage(msg: BaseMessage): msg is ProcessHistoryMessage {
   return msg.kind === MESSAGE_KIND.PROCESS_HISTORY;
+}
+
+export function isHeartbeatMessage(msg: BaseMessage): msg is HeartbeatMessage {
+  return msg.kind === MESSAGE_KIND.HEARTBEAT;
 }
 
 export function isTerminalMessage(msg: BaseMessage): msg is TerminalMessage {

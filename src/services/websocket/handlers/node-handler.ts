@@ -4,8 +4,8 @@
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import type { ConnectionManager } from "../connection-manager.js";
-import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "../../../types/websocket-message.js";
-import { isNodeBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, createWSError } from "../../../types/websocket-message.js";
+import type { ClusterConnection, BaseMessage, TaskResponseMessage, FileUpdateMessage } from "@/types/websocket-message.js";
+import { isNodeBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFileUpdateMessage, createWSError } from "@/types/websocket-message.js";
 import { ClientNotifier } from "./client-notifier.js";
 import { UpdateProcessor } from "@/lib/node/update-processor.js";
 import { NodeUpdate } from "@/types/node.js";
@@ -244,6 +244,24 @@ export class NodeMessageHandler {
     }
 
     console.log(`[WS] Broadcast file update for ${watchKey} to ${sentCount}/${subscribers.size} subscribers`);
+  }
+
+  /**
+   * Request full update from node(s) in a cluster
+   */
+  async requestHeartbeat(clusterId: string): Promise<void> {
+    const conns = this.connectionManager.getConnections(clusterId);
+    if (!conns) return;
+
+    for (const conn of conns) {
+      if (conn.ws.readyState === 1) {
+        try {
+          conn.ws.send(JSON.stringify({ kind: MESSAGE_KIND.HEARTBEAT }));
+        } catch (err) {
+          console.error(`[WS] Failed to send heartbeat to node:`, err);
+        }
+      }
+    }
   }
 
   /**
