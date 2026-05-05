@@ -123,3 +123,9 @@ export const ACCEPTABLE_HEARTBEAT_WINDOW = 3 * MINUTE;
 
 /** Instance decommission recovery window: 30 seconds */
 export const INSTANCE_DECOMMISSION_RECOVERY_WINDOW_MS = MS_30_SECONDS;
+
+/** Entity tombstone retention: 7 days (proves entity existed, expires if never refreshed) */
+export const ENTITY_TOMBSTONE_TTL = TTL_7_DAYS;
+
+/** Domain mapping TTL: 7 days (refreshed on instance activity, expires if instance goes stale) */
+export const DOMAIN_MAPPING_TTL = TTL_7_DAYS;

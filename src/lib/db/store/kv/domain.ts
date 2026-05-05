@@ -1,5 +1,6 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import { DOMAIN_MAPPING_TTL } from "@/lib/constants/duration.js";
 
 /**
  * Domain-to-IP mapping for traffic routing.
@@ -16,7 +17,7 @@ export class DomainStore {
    * @param address - The IPv4 address the domain resolves to.
    */
   async saveDomain({ domain, address }: { domain: string; address: string }): Promise<void> {
-    await this.kv.put(KV_KEYS.DOMAIN.BY_NAME(domain), address);
+    await this.kv.put(KV_KEYS.DOMAIN.BY_NAME(domain), address, { ttl: DOMAIN_MAPPING_TTL });
   }
 
   /**
