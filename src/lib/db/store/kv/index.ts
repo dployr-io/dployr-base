@@ -5,6 +5,7 @@ import { DomainStore } from "./domain.js";
 import { InstanceCacheStore } from "./instance-cache.js";
 import { IntegrationsStore } from "./integrations.js";
 import { BillingStore } from "./billing.js";
+import { EntityStore } from "./entity.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 
 export class KVStore {
@@ -15,6 +16,8 @@ export class KVStore {
   public readonly instanceCache: InstanceCacheStore;
   public readonly integrations: IntegrationsStore;
   public readonly billing: BillingStore;
+  public readonly entities: EntityStore;
+
   constructor(
     public kv: IKVAdapter,
     private githubToken?: string,
@@ -26,6 +29,7 @@ export class KVStore {
     this.instanceCache = new InstanceCacheStore(kv);
     this.integrations = new IntegrationsStore(kv, githubToken);
     this.billing = new BillingStore(kv);
+    this.entities = new EntityStore(kv);
   }
 
   // SessionStore delegation
@@ -90,4 +94,10 @@ export class KVStore {
   getbillingNotification = (...args: Parameters<BillingStore["getbillingNotification"]>) => this.billing.getbillingNotification(...args);
   setReminderNotification = (...args: Parameters<BillingStore["setReminderNotification"]>) => this.billing.setReminderNotification(...args);
 
+  // EntityStore delegation 
+  setEntity = (...args: Parameters<EntityStore["setEntity"]>) => this.entities.setEntity(...args);
+  getEntity = (...args: Parameters<EntityStore["getEntity"]>) => this.entities.getEntity(...args);
+  getEntityVersion = (...args: Parameters<EntityStore["getEntityVersion"]>) => this.entities.getEntityVersion(...args);
+  deleteEntity = (...args: Parameters<EntityStore["deleteEntity"]>) => this.entities.deleteEntity(...args);
+  entityExists = (...args: Parameters<EntityStore["exists"]>) => this.entities.exists(...args);
 }
