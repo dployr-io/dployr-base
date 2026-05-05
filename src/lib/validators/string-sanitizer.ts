@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { BLOCKED_CONTAINS, BLOCKED_EXACT } from "@/lib/constants/blocked-terms.js";
+import { SAFE_WORDS } from "@/lib/constants/safe-words.js";
 
 export type SanitizableStringType = "name" | "label";
 
@@ -32,8 +33,8 @@ const TYPE_CONFIGS: Record<SanitizableStringType, StringTypeConfig> = {
   },
 };
 
-// Cyrillic/Greek lookalikes and fullwidth chars people use to fool ASCII filters.
-// e.g. "рorn" (Cyrillic р) is visually identical to "porn".
+// Cyrillic/Greek lookalikes and fullwidth chars used to fool ASCII filters.
+// e.g. "рorn" uses Cyrillic р — visually identical to Latin p.
 const HOMOGLYPHS: Record<string, string> = {
   "\u0430": "a", "\u0435": "e", "\u043E": "o", "\u0440": "r",
   "\u0441": "c", "\u0443": "y", "\u0445": "x", "\u0456": "i",
@@ -54,31 +55,13 @@ const LEET: Record<string, string> = {
   "!": "i", "|": "i",
 };
 
-// Fired against the raw input before normalization.
 const STRUCTURAL_FLAGS: Array<{ pattern: RegExp; reason: string }> = [
-  // invisible characters used to split words mid-string
   { pattern: /[\u200B-\u200D\uFEFF\u00AD]/, reason: "contains hidden characters" },
-  // 5+ repeated chars — fuuuuuck, niiiiigger
   { pattern: /(.)\1{4,}/, reason: "contains suspicious character repetition" },
-  // standalone extremist numeric codes
   { pattern: /(?<!\d)(88|1488)(?!\d)/, reason: "contains a known extremist code" },
 ];
 
-// Words that contain a blocked substring but are legitimate.
-// Pre-normalized so obfuscated variants (th3rapist) also pass safely.
-const SAFE_WORDS: ReadonlySet<string> = new Set([
-  "therapist",    // ⊃ rapist
-  "scunthorpe",   // ⊃ cunt
-  "classic",      // ⊃ ass
-  "assume",       // ⊃ ass
-  "assistant",    // ⊃ ass
-  "passage",      // ⊃ ass
-  "cockatoo",     // ⊃ cock
-  "cocktail",     // ⊃ cock
-  "cockerel",     // ⊃ cock
-  "shiitake",     // ⊃ shit
-  "fiddlesticks", // ⊃ dick
-]);
+
 
 function normalize(input: string): string {
   return input
@@ -90,7 +73,7 @@ function normalize(input: string): string {
     .replace(/[^a-z]/g, "");
 }
 
-// Pre-normalize at module load — keeps the hot path free of repeated work.
+// Pre-normalize at module load — hot path stays O(n) with no per-call re-work.
 const NORMALIZED_BLOCKED_CONTAINS = new Set(Array.from(BLOCKED_CONTAINS).map(normalize));
 const NORMALIZED_BLOCKED_EXACT    = new Set(Array.from(BLOCKED_EXACT).map(normalize));
 const NORMALIZED_SAFE_WORDS       = new Set(Array.from(SAFE_WORDS).map(normalize));

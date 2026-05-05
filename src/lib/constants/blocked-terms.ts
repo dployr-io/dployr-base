@@ -1,25 +1,24 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-// Substring-matched after normalization. If the normalized input *contains* any
-// of these, it's rejected regardless of surrounding characters.
+// Substring-matched. If the normalized input *contains* any of these, reject.
 export const BLOCKED_CONTAINS: ReadonlySet<string> = new Set([
   // csam
   "childporn", "childabuse", "pedophile", "pedophilia", "pedo", "jailbait",
 
-  // terrorism
-  "terrorist", "terrorism", "jihadist", "alqaeda", "genocide",
+  // terrorism / mass violence
+  "terrorist", "terrorism", "jihadist", "alqaeda", "alqaida", "genocide",
   "massacre", "bioweapon", "anthrax", "ricin", "sarin",
 
   // violence
   "murderer", "assassination", "hitman", "hitlist",
-  "torture", "execution", "kidnapping", "warcrime",
+  "torture", "execution", "kidnapping", "warcrime", "lynching",
 
   // self-harm
   "suicide", "selfharm",
 
-  // sexual assault
-  "rapist", "molester", "incest",
+  // sexual assault / exploitation
+  "rapist", "molester", "incest", "bestiality", "grooming",
 
   // explicit sexual
   "pornography", "sexvideo", "sextape", "hentai",
@@ -27,13 +26,13 @@ export const BLOCKED_CONTAINS: ReadonlySet<string> = new Set([
   // racial slurs
   "nigger", "nigga", "kike", "chink", "gook", "spic",
   "wetback", "beaner", "coon", "jigaboo", "zipperhead",
-  "towelhead", "sandnigger", "raghead",
+  "towelhead", "sandnigger", "raghead", "golliwog",
 
   // homophobic / transphobic / ableist
   "faggot", "tranny", "retarded", "spastic",
 
   // extremism
-  "nazism", "1488", "rahowa", "whitepride", "whitepower",
+  "nazism", "rahowa", "whitepride", "whitepower",
 
   // hard drugs
   "cocaine", "heroin", "methamphetamine", "fentanyl", "carfentanil",
@@ -41,42 +40,143 @@ export const BLOCKED_CONTAINS: ReadonlySet<string> = new Set([
 
   // profanity
   "fuck", "motherfucker", "shit", "bullshit", "asshole",
-  "bitch", "bastard", "dick", "cunt", "pussy",
+  "bitch", "bastard", "dick", "cock", "cunt", "pussy",
   "wanker", "bollocks", "twat", "arsehole",
 
   // degrading
   "whore", "skank",
 ]);
 
-// Exact-matched after normalization. The *entire* normalized input must equal the
-// term. "facebookfinder" passes; "facebook" alone does not.
+// Exact-matched. The entire normalized input must equal the term.
+// "facebookfinder" passes; "facebook" alone does not.
 export const BLOCKED_EXACT: ReadonlySet<string> = new Set([
-  // major consumer brands — impersonation / phishing risk
-  "google", "gmail", "googledrive", "googlepay",
+  // extremist numeric codes
+  "1488", "88",
+
+  // hate as standalone intent
+  "hate", "racist", "racism", "sexist", "sexism",
+  "bigot", "bigotry", "homophobe", "transphobe",
+  "slave", "slavery", "lynch",
+
+  // weapons / wmd standalone
+  "nuke", "nukes", "napalm", "semtex",
+  "ak47", "ar15", "ak74",
+  "landmine", "grenade", "claymore",
+
+  // war criminals / genocidal dictators
+  "hitler", "himmler", "goebbels", "mengele", "eichmann",
+  "mussolini", "stalin", "polpot",
+  "idiamin", "pinochet", "milosevic", "mugabe",
+  "saddam", "saddamhussein", "gaddafi", "muammargaddafi",
+  "kimjongun", "kimjongil", "kimjonuun",
+  "mcveigh",
+
+  // terrorists / sex criminals / financial criminals
+  "osama", "binladen", "osamabinladen",
+  "epstein", "jeffreyepstein",
+  "madoff", "berniemadoff",
+  "manson", "charlesmanson",
+
+  // terror organizations
+  "bokoharam", "taliban", "hezbollah", "hamas",
+  "alshabaab", "jabhatalnusra", "islamicstate", "isis",
+  "lashkaretaiba", "aumshinrikyo",
+  "proudboys", "oathkeepers", "atomwaffen", "patriotfront",
+
+  // geopolitical
+  "northkorea", "dprk", "russia",
+
+  // celebrities / high-profile personalities (impersonation/fraud prevention)
+  // music
+  "justinbieber", "taylorswift", "theweeknd", "arianagrande", "billyeillish",
+  "drake", "eminem", "rihanna", "beyonce", "brucespringsteen",
+  "phillipcollins", "themoonoonglezers", "lizzo", "baddo", "topdop",
+
+  // sports
+  "cristiano", "cristianoronaldo", "lmessi", "neymarsantos", "haland",
+  "therock", "dylanwadeii", "lebronjames", "tomandy", "strivephen",
+
+  // film/tv
+  "tomhanks", "merylstreep", "leonardodicaprio", "emmawatson", "tomcruise",
+  "angelinajolie", "bradpitt", "johnnydepp", "scarletjohansson",
+
+  // business/tech founders
+  "elonmusk", "billgates", "stevejobs", "markzuckerberg", "jeffbezos",
+  "sundarpichar", "timcook", "sherylsandberg",
+
+  // royalty
+  "kingcharles", "princewilliam", "queenelizabeth",
+
+  // influencers/social media
+  "kimkardashian", "kyliejenner", "therock", "oprah", "joerogan",
+  "daviddobrik", "jimmifallon", "teddysmith", "mrbeast",
+
+  // big tech — US
+  "google", "gmail", "googledrive", "googlepay", "googlecloud",
   "facebook", "meta", "instagram", "threads",
   "twitter", "x",
   "tiktok", "snapchat",
   "youtube",
   "whatsapp", "telegram", "signal", "discord",
   "amazon", "aws",
-  "microsoft", "azure", "outlook", "onedrive",
-  "apple", "icloud", "appleid", "appstore",
+  "microsoft", "azure", "outlook", "onedrive", "xbox",
+  "apple", "icloud", "appleid", "appstore", "iphone", "ipad", "imessage",
   "openai", "chatgpt", "anthropic", "claude",
-  "netflix", "spotify",
+  "netflix", "spotify", "hulu", "twitch", "primevideo", "disneyplus",
   "github", "gitlab",
-  "slack", "zoom", "notion", "jira",
-  "shopify", "stripe",
-  "linkedin",
-  "reddit",
-  "pinterest",
+  "slack", "zoom", "notion", "jira", "confluence", "atlassian",
+  "shopify", "stripe", "square",
+  "linkedin", "reddit", "pinterest", "tumblr",
   "uber", "lyft",
   "airbnb",
+  "dropbox",
+  "salesforce", "hubspot",
+  "adobe", "acrobat",
+  "oracle", "ibm", "sap",
+  "intel", "amd", "nvidia", "qualcomm", "broadcom",
+  "cisco", "vmware", "dell", "hp", "hpe", "lenovo",
+  "cloudflare", "digitalocean", "heroku", "vercel", "netlify",
+  "sendgrid", "twilio", "mailchimp",
+  "wordpress", "wix", "squarespace", "webflow",
+  "godaddy", "namecheap",
+  "ebay", "etsy",
+  "doordash", "ubereats", "grubhub",
+  "tinder", "bumble", "hinge", "grindr",
+  "robinhood", "etrade",
+  "quickbooks", "intuit", "turbotax",
+  "palantir", "crowdstrike", "splunk", "fortinet",
+  "snowflake", "databricks",
+
+  // big tech — Asia
+  "alibaba", "aliexpress", "taobao", "tmall", "alipay",
+  "tencent", "wechat", "weibo", "baidu",
+  "bytedance",
+  "xiaomi", "huawei",
+  "samsung", "sony", "lg",
+
+  // finance / banking
   "paypal", "venmo", "cashapp", "zelle",
   "coinbase", "binance", "kraken", "metamask", "trustwallet",
   "visa", "mastercard", "amex",
   "chase", "wellsfargo", "bankofamerica", "barclays", "hsbc",
+  "citibank", "jpmorgan", "goldmansachs", "morganstanley",
+  "deutschebank", "ubs", "tdbank", "usbank",
+  "fidelity", "schwab", "vanguard", "blackrock",
+  "bitcoin", "ethereum", "binanceusd",
 
-  // infra primitives — any of these alone as a subdomain is an exploit attempt
+  // telecoms
+  "att", "atandt", "verizon", "tmobile", "vodacom",
+  "vodafone", "orange", "bt", "mtn", "etisalat", "9mobile", 
+
+  // media / entertainment
+  "disney", "hbo", "espn",
+
+  // retail
+  "walmart", "target", "costco", "ikea",
+  "nike", "adidas",
+  "mcdonalds", "starbucks", "kfc",
+
+  // infra primitives
   "root", "sudo", "superuser",
   "admin", "administrator",
   "sys", "system",
