@@ -1,13 +1,14 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
+import { ulid } from "ulid";
 import type { WebSocket } from "ws";
-import type { ClusterConnection, ConnectionRole, LogStreamSubscription, PendingRequest, WSErrorResponse } from "../../types/websocket-message.js";
-import { createWSError } from "../../types/websocket-message.js";
+import type { ClusterConnection, ConnectionRole, LogStreamSubscription, PendingRequest } from "@/types/websocket-message.js";
+import { createWSError } from "@/types/websocket-message.js";
 import type { ConnectionManagerConfig, Session } from "@/types/index.js";
 import type { NodeTask } from "@/lib/tasks/types.js";
-import { ulid } from "ulid";
-import { DEFAULT_CONFIG, MESSAGE_KIND, WSErrorCode } from "../../lib/constants/websocket.js";
+import type { NodeStateEntity } from "@/lib/constants/node-state.js";
+import { DEFAULT_CONFIG, MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 
 /**
  * Manages WebSocket connections, pending requests, and log stream subscriptions.
@@ -22,6 +23,7 @@ export class ConnectionManager {
   private config: ConnectionManagerConfig;
   private cleanupTimer: NodeJS.Timeout | null = null;
   private lastActivityMap = new Map<WebSocket, number>();
+  private clientVersions = new Map<string, Map<string, number>>();
 
   constructor(config: Partial<ConnectionManagerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -106,6 +108,7 @@ export class ConnectionManager {
 
     this.lastActivityMap.delete(conn.ws);
     this.requestsByClient.delete(conn.ws);
+    this.clientVersions.delete(conn.connectionId);
 
     console.log(`[WS] ${conn.role} disconnected from ${conn.connectionKey}`);
   }
@@ -585,5 +588,23 @@ export class ConnectionManager {
       fileWatches: this.fileWatchSubscriptions.size,
       unackedMessages: this.unackedMessages.size,
     };
+  }
+
+  /**
+   * Get the last known version of a section for a specific client.
+   * Returns 0 if client hasn't seen this section yet.
+   */
+  getClientVersion(connectionId: string, instanceId: string, section: NodeStateEntity): number {
+    return this.clientVersions.get(connectionId)?.get(`${instanceId}:${section}`) ?? 0;
+  }
+
+  /**
+   * Update the version a client has for a specific section.
+   */
+  setClientVersion(connectionId: string, instanceId: string, section: NodeStateEntity, version: number): void {
+    if (!this.clientVersions.has(connectionId)) {
+      this.clientVersions.set(connectionId, new Map());
+    }
+    this.clientVersions.get(connectionId)!.set(`${instanceId}:${section}`, version);
   }
 }

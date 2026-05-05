@@ -28,7 +28,7 @@ interface EntityOptions {
  * This ensures entities are clearly distinguished from regular KV cache keys.
  */
 export class EntityStore {
-  private static readonly ENTITY_ID_PATTERN = /^[a-z][a-z0-9]*:[a-z0-9\-_.]+$/i;
+  private static readonly ENTITY_ID_PATTERN = /^[a-z][a-z0-9]*:[a-z0-9\-_.:]+$/i;
   private static readonly TOMBSTONE_SUFFIX = ":deleted";
 
   constructor(private kv: IKVAdapter) {}

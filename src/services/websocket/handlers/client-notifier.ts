@@ -1,14 +1,12 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { BaseMessage, UpdateMessage } from "@/types/websocket-message.js";
-import {} from "@/types/websocket-message.js";
+import type { BaseMessage } from "@/types/websocket-message.js";
 import { ConnectionManager } from "@/services/websocket/connection-manager.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
-import { ulid } from "ulid";
 import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
-import { INSTANCE_STATUS_TTL } from "@/lib/constants/duration.js";
+import type { NodeStateEntity } from "@/lib/constants/node-state.js";
 
 /**
  * Handles broadcasting messages to connected clients.
@@ -41,30 +39,38 @@ export class ClientNotifier {
   }
 
   /**
-   * Broadcast status updates to all client connections in a cluster.
+   * Broadcast delta updates to all client connections in a cluster.
+   * Only sends sections that have changed since client last saw them.
    */
-  async broadcast(clusterId: string, message: UpdateMessage): Promise<void> {
+  async broadcast(clusterId: string, instanceId: string, sections: NodeStateEntity[]): Promise<void> {
     const clients = this.conn.getClientConnections(clusterId);
-    if (clients.length === 0) return;
-
-    const messageId = ulid();
-    const payload = JSON.stringify({
-      ...message,
-      messageId,
-    });
-
-    // Store for potential retry on reconnect
-    this.conn.storeUnackedMessage(`${clusterId}:${messageId}`, message);
+    if (!clients.length) return;
 
     for (const client of clients) {
+      const changed: Record<string, {data: unknown; version: number}> = {};
+
+      for (const section of sections) {
+        const entity = await this.kv.entities.getEntity(KV_KEYS.INSTANCE.ENTITY(instanceId, section));
+        if (!entity) continue;
+
+        const clientVersion = this.conn.getClientVersion(client.connectionId, instanceId, section);
+        if (entity.version > clientVersion) {
+          changed[section] = {data: entity.data, version: entity.version};
+        }
+      }
+
+      if (!Object.keys(changed).length) continue;
+
       try {
-        client.ws.send(payload);
+        client.ws.send(JSON.stringify({kind: MESSAGE_KIND.DELTA_UPDATE, instanceId, sections: changed}));
+
+        for (const [section, {version}] of Object.entries(changed)) {
+          this.conn.setClientVersion(client.connectionId, instanceId, section as NodeStateEntity, version);
+        }
       } catch (err) {
-        console.error(`[WS] Failed to send to client:`, err);
+        console.error(`[WS] Failed to send delta to client ${client.connectionId}:`, err);
       }
     }
-
-    await this.cacheUpdate(clusterId, message, payload);
   }
 
   /**
@@ -107,13 +113,4 @@ export class ClientNotifier {
     return replayed;
   }
 
-  private async cacheUpdate(clusterId: string, message: BaseMessage, payload: string): Promise<void> {
-    if (message.kind === MESSAGE_KIND.UPDATE) {
-      try {
-        await this.kv.kv.put(KV_KEYS.CLUSTER.STATUS(clusterId), payload, { ttl: INSTANCE_STATUS_TTL });
-      } catch (err) {
-        console.error(`[WS] Failed to cache status:`, err);
-      }
-    }
-  }
 }

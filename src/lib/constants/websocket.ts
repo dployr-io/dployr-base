@@ -11,12 +11,8 @@ export const DEFAULT_CONFIG: ConnectionManagerConfig = {
  * Message kind constants
  */
 export const MESSAGE_KIND = {
-  // Node -> Server
-  UPDATE: "update",
-  LOG_CHUNK: "log_chunk",
-  TASK_RESPONSE: "task_response",
-
-  // Client -> Server
+  HEARTBEAT: "heartbeat",
+  ACK: "ack",
   CLIENT_SUBSCRIBE: "client_subscribe",
   LOG_SUBSCRIBE: "log_subscribe",
   LOG_UNSUBSCRIBE: "log_unsubscribe",
@@ -31,36 +27,24 @@ export const MESSAGE_KIND = {
   FILE_TREE: "file_tree",
   FILE_WATCH: "file_watch",
   FILE_UNWATCH: "file_unwatch",
-  FILE_UPDATE: "file_update",
-
-  // Terminal operations
   TERMINAL: "terminal",
   TERMINAL_OPEN: "terminal_open",
-
-  // Instance operations
   INSTANCE_TOKEN_ROTATE: "instance_token_rotate",
   INSTANCE_SYSTEM_INSTALL: "instance_system_install",
   INSTANCE_SYSTEM_REBOOT: "instance_system_reboot",
   INSTANCE_SYSTEM_RESTART: "instance_system_restart",
-
-  // Proxy operations
   PROXY_STATUS: "proxy_status",
   PROXY_RESTART: "proxy_restart",
   PROXY_ADD: "proxy_add",
   PROXY_REMOVE: "proxy_remove",
-
-  // Process history
   PROCESS_HISTORY: "process_history",
-
-  // Heartbeat
-  HEARTBEAT: "heartbeat",
-
-  // Server -> Client
-  TASK: "task",
+  DELTA_UPDATE: "delta-update",
   ERROR: "error",
-
-  // Acknowledgments
-  ACK: "ack",
+  LOG_CHUNK: "log_chunk",
+  FILE_UPDATE: "file_update",
+  UPDATE: "update",
+  TASK_RESPONSE: "task_response",
+  TASK: "task",
 } as const;
 
 

@@ -20,7 +20,8 @@ import type {
   ProcessHistoryResponseMessage,
   TerminalMessage,
   TerminalOpenMessage,
-} from "../../../types/websocket-message.js";
+  HeartbeatMessage,
+} from "@/types/websocket-message.js";
 import {
   isClientSubscribeMessage,
   isFileReadMessage,
@@ -38,6 +39,7 @@ import {
   isProcessHistoryMessage,
   isTerminalMessage,
   isTerminalOpenMessage,
+  isHeartbeatMessage,
 } from "@/types/websocket-message.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { JWTService } from "@/services/auth/jwt.js";
@@ -45,8 +47,11 @@ import { InstanceService } from "@/services/instances.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { TerminalManager } from "@/services/websocket/terminal-manager.js";
-import { WSErrorCode } from "@/lib/constants/websocket.js";
+import { WSErrorCode, MESSAGE_KIND } from "@/lib/constants/websocket.js";
 import { ALLOWED_TASKS_ON_POOLED_INSTANCES } from "@/lib/constants/instances.js";
+import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
+import type { NodeStateEntity } from "@/lib/constants/node-state.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -96,6 +101,12 @@ export class ClientMessageHandler {
     // Handle acknowledgments
     if (isAckMessage(message)) {
       this.handleAck(message);
+      return;
+    }
+
+    // Handle heartbeat (no requestId required)
+    if (isHeartbeatMessage(message)) {
+      await this.handleHeartbeat(conn, message);
       return;
     }
 
@@ -197,6 +208,36 @@ export class ClientMessageHandler {
     const { messageId } = message;
     if (messageId) {
       this.connectionManager.acknowledgeMessage(messageId);
+    }
+  }
+
+  /**
+   * Handle heartbeat from client - sync all instance updates
+   */
+  private async handleHeartbeat(conn: ClusterConnection, msg: HeartbeatMessage): Promise<void> {
+    const instanceIds = await this.kv.instanceCache.getClusterNodes(conn.connectionKey);
+
+    for (const instanceId of instanceIds) {
+      const changed: Record<string, {data: unknown; version: number}> = {};
+      const knownVersions = msg.versions?.[instanceId] ?? {};
+
+      for (const section of NODE_STATE_ENTITIES) {
+        const entity = await this.kv.entities.getEntity(KV_KEYS.INSTANCE.ENTITY(instanceId, section));
+        if (!entity) continue;
+
+        const clientVersion = knownVersions[section] ?? 0;
+        if (entity.version > clientVersion) {
+          changed[section] = {data: entity.data, version: entity.version};
+        }
+      }
+
+      if (!Object.keys(changed).length) continue;
+
+      conn.ws.send(JSON.stringify({kind: MESSAGE_KIND.DELTA_UPDATE, instanceId, sections: changed}));
+
+      for (const [section, {version}] of Object.entries(changed)) {
+        this.connectionManager.setClientVersion(conn.connectionId, instanceId, section as NodeStateEntity, version);
+      }
     }
   }
 

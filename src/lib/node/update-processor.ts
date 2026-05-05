@@ -4,6 +4,8 @@
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { NodeUpdate, NodeUpdateV1_1 } from "@/types/node.js";
+import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 
 /**
  * Processes a single node update message — short-lived, one instance per message.
@@ -17,20 +19,10 @@ export class UpdateProcessor {
   private kv: KVStore;
   private tag: string;
   private message: NodeUpdate | NodeUpdateV1_1;
-  private tasks: Promise<void>[];
+  private tasks: Promise<any>[];
   private deploymentsChanged = false;
 
-  constructor({
-    db,
-    kv,
-    tag,
-    message,
-  }: {
-    db: DatabaseStore;
-    kv: KVStore;
-    tag: string;
-    message: NodeUpdate | NodeUpdateV1_1;
-  }) {
+  constructor({ db, kv, tag, message }: { db: DatabaseStore; kv: KVStore; tag: string; message: NodeUpdate | NodeUpdateV1_1 }) {
     this.db = db;
     this.kv = kv;
     this.tag = tag;
@@ -48,6 +40,13 @@ export class UpdateProcessor {
     this.handleMessageV1_1();
 
     this.tasks.push(this.kv.saveNodeUpdate({ tag: this.tag, update: this.message as Record<string, unknown> }));
+
+    for (const section of NODE_STATE_ENTITIES) {
+      const sectionData = (this.message as any)[section];
+      if (sectionData !== undefined) {
+        this.tasks.push(this.kv.entities.setEntity(KV_KEYS.INSTANCE.ENTITY(this.message.instance_id, section), sectionData));
+      }
+    }
 
     await Promise.all(this.tasks);
     return { deploymentsChanged: this.deploymentsChanged };

@@ -9,6 +9,7 @@ import { isNodeBroadcastMessage, isLogChunkMessage, isTaskResponseMessage, isFil
 import { ClientNotifier } from "./client-notifier.js";
 import { UpdateProcessor } from "@/lib/node/update-processor.js";
 import { NodeUpdate } from "@/types/node.js";
+import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
 import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 
 /**
@@ -47,12 +48,14 @@ export class NodeMessageHandler {
         }).processUpdate();
       }
 
+      const presentSections = NODE_STATE_ENTITIES.filter(s => (update as any)[s] !== undefined);
+
       if (conn.connectionKey.startsWith("pool:")) {
         const instanceTag = conn.connectionKey.slice("pool:".length);
         const { clusters } = await this.db.clusters.list({ instanceTag: instanceTag });
         await Promise.all(
           clusters.map(async (cluster) => {
-            await this.clientNotifier.broadcast(cluster.id, message);
+            await this.clientNotifier.broadcast(cluster.id, update.instance_id, presentSections);
             if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(cluster.id, "deployments");
             if (update?.instance_id) {
               await this.kv.instanceCache.registerClusterNode(cluster.id, update.instance_id);
@@ -60,7 +63,7 @@ export class NodeMessageHandler {
           }),
         );
       } else if (conn.clusterId) {
-        await this.clientNotifier.broadcast(conn.clusterId, message);
+        await this.clientNotifier.broadcast(conn.clusterId, update.instance_id, presentSections);
         if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "deployments");
         if (update?.instance_id) {
           await this.kv.instanceCache.registerClusterNode(conn.clusterId, update.instance_id);

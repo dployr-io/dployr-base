@@ -4,6 +4,7 @@
 import type { WebSocket } from "ws";
 import type { DeploymentPayload } from "@/lib/tasks/types.js";
 import type { Session } from "@/types/index.js";
+import type { NodeStateEntity } from "@/lib/constants/node-state.js";
 import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 
 /**
@@ -70,6 +71,11 @@ export type NodeMessage = UpdateMessage | LogChunkMessage | TaskResponseMessage;
 export interface AckMessage extends BaseMessage {
   kind: typeof MESSAGE_KIND.ACK;
   messageId: string;
+}
+
+export interface HeartbeatMessage extends BaseMessage {
+  kind: typeof MESSAGE_KIND.HEARTBEAT;
+  versions?: Record<string, Partial<Record<NodeStateEntity, number>>>;
 }
 
 /**
@@ -346,17 +352,11 @@ export interface ProxyRemoveMessage extends BaseRequestMessage {
   serviceName: string;
 }
 
-/** @deprecated */
 export interface ProcessHistoryMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.PROCESS_HISTORY;
   instanceId: string;
   startTime?: number; // Unix ms, defaults to 1h ago
   endTime?: number; // Unix ms, defaults to now
-}
-
-export interface HeartbeatMessage extends BaseRequestMessage {
-  kind: typeof MESSAGE_KIND.HEARTBEAT;
-  instanceId: string;
 }
 
 /**
@@ -765,6 +765,10 @@ export function isFileUpdateMessage(msg: BaseMessage): msg is FileUpdateMessage 
 export function isAckMessage(msg: BaseMessage): msg is AckMessage {
   return msg.kind === MESSAGE_KIND.ACK;
 }
+
+export function isHeartbeatMessage(msg: BaseMessage): msg is HeartbeatMessage {
+  return msg.kind === MESSAGE_KIND.HEARTBEAT;
+}
 /** @deprecated */
 export function isInstanceTokenRotateMessage(msg: BaseMessage): msg is InstanceTokenRotateMessage {
   return msg.kind === MESSAGE_KIND.INSTANCE_TOKEN_ROTATE;
@@ -800,10 +804,6 @@ export function isProxyRemoveMessage(msg: BaseMessage): msg is ProxyRemoveMessag
 
 export function isProcessHistoryMessage(msg: BaseMessage): msg is ProcessHistoryMessage {
   return msg.kind === MESSAGE_KIND.PROCESS_HISTORY;
-}
-
-export function isHeartbeatMessage(msg: BaseMessage): msg is HeartbeatMessage {
-  return msg.kind === MESSAGE_KIND.HEARTBEAT;
 }
 
 export function isTerminalMessage(msg: BaseMessage): msg is TerminalMessage {

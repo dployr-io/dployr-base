@@ -34,6 +34,7 @@ export const KV_KEYS = {
     BY_NAME: (clusterId: string, tag: string) => `instance:name:${clusterId}:${tag}`,
     BY_TAG: (tag: string) => `instance:tag:${tag}`,
     DECOMMISSION_RECOVERY_WINDOW: (instanceId: string) => `recovery_window:${instanceId}`,
+    ENTITY: (instanceId: string, entity: string) => `instance:${instanceId}:${entity}`,
   },
   SERVICES: {
     BY_INSTANCE: (instanceId: string) => `services:${instanceId}`,
