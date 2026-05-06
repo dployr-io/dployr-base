@@ -1404,10 +1404,10 @@
               <div class="panel-header"><span class="panel-title">Identify Instance</span></div>
               <div class="panel-body">
                 <div class="form-group">
-                  <label class="form-label">Instance ID</label>
-                  <input type="text" class="form-input" id="remove-id" placeholder="e.g. 01F8MECHZX3XBKS6GC0JNTYAYD"
+                  <label class="form-label">Instance Tag or ID</label>
+                  <input type="text" class="form-input" id="remove-id" placeholder="e.g. node-us-east-01 or 01F8MECHZX3XBKS6GC0JNTYAYD"
                     required />
-                  <div class="form-hint">The unique ID of the instance to remove.</div>
+                  <div class="form-hint">Enter the instance tag (e.g. node-us-east-01) or ULID for quick removal.</div>
                 </div>
                 <button class="btn btn-danger btn-full mt-12" id="remove-btn">Remove Instance</button>
               </div>
@@ -1805,8 +1805,7 @@
       }
 
       async function removeInstanceApi(id) {
-        const url = new URL(`${API_BASE}/v1/admin/instances/${encodeURIComponent(id)}`);
-        url.searchParams.set('sessionId', state.sessionId);
+        const url = new URL(`${API_BASE}/v1/admin/remove-instance/${encodeURIComponent(id)}`);
         return await apiRequest(url, {
           method: 'DELETE',
           headers: apiHeaders()
@@ -2158,16 +2157,15 @@
 
       function prefillRemove(id, tag) {
         switchView('remove');
-        $('#remove-id').value = id;
-        // store tag for dialog
-        $('#remove-id').dataset.tag = tag;
+        $('#remove-id').value = tag || id;
+        $('#remove-id').dataset.displayName = tag || id;
       }
 
       function confirmRemove() {
         const id = $('#remove-id').value.trim();
-        if (!id) { toast('Instance ID is required.', 'error'); return; }
-        const tag = $('#remove-id').dataset.tag || id;
-        $('#dialog-body').innerHTML = `You are about to permanently remove instance <strong>${escHtml(tag)}</strong>. This action cannot be undone.`;
+        if (!id) { toast('Instance tag or ID is required.', 'error'); return; }
+        const displayName = $('#remove-id').dataset.displayName || id;
+        $('#dialog-body').innerHTML = `You are about to permanently remove instance <strong>${escHtml(displayName)}</strong>. This action cannot be undone.`;
         $('#dialog-overlay').classList.add('open');
       }
 

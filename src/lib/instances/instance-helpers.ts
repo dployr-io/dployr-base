@@ -3,7 +3,7 @@
 
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { ERROR, SUCCESS } from "@/lib/constants/index.js";
-import { getDbStore, getInstancePoolService, getInstanceService, getKVStore } from "@/lib/config/context.js";
+import { getDbStore, getInstancePoolService, getInstanceService, getKVStore, getVMService } from "@/lib/config/context.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
@@ -126,16 +126,34 @@ export function attachGetInstance(app: Hono<{ Bindings: Bindings; Variables: Var
 export function attachDeleteInstance(app: Hono<{ Bindings: Bindings; Variables: Variables }>) {
   app.delete("/:id", async (c) => {
     const id = c.req.param("id");
+    const db = getDbStore(c);
+
     try {
-      await getInstanceService(c).deleteInstance({ instanceId: id, c });
-      return c.json({ success: true, data: { deleted: true } });
+      // Lookup instance by ID or tag
+      let instance = await db.instances.find({ id });
+      if (!instance) {
+        instance = await db.instances.find({ tag: id });
+      }
+
+      if (!instance) {
+        return c.json(
+          createErrorResponse({
+            message: "Instance not found",
+            code: ERROR.REQUEST.BAD_REQUEST.code,
+          }),
+          ERROR.REQUEST.BAD_REQUEST.status,
+        );
+      }
+
+      await db.instances.delete({ id: instance.id });
+      return c.json({ success: true, data: { deleted: true, instance: instance.tag } });
     } catch {
       return c.json(
         createErrorResponse({
-          message: "Instance not found",
-          code: ERROR.REQUEST.BAD_REQUEST.code,
+          message: "Failed to delete instance",
+          code: ERROR.REQUEST.INTERNAL_SERVER_ERROR.code,
         }),
-        ERROR.REQUEST.BAD_REQUEST.status,
+        ERROR.REQUEST.INTERNAL_SERVER_ERROR.status,
       );
     }
   });
@@ -246,7 +264,7 @@ export function attachInstallDployr(app: Hono<{ Bindings: Bindings; Variables: V
       const taskId = await getInstanceService(c).installDployr({
         c,
         clusterId,
-        instanceId,
+        tag: instanceId,
         version,
       });
 
@@ -256,7 +274,7 @@ export function attachInstallDployr(app: Hono<{ Bindings: Bindings; Variables: V
           taskId,
           message: version ? `Install task sent for version ${version}` : "Install task sent for latest version",
         }),
-        202,
+        SUCCESS.ACCEPTED.status,
       );
     } catch (error) {
       return handleInstanceError(c, error, "Failed to send system install task");
@@ -300,7 +318,7 @@ export function attachRebootInstance(app: Hono<{ Bindings: Bindings; Variables: 
           taskId,
           message: force ? "Reboot instance task with force mode sent" : "Reboot instance task sent",
         }),
-        202,
+        SUCCESS.ACCEPTED.status,
       );
     } catch (error) {
       return handleInstanceError(c, error, "Failed to send system reboot instance task");
@@ -387,7 +405,7 @@ export function attachRestartDaemon(app: Hono<{ Bindings: Bindings; Variables: V
           taskId,
           message: force ? "Restart daemon task with force mode sent" : "Restart daemon task sent",
         }),
-        202,
+        SUCCESS.ACCEPTED.status,
       );
     } catch (error) {
       return handleInstanceError(c, error, "Failed to send system restart daemon task");

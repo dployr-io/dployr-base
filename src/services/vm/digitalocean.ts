@@ -171,9 +171,15 @@ export class DigitalOceanVMService implements VmProvider {
     return this.triggerAction(id, "shutdown");
   }
 
-  /** Permanently destroy a Droplet. */
-  async delete(id: number): Promise<void> {
-    await this.request(`/droplets/${id}`, "DELETE");
+  /** Permanently destroy a Droplet by ID or name. */
+  async delete(id: number | string): Promise<void> {
+    if (typeof id === "number") {
+      await this.request(`/droplets/${id}`, "DELETE");
+    } else {
+      const droplets = await this.list({ name: id });
+      if (droplets.length === 0) return;
+      await this.request(`/droplets/${droplets[0].id}`, "DELETE");
+    }
   }
 
   /**

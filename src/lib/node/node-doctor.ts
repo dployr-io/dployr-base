@@ -256,13 +256,13 @@ export class NodeDoctor extends EventEmittable {
   /** Destroy the VM droplet and clean up its DB record. */
   private async destroyDroplet(instance: { id: string; tag: string }, dropletMap: Map<string, VirtualMachine & { id?: number | string }>): Promise<void> {
     const droplet = dropletMap.get(instance.tag);
-    if (droplet?.id) {
+    if (droplet) {
       try {
-        await this.vm!.delete(droplet.id);
+        await this.vm!.delete(instance.tag);
         await this.emit(EVENTS.NODE.DRAINED.code, droplet.name);
       } catch (err) {
         console.error(`[pool-drain] Failed to delete droplet ${droplet.name}:`, err);
-        return; // don't remove from DB if delete failed
+        return;
       }
     }
 

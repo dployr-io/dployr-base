@@ -12,7 +12,7 @@ export interface VmProvider {
   restart(id: number): Promise<VMActionResult>;
   start(id: number): Promise<VMActionResult>;
   stop(id: number): Promise<VMActionResult>;
-  delete(id: number): Promise<void>;
+  delete(id: number | string): Promise<void>;
   ping(id: number): Promise<boolean>;
   getMetrics(id: number): Promise<VMMetrics>;
   waitForAction(dropletId: number, actionId: number): Promise<VMActionResult>;
