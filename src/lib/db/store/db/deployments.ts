@@ -1,5 +1,7 @@
 import { Deployment, DeploymentStatus, ServiceType } from "@/types/index.js";
 import { type AllowedTable } from "@/lib/constants/index.js";
+import { ValidationError } from "@/lib/errors/errors.js";
+import { validateString } from "@/lib/validators/string-sanitizer.js";
 import { BaseStore, Pagination } from "./base.js";
 
 export type DeploymentFilter = {
@@ -63,6 +65,11 @@ export class DeploymentStore extends BaseStore {
     finishedAt?: number | null;
     serviceId?: string | null;
   }): Promise<Deployment | null> {
+    const nameValidation = validateString(name, "name");
+    if (!nameValidation.valid) {
+      throw new ValidationError(nameValidation.error || "Deployment name is not allowed");
+    }
+
     if (!createdAt) createdAt = this.now();
     if (!id) id = this.generateId();
     if (!logs) logs = null;
@@ -77,6 +84,7 @@ export class DeploymentStore extends BaseStore {
             `INSERT INTO deployments (id, cluster_id, user_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, created_at, logs, finished_at, service_id, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
            ON CONFLICT (id) DO UPDATE SET
+             status = $7,
              description = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.description ELSE $8 END,
              run_cmd = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.run_cmd ELSE $9 END,
              build_cmd = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.build_cmd ELSE $10 END,

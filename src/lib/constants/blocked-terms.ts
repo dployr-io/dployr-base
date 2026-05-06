@@ -9,6 +9,9 @@ export const BLOCKED_CONTAINS: ReadonlySet<string> = new Set([
   // terrorism / mass violence
   "terrorist", "terrorism", "jihadist", "alqaeda", "alqaida", "genocide",
   "massacre", "bioweapon", "anthrax", "ricin", "sarin",
+  "bokoharam", "taliban", "hezbollah", "alshabaab", "jabhatalnusra",
+  "islamicstate", "isis", "hamas", "lashkaretaiba", "aumshinrikyo",
+  "proudboys", "oathkeepers", "atomwaffen", "patriotfront",
 
   // violence
   "murderer", "assassination", "hitman", "hitlist",
@@ -45,6 +48,26 @@ export const BLOCKED_CONTAINS: ReadonlySet<string> = new Set([
 
   // degrading
   "whore", "skank",
+
+  // crypto scams / wallet drainers / fake investment funnels
+  "airdrop", "giveaway", "freemoney", "freecrypto", "freebitcoin",
+  "claimairdrop", "airdropclaim", "claimtoken", "tokenclaim",
+  "claimreward", "rewardclaim", "claimbonus", "bonusclaim",
+  "walletdrainer", "cryptodrainer", "tokendrainer", "nftdrainer",
+  "seedphrase", "recoveryphrase", "privatekey", "walletkey",
+  "connectwallet", "walletconnect", "walletverify", "walletverification",
+  "walletvalidate", "walletvalidation", "walletrectify", "walletsync",
+  "dappsync", "dappsynchronizer", "rectification", "defivalidate",
+  "guaranteedreturns", "guaranteedprofit", "riskfreeprofit",
+  "doubleyourcrypto", "getrichquick", "investmentplatform",
+  "liquiditymining", "binarytrading", "pigbutchering", "shazhupan",
+  "cryptorecovery", "fundrecovery", "recoveryfunds", "recoveryagent",
+  "unlockfunds", "withdrawalfee", "taxunlock",
+
+  // crypto/payment brand impersonation is high-risk on public subdomains
+  "coinbase", "binance", "kraken", "metamask", "trustwallet",
+  "phantomwallet", "phantom", "walletconnect", "ledger", "trezor",
+  "uniswap", "opensea", "tether", "usdt", "usdc",
 ]);
 
 // Exact-matched. The entire normalized input must equal the term.
@@ -216,4 +239,39 @@ export const BLOCKED_EXACT: ReadonlySet<string> = new Set([
   "monitor", "metrics",
   "backup",
   "cdn",
+]);
+
+// Fuzzy-matched with a conservative edit-distance and confusable-character model.
+// Keep this to terms where false negatives are materially worse than false positives.
+export const BLOCKED_FUZZY: ReadonlySet<string> = new Set([
+  // high-risk safety terms
+  "childporn", "childabuse", "pedophile", "pedophilia", "jailbait",
+  "terrorist", "terrorism", "jihadist", "alqaeda", "alqaida", "genocide",
+  "massacre", "bioweapon", "anthrax", "ricin", "sarin",
+  "bokoharam", "taliban", "hezbollah", "hamas", "alshabaab",
+  "jabhatalnusra", "islamicstate", "isis", "lashkaretaiba",
+  "aumshinrikyo", "proudboys", "oathkeepers", "atomwaffen", "patriotfront",
+
+  // crypto scam terms
+  "airdrop", "giveaway", "claimairdrop", "airdropclaim", "claimtoken",
+  "claimreward", "walletdrainer", "cryptodrainer", "tokendrainer",
+  "seedphrase", "recoveryphrase", "privatekey", "walletconnect",
+  "connectwallet", "walletverify", "walletrectify", "dappsync",
+  "dappsynchronizer", "guaranteedreturns", "guaranteedprofit",
+  "doubleyourcrypto", "getrichquick", "investmentplatform",
+  "liquiditymining", "binarytrading", "pigbutchering",
+  "cryptorecovery", "fundrecovery", "recoveryfunds", "recoveryagent",
+
+  // high-risk standalone terms from exact matching
+  "1488", "88",
+  "hate", "racist", "racism", "bigot", "bigotry", "homophobe", "transphobe",
+  "slave", "slavery", "lynch",
+  "nuke", "nukes", "napalm", "semtex", "ak47", "ar15", "ak74",
+  "landmine",
+  "hitler", "himmler", "goebbels", "mengele", "eichmann",
+  "mussolini", "stalin", "polpot", "idiamin", "pinochet", "milosevic",
+  "saddam", "saddamhussein", "gaddafi", "muammargaddafi",
+  "kimjongun", "kimjongil", "mcveigh",
+  "osama", "binladen", "osamabinladen",
+  "epstein", "jeffreyepstein", "madoff", "berniemadoff",
 ]);

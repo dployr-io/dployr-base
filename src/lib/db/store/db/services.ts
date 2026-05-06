@@ -3,6 +3,8 @@
 
 import { BaseStore, type Pagination } from "./base.js";
 import { type AllowedTable } from "@/lib/constants/index.js";
+import { ValidationError } from "@/lib/errors/errors.js";
+import { validateString } from "@/lib/validators/string-sanitizer.js";
 import { Service, ServiceType } from "@/types/index.js";
 
 export type ServiceFilter = {
@@ -33,6 +35,11 @@ export class ServiceStore extends BaseStore {
     type: ServiceType;
     deploymentId?: string;
   }): Promise<Service | null> {
+    const nameValidation = validateString(name, "name");
+    if (!nameValidation.valid) {
+      throw new ValidationError(nameValidation.error || "Service name is not allowed");
+    }
+
     const id = this.generateId();
     const now = this.now();
 
