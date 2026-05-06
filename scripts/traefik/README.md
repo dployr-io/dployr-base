@@ -147,7 +147,7 @@ openssl s_client -connect myservice.production.dployr.run:443 \
 
 curl -H "Host: myservice.production.dployr.run" http://localhost/
 
-redis-cli -h <host> -a <password> KEYS 'traefik/*'
+redis-cli -h <host> --user <username> -a <password> KEYS 'traefik/*'
 
 systemctl kill --signal=SIGHUP traefik
 ```

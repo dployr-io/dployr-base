@@ -17,6 +17,7 @@ base = "dployr.io"
 # Redis host managed by base — this service has read-only access
 host = ""
 port = 6379
+username = ""
 password = ""
 # Redis key namespace Traefik reads routes from
 root_key = "traefik"

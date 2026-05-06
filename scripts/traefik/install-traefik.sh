@@ -62,13 +62,18 @@ prompt() {
     printf "%s [%s] Keep this value? (y/n): " "$label" "$display"
     local choice
     read -r choice
-    [ "$choice" = "n" ] || return 0
+    case "$choice" in
+      ""|"y"|"Y") return 0 ;;
+      "n"|"N") ;;
+      *) tset "$key" "$choice"; return 0 ;;
+    esac
   fi
 
   printf "%s: " "$label"
   local val
-  if $secret; then read -rs val; echo; else read -r val; fi
+  read -r val
   [ -n "$val" ] && tset "$key" "$val"
+  return 0
 }
 
 configure() {
@@ -78,7 +83,9 @@ configure() {
   prompt "domains.tld"        "Customer domain (e.g. dployr.run)"
   prompt "redis.host"         "Redis host"
   prompt "redis.port"         "Redis port"
+  prompt "redis.username"     "Redis username (optional)"
   prompt "redis.password"     "Redis password"           true
+  prompt "redis.root_key"     "Redis root key/prefix"
   prompt "redis.tls"          "Redis TLS (true/false)"
   prompt "tls.acme_email"     "ACME email"
   prompt "tls.cf_api_token"   "Cloudflare API token"     true
@@ -90,13 +97,22 @@ configure() {
       printf "Dashboard password [set] Keep this value? (y/n): "
       local choice
       read -r choice
-      [ "$choice" = "n" ] || return 0
+      case "$choice" in
+        ""|"y"|"Y") ;;
+        "n"|"N")
+          local pass
+          printf "Dashboard password: "
+          read -r pass
+          [ -n "$pass" ] && tset "dashboard.password_hash" "$(htpasswd -nbB admin "$pass" | cut -d: -f2)"
+          ;;
+        *) tset "dashboard.password_hash" "$(htpasswd -nbB admin "$choice" | cut -d: -f2)" ;;
+      esac
+    else
+      local pass
+      printf "Dashboard password: "
+      read -r pass
+      [ -n "$pass" ] && tset "dashboard.password_hash" "$(htpasswd -nbB admin "$pass" | cut -d: -f2)"
     fi
-
-    local pass
-    printf "Dashboard password: "
-    read -rs pass; echo
-    [ -n "$pass" ] && tset "dashboard.password_hash" "$(htpasswd -nbB admin "$pass" | cut -d: -f2)"
   fi
 }
 
@@ -105,10 +121,16 @@ generate_traefik_yml() {
   local tld; tld="$(tget 'domains.tld')"
   local redis_host; redis_host="$(tget 'redis.host')"
   local redis_port; redis_port="$(tget 'redis.port')"
+  local redis_user; redis_user="$(tget 'redis.username')"
   local redis_pass; redis_pass="$(tget 'redis.password')"
   local redis_tls; redis_tls="$(tget 'redis.tls')"
   local redis_key; redis_key="$(tget 'redis.root_key')"
   local email; email="$(tget 'tls.acme_email')"
+
+  [ -z "$redis_key" ] && redis_key="traefik"
+
+  local username_block=""
+  [ -n "$redis_user" ] && username_block="    username: \"${redis_user}\""
 
   local tls_block=""
   [ "$redis_tls" = "true" ] && tls_block="    tls: {}"
@@ -141,6 +163,7 @@ providers:
   redis:
     endpoints:
       - "${redis_host}:${redis_port}"
+${username_block}
     password: "${redis_pass}"
 ${tls_block}
     rootKey: "${redis_key}"
@@ -184,7 +207,6 @@ EOF
   local hash; hash="$(tget 'dashboard.password_hash')"
   # strip any leading "user:" prefix if the hash was stored with it
   hash="${hash#*:}"
-  local escaped_hash; escaped_hash="${hash//\$/\$\$}"
   local dashboard_domain="traefik-${instance}.${tld}"
 
   mkdir -p "$CONFIG_DIR/dynamic"
@@ -204,7 +226,7 @@ http:
     dashboard-auth:
       basicAuth:
         users:
-          - "${user}:${escaped_hash}"
+          - '${user}:${hash}'
 EOF
 }
 

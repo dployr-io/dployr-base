@@ -59,13 +59,18 @@ prompt() {
     printf "%s [%s] Keep this value? (y/n): " "$label" "$display"
     local choice
     read -r choice
-    [ "$choice" = "n" ] || return 0
+    case "$choice" in
+      ""|"y"|"Y") return 0 ;;
+      "n"|"N") ;;
+      *) tset "$key" "$choice"; return 0 ;;
+    esac
   fi
 
   printf "%s: " "$label"
   local val
-  if $secret; then read -rs val; echo; else read -r val; fi
+  read -r val
   [ -n "$val" ] && tset "$key" "$val"
+  return 0
 }
 
 configure() {
