@@ -85,6 +85,9 @@ export const FAILED_WORKFLOW_EVENT_TTL = TTL_90_DAYS;
 /** Background task lifetime: 1 day */
 export const TASK_TTL = TTL_24_HOURS;
 
+/** Pending deployment payload lobby retention: 30 minutes */
+export const PAYLOAD_TTL = TTL_30_MINUTES;
+
 /** Task lease/lock duration: 1 minute */
 export const TASK_LEASE_TTL = TTL_1_MINUTE;
 

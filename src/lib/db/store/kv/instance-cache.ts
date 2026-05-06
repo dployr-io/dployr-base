@@ -107,18 +107,6 @@ export class InstanceCacheStore {
     await this.kv.delete(KV_KEYS.CLUSTER.NODE(clusterId, instanceId));
   }
 
-  async saveNodeUpdate({ tag, update }: { tag: string; update: Record<string, unknown> }): Promise<void> {
-    const existing = await this.getNodeUpdate(tag);
-    const merged = { ...(existing || {}), ...update, lastUpdated: Date.now() };
-    await this.kv.put(KV_KEYS.NODE.UPDATE(tag), JSON.stringify(merged), { ttl: NODE_UPDATE_TTL });
-  }
-
-  async getNodeUpdate(tag: string): Promise<Record<string, unknown> | null> {
-    const data = await this.kv.get(KV_KEYS.NODE.UPDATE(tag));
-    if (!data) return null;
-    return JSON.parse(data);
-  }
-
   async saveProcessSnapshot({ tag, seq, snapshot }: { tag: string; seq: number; snapshot: Record<string, unknown> }): Promise<void> {
     const timestamp = Date.now();
     await this.kv.put(KV_KEYS.PROCESS.SNAPSHOT(tag, timestamp), JSON.stringify({ seq, timestamp, data: snapshot }), { ttl: 60 * 60 * 2 });

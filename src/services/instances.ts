@@ -11,6 +11,7 @@ import { DployrdService } from "./dployrd.js";
 import { InstancePayload } from "@/lib/db/store/db/instances.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 
 /**
  * Service for managing dployr instances.
@@ -542,10 +543,11 @@ export class InstanceService {
     if (instances.length === 0) return null;
 
     const matches = async (instance: Instance): Promise<boolean> => {
-      const update = await kv.instanceCache.getNodeUpdate(instance.tag);
-      const workloads = (update as any)?.workloads;
-      if (isService) return workloads?.services?.some((s: any) => s.name === path.slice(8)) ?? false;
-      return workloads?.deployments?.some((d: any) => d.id === path) ?? false;
+      const workloads = await kv.entities.getEntity<{ services?: Record<string, any>[]; deployments?: Record<string, any>[] }>(
+        KV_KEYS.INSTANCE.ENTITY(instance.tag, "workloads"),
+      );
+      if (isService) return workloads?.data?.services?.some((s: any) => s.name === path.slice(8)) ?? false;
+      return workloads?.data?.deployments?.some((d: any) => d.id === path) ?? false;
     };
 
     const connected: Instance[] = [];

@@ -37,9 +37,9 @@ export class UpdateProcessor {
       return { deploymentsChanged: false };
     }
 
-    this.handleMessageV1_1();
+    console.debug("Update MESAAGE", this.message);
 
-    this.tasks.push(this.kv.saveNodeUpdate({ tag: this.tag, update: this.message as Record<string, unknown> }));
+    this.handleMessageV1_1();
 
     for (const section of NODE_STATE_ENTITIES) {
       const sectionData = (this.message as any)[section];
@@ -85,40 +85,64 @@ export class UpdateProcessor {
           const d = deployment as any;
           const cluster = await this.db.clusters.find({ ownerId: d.user_id });
 
-          if (!d.name || !d.type || !d.source || !cluster) {
+          if (!d.name || !cluster) {
             console.warn(`[UpdateProcessor] Skipping incomplete deployment ${d.id}: missing required fields`, d);
             return;
           }
 
           try {
+            const pending = await this.kv.payloads.consumeDeploymentPayload({ clusterId: cluster.id, name: d.name });
+            const payload = pending?.payload;
+            const type = d.type ?? payload?.type;
+            const source = d.source ?? payload?.source;
+
+            if (!type || !source) {
+              console.warn(`[UpdateProcessor] Skipping incomplete deployment ${d.id}: missing required fields`, d);
+              return;
+            }
+
             const createdAtMs = d.created_at ? new Date(d.created_at).getTime() : undefined;
             const finishedAtMs = (d.status === "failed" || d.status === "success" || d.status === "completed") && d.updated_at ? new Date(d.updated_at).getTime() : undefined;
             const normalizedStatus = d.status === "in_progress" ? "running" : d.status === "completed" ? "success" : d.status;
-            await this.db.deployments.upsert({
+            const synced = await this.db.deployments.upsert({
               clusterId: cluster.id,
               userId: d.user_id,
               id: d.id,
               name: d.name,
-              type: d.type,
-              source: d.source,
+              type,
+              source,
               status: normalizedStatus,
-              description: d.description,
-              runCmd: d.run_cmd,
-              buildCmd: d.build_cmd,
-              port: d.port,
-              workingDir: d.working_dir,
-              staticDir: d.static_dir,
-              image: d.image,
-              domain: d.domain,
-              runtimeType: d.runtime_type || d.runtime,
-              runtimeVersion: d.runtime_version || d.version,
-              remoteUrl: d.remote_url,
-              remoteBranch: d.remote_branch,
-              remoteCommitHash: d.remote_commit_hash,
+              description: d.description ?? payload?.description,
+              runCmd: d.run_cmd ?? payload?.run_cmd,
+              buildCmd: d.build_cmd ?? payload?.build_cmd,
+              port: d.port ?? payload?.port,
+              workingDir: d.working_dir ?? payload?.working_dir,
+              staticDir: d.static_dir ?? payload?.static_dir,
+              image: d.image ?? payload?.image,
+              domain: d.domain ?? payload?.domain,
+              runtimeType: d.runtime_type || d.runtime || payload?.runtime,
+              runtimeVersion: d.runtime_version || d.version || payload?.version,
+              remoteUrl: d.remote_url ?? payload?.remote?.url,
+              remoteBranch: d.remote_branch ?? payload?.remote?.branch,
+              remoteCommitHash: d.remote_commit_hash ?? payload?.remote?.commit_hash,
               logs: d.logs ?? null,
               createdAt: createdAtMs,
               finishedAt: finishedAtMs,
             });
+
+            if (synced && payload) {
+              if (payload.env_vars && typeof payload.env_vars === "object") {
+                await this.db.serviceEnvs.set({ deploymentId: synced.id, envs: payload.env_vars }).catch((error) => {
+                  console.error(`[UpdateProcessor] Failed to set envs for deployment ${synced.id}:`, error);
+                });
+              }
+
+              if (payload.secrets && typeof payload.secrets === "object" && this.db.serviceSecrets) {
+                await this.db.serviceSecrets.set({ deploymentId: synced.id, secrets: payload.secrets }).catch((error) => {
+                  console.error(`[UpdateProcessor] Failed to set secrets for deployment ${synced.id}:`, error);
+                });
+              }
+            }
           } catch (error) {
             console.error(`[UpdateProcessor] Failed to sync deployment ${d.id}:`, error);
           }

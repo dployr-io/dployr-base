@@ -3,12 +3,13 @@
 
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { ERROR, SUCCESS } from "@/lib/constants/index.js";
-import { getBillingService, getDbStore, getInstancePoolService, getInstanceService, getKVStore } from "@/lib/config/context.js";
+import { getDbStore, getInstancePoolService, getInstanceService, getKVStore } from "@/lib/config/context.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
 import { DatabaseConflictError, handleInstanceError } from "../errors/errors.js";
 import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 
 export const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
@@ -311,16 +312,29 @@ export function attachGetInstanceHealth(app: Hono<{ Bindings: Bindings; Variable
   app.get("/:tag/health", async (c) => {
     const tag = c.req.param("tag");
     const kv = getKVStore(c);
-    const raw = await kv.getNodeUpdate(tag);
-    if (!raw) {
+    const [healthEntity, resourcesEntity, nodeEntity, statusEntity, processesEntity] = await Promise.all([
+      kv.entities.getEntity<any>(KV_KEYS.INSTANCE.ENTITY(tag, "health")),
+      kv.entities.getEntity<any>(KV_KEYS.INSTANCE.ENTITY(tag, "resources")),
+      kv.entities.getEntity<any>(KV_KEYS.INSTANCE.ENTITY(tag, "node")),
+      kv.entities.getEntity<any>(KV_KEYS.INSTANCE.ENTITY(tag, "status")),
+      kv.entities.getEntity<any>(KV_KEYS.INSTANCE.ENTITY(tag, "processes")),
+    ]);
+    if (!healthEntity && !resourcesEntity && !nodeEntity && !statusEntity && !processesEntity) {
       return c.json(createSuccessResponse(null));
     }
-    const resources = raw.resources as any;
-    const node = raw.node as any;
-    const status = raw.status as any;
-    const processes = raw.processes as any;
+    const resources = resourcesEntity?.data as any;
+    const node = nodeEntity?.data as any;
+    const status = statusEntity?.data as any;
+    const processes = processesEntity?.data as any;
+    const lastUpdated = Math.max(
+      healthEntity?.timestamp ?? 0,
+      resourcesEntity?.timestamp ?? 0,
+      nodeEntity?.timestamp ?? 0,
+      statusEntity?.timestamp ?? 0,
+      processesEntity?.timestamp ?? 0,
+    );
     const data = {
-      health: raw.health,
+      health: healthEntity?.data,
       resources: {
         cpu: resources?.cpu,
         memory: resources?.memory,
@@ -330,8 +344,8 @@ export function attachGetInstanceHealth(app: Hono<{ Bindings: Bindings; Variable
       uptime: status?.uptime_seconds,
       version: node?.version,
       go_version: node?.go_version,
-      timestamp: raw.timestamp,
-      lastUpdated: raw.lastUpdated,
+      timestamp: lastUpdated ? new Date(lastUpdated).toISOString() : undefined,
+      lastUpdated: lastUpdated || undefined,
     };
     return c.json(createSuccessResponse(data));
   });

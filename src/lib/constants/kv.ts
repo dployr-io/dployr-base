@@ -1,6 +1,8 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
+import { NodeStateEntity } from "./node-state.js";
+
 export const KV_KEYS = {
   VERSION: {
     LATEST: "version:latest",
@@ -23,6 +25,10 @@ export const KV_KEYS = {
     BY_ID: (id: string) => `workflow:${id}`,
     STATE: (state: string) => `state:${state}`,
   },
+  PAYLOAD: {
+    DEPLOYMENT: (clusterId: string, name: string) => `payload:deployment:${clusterId}:${name}`,
+    DEPLOYMENTS_PREFIX: (clusterId: string) => `payload:deployment:${clusterId}:`,
+  },
   OTP: {
     BY_EMAIL: (email: string) => `otp:${email}`,
   },
@@ -34,7 +40,7 @@ export const KV_KEYS = {
     BY_NAME: (clusterId: string, tag: string) => `instance:name:${clusterId}:${tag}`,
     BY_TAG: (tag: string) => `instance:tag:${tag}`,
     DECOMMISSION_RECOVERY_WINDOW: (instanceId: string) => `recovery_window:${instanceId}`,
-    ENTITY: (instanceId: string, entity: string) => `instance:${instanceId}:${entity}`,
+    ENTITY: (instanceId: string, entity: NodeStateEntity) => `instance:${instanceId}:${entity}`,
   },
   SERVICES: {
     BY_INSTANCE: (instanceId: string) => `services:${instanceId}`,
@@ -68,7 +74,7 @@ export const KV_KEYS = {
   },
   TRAEFIK: {
     ROUTER_RULE: (routeKey: string) => `traefik/http/routers/${routeKey}/rule`,
-    ROUTER_ENTRYPOINTS: (routeKey: string) => `traefik/http/routers/${routeKey}/entrypoints`,
+    ROUTER_ENTRYPOINTS: (routeKey: string) => `traefik/http/routers/${routeKey}/entrypoints/0`,
     ROUTER_SERVICE: (routeKey: string) => `traefik/http/routers/${routeKey}/service`,
     SERVICE_URL: (routeKey: string) => `traefik/http/services/${routeKey}/loadbalancer/servers/0/url`,
   },

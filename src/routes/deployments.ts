@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "@/types/index.js";
 import { requireClusterViewer, requireClusterDeveloper, authMiddleware } from "@/middleware/auth.js";
 import { ERROR, SUCCESS } from "@/lib/constants/index.js";
-import { getDbStore, getWS, getJWTService } from "@/lib/config/context.js";
+import { getDbStore, getWS, getJWTService, getKVStore } from "@/lib/config/context.js";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { DeploymentPayload, DeploymentSchema } from "@/lib/tasks/types.js";
@@ -70,16 +70,46 @@ deployments.post("/finish", async (c) => {
           ERROR.RESOURCE.MISSING_RESOURCE.status,
         );
       }
+      const kv = getKVStore(c);
+      const pending = await kv.payloads.consumeDeploymentPayload({ clusterId: cluster.id, name: blueprint.name });
+      const payload = pending?.payload;
 
-      await db.deployments.upsert({
+      const synced = await db.deployments.upsert({
         clusterId: cluster.id,
         userId: blueprint.user_id,
         id,
         name: blueprint.name,
-        type: blueprint.type,
-        source: blueprint.source,
+        type: blueprint.type ?? payload?.type,
+        source: blueprint.source ?? payload?.source,
+        description: blueprint.description ?? payload?.description,
+        runCmd: blueprint.run_cmd ?? payload?.run_cmd,
+        buildCmd: blueprint.build_cmd ?? payload?.build_cmd,
+        port: blueprint.port ?? payload?.port,
+        workingDir: blueprint.working_dir ?? payload?.working_dir,
+        staticDir: blueprint.static_dir ?? payload?.static_dir,
+        image: blueprint.image ?? payload?.image,
+        domain: blueprint.domain ?? payload?.domain,
+        runtimeType: blueprint.runtime_type ?? blueprint.runtime ?? payload?.runtime,
+        runtimeVersion: blueprint.runtime_version ?? blueprint.version ?? payload?.version,
+        remoteUrl: blueprint.remote_url ?? payload?.remote?.url,
+        remoteBranch: blueprint.remote_branch ?? payload?.remote?.branch,
+        remoteCommitHash: blueprint.remote_commit_hash ?? payload?.remote?.commit_hash,
         logs,
       });
+
+      if (synced && payload) {
+        if (payload.env_vars && typeof payload.env_vars === "object") {
+          await db.serviceEnvs.set({ deploymentId: synced.id, envs: payload.env_vars }).catch((error) => {
+            console.error(`[Deployments] Failed to set envs for deployment ${synced.id}:`, error);
+          });
+        }
+
+        if (payload.secrets && typeof payload.secrets === "object" && db.serviceSecrets) {
+          await db.serviceSecrets.set({ deploymentId: synced.id, secrets: payload.secrets }).catch((error) => {
+            console.error(`[Deployments] Failed to set secrets for deployment ${synced.id}:`, error);
+          });
+        }
+      }
     }
 
     // Update deployment logs
@@ -152,56 +182,6 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     return c.json(createErrorResponse({ message: nameValidation.error || "This name is not allowed", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  // Create deployment record and set envs/secrets
-  let deployment: any;
-  try {
-    deployment = await db.deployments.upsert({
-      clusterId,
-      userId: deployPayload.user_id,
-      name: deployPayload.name,
-      type: deployPayload.type,
-      source: deployPayload.source,
-      description: deployPayload.description,
-      runCmd: deployPayload.run_cmd,
-      buildCmd: deployPayload.build_cmd,
-      port: deployPayload.port,
-      workingDir: deployPayload.working_dir,
-      staticDir: deployPayload.static_dir,
-      image: deployPayload.image,
-      domain: deployPayload.domain,
-      runtimeType: deployPayload.runtime,
-      runtimeVersion: deployPayload.version,
-      remoteUrl: deployPayload.remote?.url,
-      remoteBranch: deployPayload.remote?.branch,
-      remoteCommitHash: deployPayload.remote?.commit_hash,
-    });
-
-    if (deployment) {
-      if (deployPayload.env_vars && typeof deployPayload.env_vars === "object") {
-        await db.serviceEnvs.set({ deploymentId: deployment.id, envs: deployPayload.env_vars }).catch((error) => {
-          console.error(`[Deployments] Failed to set envs for deployment ${deployment.id}:`, error);
-        });
-      }
-
-      if (deployPayload.secrets && typeof deployPayload.secrets === "object" && db.serviceSecrets) {
-        await db.serviceSecrets.set({ deploymentId: deployment.id, secrets: deployPayload.secrets }).catch((error) => {
-          console.error(`[Deployments] Failed to set secrets for deployment ${deployment.id}:`, error);
-        });
-      }
-    }
-  } catch (error) {
-    if (error instanceof DatabaseConflictError && error.field === "name") {
-      return c.json(
-        createErrorResponse({
-          message: `Service name '${deployPayload.name}' is already in use by another cluster. Service names must be globally unique.`,
-          code: ERROR.RESOURCE.CONFLICT.code,
-        }),
-        ERROR.RESOURCE.CONFLICT.status,
-      );
-    }
-    throw error;
-  }
-
   // Dispatch task to instance
   try {
     const instance = await db.instances.find({ tag: instanceName });
@@ -214,6 +194,9 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
     const task = dployrdService.createDeployTask(taskId, deployPayload, token);
     const routingKey = instance.kind === "pool" ? `pool:${instanceName}` : instanceName;
+    const kv = getKVStore(c);
+
+    await kv.payloads.saveDeploymentPayload({ clusterId, instanceName, taskId, payload: deployPayload });
 
     let dispatched = false;
     try {

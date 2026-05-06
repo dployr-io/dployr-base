@@ -6,6 +6,7 @@ import { InstanceCacheStore } from "./instance-cache.js";
 import { IntegrationsStore } from "./integrations.js";
 import { BillingStore } from "./billing.js";
 import { EntityStore } from "./entity.js";
+import { PayloadStore } from "./payload.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 
 export class KVStore {
@@ -17,6 +18,7 @@ export class KVStore {
   public readonly integrations: IntegrationsStore;
   public readonly billing: BillingStore;
   public readonly entities: EntityStore;
+  public readonly payloads: PayloadStore;
 
   constructor(
     public kv: IKVAdapter,
@@ -30,6 +32,7 @@ export class KVStore {
     this.integrations = new IntegrationsStore(kv, githubToken);
     this.billing = new BillingStore(kv);
     this.entities = new EntityStore(kv);
+    this.payloads = new PayloadStore(kv);
   }
 
   // SessionStore delegation
@@ -74,8 +77,6 @@ export class KVStore {
   refreshNodeConnected = (...args: Parameters<InstanceCacheStore["refreshNodeConnected"]>) => this.instanceCache.refreshNodeConnected(...args);
   deleteNodeConnected = (...args: Parameters<InstanceCacheStore["deleteNodeConnected"]>) => this.instanceCache.deleteNodeConnected(...args);
   isNodeConnected = (...args: Parameters<InstanceCacheStore["isNodeConnected"]>) => this.instanceCache.isNodeConnected(...args);
-  saveNodeUpdate = (...args: Parameters<InstanceCacheStore["saveNodeUpdate"]>) => this.instanceCache.saveNodeUpdate(...args);
-  getNodeUpdate = (...args: Parameters<InstanceCacheStore["getNodeUpdate"]>) => this.instanceCache.getNodeUpdate(...args);
   saveProcessSnapshot = (...args: Parameters<InstanceCacheStore["saveProcessSnapshot"]>) => this.instanceCache.saveProcessSnapshot(...args);
   getProcessSnapshot = (...args: Parameters<InstanceCacheStore["getProcessSnapshot"]>) => this.instanceCache.getProcessSnapshot(...args);
   getLatestProcessSnapshots = (...args: Parameters<InstanceCacheStore["getLatestProcessSnapshots"]>) => this.instanceCache.getLatestProcessSnapshots(...args);
@@ -100,4 +101,9 @@ export class KVStore {
   getEntityVersion = (...args: Parameters<EntityStore["getEntityVersion"]>) => this.entities.getEntityVersion(...args);
   deleteEntity = (...args: Parameters<EntityStore["deleteEntity"]>) => this.entities.deleteEntity(...args);
   entityExists = (...args: Parameters<EntityStore["exists"]>) => this.entities.exists(...args);
+
+  // PayloadStore delegation
+  saveDeploymentPayload = (...args: Parameters<PayloadStore["saveDeploymentPayload"]>) => this.payloads.saveDeploymentPayload(...args);
+  consumeDeploymentPayload = (...args: Parameters<PayloadStore["consumeDeploymentPayload"]>) => this.payloads.consumeDeploymentPayload(...args);
+  listDeploymentPayloads = (...args: Parameters<PayloadStore["listDeploymentPayloads"]>) => this.payloads.listDeploymentPayloads(...args);
 }

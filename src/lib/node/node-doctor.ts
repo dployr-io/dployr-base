@@ -287,7 +287,7 @@ export class NodeDoctor extends EventEmittable {
 
       // 2. If the connection is still "fresh" (within the acceptable heartbeat window)
       if (connectionAge < ACCEPTABLE_HEARTBEAT_WINDOW * 1000) {
-        const nodeUpdate = (await this.kv.getNodeUpdate(tag)) as NodeUpdateV1_1;
+        const nodeUpdate = await this.getNodeUpdate(tag);
         if (nodeUpdate?.health?.overall === "ok") {
           console.debug(`[heartbeat] ${tag}: connection alive (${connectionAge}ms), last health ok → healthy`);
           return "healthy";
@@ -300,7 +300,7 @@ export class NodeDoctor extends EventEmittable {
       }
 
       // 3. Fallback: normal KV-based recency + health check
-      const nodeUpdate = (await this.kv.getNodeUpdate(tag)) as NodeUpdateV1_1;
+      const nodeUpdate = await this.getNodeUpdate(tag);
       const updateTime = nodeUpdate?.timestamp ? new Date(nodeUpdate.timestamp).getTime() : 0;
       const isRecent = updateTime >= windowStart;
       const isHealthy = nodeUpdate?.health?.overall === "ok";
@@ -347,6 +347,22 @@ export class NodeDoctor extends EventEmittable {
 
     console.debug(`[heartbeat] ${tag}: timed out after ${attempt} retries, marking degraded`);
     return "degraded";
+  }
+
+  private async getNodeUpdate(tag: string): Promise<Partial<NodeUpdateV1_1> | null> {
+    const [healthEntity, statusEntity] = await Promise.all([
+      this.kv.entities.getEntity<NodeUpdateV1_1["health"]>(KV_KEYS.INSTANCE.ENTITY(tag, "health")),
+      this.kv.entities.getEntity<NodeUpdateV1_1["status"]>(KV_KEYS.INSTANCE.ENTITY(tag, "status")),
+    ]);
+
+    if (!healthEntity && !statusEntity) return null;
+
+    const timestamp = Math.max(healthEntity?.timestamp ?? 0, statusEntity?.timestamp ?? 0);
+    return {
+      health: healthEntity?.data,
+      status: statusEntity?.data,
+      timestamp: timestamp ? new Date(timestamp).toISOString() : undefined,
+    };
   }
 
   /** Confirm a status change with a TCP probe. */
