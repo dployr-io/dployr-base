@@ -47,7 +47,7 @@ export class ClientNotifier {
     if (!clients.length) return;
 
     for (const client of clients) {
-      const changed: Record<string, {data: unknown; version: number}> = {};
+      const changed: Record<string, { data: unknown; version: number }> = {};
 
       for (const section of sections) {
         const entity = await this.kv.entities.getEntity(KV_KEYS.INSTANCE.ENTITY(instanceId, section));
@@ -55,16 +55,16 @@ export class ClientNotifier {
 
         const clientVersion = this.conn.getClientVersion(client.connectionId, instanceId, section);
         if (entity.version > clientVersion) {
-          changed[section] = {data: entity.data, version: entity.version};
+          changed[section] = { data: entity.data, version: entity.version };
         }
       }
 
       if (!Object.keys(changed).length) continue;
 
       try {
-        client.ws.send(JSON.stringify({kind: MESSAGE_KIND.DELTA_UPDATE, instanceId, sections: changed}));
+        client.ws.send(JSON.stringify({ kind: MESSAGE_KIND.DELTA_UPDATE, instanceId, sections: changed }));
 
-        for (const [section, {version}] of Object.entries(changed)) {
+        for (const [section, { version }] of Object.entries(changed)) {
           this.conn.setClientVersion(client.connectionId, instanceId, section as NodeStateEntity, version);
         }
       } catch (err) {
@@ -112,5 +112,4 @@ export class ClientNotifier {
     console.log(`[WS] Replayed ${replayed} unacked messages to client ${connectionId}`);
     return replayed;
   }
-
 }

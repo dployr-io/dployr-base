@@ -8,6 +8,7 @@ import * as OTPAuth from "otpauth";
 import { ADMIN_JWT_TTL, ERROR } from "@/lib/constants/index.js";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { getVMService } from "@/lib/config/context.js";
 
 const admin = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -101,6 +102,53 @@ admin.get("/services", async (c) => {
   const db = getDbStore(c);
   const { services, total } = await db.services.list();
   return c.json(createSuccessResponse({ services, total }));
+});
+
+/**
+ * Admin endpoint: delete instance AND VM droplet.
+ * Protected by requireDployrAdministrator middleware.
+ * Accepts instance ID or tag name.
+ */
+admin.delete("/remove-instance/:id", async (c) => {
+  const identifier = c.req.param("id");
+  const db = getDbStore(c);
+  const vm = getVMService(c);
+
+  try {
+    let instance = await db.instances.find({ id: identifier });
+    if (!instance) {
+      instance = await db.instances.find({ tag: identifier });
+    }
+
+    if (!instance) {
+      return c.json(
+        createErrorResponse({
+          message: "Instance not found",
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
+
+    try {
+      await vm.delete(instance.tag);
+    } catch (err: any) {
+      console.error(`[Admin] Failed to delete VM: ${err.message}`);
+      throw err;
+    }
+
+    await db.instances.delete({ id: instance.id });
+
+    return c.json(createSuccessResponse({ deleted: true, instance: instance.tag }));
+  } catch (err: any) {
+    return c.json(
+      createErrorResponse({
+        message: "Failed to delete instance",
+        code: ERROR.REQUEST.INTERNAL_SERVER_ERROR.code,
+      }),
+      ERROR.REQUEST.INTERNAL_SERVER_ERROR.status,
+    );
+  }
 });
 
 admin.route("/instances", instances);

@@ -37,8 +37,6 @@ export class UpdateProcessor {
       return { deploymentsChanged: false };
     }
 
-    console.debug("Update MESAAGE", this.message);
-
     this.handleMessageV1_1();
 
     for (const section of NODE_STATE_ENTITIES) {
@@ -62,12 +60,12 @@ export class UpdateProcessor {
 
   private async handleMessageV1_1() {
     if (this.message.schema === "v1.1") {
-      const v1_1Message = this.message as NodeUpdateV1_1;
-      if (v1_1Message.processes?.list && v1_1Message.sequence) {
-        this.tasks.push(this.saveProcessSnapshot({ seq: v1_1Message.sequence, snapshot: { list: v1_1Message.processes.list } }));
+      const message = this.message as NodeUpdateV1_1;
+      if (message.processes?.list && message.sequence) {
+        this.tasks.push(this.saveProcessSnapshot({ seq: message.sequence, snapshot: { list: message.processes.list } }));
       }
-      if (v1_1Message.workloads?.deployments) {
-        this.tasks.push(this.syncDeployments(v1_1Message.workloads.deployments));
+      if (message.workloads?.deployments) {
+        this.tasks.push(this.syncDeployments(message.workloads.deployments));
       }
     }
   }

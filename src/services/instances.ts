@@ -357,18 +357,18 @@ export class InstanceService {
    * WebSocket to download and install the specified dployr version.
    * Requires owner permission on the cluster.
    *
-   * @param params.instanceId - Instance ID to install on
+   * @param params.tag - Instance tag to install on
    * @param params.clusterId - Cluster containing the instance
    * @param params.version - Dployr version to install
    * @param params.c - Hono context with request bindings
    * @returns Task ID for the install operation
    */
-  async installDployr({ instanceId, clusterId, version, c }: { instanceId: string; clusterId: string; version: string; c: Context }): Promise<string> {
+  async installDployr({ tag, clusterId, version, c }: { tag: string; clusterId: string; version: string; c: Context }): Promise<string> {
     const db = getDbStore(c);
     const session = c.get("session")!;
     const jwtService = getJWTService(c);
 
-    const instance = await db.instances.find({ id: instanceId });
+    const instance = await db.instances.find({ tag });
     if (!instance) {
       throw new ResourceNotFoundError("instance");
     }
@@ -379,11 +379,11 @@ export class InstanceService {
     const ws = getWS(c);
     const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
     if (!ws.hasNodeConnection(routingKey)) {
-      throw new InstanceNotConnectedError(instanceId);
+      throw new InstanceNotConnectedError(tag);
     }
 
     const dployrd = new DployrdService();
-    const token = await jwtService.createInstanceAccessToken(session, instanceId, "owner", {
+    const token = await jwtService.createInstanceAccessToken(session, tag, "owner", {
       issuer: c.env.BASE_URL,
       audience: "dployr-instance",
     });
@@ -393,7 +393,7 @@ export class InstanceService {
 
     const sent = ws.sendTask(routingKey, task);
     if (!sent) {
-      throw new InstanceConnectionFailureError(instanceId);
+      throw new InstanceConnectionFailureError(tag);
     }
 
     return task.ID;

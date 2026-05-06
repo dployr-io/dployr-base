@@ -18,15 +18,12 @@ import {
   attachGetInstanceHealth,
 } from "@/lib/instances/instance-helpers.js";
 import { pool } from "./pool.js";
-import vm from "./vm.js";
 
 const instances = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 instances.use("*", requireDployrAdministrator);
 
 instances.route("/pool", pool);
-
-instances.route("/vm", vm);
 
 attachListInstances(instances);
 
