@@ -8,64 +8,40 @@
  * MILLISECONDS: setTimeout/setInterval values, Date calculations
  */
 
+// --- seconds primitives (for TTL_ constants) ---
 const SECOND = 1;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** 1 minute in seconds (for KV/Redis TTL) */
-export const TTL_1_MINUTE = 60;
+// --- milliseconds primitives (for MS_ constants) ---
+const MS_SECOND = 1000;
+const MS_MINUTE = 60 * MS_SECOND;
+const MS_HOUR = 60 * MS_MINUTE;
 
-/** 5 minutes in seconds (for KV/Redis TTL) */
+// --- TTL primitives (seconds, for KV/Redis) ---
+export const TTL_1_MINUTE = MINUTE;
 export const TTL_5_MINUTES = 5 * MINUTE;
-
-/** 10 minutes in seconds (for KV/Redis TTL) */
 export const TTL_10_MINUTES = 10 * MINUTE;
-
-/** 15 minutes in seconds (for KV/Redis TTL) */
 export const TTL_15_MINUTES = 15 * MINUTE;
-
-/** 30 minutes in seconds (for KV/Redis TTL) */
 export const TTL_30_MINUTES = 30 * MINUTE;
-
-/** 1 hour in seconds (for KV/Redis TTL) */
-export const TTL_1_HOUR = 1 * HOUR;
-
-/** 24 hours in seconds (for KV/Redis TTL) */
+export const TTL_1_HOUR = HOUR;
 export const TTL_24_HOURS = 24 * HOUR;
-
-/** 30 days in seconds (for KV/Redis TTL) */
+export const TTL_7_DAYS = 7 * DAY;
 export const TTL_30_DAYS = 30 * DAY;
-
-/** 90 days in seconds (for KV/Redis TTL) */
 export const TTL_90_DAYS = 90 * DAY;
 
-/** 7 days in seconds (for KV/Redis TTL) */
-export const TTL_7_DAYS = 7 * DAY;
-
-/** 10 seconds in milliseconds (for setTimeout/setInterval) */
-export const MS_10_SECONDS = 10 * 1000;
-
-/** 12 seconds in milliseconds (for setTimeout/setInterval) */
-export const MS_12_SECONDS = 12 * 1000;
-
-/** 30 seconds in milliseconds (for setTimeout/setInterval) */
-export const MS_30_SECONDS = 30 * 1000;
-
-/** 1 minute in milliseconds (for setTimeout/setInterval) */
-export const MS_1_MINUTE = 1 * 60 * 1000;
-
-/** 5 minutes in milliseconds (for setTimeout/setInterval) */
-export const MS_5_MINUTES = 5 * 60 * 1000;
-
-/** 30 minutes in milliseconds (for setTimeout/setInterval) */
-export const MS_30_MINUTES = 30 * 60 * 1000;
-
-/** 12 hours in milliseconds (for setTimeout/setInterval) */
-export const MS_12_HOURS = 12 * 60 * 60 * 1000;
-
-/** 24 hours in milliseconds (for setTimeout/setInterval) */
-export const MS_24_HOURS = 24 * 60 * 60 * 1000;
+// --- MS primitives (milliseconds, for timers/Date math) ---
+export const MS_10_SECONDS = 10 * MS_SECOND;
+export const MS_12_SECONDS = 12 * MS_SECOND;
+export const MS_30_SECONDS = 30 * MS_SECOND;
+export const MS_1_MINUTE = MS_MINUTE;
+export const MS_5_MINUTES = 5 * MS_MINUTE;
+export const MS_6_MINUTES = 6 * MS_MINUTE;
+export const MS_8_MINUTES = 8 * MS_MINUTE;
+export const MS_30_MINUTES = 30 * MS_MINUTE;
+export const MS_12_HOURS = 12 * MS_HOUR;
+export const MS_24_HOURS = 24 * MS_HOUR;
 
 /** Session lifetime: 7 days */
 export const SESSION_TTL = TTL_7_DAYS;
@@ -118,17 +94,23 @@ export const POOL_PROVISION_LOCK_TTL = 100;
 /** Node connected heartbeat refresh: 60 seconds */
 export const NODE_CONNECTED_TTL = TTL_1_MINUTE;
 
-/** Admin JWT refresh threshold: 29.5 minutes (checked before 30 min expiry to issue fresh token) */
+/** Admin JWT refresh threshold: 29.5 minutes in seconds (checked before 30 min expiry) */
 export const ADMIN_JWT_REFRESH_WINDOW = 29.5 * MINUTE;
 
-/** Node heartbeat acceptable window: 3 minutes */
+/** Node heartbeat acceptable window: 3 minutes in seconds */
 export const ACCEPTABLE_HEARTBEAT_WINDOW = 3 * MINUTE;
 
 /** Instance decommission recovery window: 30 seconds */
 export const INSTANCE_DECOMMISSION_RECOVERY_WINDOW_MS = MS_30_SECONDS;
 
-/** Entity tombstone retention: 7 days (proves entity existed, expires if never refreshed) */
+/** Grace period after instance creation before health checks begin: 6 minutes */
+export const INSTANCE_STARTUP_GRACE_MS = MS_6_MINUTES;
+
+/** Entity tombstone retention: 7 days */
 export const ENTITY_TOMBSTONE_TTL = TTL_7_DAYS;
 
-/** Domain mapping TTL: 7 days (refreshed on instance activity, expires if instance goes stale) */
+/** Domain mapping TTL: 7 days */
 export const DOMAIN_MAPPING_TTL = TTL_7_DAYS;
+
+/** Reprovision cooldown for workload processor: 8 minutes */
+export const REPROVISION_COOLDOWN_MS = MS_8_MINUTES;

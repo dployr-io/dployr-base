@@ -84,6 +84,7 @@ export const HEADLESS_EVENTS: Record<InstanceStatus, string> = {
   offline: EVENTS.NODE.OFFLINE.code,
   unreachable: EVENTS.NODE.UNREACHABLE.code,
   maintenance: EVENTS.NODE.MAINTENANCE.code,
+  provisioning: EVENTS.NODE.PROVISIONED.code,
 };
 
 export const EVENT_METADATA: EventMetadataMap = {

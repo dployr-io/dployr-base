@@ -177,8 +177,9 @@ export type StatusUpdateMessage = {
  * @property "offline" - Turned off but still provisioned on the VM provider
  * @property "unreachable" - Not reachable by TCP ping
  * @property "maintenance" - Taken out of pool rotation
+ * @property "provisioning" - VM just created, waiting to boot and connect
  */
-export type InstanceStatus = "healthy" | "degraded" | "offline" | "unreachable" | "maintenance";
+export type InstanceStatus = "healthy" | "degraded" | "offline" | "unreachable" | "maintenance" | "provisioning";
 
 export type InstanceRegion = (typeof INSTANCE_REGIONS)[number];
 
