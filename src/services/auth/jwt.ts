@@ -107,6 +107,28 @@ export class JWTService {
   }
 
   /**
+   * Creates a short-lived token for internal platform operations (e.g. workload reprovision)
+   * that need to act on behalf of a cluster owner without a live user session.
+   * Accepted by authenticate() via Bearer header.
+   */
+  async createReprovisionToken(instanceName: string, clusterId: string, ownerId: string): Promise<string> {
+    const privateKey = await this.keyStore.getPrivateKey();
+    const publicKeyJwk = await this.keyStore.getPublicKey();
+
+    return await new SignJWT({
+      sub: ownerId,
+      instance_id: instanceName,
+      cluster_id: clusterId,
+      token_type: "reprovision",
+      perm: "owner",
+    })
+      .setProtectedHeader({ alg: "RS256", kid: (publicKeyJwk as any).kid as string })
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(privateKey);
+  }
+
+  /**
    * Creates a short-lived access token for an instance node to call
    * /v1/node endpoints. This does not depend on a user session.
    */

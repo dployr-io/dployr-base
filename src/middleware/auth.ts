@@ -23,6 +23,39 @@ async function authenticate(c: Context<{ Bindings: Bindings; Variables: Variable
     return existingSession;
   }
 
+  // Accept reprovision tokens issued by the platform for internal operations (no user session).
+  const authHeader = c.req.header("Authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (bearerToken) {
+    try {
+      const kv = getKVStore(c);
+      const publicKey = await kv.getPublicKey();
+      const { payload } = await jwtVerify(bearerToken, publicKey);
+
+      if (payload.token_type === "reprovision" && payload.sub && payload.cluster_id) {
+        const db = getDbStore(c);
+        const [user, cluster] = await Promise.all([
+          db.users.find({ id: payload.sub as string }),
+          db.clusters.find({ id: payload.cluster_id as string }),
+        ]);
+        if (user && cluster) {
+          const session: Session = {
+            userId: user.id,
+            email: user.email,
+            provider: user.provider as Session["provider"],
+            clusters: [{ id: cluster.id, name: cluster.name, owner: user.id, role: "owner" }],
+            createdAt: Date.now(),
+            expiresAt: Date.now() + 5 * 60 * 1000,
+          };
+          c.set("session", session);
+          return session;
+        }
+      }
+    } catch {
+      // Invalid token — fall through to session cookie check
+    }
+  }
+
   const sessionId = getCookie(c, "session");
   if (!sessionId) {
     return null;
