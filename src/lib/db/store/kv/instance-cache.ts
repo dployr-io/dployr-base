@@ -97,10 +97,14 @@ export class InstanceCacheStore {
     await this.kv.put(KV_KEYS.CLUSTER.NODE(clusterId, instanceId), "1", { ttl: NODE_CONNECTED_TTL });
   }
 
-  async getClusterNodes(clusterId: string): Promise<string[]> {
+  async getClusterNodes(clusterId: string): Promise<string[] | null> {
     const prefix = KV_KEYS.CLUSTER.NODES_PREFIX(clusterId);
-    const results = await this.kv.list({ prefix });
-    return results.map((r) => r.name.slice(prefix.length));
+    try {
+      const results = await this.kv.list({ prefix });
+      return results.map((r) => r.name.slice(prefix.length)).filter(Boolean);
+    } catch {
+      return null;
+    }
   }
 
   async deregisterClusterNode(clusterId: string, instanceId: string): Promise<void> {

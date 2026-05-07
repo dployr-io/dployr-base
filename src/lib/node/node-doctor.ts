@@ -1,6 +1,6 @@
 import { InstanceStatus, SubscriptionPlan } from "@/types/index.js";
 import { NodeUpdateV1_1 } from "@/types/node.js";
-import { ACCEPTABLE_HEARTBEAT_WINDOW } from "../constants/duration.js";
+import { ACCEPTABLE_HEARTBEAT_WINDOW, INSTANCE_STARTUP_GRACE_MS } from "../constants/duration.js";
 import { tcpReachable } from "../net.js";
 import { EventEmittable } from "@/services/notifications/emittable.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
@@ -22,6 +22,7 @@ export class NodeDoctor extends EventEmittable {
   protected readonly conn: ConnectionManager;
   protected readonly pool: InstancePool;
   private readonly log: Logger;
+  private decommissionHook?: () => void;
 
   constructor({ vm, kv, db, conn, pool }: { vm: VmProvider | null; kv: KVStore; db: DatabaseStore; conn: ConnectionManager; pool: InstancePool }) {
     super(kv);
@@ -30,6 +31,10 @@ export class NodeDoctor extends EventEmittable {
     this.conn = conn;
     this.pool = pool;
     this.log = new Logger("node-doctor");
+  }
+
+  onDecommission(hook: () => void): void {
+    this.decommissionHook = hook;
   }
 
   /** Health check based on daemon heartbeat. */
@@ -45,6 +50,11 @@ export class NodeDoctor extends EventEmittable {
 
     this.log.debug("Computed candidates", { count: instances.length });
     for (const entry of instances) {
+      const hasConnection = this.conn.getNodeConnections(entry.tag).length > 0;
+      if (!hasConnection && Date.now() - entry.createdAt < INSTANCE_STARTUP_GRACE_MS) {
+        this.log.debug(`Skipping health check for ${entry.tag} — ${entry.status === "provisioning" ? "still provisioning, no connection yet" : "within startup grace period"}`);
+        continue;
+      }
       const heartbeatStatus = await this.resolveHeartbeatStatus(entry.tag, windowStart, entry.kind);
       if (entry.status === heartbeatStatus) continue;
 
@@ -58,6 +68,7 @@ export class NodeDoctor extends EventEmittable {
           if (!alreadyFlagged) {
             await this.kv.instanceCache.setFlagForDecommission({ tag: entry.tag });
             await this.emit(EVENTS.NODE.DECOMMISSIONED.code, entry.tag);
+            this.decommissionHook?.();
           }
         }
       } catch (err) {
@@ -138,8 +149,9 @@ export class NodeDoctor extends EventEmittable {
 
       await this.emit(EVENTS.INSTANCE.UPDATED.code, droplet.name);
 
-      // update in‑memory map
-      existing.status = status;
+      // Preserve existing status in the map — status transitions are owned by nodeHeartbeat,
+      // not inferred from provider state. A provisioning instance would otherwise get
+      // overwritten with "degraded" here and immediately demoted to maintenance.
       existing.address = droplet.ipv4 ?? null;
       existing.metadata = metadata;
       poolMap.set(droplet.name, existing);
@@ -160,6 +172,7 @@ export class NodeDoctor extends EventEmittable {
   /** Phase 3: mark offline / unreachable pool instances as maintenance. */
   private async demoteUnhealthyInstancesToMaintenance(poolMap: Map<string, { id: string; tag: string; status: InstanceStatus }>): Promise<void> {
     const demotableStatuses = new Set<InstanceStatus>(["offline", "unreachable", "degraded"]);
+    // "provisioning" instances are still booting — never demote them here; nodeHeartbeat handles the transition
 
     for (const entry of poolMap.values()) {
       this.log.debug("Identifying node entry", { tag: entry.tag, status: entry.status });
@@ -191,9 +204,9 @@ export class NodeDoctor extends EventEmittable {
     }
 
     const unassigned = await this.db.instances.listUnassignedClusters();
-    for (const { id: clusterId } of unassigned) {
+    for (const { id: clusterId, name: clusterName } of unassigned) {
       const plan = await this.db.billing.getEffectivePlan(clusterId);
-      await this.allocateForPlan(clusterId, plan);
+      await this.allocateForPlan(clusterId, clusterName, plan);
       await this.emit("allocated", EVENTS.NODE.ALLOCATED.code);
     }
   }
@@ -248,12 +261,29 @@ export class NodeDoctor extends EventEmittable {
       try {
         await this.pool.allocateSharedPool(clusterId);
         await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
+        await this.nudgePoolNode(clusterId);
       } catch (err) {
         this.log.error("Error while migrating clusters", { error: String(err) });
         allMigrated = false;
       }
     }
     return allMigrated;
+  }
+
+  /** Send a heartbeat request to the pool node assigned to a cluster, forcing an immediate full sync. */
+  private async nudgePoolNode(clusterId: string): Promise<void> {
+    const cluster = await this.db.clusters.find({ id: clusterId });
+    if (!cluster?.poolInstanceId) return;
+    const instance = await this.db.instances.find({ id: cluster.poolInstanceId });
+    if (!instance?.tag) return;
+    const conns = this.conn.getNodeConnections(instance.tag);
+    if (conns.length === 0) return;
+    try {
+      conns[0].ws.send(JSON.stringify({ kind: "heartbeat" }));
+      this.log.info(`Nudged pool node ${instance.tag} after cluster ${cluster.name} migration`);
+    } catch (err) {
+      this.log.warn(`Failed to nudge pool node ${instance.tag}`, { error: String(err) });
+    }
   }
 
   /** Destroy the VM droplet and clean up its DB record. */
@@ -277,8 +307,7 @@ export class NodeDoctor extends EventEmittable {
   private async resolveHeartbeatStatus(tag: string, windowStart: number, kind: string): Promise<InstanceStatus> {
     const singleCheck = async (): Promise<InstanceStatus> => {
       // 1. Look for active connections
-      const connKey = kind === "pool" ? `pool:${tag}` : tag;
-      const nodeConns = this.conn.getNodeConnections(connKey);
+      const nodeConns = this.conn.getNodeConnections(tag);
       if (!nodeConns.length) {
         this.log.debug(`${tag}: no active WebSocket connection → degraded`);
         return "degraded";
@@ -390,16 +419,16 @@ export class NodeDoctor extends EventEmittable {
     return "hobby";
   }
 
-  private async allocateForPlan(clusterId: string, plan: SubscriptionPlan): Promise<void> {
+  private async allocateForPlan(clusterId: string, clusterName: string, plan: SubscriptionPlan): Promise<void> {
     switch (plan) {
       case "hobby":
         await this.pool.allocateSharedPool(clusterId);
         break;
       case "indie":
-        this.log.info(`Indie allocation not yet implemented for cluster ${clusterId}`);
+        this.log.info(`Indie allocation not yet implemented for cluster ${clusterName}`);
         break;
       case "pro":
-        this.log.info(`Pro dedicated instance not yet implemented for cluster ${clusterId}`);
+        this.log.info(`Pro dedicated instance not yet implemented for cluster ${clusterName}`);
         break;
     }
   }

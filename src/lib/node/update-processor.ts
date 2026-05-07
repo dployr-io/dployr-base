@@ -80,7 +80,6 @@ export class UpdateProcessor {
     }
 
     try {
-      if (deployments.length > 0) this.deploymentsChanged = true;
       await Promise.all(
         deployments.map(async (deployment) => {
           const d = deployment as any;
@@ -121,15 +120,22 @@ export class UpdateProcessor {
               staticDir: d.static_dir ?? payload?.static_dir,
               image: d.image ?? payload?.image,
               domain: d.domain ?? payload?.domain,
-              runtimeType: d.runtime_type || d.runtime || payload?.runtime,
-              runtimeVersion: d.runtime_version || d.version || payload?.version,
-              remoteUrl: d.remote_url ?? payload?.remote?.url,
-              remoteBranch: d.remote_branch ?? payload?.remote?.branch,
-              remoteCommitHash: d.remote_commit_hash ?? payload?.remote?.commit_hash,
+              runtimeType: d.runtime_type || d.runtime.type || payload?.runtime,
+              runtimeVersion: d.runtime_version || d.runtime.version || payload?.version,
+              remoteUrl: d.remote_url || d.remote.url || payload?.remote?.url,
+              remoteBranch: d.remote_branch || d.remote.branch || payload?.remote?.branch,
+              remoteCommitHash: d.remote_commit_hash || d.remote.commit_hash || payload?.remote?.commit_hash,
               logs: d.logs ?? null,
               createdAt: createdAtMs,
               finishedAt: finishedAtMs,
             });
+
+            // Only notify clients when something meaningful happened:
+            // a new deployment payload was consumed, or the deployment reached a terminal state.
+            const isTerminal = normalizedStatus === "success" || normalizedStatus === "failed";
+            if (synced && (pending || isTerminal)) {
+              this.deploymentsChanged = true;
+            }
 
             if (synced && payload) {
               if (payload.env_vars && typeof payload.env_vars === "object") {

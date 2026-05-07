@@ -14,6 +14,7 @@ import type { DeploymentPayload } from "@/lib/tasks/types.js";
 import { DatabaseConflictError } from "../errors/errors.js";
 import { KV_KEYS } from "../constants/kv.js";
 import { Logger } from "@/lib/logger.js";
+import { REPROVISION_COOLDOWN_MS } from "../constants/index.js";
 
 type ReportedService = { name: string; type: ServiceType; deploymentId?: string };
 type WorkloadService = Record<string, any>;
@@ -21,6 +22,8 @@ type AggregatedWorkloads = { services: Map<string, ReportedService>; nodesWithUp
 
 export class WorkloadSupervisor {
   private log = new Logger("workload-supervisor");
+  private reprovisionSentAt: Map<string, number>;
+  private reallocateCluster?: (clusterId: string) => Promise<void>;
 
   constructor(
     private db: DatabaseStore,
@@ -30,7 +33,15 @@ export class WorkloadSupervisor {
     private dployrdService: DployrdService,
     private clientNotifier: ClientNotifier,
     private traefik: TraefikService | null = null,
-  ) {}
+    cooldownMap?: Map<string, number>,
+  ) {
+    this.reprovisionSentAt = cooldownMap ?? new Map();
+  }
+
+  /** Register a handler that re-assigns the cluster to a healthy pool node when it has no connected node. */
+  onClusterNeedsReallocation(handler: (clusterId: string) => Promise<void>): void {
+    this.reallocateCluster = handler;
+  }
 
   async run(): Promise<void> {
     const { clusters } = await this.db.clusters.list({});
@@ -39,25 +50,30 @@ export class WorkloadSupervisor {
 
   private async superviseCluster(cluster: Cluster): Promise<void> {
     try {
-      // Get all physical node IDs that have registered for this cluster
-      const activeNodeIds = await this.kv.instanceCache.getClusterNodes(cluster.id);
+      const activeNodeIds = await this.resolveConnectedNodes(cluster);
 
-      // If no active nodes — we can't distinguish "services gone" from "cluster offline"
-      // Do nothing. This is the key correctness guarantee.
       if (activeNodeIds.length === 0) {
-        this.log.warn("No active nodes present on this cluster", { cluster: cluster.name });
+        const { services: orphaned } = await this.db.services.list({ clusterId: cluster.id });
+        if (orphaned.length === 0) return;
+
+        // No connected node to dispatch to — trigger reallocation. Use the reprovision
+        // cooldown map with a cluster-scoped key so we don't re-trigger every tick while
+        // the new node is booting.
+        const reallocKey = `realloc:${cluster.id}`;
+        const lastRealloc = this.reprovisionSentAt.get(reallocKey);
+        if (lastRealloc && Date.now() - lastRealloc < REPROVISION_COOLDOWN_MS) return;
+
+        this.log.warn(`Cluster ${cluster.name} has ${orphaned.length} orphaned service(s) but no connected node — triggering reallocation`);
+        this.reprovisionSentAt.set(reallocKey, Date.now());
+        await this.reallocateCluster?.(cluster.id);
         return;
       }
 
       const { services: aggregatedServices, nodesWithUpdates } = await this.getAggregatedWorkloads(activeNodeIds);
 
       if (nodesWithUpdates === 0) {
-        this.log.warn("At least one node was registered but all updates expired. Skipping...", { cluster: cluster.name });
-        return;
-      }
-
-      if (aggregatedServices.size === 0) {
-        this.log.warn("Active nodes reported no provisioned services. Skipping...", { cluster: cluster.name });
+        // Connected node hasn't sent workload data yet — transient, skip.
+        this.log.warn("Connected node has no workload data yet. Skipping...", { cluster: cluster.name });
         return;
       }
 
@@ -72,11 +88,13 @@ export class WorkloadSupervisor {
       changed = (await this.createMissingServices({ cluster, activeNodeIds, services: toCreate })) || changed;
       changed = (await this.backfillDeploymentLinks({ cluster, dbServices, aggregatedServices })) || changed;
 
-      // Reprovision missing services
       for (const svc of toReprovision) {
         await this.reprovisionService(svc, cluster);
         changed = true;
       }
+
+      // Ensure Traefik routes are present and current for all running services.
+      await this.reconcileTraefikRoutes({ activeNodeIds, aggregatedServices });
 
       if (changed) {
         this.clientNotifier.notifyRefresh(cluster.id, "services");
@@ -86,10 +104,31 @@ export class WorkloadSupervisor {
     }
   }
 
+  /** Returns tags of instances currently connected to base for this cluster. No SCAN needed. */
+  private async resolveConnectedNodes(cluster: Cluster): Promise<string[]> {
+    const tags: string[] = [];
+
+    if (cluster.poolInstanceId) {
+      const instance = await this.db.instances.find({ id: cluster.poolInstanceId });
+      if (instance?.tag && this.connectionManager.hasNodeConnection(instance.tag)) {
+        tags.push(instance.tag);
+      }
+    }
+
+    // Also check for a dedicated instance on the cluster
+    const dedicated = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
+    if (dedicated?.tag && this.connectionManager.hasNodeConnection(dedicated.tag)) {
+      tags.push(dedicated.tag);
+    }
+
+    return tags;
+  }
+
   private async getAggregatedWorkloads(activeNodeIds: string[]): Promise<AggregatedWorkloads> {
     const services = new Map<string, ReportedService>();
     let nodesWithUpdates = 0;
 
+    // All nodeIds here are pre-validated as connected by resolveConnectedNodes.
     for (const nodeId of activeNodeIds) {
       const workloads = await this.getWorkloads(nodeId);
       if (!workloads) continue;
@@ -178,6 +217,55 @@ export class WorkloadSupervisor {
     }
   }
 
+  private async reconcileTraefikRoutes({
+    activeNodeIds,
+    aggregatedServices,
+  }: {
+    activeNodeIds: string[];
+    aggregatedServices: Map<string, ReportedService>;
+  }): Promise<void> {
+    if (!this.traefik || aggregatedServices.size === 0) return;
+
+    for (const [serviceName] of aggregatedServices) {
+      try {
+        // Find which live node is running this service and what port it's on
+        let instanceAddress: string | null = null;
+        let instancePort: number | null = null;
+
+        for (const nodeId of activeNodeIds) {
+          const workloads = await this.getWorkloads(nodeId);
+          const entry = workloads?.find((s) => s.name === serviceName);
+          // Use host_port (the Docker-mapped port in 61000-64999 range) — this is
+          // what Traefik must route to. `port` is the internal container port (e.g. 3000).
+          const hostPort = entry?.host_port ?? entry?.hostPort;
+          if (!hostPort) continue;
+
+          const instance = await this.db.instances.find({ tag: nodeId });
+          if (!instance?.address) continue;
+
+          instanceAddress = instance.address;
+          instancePort = Number(hostPort);
+          break;
+        }
+
+        if (!instanceAddress || !instancePort || !Number.isInteger(instancePort) || instancePort <= 0) continue;
+
+        const expectedUrl = `http://${instanceAddress}:${instancePort}`;
+        const currentUrl = await this.traefik.getRouteBackendUrl(serviceName);
+
+        if (currentUrl === expectedUrl) continue;
+
+        await this.traefik.registerRoute({ serviceName, instanceAddress, instancePort });
+        this.log.info(`Traefik route ${currentUrl ? "updated" : "registered"} for service ${serviceName}`, {
+          old: currentUrl ?? "none",
+          new: expectedUrl,
+        });
+      } catch (err) {
+        this.log.error(`Failed to reconcile Traefik route for ${serviceName}`, { error: String(err) });
+      }
+    }
+  }
+
   private async backfillDeploymentLinks({
     cluster,
     dbServices,
@@ -203,7 +291,7 @@ export class WorkloadSupervisor {
         type: service.type,
         deploymentId: deployment.id,
       });
-      this.log.info(`Linked service ${service.name} to deployment ${deployment.id}`);
+      this.log.info(`Linked service ${service.name} to deployment ${deployment.name}`);
       changed = true;
     }
 
@@ -211,6 +299,13 @@ export class WorkloadSupervisor {
   }
 
   private async reprovisionService(service: Service, cluster: Cluster): Promise<void> {
+    const cooldownKey = `${cluster.id}:${service.name}`;
+    const lastSent = this.reprovisionSentAt.get(cooldownKey);
+    if (lastSent && Date.now() - lastSent < REPROVISION_COOLDOWN_MS) {
+      this.log.debug(`Skipping reprovision for ${service.name} — cooldown active`, { remainingMs: REPROVISION_COOLDOWN_MS - (Date.now() - lastSent) });
+      return;
+    }
+
     if (!service.deploymentId) {
       this.log.warn(`Service ${service.name} has no deployment reference — skipping reprovision`);
       return;
@@ -222,9 +317,45 @@ export class WorkloadSupervisor {
     }
 
     try {
+      // reprovison only if there's no active deployment in-flight
+      const activeNodeIds = await this.resolveConnectedNodes(cluster);
+      let nodeDataAvailable = false;
+
+      for (const nodeId of activeNodeIds) {
+        const workloadsEntity = await this.kv.entities.getEntity<{ services?: any[]; deployments?: any[] }>(
+          KV_KEYS.INSTANCE.ENTITY(nodeId, "workloads")
+        );
+        if (!workloadsEntity) continue;
+        nodeDataAvailable = true;
+
+        const inFlight = (workloadsEntity.data?.deployments ?? []).find(
+          (d: any) =>
+            d.name === service.name &&
+            (d.status === "pending" || d.status === "in_progress"),
+        );
+        if (inFlight) {
+          this.log.info(`Service ${service.name} has an in-flight deployment on ${nodeId} (${inFlight.status}) — skipping reprovision`);
+          return;
+        }
+      }
+
+      if (!nodeDataAvailable) {
+        // Node hasn't sent workloads yet — fall back to DB as a safety net
+        const { deployments: pendingInDb } = await this.db.deployments.list({
+          serviceId: service.id,
+          status: "pending",
+          limit: 1,
+          offset: 0,
+        });
+        if (pendingInDb.length > 0) {
+          this.log.info(`Service ${service.name} has a pending deployment in DB (no node data yet) — skipping reprovision`);
+          return;
+        }
+      }
+
       const deployment = await this.db.deployments.get(service.deploymentId);
       if (!deployment) {
-        this.log.warn(`Deployment ${service.deploymentId} not found for service ${service.name} — skipping`);
+        this.log.warn(`Deployment not found for service ${service.name} — skipping reprovision`);
         return;
       }
 
@@ -266,16 +397,18 @@ export class WorkloadSupervisor {
       const routingKey = await this.getRoutingKey(cluster);
 
       if (!routingKey) {
-        this.log.warn(`No instance found for cluster ${cluster.name}`);
+        this.log.warn(`No instance found for cluster ${cluster.name} — triggering reallocation`);
+        await this.reallocateCluster?.(cluster.id);
         return;
       }
 
       const taskId = ulid();
-      const token = await this.jwtService.createNodeAccessToken(routingKey);
+      const token = await this.jwtService.createReprovisionToken(routingKey, cluster.id, deployment.userId);
       const task = this.dployrdService.createDeployTask(taskId, blueprint, token);
 
       const sent = this.connectionManager.sendTask(routingKey, task);
       if (sent) {
+        this.reprovisionSentAt.set(cooldownKey, Date.now());
         this.log.info(`Reprovisioning service ${service.name} via task ${taskId}`);
       } else {
         this.log.warn(`No connected node to reprovision ${service.name}`);
@@ -288,23 +421,25 @@ export class WorkloadSupervisor {
   // Note: This does its best effort to get an instance to re-provison the service to
   // In the future we can improve this by adding user prefs and checking where to re-provision by default
   private async getRoutingKey(cluster: Cluster): Promise<string | undefined> {
-    // Derive routing key: pool clusters send to pool:tag, dedicated clusters send to tag
-    let routingKey: string | undefined;
-
     if (cluster.poolInstanceId) {
       const poolInstance = await this.db.instances.find({ id: cluster.poolInstanceId });
+      if (poolInstance?.tag && this.connectionManager.hasNodeConnection(poolInstance.tag)) {
+        return poolInstance.tag;
+      }
       if (poolInstance?.tag) {
-        routingKey = `pool:${poolInstance.tag}`;
+        this.log.warn(`Pool instance ${poolInstance.tag} has no active connection — skipping`, { cluster: cluster.name });
       }
     }
 
-    if (!routingKey) {
-      // Either not a pool cluster, or pool instance lookup failed — try dedicated
-      const dedicatedInstance = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
-      if (!dedicatedInstance?.tag) return;
-      routingKey = dedicatedInstance.tag;
+    // Either not a pool cluster, pool instance is dead, or lookup failed — try dedicated
+    const dedicatedInstance = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
+    if (!dedicatedInstance?.tag) return undefined;
+
+    if (!this.connectionManager.hasNodeConnection(dedicatedInstance.tag)) {
+      this.log.warn(`Dedicated instance ${dedicatedInstance.tag} has no active connection — skipping`, { cluster: cluster.name });
+      return undefined;
     }
 
-    return routingKey;
+    return dedicatedInstance.tag;
   }
 }
