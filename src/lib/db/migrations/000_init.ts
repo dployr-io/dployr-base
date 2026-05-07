@@ -3,7 +3,7 @@
 
 export const _000_init = `
 DO $$ BEGIN
-  CREATE TYPE instance_status AS ENUM ('healthy', 'degraded', 'offline', 'unreachable', 'maintenance');
+  CREATE TYPE instance_status AS ENUM ('healthy', 'degraded', 'offline', 'unreachable', 'maintenance', 'provisioning');
   CREATE TYPE instance_region AS ENUM ('us-east', 'us-west', 'us-central', 'eu-west', 'eu-central', 'eu-north', 'ap-south', 'ap-southeast', 'ap-northeast', 'af-south', 'me-central', 'sa-east');
   CREATE TYPE user_role AS ENUM ('owner', 'admin', 'developer', 'viewer', 'invited');
   CREATE TYPE service_type AS ENUM ('static', 'web', 'worker', 'job');

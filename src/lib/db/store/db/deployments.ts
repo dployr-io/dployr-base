@@ -83,7 +83,7 @@ export class DeploymentStore extends BaseStore {
           .prepare(
             `INSERT INTO deployments (id, cluster_id, user_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, created_at, logs, finished_at, service_id, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
-           ON CONFLICT (id) DO UPDATE SET
+           ON CONFLICT (name) DO UPDATE SET
              status = $7,
              description = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.description ELSE $8 END,
              run_cmd = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.run_cmd ELSE $9 END,
@@ -147,8 +147,16 @@ export class DeploymentStore extends BaseStore {
     }
   }
 
-  async get(id: string): Promise<Deployment | null> {
-    const row = await this.db.prepare(`SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, created_at, finished_at FROM deployments WHERE id = $1`).bind(id).first();
+  async get(filter: string | { id?: string; name?: string }): Promise<Deployment | null> {
+    const id = typeof filter === "string" ? filter : filter.id;
+    const name = typeof filter === "object" ? filter.name : undefined;
+    const sel = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, created_at, finished_at FROM deployments WHERE`;
+    if (id) {
+      const row = await this.db.prepare(`${sel} id = $1`).bind(id).first()
+        ?? await this.db.prepare(`${sel} name = $1`).bind(id).first();
+      return row ? this.toDeployment(row) : null;
+    }
+    const row = await this.db.prepare(`${sel} name = $1`).bind(name!).first();
     return row ? this.toDeployment(row) : null;
   }
 

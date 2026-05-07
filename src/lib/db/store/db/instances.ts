@@ -254,8 +254,8 @@ export class InstanceStore extends BaseStore {
   }
 
   /**
-   * Resolves the WS routing key for a cluster pool clusters 
-   * @returns `pool:${tag}`.
+   * Resolves the WS routing key for a cluster.
+   * Returns the bare instance tag — connection manager handles pool: fallback internally.
    */
   async getRoutingKey(clusterId: string): Promise<string> {
     const poolInstanceId = await this.getClusterPoolInstance(clusterId);
@@ -263,8 +263,7 @@ export class InstanceStore extends BaseStore {
       return clusterId;
     }
     const poolInstance = await this.find({ id: poolInstanceId });
-    const routingKey = poolInstance ? `pool:${poolInstance.tag}` : clusterId;
-    return routingKey;
+    return poolInstance?.tag ?? clusterId;
   }
 
 
@@ -286,9 +285,9 @@ export class InstanceStore extends BaseStore {
     }));
   }
 
-  async listUnassignedClusters(): Promise<{ id: string }[]> {
-    const result = await this.db.prepare(`SELECT id FROM clusters WHERE pool_instance_id IS NULL`).all();
-    return result.results.map((r) => ({ id: r.id as string }));
+  async listUnassignedClusters(): Promise<{ id: string; name: string }[]> {
+    const result = await this.db.prepare(`SELECT id, name FROM clusters WHERE pool_instance_id IS NULL`).all();
+    return result.results.map((r) => ({ id: r.id as string, name: r.name as string }));
   }
 
   private toInstance(row: any): Instance {
