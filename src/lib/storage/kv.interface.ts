@@ -41,30 +41,39 @@ export class RedisKV implements IKVAdapter {
     await this.client.del(key);
   }
 
-  async list(options: { prefix: string; limit?: number }): Promise<Array<{ name: string }>> {
-    const pattern = `${options.prefix}*`;
-    const keys: string[] = [];
+  private async *scanKeys(pattern: string): AsyncGenerator<string> {
+    const coerce = (raw: unknown): string =>
+      typeof raw === 'string' ? raw : ((raw as any)?.name ?? String(raw));
 
-    try {
-      let cursor = '0';
+    if (typeof this.client.scanIterator === 'function') {
+      for await (const raw of this.client.scanIterator({ MATCH: pattern, COUNT: 100 }))
+        yield coerce(raw);
+    } else {
+      let cursor = 0;
       do {
-        const res: any = await this.client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
-        
-        // Handle both [cursor, keys] and { cursor, keys } shapes
-        const [newCursor, batch] = Array.isArray(res) 
-          ? [res[0] ?? '0', res[1] ?? []]
-          : [res?.cursor ?? '0', res?.keys ?? []];
+        const res: any = await this.client.scan(cursor, { match: pattern, count: 100 });
+        // Upstash returns [cursor, keys[]]; node-redis returns { cursor, keys }
+        const [newCursor, batch]: [number, unknown[]] = Array.isArray(res)
+          ? [Number(res[0] ?? 0), res[1] ?? []]
+          : [Number(res?.cursor ?? 0), res?.keys ?? []];
+        cursor = newCursor;
+        for (const raw of batch) yield coerce(raw);
+      } while (cursor !== 0);
+    }
+  }
 
-        cursor = String(newCursor);
-        keys.push(...batch);
-        
+  async list(options: { prefix: string; limit?: number }): Promise<Array<{ name: string }>> {
+    const keys: string[] = [];
+    try {
+      for await (const key of this.scanKeys(`${options.prefix}*`)) {
+        keys.push(key);
         if (options.limit && keys.length >= options.limit) break;
-      } while (cursor !== '0');
+      }
     } catch (error) {
       log.error('Scan failed:', error);
+      throw error;
     }
-
-    return keys.slice(0, options.limit).map(name => ({ name }));
+    return keys.map(name => ({ name }));
   }
 }
 
