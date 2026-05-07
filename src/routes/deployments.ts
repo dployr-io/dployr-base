@@ -92,11 +92,11 @@ deployments.post("/finish", async (c) => {
         staticDir: blueprint.static_dir ?? payload?.static_dir,
         image: blueprint.image ?? payload?.image,
         domain: blueprint.domain ?? payload?.domain,
-        runtimeType: blueprint.runtime_type ?? blueprint.runtime ?? payload?.runtime,
-        runtimeVersion: blueprint.runtime_version ?? blueprint.version ?? payload?.version,
-        remoteUrl: blueprint.remote_url ?? payload?.remote?.url,
-        remoteBranch: blueprint.remote_branch ?? payload?.remote?.branch,
-        remoteCommitHash: blueprint.remote_commit_hash ?? payload?.remote?.commit_hash,
+        runtimeType: blueprint.runtime_type ?? blueprint.runtime.type ?? payload?.runtime,
+        runtimeVersion: blueprint.runtime_version ?? blueprint.runtime.version ?? payload?.version,
+        remoteUrl: blueprint.remote_url ?? blueprint.remote.url ?? payload?.remote?.url,
+        remoteBranch: blueprint.remote_branch ?? blueprint.remote?.branch ?? payload?.remote?.branch,
+        remoteCommitHash: blueprint.remote_commit_hash ?? blueprint.remote?.commit_hash ?? payload?.remote?.commit_hash,
         logs,
       });
 
@@ -196,7 +196,7 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     const jwtService = getJWTService(c);
     const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
     const task = dployrdService.createDeployTask(taskId, deployPayload, token);
-    const routingKey = instance.kind === "pool" ? `pool:${instanceName}` : instanceName;
+    const routingKey = instanceName;
     const kv = getKVStore(c);
 
     await kv.payloads.saveDeploymentPayload({ clusterId, instanceName, taskId, payload: deployPayload });

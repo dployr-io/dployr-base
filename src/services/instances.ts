@@ -377,7 +377,7 @@ export class InstanceService {
       throw new PermissionError("owner");
     }
     const ws = getWS(c);
-    const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
+    const routingKey = instance.tag;
     if (!ws.hasNodeConnection(routingKey)) {
       throw new InstanceNotConnectedError(tag);
     }
@@ -426,7 +426,7 @@ export class InstanceService {
       throw new PermissionError("admin");
     }
     const ws = getWS(c);
-    const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
+    const routingKey = instance.tag;
     if (!ws.hasNodeConnection(routingKey)) {
       throw new InstanceNotConnectedError(instanceId);
     }
@@ -474,7 +474,7 @@ export class InstanceService {
       throw new PermissionError("admin");
     }
     const ws = getWS(c);
-    const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
+    const routingKey = instance.tag;
     if (!ws.hasNodeConnection(routingKey)) {
       throw new InstanceNotConnectedError(instanceId);
     }
@@ -519,12 +519,16 @@ export class InstanceService {
     clusterId?: string;
     db: DatabaseStore;
     kv: KVStore;
-  }): Promise<Instance | null> {
+  }): Promise<{ instance: Instance; resolvedPath: string } | null> {
     const isService = path.startsWith("service:");
+    const isSystemLog = path === "app" || path === "";
     let clusterId = initialClusterId;
     let deployment: any = null;
 
-    if (isService) {
+    if (isSystemLog) {
+      // System log ("app") — no workload to match, just need a cluster instance
+      if (!clusterId) return null;
+    } else if (isService) {
       const service = await db.services.find({ name: path.slice(8), clusterId });
       if (!service) return null;
       clusterId = service.clusterId;
@@ -542,13 +546,9 @@ export class InstanceService {
     const instances = [...dedicated, ...(pool ? [pool] : [])];
     if (instances.length === 0) return null;
 
-    const matches = async (instance: Instance): Promise<boolean> => {
-      const workloads = await kv.entities.getEntity<{ services?: Record<string, any>[]; deployments?: Record<string, any>[] }>(
-        KV_KEYS.INSTANCE.ENTITY(instance.tag, "workloads"),
-      );
-      if (isService) return workloads?.data?.services?.some((s: any) => s.name === path.slice(8)) ?? false;
-      return workloads?.data?.deployments?.some((d: any) => d.id === path) ?? false;
-    };
+    // Resolve to a stable name-based path so the node never receives a UUID.
+    // System logs use "app"; services use "service:NAME"; deployments use the canonical name.
+    const resolvedPath = isSystemLog ? "app" : isService ? path : deployment.name;
 
     const connected: Instance[] = [];
     const disconnected: Instance[] = [];
@@ -557,13 +557,29 @@ export class InstanceService {
       else disconnected.push(instance);
     }
 
-    for (const instance of [...connected, ...disconnected]) {
-      if (await matches(instance)) return instance;
+    // System logs — route to any connected instance (no workload matching needed)
+    if (isSystemLog) {
+      const instance = connected[0] ?? disconnected[0] ?? null;
+      return instance ? { instance, resolvedPath } : null;
     }
 
-    // Deployment not in any update yet — if still in progress, route to any available instance
-    if (deployment?.status === "pending" || deployment?.status === "running") {
-      return connected[0] ?? disconnected[0] ?? null;
+    const matches = async (instance: Instance): Promise<boolean> => {
+      const workloads = await kv.entities.getEntity<{ services?: Record<string, any>[]; deployments?: Record<string, any>[] }>(
+        KV_KEYS.INSTANCE.ENTITY(instance.tag, "workloads"),
+      );
+      if (isService) return workloads?.data?.services?.some((s: any) => s.name === path.slice(8)) ?? false;
+      return workloads?.data?.deployments?.some((d: any) => d.name === deployment.name) ?? false;
+    };
+
+    for (const instance of [...connected, ...disconnected]) {
+      if (await matches(instance)) return { instance, resolvedPath };
+    }
+
+    // No workload match — route to any available instance.
+    // Completed/failed deployments are no longer in the live workloads list but their log files remain on disk.
+    if (deployment) {
+      const instance = connected[0] ?? disconnected[0] ?? null;
+      return instance ? { instance, resolvedPath } : null;
     }
 
     return null;

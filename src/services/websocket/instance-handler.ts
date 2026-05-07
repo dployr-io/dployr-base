@@ -19,6 +19,8 @@ import { parseMessage, type ClusterConnection } from "@/types/websocket-message.
 import type { BillingProvider } from "@/services/billing/provider.js";
 import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
 import { Logger } from "@/lib/logger.js";
+import { worker } from "@/services/background/index.js";
+import { NODES_HEALTH_JOB, NODES_SYNC_JOB } from "@/lib/constants/index.js";
 
 export interface WebSocketHandlerConfig {
   connectionManager?: Partial<ConnectionManagerConfig>;
@@ -84,6 +86,8 @@ export class WebSocketHandler {
     if (role === "node" && instanceTag) {
       conn.instanceTag = instanceTag;
       this.kvStore.setNodeConnected(instanceTag).catch(() => {});
+      worker.emit(NODES_HEALTH_JOB);
+      worker.emit(NODES_SYNC_JOB);
     }
 
     // Handle reconnection for clients
@@ -97,7 +101,7 @@ export class WebSocketHandler {
 
     ws.on("message", (data) => {
       this.handleMessage(conn, data).catch((err) => {
-        this.log.error(`Error handling message for cluster ${clusterId}:`, err);
+        this.log.error(`Error handling message for cluster ${clusterId}:`, err instanceof Error ? err : { error: String(err) });
       });
     });
 

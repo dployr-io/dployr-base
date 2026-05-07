@@ -69,10 +69,10 @@ export class DployrdService {
     };
   }
 
-  createServiceRemoveTask(taskId: string, serviceId: string, token?: string): NodeTask {
+  createServiceRemoveTask(taskId: string, serviceName: string, token?: string): NodeTask {
     return {
       ID: taskId,
-      Type: `services/${serviceId}:delete`,
+      Type: `services/${serviceName}:delete`,
       Payload: { token },
       Status: "pending",
     };

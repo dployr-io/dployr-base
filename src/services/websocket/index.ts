@@ -138,7 +138,7 @@ export class WebSocketService {
       if (!instance) return null;
 
       return {
-        connectionKey: instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag,
+        connectionKey: instance.tag,
         clusterId: instance.kind === "dedicated" ? instance.clusterId || undefined : undefined,
         instanceTag: instance.tag,
       };

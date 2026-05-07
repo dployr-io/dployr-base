@@ -53,9 +53,8 @@ export class NodeMessageHandler {
 
       const presentSections = NODE_STATE_ENTITIES.filter(s => (update as any)[s] !== undefined);
 
-      if (conn.connectionKey.startsWith("pool:")) {
-        const instanceTag = conn.connectionKey.slice("pool:".length);
-        const { clusters } = await this.db.clusters.list({ instanceTag: instanceTag });
+      if (!conn.clusterId) {
+        const { clusters } = await this.db.clusters.list({ instanceTag: conn.instanceTag });
         await Promise.all(
           clusters.map(async (cluster) => {
             await this.clientNotifier.broadcast(cluster.id, update.instance_id, presentSections);
@@ -283,9 +282,8 @@ export class NodeMessageHandler {
 
     try {
       // Deregister node from cluster(s)
-      if (conn.connectionKey.startsWith("pool:")) {
-        const instanceTag = conn.connectionKey.slice("pool:".length);
-        const { clusters } = await this.db.clusters.list({ instanceTag });
+      if (!conn.clusterId) {
+        const { clusters } = await this.db.clusters.list({ instanceTag: conn.instanceTag });
         for (const cluster of clusters) {
           await this.kv.instanceCache.deregisterClusterNode(cluster.id, nodeInstanceId);
         }

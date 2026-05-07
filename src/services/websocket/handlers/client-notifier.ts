@@ -56,6 +56,11 @@ export class ClientNotifier {
         const entity = await this.kv.entities.getEntity(KV_KEYS.INSTANCE.ENTITY(instanceId, section));
         if (!entity) continue;
 
+        if (section === "workloads") {
+          const services = (entity.data as any)?.services;
+          if (!Array.isArray(services) || services.length === 0) continue;
+        }
+
         const clientVersion = this.conn.getClientVersion(client.connectionId, instanceId, section);
         if (entity.version > clientVersion) {
           changed[section] = { data: entity.data, version: entity.version };

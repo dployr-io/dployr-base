@@ -13,6 +13,8 @@ export interface JobContext {
   db: DatabaseStore;
   kv: KVStore;
   adapters: Adapters;
+  /** Immediately fire a registered event-driven job by name. */
+  trigger: (event: string) => void;
 }
 
 export type JobFn = (ctx: JobContext) => Promise<void>;
@@ -36,6 +38,7 @@ export class BackgroundWorker {
   private scheduled: ScheduledEntry[] = [];
   private triggered: TriggeredEntry[] = [];
   private adapters: Adapters | null = null;
+  private triggerCooldowns = new Map<string, number>();
 
   schedule(name: string, intervalMs: number, fn: JobFn, options?: { runImmediately?: boolean }): this {
     this.scheduled.push({ name, intervalMs, fn, runImmediately: options?.runImmediately ?? false });
@@ -51,7 +54,13 @@ export class BackgroundWorker {
   /**
    * Trigger a registered event-driven job from anywhere in the app.
    */
-  emit(event: string): void {
+  emit(event: string, cooldownMs = 15_000): void {
+    const last = this.triggerCooldowns.get(event) ?? 0;
+    if (Date.now() - last < cooldownMs) {
+      log.debug(`Skipping duplicate trigger for "${event}" — cooldown active`);
+      return;
+    }
+    this.triggerCooldowns.set(event, Date.now());
     this.emitter.emit(event);
   }
 
@@ -99,6 +108,7 @@ export class BackgroundWorker {
       db: new DatabaseStore(this.adapters.db),
       kv: new KVStore(this.adapters.kv),
       adapters: this.adapters,
+      trigger: (event) => this.emitter.emit(event),
     };
     try {
       await fn(ctx);

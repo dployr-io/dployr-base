@@ -133,7 +133,7 @@ export class ConnectionManager {
    * Get all node connections for a cluster
    */
   getNodeConnections(key: string): ClusterConnection[] {
-    const conns = this.connections.get(key) || this.connections.get(`pool:${key}`);
+    const conns = this.connections.get(key);
     const found = conns ? Array.from(conns).filter((c) => c.role === "node") : [];
     return found;
   }
@@ -192,6 +192,26 @@ export class ConnectionManager {
 
     this.log.info(`Sent task ${task.ID} to ${sentCount}/${nodeConns.length} nodes (key: ${routingKey})`);
     return sentCount > 0;
+  }
+
+  /**
+   * Send a heartbeat to all nodes reachable via routingKey.
+   * The node responds with an immediate full sync (including workloads).
+   */
+  sendHeartbeat(routingKey: string): boolean {
+    const nodeConns = this.getNodeConnections(routingKey);
+    if (nodeConns.length === 0) return false;
+    const payload = JSON.stringify({ kind: MESSAGE_KIND.HEARTBEAT });
+    let sent = 0;
+    for (const nodeConn of nodeConns) {
+      try {
+        nodeConn.ws.send(payload);
+        sent++;
+      } catch (err) {
+        this.log.error("Failed to send heartbeat to node", { error: String(err) });
+      }
+    }
+    return sent > 0;
   }
 
   /**
@@ -353,7 +373,7 @@ export class ConnectionManager {
     const now = Date.now();
     const dead: ClusterConnection[] = [];
 
-    for (const [clusterId, conns] of this.connections) {
+    for (const [, conns] of this.connections) {
       for (const conn of conns) {
         const lastActivity = this.lastActivityMap.get(conn.ws) ?? conn.connectedAt;
         if (now - lastActivity > this.config.connectionTtlMs) {

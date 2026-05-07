@@ -48,11 +48,13 @@ import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { TerminalManager } from "@/services/websocket/terminal-manager.js";
 import { WSErrorCode, MESSAGE_KIND } from "@/lib/constants/websocket.js";
+import { MS_30_SECONDS } from "@/lib/constants/index.js";
 import { ALLOWED_TASKS_ON_POOLED_INSTANCES } from "@/lib/constants/instances.js";
 import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
 import type { NodeStateEntity } from "@/lib/constants/node-state.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { Logger } from "@/lib/logger.js";
+import { toISO } from "@/lib/utils.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -74,6 +76,9 @@ export class ClientMessageHandler {
   private terminalManager: TerminalManager;
   private connectionManager: ConnectionManager;
   private log = new Logger("ws-client");
+  // Tracks last time we requested a fresh sync from a node (keyed by instanceId).
+  // Prevents heartbeat spam when KV is persistently empty.
+  private nodeHeartbeatRequestedAt = new Map<string, number>();
 
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
@@ -217,30 +222,172 @@ export class ClientMessageHandler {
    * Handle heartbeat from client - sync all instance updates
    */
   private async handleHeartbeat(conn: ClusterConnection, msg: HeartbeatMessage): Promise<void> {
-    const instanceIds = await this.kv.instanceCache.getClusterNodes(conn.connectionKey);
+    const clusterId = conn.connectionKey;
+    const instanceIds = await this.resolveInstanceTagsForCluster(clusterId);
 
+    // Even if no live node is connected, we can always serve cold DB state
+    // for workloads so the client never shows a blank screen.
+    const syntheticWorkloads = await this.buildWorkloadsFromDB(clusterId);
+
+    // Collect changed sections per instance
     for (const instanceId of instanceIds) {
-      const changed: Record<string, {data: unknown; version: number}> = {};
+      const changed: Record<string, { data: unknown; version: number }> = {};
       const knownVersions = msg.versions?.[instanceId] ?? {};
 
+      // All sections except workloads use standard version-gating.
       for (const section of NODE_STATE_ENTITIES) {
+        if (section === "workloads") continue;
         const entity = await this.kv.entities.getEntity(KV_KEYS.INSTANCE.ENTITY(instanceId, section));
         if (!entity) continue;
-
         const clientVersion = knownVersions[section] ?? 0;
         if (entity.version > clientVersion) {
-          changed[section] = {data: entity.data, version: entity.version};
+          changed[section] = { data: entity.data, version: entity.version };
+        }
+      }
+
+      // Workloads: content-aware fallback to DB when the live node reports empty.
+      // We fetch the entity directly so we can inspect its content regardless of whether the
+      // version changed — this avoids the oscillation caused by checking changed["workloads"].
+      const workloadsEntity = await this.kv.entities.getEntity(KV_KEYS.INSTANCE.ENTITY(instanceId, "workloads"));
+      const clientWorkloadsVersion = knownVersions["workloads"] ?? 0;
+      const liveHasServices = Array.isArray((workloadsEntity?.data as any)?.services) &&
+        (workloadsEntity!.data as any).services.length > 0;
+
+      if (liveHasServices) {
+        if (workloadsEntity!.version > clientWorkloadsVersion) {
+          changed["workloads"] = { data: workloadsEntity!.data, version: workloadsEntity!.version };
+        }
+      } else {
+        // Node is empty — serve DB data using a version derived from DB content (not the KV
+        // entity version). This prevents re-sends every time the node increments the entity
+        // with another empty update.
+        if (syntheticWorkloads) {
+          if (syntheticWorkloads.version !== clientWorkloadsVersion) {
+            changed["workloads"] = { data: syntheticWorkloads.data, version: syntheticWorkloads.version };
+          }
+        }
+
+        // Proactively request a fresh full sync from the node so the next heartbeat gets real data.
+        const lastRequested = this.nodeHeartbeatRequestedAt.get(instanceId) ?? 0;
+        if (Date.now() - lastRequested > MS_30_SECONDS) {
+          const sent = this.connectionManager.sendHeartbeat(instanceId);
+          if (sent) {
+            this.nodeHeartbeatRequestedAt.set(instanceId, Date.now());
+            this.log.debug(`Requested fresh sync from node ${instanceId} — workloads empty`);
+          }
         }
       }
 
       if (!Object.keys(changed).length) continue;
 
-      conn.ws.send(JSON.stringify({kind: MESSAGE_KIND.DELTA_UPDATE, instanceId, sections: changed}));
+      conn.ws.send(JSON.stringify({ kind: MESSAGE_KIND.DELTA_UPDATE, instanceId, sections: changed }));
 
-      for (const [section, {version}] of Object.entries(changed)) {
+      for (const [section, { version }] of Object.entries(changed)) {
         this.connectionManager.setClientVersion(conn.connectionId, instanceId, section as NodeStateEntity, version);
       }
     }
+
+    // No live instance at all — serve DB cold storage. Re-sends when DB content changes.
+    if (instanceIds.length === 0 && syntheticWorkloads) {
+      const fakeInstanceId = `${clusterId}:db`;
+      const clientVersion = msg.versions?.[fakeInstanceId]?.["workloads"] ?? 0;
+      if (syntheticWorkloads.version !== clientVersion) {
+        conn.ws.send(JSON.stringify({
+          kind: MESSAGE_KIND.DELTA_UPDATE,
+          instanceId: fakeInstanceId,
+          sections: { workloads: { data: syntheticWorkloads.data, version: syntheticWorkloads.version } },
+        }));
+      }
+    }
+  }
+
+  private async resolveInstanceTagsForCluster(clusterId: string): Promise<string[]> {
+    const tags: string[] = [];
+    const cluster = await this.db.clusters.find({ id: clusterId });
+
+    if (cluster?.poolInstanceId) {
+      const instance = await this.db.instances.find({ id: cluster.poolInstanceId });
+      if (instance?.tag) tags.push(instance.tag);
+    }
+
+    const dedicated = await this.db.instances.find({ clusterId, kind: "dedicated" });
+    if (dedicated?.tag && !tags.includes(dedicated.tag)) tags.push(dedicated.tag);
+
+    return tags;
+  }
+
+  /** Synthesize a workloads payload from DB so the client always has something to show. */
+  private async buildWorkloadsFromDB(clusterId: string): Promise<{ data: { services: unknown[]; deployments: unknown[] }; version: number } | null> {
+    const [{ services }, { deployments }] = await Promise.all([
+      this.db.services.list({ clusterId }),
+      this.db.deployments.list({ clusterId, limit: 50, offset: 0 }),
+    ]);
+
+    if (services.length === 0 && deployments.length === 0) return null;
+
+    const servicePayloads = await Promise.all(
+      services.map(async (svc) => {
+        const dep = svc.deploymentId ? await this.db.deployments.get(svc.deploymentId) : null;
+        return {
+          id: svc.id,
+          name: svc.name,
+          description: dep?.description ?? "",
+          type: svc.type,
+          source: dep?.source ?? "remote",
+          runtime: dep?.runtimeType ?? "",
+          runtime_version: dep?.runtimeVersion ?? null,
+          port: dep?.port ?? null,
+          working_dir: dep?.workingDir ?? null,
+          run_cmd: dep?.runCmd ?? null,
+          build_cmd: dep?.buildCmd ?? null,
+          remote_url: dep?.remoteUrl ?? null,
+          branch: dep?.remoteBranch ?? null,
+          commit_hash: dep?.remoteCommitHash ?? null,
+          deployment_id: svc.deploymentId ?? null,
+          env_vars: {},
+          secrets: [],
+          created_at: toISO(svc.createdAt),
+          updated_at: toISO(svc.updatedAt),
+        };
+      })
+    );
+
+    const deploymentPayloads = deployments.map((d) => ({
+      id: d.id,
+      user_id: d.userId,
+      name: d.name,
+      description: d.description ?? "",
+      type: d.type,
+      source: d.source,
+      status: d.status,
+      port: d.port ?? null,
+      working_dir: d.workingDir ?? null,
+      run_cmd: d.runCmd ?? null,
+      build_cmd: d.buildCmd ?? null,
+      runtime: { type: d.runtimeType ?? "", version: d.runtimeVersion ?? null },
+      remote: d.remoteUrl ? { url: d.remoteUrl, branch: d.remoteBranch ?? "", commit_hash: d.remoteCommitHash ?? null } : null,
+      env_vars: {},
+      secrets: [],
+      created_at: toISO(d.createdAt),
+      updated_at: toISO(d.finishedAt ?? d.createdAt),
+    }));
+
+    // Derive a stable version from DB content — only increments when records actually change.
+    // This prevents the KV entity's ever-incrementing version (from empty node updates)
+    // from causing constant re-sends of synthetic data to the client.
+    const toMs = (v: any): number => {
+      if (!v) return 0;
+      if (typeof v === "number") return v;
+      const t = new Date(v).getTime();
+      return isNaN(t) ? 0 : t;
+    };
+    const dbVersion = Math.max(
+      1,
+      ...services.map((s) => toMs(s.updatedAt ?? s.createdAt)),
+      ...deployments.map((d) => toMs(d.finishedAt ?? d.createdAt)),
+    );
+
+    return { data: { services: servicePayloads, deployments: deploymentPayloads }, version: dbVersion };
   }
 
   /**
@@ -262,10 +409,11 @@ export class ClientMessageHandler {
   }
 
   /**
-   * Handle log stream for deployments and services
+   * Handle log stream for deployments, services, and system logs
    * path formats:
-   *   - "<deployment-id>" for deployment logs
-   *   - "service:<service-name>" for service logs
+   *   - "app" or "" for system (daemon) logs
+   *   - "<deployment-id>" for deployment logs (resolved to service name before forwarding)
+   *   - "service:<service-name>" for service runtime logs
    */
   private async handleLogSubscribe(conn: ClusterConnection, message: LogSubscribeMessage): Promise<void> {
     const { path, streamId, duration, startFrom } = message;
@@ -280,8 +428,17 @@ export class ClientMessageHandler {
       return;
     }
 
-    // Create new subscription
     const startOffset = startFrom === -1 ? undefined : startFrom;
+
+    const result = await InstanceService.findInstanceWithWorkload({ path, clusterId: conn.clusterId, db: this.db, kv: this.kv });
+    if (!result) {
+      this.log.error(`No instance found with deployment/service at path ${path}`);
+      this.sendError(conn, streamId, WSErrorCode.INTERNAL_ERROR, "Deployment or service not found on any instance");
+      return;
+    }
+
+    const { instance, resolvedPath } = result;
+
     this.connectionManager.addLogStream({
       streamId,
       path,
@@ -290,30 +447,23 @@ export class ClientMessageHandler {
       duration,
     });
 
-    let instance = await InstanceService.findInstanceWithWorkload({ path, clusterId: conn.clusterId, db: this.db, kv: this.kv });
-    if (!instance) {
-      this.log.error(`No instance found with deployment/service at path ${path}`);
-      this.sendError(conn, streamId, WSErrorCode.INTERNAL_ERROR, "Deployment or service not found on any instance");
-      return;
-    }
-
     const nodeToken = await this.jwtService.createNodeAccessToken(instance.tag);
     const task = this.dployrdService.createLogStreamTask({
       streamId,
-      path,
+      path: resolvedPath,
       startOffset,
       duration,
       token: nodeToken,
     });
 
-    const routingKey = instance.kind === "pool" ? `pool:${instance.tag}` : instance.tag;
+    const routingKey = instance.tag;
     const sent = this.connectionManager.sendTask(routingKey, task);
 
     if (!sent) {
       this.log.error(`Failed to send log task - no node connections for routing key ${routingKey}`);
     }
 
-    this.log.info(`Created log stream ${streamId} for path ${path}, in instance ${conn.instanceTag}, ID: ${conn.connectionKey}`);
+    this.log.info(`Created log stream ${streamId} for ${resolvedPath} on ${instance.tag}`);
   }
 
   /**
@@ -587,15 +737,6 @@ export class ClientMessageHandler {
     }
 
     this.log.info(`Created file tree task ${taskId} (requestId: ${requestId})`);
-  }
-
-  /**
-   * Build a unique stream ID
-   */
-  private buildStreamId(clusterId: string, path: string, startOffset?: number, limit?: number, duration?: string): string {
-    const offsetKey = startOffset ?? 0;
-    const limitKey = limit ?? -1;
-    return `${clusterId}:${path}:${offsetKey}:${limitKey}:${duration}`;
   }
 
   /**

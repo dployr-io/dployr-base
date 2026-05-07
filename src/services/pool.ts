@@ -42,11 +42,13 @@ export class InstancePool extends EventEmittable {
 
   /** Provision a brand‑new pool instance and assign it to a cluster. */
   public async spawnPoolInstance({ clusterId }: { clusterId: string }): Promise<void> {
+    const cluster = await this.db.clusters.find({ id: clusterId });
+    const clusterName = cluster?.name ?? clusterId;
     try {
       await this.createPoolInstance();
       await this.db.instances.assignPool(clusterId);
     } catch (err) {
-      this.log.error("Failed to provision pool instance for cluster", { clusterId, error: String(err) });
+      this.log.error(`Failed to provision pool instance for cluster ${clusterName}`, { error: String(err) });
     }
   }
 
@@ -88,20 +90,22 @@ export class InstancePool extends EventEmittable {
       capacity: DEFAULT_CAPACITY,
       tag,
       region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
-      status: "healthy",
+      status: "provisioning",
     });
   }
 
   public async allocateSharedPool(clusterId: string): Promise<void> {
+    const cluster = await this.db.clusters.find({ id: clusterId });
+    const clusterName = cluster?.name ?? clusterId;
     try {
       await this.db.instances.assignPool(clusterId);
       await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
-      this.log.info(`Assigned shared pool instance to cluster ${clusterId}`);
+      this.log.info(`Assigned shared pool instance to cluster ${clusterName}`);
     } catch (err) {
       if (!(err instanceof PoolCapacityExceededError)) throw err;
 
       if (!this.vm || !this.jwt) {
-        this.log.info(`Pool at capacity for cluster ${clusterId} — VM or JWT service not configured, cannot provision`);
+        this.log.info(`Pool at capacity for cluster ${clusterName} — VM or JWT service not configured, cannot provision`);
         return;
       }
 
@@ -110,13 +114,13 @@ export class InstancePool extends EventEmittable {
         return;
       }
 
-      this.log.info(`Pool at capacity — provisioning new instance for cluster ${clusterId}`);
+      this.log.info(`Pool at capacity — provisioning new instance for cluster ${clusterName}`);
       await this.kv.kv.put(KV_KEYS.POOL.PROVISION_LOCK, "1", { ttl: POOL_PROVISION_LOCK_TTL });
       await this.createPoolInstance();
       await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId);
       await this.db.instances.assignPool(clusterId);
       await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
-      this.log.info(`Provisioned and assigned new instance to cluster ${clusterId}`);
+      this.log.info(`Provisioned and assigned new instance to cluster ${clusterName}`);
     }
   }
 }

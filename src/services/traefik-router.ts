@@ -53,6 +53,14 @@ export class TraefikService {
    *
    * @param serviceName - The service name
    */
+  /**
+   * Returns the currently registered backend URL for a service, or null if not registered.
+   * Used to detect missing or stale routes without doing a full re-register.
+   */
+  async getRouteBackendUrl(serviceName: string): Promise<string | null> {
+    return this.redis.get(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName));
+  }
+
   async unregisterRoute(serviceName: string): Promise<void> {
     const routeKey = serviceName;
 
