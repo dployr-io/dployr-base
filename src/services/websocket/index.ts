@@ -11,6 +11,9 @@ import { initializeAdapters, type Adapters } from "@/lib/config/bootstrap.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import type { Session } from "@/types/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Server");
 
 export class WebSocketService {
   private server: Server;
@@ -30,7 +33,7 @@ export class WebSocketService {
     this.adapters = await initializeAdapters();
     const config = this.adapters.config;
     this.server.listen(config.server.port, config.server.host, () => {
-      console.log(`Dployr Base running on http://${config.server.host}:${config.server.port}`);
+      log.info(`Dployr Base running on http://${config.server.host}:${config.server.port}`);
     });
     this.setupGracefulShutdown();
   }
@@ -40,7 +43,7 @@ export class WebSocketService {
    */
   private setupGracefulShutdown(): void {
     const shutdown = async (signal: string) => {
-      console.log(`\n[Server] Received ${signal}, starting graceful shutdown...`);
+      log.info(`Received ${signal}, starting graceful shutdown...`);
 
       // Stop accepting new connections
       this.wss.close();
@@ -52,13 +55,13 @@ export class WebSocketService {
 
       // Close HTTP server
       this.server.close(() => {
-        console.log("[Server] HTTP server closed");
+        log.info("HTTP server closed");
         process.exit(0);
       });
 
       // Force exit after 10 seconds
       setTimeout(() => {
-        console.error("[Server] Forced shutdown after timeout");
+        log.error("Forced shutdown after timeout");
         process.exit(1);
       }, 10000);
     };
@@ -71,7 +74,7 @@ export class WebSocketService {
     return createServer(async (req, res) => {
       const upgradeHeader = req.headers["upgrade"];
       if (upgradeHeader && upgradeHeader.toLowerCase() === "websocket") {
-        console.log("WebSocket upgrade request detected, deferring to upgrade handler");
+        log.info("WebSocket upgrade request detected, deferring to upgrade handler");
         return;
       }
 

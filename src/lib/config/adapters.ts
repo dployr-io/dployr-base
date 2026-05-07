@@ -10,6 +10,9 @@ import type { Bindings } from "@/types/index.js";
 import { PolarService } from "@/services/billing/polar.js";
 import { DigitalOceanVMService } from "@/services/vm/index.js";
 import { EmailProvider, ZeptoProvider } from "@/services/notifications/email/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("adapters");
 
 /**
  * Create KV adapter from config
@@ -55,7 +58,7 @@ export async function createKVFromConfig(config: Config): Promise<IKVAdapter> {
          ...(config.kv.password ? { password: config.kv.password } : {}),
        });
 
-       client.on("error", (err: any) => console.log("Redis Client Error", err));
+       client.on("error", (err: any) => log.error("Redis Client Error", { error: String(err) }));
 
        await client.connect();
 
@@ -75,7 +78,7 @@ export async function createKVFromConfig(config: Config): Promise<IKVAdapter> {
     }
 
     case "memory":
-      console.warn("Using in-memory KV; data will not persist across restarts. " + "For production deployments, configure Upstash or another managed Redis service.");
+      log.warn("Using in-memory KV; data will not persist across restarts. For production deployments, configure Upstash or another managed Redis service.");
       return new MemoryKV();
 
     default:
@@ -114,7 +117,7 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
         if (isProd) {
           throw new Error("Filesystem path required in production: storage.path");
         }
-        console.warn("Storage not configured; skipping filesystem storage initialization");
+        log.warn("Storage not configured; skipping filesystem storage initialization");
         return null;
       }
       const { mkdir } = await import("fs/promises");
@@ -128,7 +131,7 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
         if (isProd) {
           throw new Error("S3/DigitalOcean storage requires bucket and region in production");
         }
-        console.warn("S3/DigitalOcean storage not fully configured; skipping storage initialization");
+        log.warn("S3/DigitalOcean storage not fully configured; skipping storage initialization");
         return null;
       }
       const { S3Client } = await import("@aws-sdk/client-s3");
@@ -147,7 +150,7 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
       if (isProd) {
         throw new Error(`Unknown storage type in production: ${(config.storage as any).type}`);
       }
-      console.warn(`Unknown storage type: ${(config.storage as any).type}; skipping storage initialization`);
+      log.warn(`Unknown storage type: ${(config.storage as any).type}; skipping storage initialization`);
       return null;
   }
 }
@@ -177,7 +180,7 @@ export async function createStorageFromConfig(config: Config): Promise<any> {
          if (isProd) {
            throw new Error(`Unknown email provider in production: ${config.email?.provider}`);
          }
-         console.warn(`Unknown email provider: ${config.email?.provider}; email notifications will be disabled`);
+         log.warn(`Unknown email provider: ${config.email?.provider}; email notifications will be disabled`);
          return null;
      }
    }
@@ -210,7 +213,7 @@ export function createBillingProvider(config: Config): BillingProvider | null {
       if (isProd) {
         throw new Error(`Unknown billing provider in production: ${config.billing?.provider}`);
       }
-      console.warn(`Unknown billing provider: ${config.billing?.provider}; billing will be disabled`);
+      log.warn(`Unknown billing provider: ${config.billing?.provider}; billing will be disabled`);
       return null;
   }
 }
@@ -237,7 +240,7 @@ export function createVmProvider(config: Config): DigitalOceanVMService | null {
       if (isProd) {
         throw new Error(`Unknown VM provider in production: ${config.virtual_machines?.provider}`);
       }
-      console.warn(`Unknown VM provider: ${config.virtual_machines?.provider}; VM provisioning will be disabled`);
+      log.warn(`Unknown VM provider: ${config.virtual_machines?.provider}; VM provisioning will be disabled`);
       return null;
   }
 }
@@ -271,7 +274,7 @@ export async function createTraefikRedisFromConfig(config: Config): Promise<any 
         config.traefik.redis_password = url.password;
       }
     } else {
-      console.warn("Traefik enabled but no Redis configuration found; Traefik routing will be disabled");
+      log.warn("Traefik enabled but no Redis configuration found; Traefik routing will be disabled");
       return null;
     }
   }
@@ -287,10 +290,10 @@ export async function createTraefikRedisFromConfig(config: Config): Promise<any 
     ...(config.traefik.redis_password ? { password: config.traefik.redis_password } : {}),
   });
 
-  client.on("error", (err: any) => console.error("Traefik Redis Client Error", err));
+  client.on("error", (err: any) => log.error("Traefik Redis Client Error", { error: String(err) }));
 
   await client.connect();
-  console.log(`[Traefik] Connected to Redis at ${host}:${port}`);
+  log.info(`Connected to Redis at ${host}:${port}`);
 
   return client;
 }

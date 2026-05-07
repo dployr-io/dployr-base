@@ -4,6 +4,9 @@
 import type { Bindings } from "@/types/index.js";
 import { PolarRequestValidationError } from "@/lib/errors/errors.js";
 import { BillingProvider, CustomerParams, CheckoutParams, RawWebhookEvent } from "./provider.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("PolarService");
 
 export class PolarService implements BillingProvider {
   private baseUrl: string;
@@ -130,7 +133,7 @@ export class PolarService implements BillingProvider {
 
       return computed === receivedSig;
     } catch (error) {
-      console.error("[PolarService] signature verification error:", error);
+      log.error("Signature verification error:", { error: error instanceof Error ? error.message : String(error) });
       return false;
     }
   }

@@ -11,11 +11,14 @@ import { UpdateProcessor } from "@/lib/node/update-processor.js";
 import { NodeUpdate } from "@/types/node.js";
 import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
 import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
+import { Logger } from "@/lib/logger.js";
 
 /**
  * Handles messages from dployrd connections.
  */
 export class NodeMessageHandler {
+  private log = new Logger("ws-node");
+
   constructor(
     private connectionManager: ConnectionManager,
     private clientNotifier: ClientNotifier,
@@ -90,7 +93,7 @@ export class NodeMessageHandler {
     const { taskId, success, data, error } = message;
 
     if (!taskId) {
-      console.warn(`[WS] Received task_response without taskId`);
+      this.log.warn("Received task_response without taskId");
       return;
     }
 
@@ -148,7 +151,7 @@ export class NodeMessageHandler {
 
         request.ws.send(JSON.stringify(errorResponse));
         this.connectionManager.removePendingRequest(taskId);
-        console.warn(`[WS] Task ${taskId} failed: ${errorMessage}`);
+        this.log.warn(`Task ${taskId} failed: ${errorMessage}`);
         return;
       }
     }
@@ -201,7 +204,7 @@ export class NodeMessageHandler {
   private handleLogChunk(message: { streamId?: string; [key: string]: unknown }): void {
     const streamId = message.streamId;
     if (!streamId) {
-      console.warn(`[WS] Received log_chunk without streamId`);
+      this.log.warn("Received log_chunk without streamId");
       return;
     }
 
@@ -213,7 +216,7 @@ export class NodeMessageHandler {
     try {
       subscription.ws.send(JSON.stringify(message));
     } catch (err) {
-      console.error(`[WS] Failed to send log chunk to client:`, err);
+      this.log.error("Failed to send log chunk to client", { error: String(err) });
       // Clean up dead subscription
       this.connectionManager.removeLogStream(streamId);
     }
@@ -241,12 +244,12 @@ export class NodeMessageHandler {
           conn.ws.send(payload);
           sentCount++;
         } catch (err) {
-          console.error(`[WS] Failed to send file update to connection ${connectionId}:`, err);
+          this.log.error(`Failed to send file update to connection ${connectionId}`, { error: String(err) });
         }
       }
     }
 
-    console.log(`[WS] Broadcast file update for ${watchKey} to ${sentCount}/${subscribers.size} subscribers`);
+    this.log.info(`Broadcast file update for ${watchKey} to ${sentCount}/${subscribers.size} subscribers`);
   }
 
   /**
@@ -261,7 +264,7 @@ export class NodeMessageHandler {
         try {
           conn.ws.send(JSON.stringify({ kind: MESSAGE_KIND.HEARTBEAT }));
         } catch (err) {
-          console.error(`[WS] Failed to send heartbeat to node:`, err);
+          this.log.error("Failed to send heartbeat to node", { error: String(err) });
         }
       }
     }
@@ -271,7 +274,7 @@ export class NodeMessageHandler {
    * Handle node disconnection - cleanup cluster registrations
    */
   async handleNodeDisconnect(conn: ClusterConnection): Promise<void> {
-    console.log("[WS] Node disconnected from base: ", conn.connectionKey);
+    this.log.info(`Node disconnected from base: ${conn.connectionKey}`);
 
     const nodeInstanceId = (conn as any).nodeInstanceId || conn.instanceTag;
     if (!nodeInstanceId) {
@@ -290,7 +293,7 @@ export class NodeMessageHandler {
         await this.kv.instanceCache.deregisterClusterNode(conn.clusterId, nodeInstanceId);
       }
     } catch (err) {
-      console.error(`[WS] Error deregistering node ${nodeInstanceId}:`, err);
+      this.log.error(`Error deregistering node ${nodeInstanceId}`, { error: String(err) });
     }
   }
 }

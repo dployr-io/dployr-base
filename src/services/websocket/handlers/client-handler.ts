@@ -52,6 +52,7 @@ import { ALLOWED_TASKS_ON_POOLED_INSTANCES } from "@/lib/constants/instances.js"
 import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
 import type { NodeStateEntity } from "@/lib/constants/node-state.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import { Logger } from "@/lib/logger.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -72,6 +73,7 @@ export class ClientMessageHandler {
   private dployrdService: DployrdService;
   private terminalManager: TerminalManager;
   private connectionManager: ConnectionManager;
+  private log = new Logger("ws-client");
 
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
@@ -197,7 +199,7 @@ export class ClientMessageHandler {
       const error = createWSError(requestId, code, message, details);
       conn.ws.send(JSON.stringify(error));
     } catch (err) {
-      console.error(`[WS] Failed to send error to client:`, err);
+      this.log.error("Failed to send error to client", { error: String(err) });
     }
   }
 
@@ -254,7 +256,7 @@ export class ClientMessageHandler {
         };
         conn.ws.send(JSON.stringify(response));
       } catch (err) {
-        console.error(`[WS] Failed to send cached status:`, err);
+        this.log.error("Failed to send cached status", { error: String(err) });
       }
     }
   }
@@ -290,7 +292,7 @@ export class ClientMessageHandler {
 
     let instance = await InstanceService.findInstanceWithWorkload({ path, clusterId: conn.clusterId, db: this.db, kv: this.kv });
     if (!instance) {
-      console.error(`[ConnectionManager] No instance found with deployment/service at path ${path}`);
+      this.log.error(`No instance found with deployment/service at path ${path}`);
       this.sendError(conn, streamId, WSErrorCode.INTERNAL_ERROR, "Deployment or service not found on any instance");
       return;
     }
@@ -308,10 +310,10 @@ export class ClientMessageHandler {
     const sent = this.connectionManager.sendTask(routingKey, task);
 
     if (!sent) {
-      console.error(`[ClientMessageHandler] Failed to send log task - no node connections for routing key ${routingKey}`);
+      this.log.error(`Failed to send log task - no node connections for routing key ${routingKey}`);
     }
 
-    console.log(`[WS] Created log stream ${streamId} for path ${path}, in instance ${conn.instanceTag}, ID: ${conn.connectionKey}`);
+    this.log.info(`Created log stream ${streamId} for path ${path}, in instance ${conn.instanceTag}, ID: ${conn.connectionKey}`);
   }
 
   /**
@@ -376,7 +378,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    console.log(`[WS] Created file read task ${taskId} (requestId: ${requestId})`);
+    this.log.info(`Created file read task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -428,7 +430,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    console.log(`[WS] Created file write task ${taskId} (requestId: ${requestId})`);
+    this.log.info(`Created file write task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -480,7 +482,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    console.log(`[WS] Created file create task ${taskId} (requestId: ${requestId})`);
+    this.log.info(`Created file create task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -532,7 +534,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    console.log(`[WS] Created file delete task ${taskId} (requestId: ${requestId})`);
+    this.log.info(`Created file delete task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -584,7 +586,7 @@ export class ClientMessageHandler {
       return;
     }
 
-    console.log(`[WS] Created file tree task ${taskId} (requestId: ${requestId})`);
+    this.log.info(`Created file tree task ${taskId} (requestId: ${requestId})`);
   }
 
   /**
@@ -759,7 +761,7 @@ export class ClientMessageHandler {
     const { instanceId, startTime, endTime, requestId } = message;
 
     if (!requestId) {
-      console.warn("[WS] Process history request missing requestId");
+      this.log.warn("Process history request missing requestId");
       return;
     }
 
@@ -802,9 +804,9 @@ export class ClientMessageHandler {
       };
 
       conn.ws.send(JSON.stringify(response));
-      console.log(`[WS] Retrieved ${snapshots.length} process snapshots for ${instanceId} (requestId: ${requestId})`);
+      this.log.info(`Retrieved ${snapshots.length} process snapshots for ${instanceId} (requestId: ${requestId})`);
     } catch (error) {
-      console.error(`[WS] Failed to retrieve process history for ${instanceId}:`, error);
+      this.log.error(`Failed to retrieve process history for ${instanceId}`, { error: String(error) });
       this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to retrieve process history");
     }
   }

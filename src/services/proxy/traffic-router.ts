@@ -3,6 +3,9 @@
 
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("TrafficRouter");
 
 /**
  * Traffic routing configuration
@@ -135,7 +138,7 @@ export class TrafficRouter {
       // Fall back to step-by-step lookup if validateServiceCluster not available
       return this.lookupRouteStepByStep(serviceName, clusterName);
     } catch (error) {
-      console.error(`[TrafficRouter] Error looking up route: ${error}`);
+      log.error(`Error looking up route: ${error}`);
       return null;
     }
   }
@@ -149,19 +152,19 @@ export class TrafficRouter {
     // Find cluster by name first, then look for the service within it
     const cluster = await this.db.clusters.getByName(clusterName);
     if (!cluster) {
-      console.debug(`[TrafficRouter] Cluster not found: ${clusterName}`);
+      log.debug(`Cluster not found: ${clusterName}`);
       return null;
     }
 
     const service = await this.db.services.find({ name: serviceName, clusterId: cluster.id });
     if (!service) {
-      console.debug(`[TrafficRouter] Service not found: ${serviceName} in cluster ${clusterName}`);
+      log.debug(`Service not found: ${serviceName} in cluster ${clusterName}`);
       return null;
     }
 
     const instance = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
     if (!instance) {
-      console.debug(`[TrafficRouter] No dedicated instance for cluster: ${clusterName}`);
+      log.debug(`No dedicated instance for cluster: ${clusterName}`);
       return null;
     }
 
@@ -174,7 +177,7 @@ export class TrafficRouter {
       instanceId: instance.id,
     };
   } catch (error) {
-    console.error(`[TrafficRouter] Error in step-by-step lookup: ${error}`);
+    log.error(`Error in step-by-step lookup: ${error}`);
     return null;
   }
 }

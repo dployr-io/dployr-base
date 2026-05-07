@@ -5,6 +5,9 @@ import { Hono } from "hono";
 import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getJWTService, getDbStore } from "@/lib/config/context.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Node");
 
 const node = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -26,7 +29,7 @@ node.post("/token", async (c) => {
   try {
     payload = await jwtService.verifyTokenIgnoringExpiry(rawToken);
   } catch (error) {
-    console.error("[Node] Invalid node token on /v1/node/token", error);
+    log.error("Invalid node token on /v1/node/token", error);
     return c.json(
       createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
@@ -87,7 +90,7 @@ async function handleCert(c: any, upsert: boolean) {
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("[Node] Invalid node token on /cert", err);
+    log.error("Invalid node token on /cert", err);
     return c.json(
       createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,
@@ -179,7 +182,7 @@ node.get("/ws", async (c) => {
   try {
     token = await jwtService.verifyToken(rawToken);
   } catch (err) {
-    console.error("[Node] Invalid node token on /ws", err);
+    log.error("Invalid node token on /ws", err);
     return c.json(
       createErrorResponse({ message: ERROR.AUTH.BAD_TOKEN.message, code: ERROR.AUTH.BAD_TOKEN.code }),
       ERROR.AUTH.BAD_TOKEN.status,

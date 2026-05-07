@@ -10,6 +10,9 @@ import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { getKVStore, getOAuthService, getDbStore, getJWTService, getEmailService, getAuthService } from "@/lib/config/context.js";
 import { worker } from "@/services/background/index.js";
 import { notify } from "@/services/background/jobs/notify.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Auth");
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -114,7 +117,7 @@ auth.get("/callback/:provider", async (c) => {
 
     return c.redirect(c.env.APP_URL);
   } catch (error) {
-    console.error("[Auth] OAuth error:", error);
+    log.error("OAuth error:", error);
     return c.redirect(`${c.env.APP_URL}/?authError=${encodeURIComponent(`Failed to sign-in with ${provider}. Try email instead.`)}`);
   }
 });
@@ -141,7 +144,7 @@ auth.post("/login/email", async (c) => {
     try {
       await authService.sendOTP({ email, emailProvider: getEmailService(c) });
     } catch (error) {
-      console.error("[Auth] Send OTP error:", error);
+      log.error("Send OTP error:", error);
       return c.json(
         createErrorResponse({ message: "Failed to send code. Wait a few moments and try again.", code: ERROR.REQUEST.BAD_REQUEST.code }),
         ERROR.REQUEST.BAD_REQUEST.status,

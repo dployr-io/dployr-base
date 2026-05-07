@@ -2,6 +2,9 @@ import { Session, User } from "@/types/index.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { OTP_TTL, SESSION_TTL, STATE_TTL } from "@/lib/constants/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("OAuth");
 
 /**
  * Session-related KV operations: auth sessions, OTP, OAuth state.
@@ -142,7 +145,7 @@ export class SessionStore {
     try {
       const data = await this.kv.get(KV_KEYS.WORKFLOW.STATE(state));
       if (!data) {
-        console.error(`[OAuth] State validation failed: state not found in KV store (state: ${state})`);
+        log.error(`State validation failed: state not found in KV store (state: ${state})`);
         return null;
       }
 
@@ -152,11 +155,11 @@ export class SessionStore {
         createdAt: number;
       };
 
-      console.log(`[OAuth] State validated successfully (redirectUrl: ${stateData.redirectUrl})`);
+      log.info(`State validated successfully (redirectUrl: ${stateData.redirectUrl})`);
       await this.kv.delete(KV_KEYS.WORKFLOW.STATE(state));
       return stateData.redirectUrl;
     } catch (error) {
-      console.error(`[OAuth] State validation error:`, error);
+      log.error(`State validation error:`, error);
       return null;
     }
   }

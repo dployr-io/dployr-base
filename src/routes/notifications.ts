@@ -7,6 +7,9 @@ import { ERROR, DEFAULT_EVENTS } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
 import { getDbStore } from "@/lib/config/context.js";
 import z from "zod";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Notifications");
 
 const notifications = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -67,7 +70,7 @@ notifications.post("/events/setup", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ integration, events }, "Notification events updated"));
   } catch (error) {
-    console.error("[Notifications] Notification events setup error:", error);
+    log.error("Notification events setup error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -90,7 +93,7 @@ notifications.post("/discord/setup", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ webhookUrl, enabled, events: events || DEFAULT_EVENTS }, "Discord integration configured"));
   } catch (error) {
-    console.error("[Notifications] Discord setup error:", error);
+    log.error("Discord setup error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -113,7 +116,7 @@ notifications.post("/slack/setup", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ webhookUrl, enabled, events: events || DEFAULT_EVENTS }, "Slack integration configured"));
   } catch (error) {
-    console.error("[Notifications] Slack setup error:", error);
+    log.error("Slack setup error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -136,7 +139,7 @@ notifications.post("/webhook/setup", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ webhookUrl, enabled, events: events || DEFAULT_EVENTS }, "Custom webhook integration configured"));
   } catch (error) {
-    console.error("[Notifications] Webhook setup error:", error);
+    log.error("Webhook setup error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -159,7 +162,7 @@ notifications.post("/email/setup", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ enabled, events }, "Email notification configured"));
   } catch (error) {
-    console.error("[Notifications] Email notification setup error:", error);
+    log.error("Email notification setup error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",

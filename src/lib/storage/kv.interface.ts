@@ -1,6 +1,10 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("RedisKV");
+
 /**
  * KV storage interface
  */
@@ -57,7 +61,7 @@ export class RedisKV implements IKVAdapter {
         if (options.limit && keys.length >= options.limit) break;
       } while (cursor !== '0');
     } catch (error) {
-      console.error('[RedisKV] scan failed:', error);
+      log.error('Scan failed:', error);
     }
 
     return keys.slice(0, options.limit).map(name => ({ name }));

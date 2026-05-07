@@ -1,11 +1,14 @@
 // pool.routes.ts
 import { Hono } from "hono";
+import { z } from "zod";
 import { Bindings, Variables, createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { getDbStore } from "@/lib/config/context.js";
 import { DatabaseConflictError } from "@/lib/errors/errors.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { z } from "zod";
 import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Admin/Pool");
 
 const addPoolInstanceSchema = z.object({
   address: z.string().regex(/^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/, "Address must be a valid IPv4 address"),
@@ -33,7 +36,7 @@ pool.get("/", async (c) => {
     const paginated = createPaginatedResponse(enriched, page, pageSize, total);
     return c.json(createSuccessResponse({ data: paginated }));
   } catch (error: any) {
-    console.error("[Admin/Pool] Failed to list instance pools: ", error);
+    log.error("Failed to list instance pools: ", error);
     if (error instanceof DatabaseConflictError) {
       return c.json(createErrorResponse({ message: "Instance with that address or tag already exists", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
     }
@@ -68,7 +71,7 @@ pool.post("/", async (c) => {
     const instance = await db.instances.addPool({ address, tag, region, capacity, status: "healthy" });
     return c.json(createSuccessResponse({ instance }));
   } catch (error: any) {
-    console.error("[Admin/Pool] Failed to add instance pools: ", error);
+    log.error("Failed to add instance pools: ", error);
     if (error instanceof DatabaseConflictError) {
       return c.json(createErrorResponse({ message: "Instance with that address or tag already exists", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
     }
@@ -85,7 +88,7 @@ pool.delete("/:id", async (c) => {
     await db.instances.removePool(id);
     return c.json(createSuccessResponse({ deleted: id }));
   } catch (error: any) {
-    console.error("[Admin/Pool] Failed to remove instance from pools: ", error);
+    log.error("Failed to remove instance from pools: ", error);
     if (error instanceof DatabaseConflictError) {
       return c.json(createErrorResponse({ message: "Instance with that address or tag already exists", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
     }
@@ -114,7 +117,7 @@ pool.patch("/:id", async (c) => {
     await db.instances.update({ id }, { status });
     return c.json(createSuccessResponse({ id, status }));
   } catch (error: any) {
-    console.error("[Admin/Pool] Failed to update instance pools: ", error);
+    log.error("Failed to update instance pools: ", error);
     if (error instanceof DatabaseConflictError) {
       return c.json(createErrorResponse({ message: "Instance with that address or tag already exists", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
     }

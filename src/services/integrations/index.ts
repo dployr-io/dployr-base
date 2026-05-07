@@ -8,6 +8,9 @@ import { BitBucketService } from "./bitbucket.js";
 import type { DatabaseStore } from "@/lib/db/store/db/index.js";
 import type { KVStore } from "@/lib/db/store/kv/index.js";
 import { WORKFLOW_NAME } from "@/lib/constants/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("IntegrationsService");
 
 export interface RemoteRepository {
   id: string | number;
@@ -112,17 +115,17 @@ export class IntegrationsService {
     const account = installation.account;
 
     if (!installation.id || !account?.login) {
-      console.warn(`GitHub installation webhook has a bad payload. Missing installation id or account login:`, installation);
+      log.warn("GitHub installation webhook has a bad payload. Missing installation id or account login:", { installation: JSON.stringify(installation) });
       return;
     }
 
     // Log the installation event - actual linking happens via OAuth callback
-    console.log(`GitHub app installation webhook received: ${installation.id} for ${account.login}`);
+    log.info(`GitHub app installation webhook received: ${installation.id} for ${account.login}`);
   }
 
   async handleGitHubMeta(body: any): Promise<void> {
     const hookId = body.hook_id;
-    console.log(`GitHub App hook deleted: ${hookId}`);
+    log.info(`GitHub App hook deleted: ${hookId}`);
   }
 
   async handleGitHubWorkflowRun(body: any): Promise<void> {
@@ -136,7 +139,7 @@ export class IntegrationsService {
       const status = workflow_run.conclusion;
       const runId = workflow_run.id;
 
-      console.log(`Deployment workflow ${runId} ${status} in ${repository.full_name}`);
+      log.info(`Deployment workflow ${runId} ${status} in ${repository.full_name}`);
 
       await this.kv.createWorkflowFailedEvent(runId, {
         repository: repository.full_name,
@@ -149,7 +152,7 @@ export class IntegrationsService {
       });
 
       if (status === "failure") {
-        console.error(`Deployment failed for ${repository.full_name}`);
+        log.error(`Deployment failed for ${repository.full_name}`);
       }
     }
   }
@@ -157,6 +160,6 @@ export class IntegrationsService {
   async handleGitHubPush(body: any): Promise<void> {
     const { repository, ref, pusher, commits } = body;
 
-    console.log(`Auto-deploying ${repository.full_name} after push by ${pusher.name}`);
+    log.info(`Auto-deploying ${repository.full_name} after push by ${pusher.name}`);
   }
 }

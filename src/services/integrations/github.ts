@@ -5,6 +5,9 @@ import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import { Buffer } from "buffer";
 import type { Bindings } from "@/types/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("GitHubService");
 
 export class GitHubService {
 
@@ -155,7 +158,7 @@ export class GitHubService {
         htmlUrl: res.data.html_url,
       };
     } catch (error) {
-      console.error("Failed to get GitHub installation:", error);
+      log.error("Failed to get GitHub installation:", { error: error instanceof Error ? error.message : String(error) });
       return null;
     }
   }
@@ -188,7 +191,7 @@ export class GitHubService {
       const data = await response.json() as any;
 
       if (data.error) {
-        console.error("GitHub OAuth error:", data.error, data.error_description);
+        log.error("GitHub OAuth error:", { error: data.error, description: data.error_description });
         return null;
       }
 
@@ -197,7 +200,7 @@ export class GitHubService {
         tokenType: data.token_type,
       };
     } catch (error) {
-      console.error("Failed to exchange GitHub code for token:", error);
+      log.error("Failed to exchange GitHub code for token:", { error: error instanceof Error ? error.message : String(error) });
       return null;
     }
   }
@@ -220,7 +223,7 @@ export class GitHubService {
         htmlUrl: inst.html_url || `https://github.com/settings/installations/${inst.id}`,
       }));
     } catch (error) {
-      console.error("Failed to get user installations:", error);
+      log.error("Failed to get user installations:", { error: error instanceof Error ? error.message : String(error) });
       return [];
     }
   }

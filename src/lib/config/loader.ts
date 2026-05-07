@@ -157,5 +157,8 @@ function loadConfigFromEnv(): Config {
       do_api_token: process.env.DO_API_TOKEN,
       ssh_key: process.env.SSH_KEY,
     },
+    logging: {
+      level: (process.env.LOG_LEVEL as "debug" | "info" | "warn" | "error") || "info",
+    },
   });
 }

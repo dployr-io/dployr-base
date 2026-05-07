@@ -6,6 +6,7 @@ import type { Bindings, Variables } from "@/types/index.js";
 import { initializeDatabase } from "@/lib/db/migrate.js";
 import { loadConfig, type Config } from "@/lib/config/loader.js";
 import { initializeFromConfig } from "@/lib/config/adapters.js";
+import { setLogLevel, Logger } from "@/lib/logger.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
@@ -27,6 +28,7 @@ export interface Adapters {
 }
 
 let adapters: Adapters | null = null;
+const log = new Logger("bootstrap");
 
 /**
  * Get the current adapters instance (for use outside middleware context)
@@ -51,6 +53,7 @@ export async function initializeAdapters(): Promise<Adapters> {
   }
 
   const config = loadConfig();
+  setLogLevel(config.logging?.level ?? "info");
 
   adapters = await initializeFromConfig(config);
 
@@ -58,7 +61,7 @@ export async function initializeAdapters(): Promise<Adapters> {
     await initializeDatabase(adapters.db);
   }
 
-  console.log("Dployr Base initialized");
+  log.info("Dployr Base initialized");
   return adapters;
 }
 

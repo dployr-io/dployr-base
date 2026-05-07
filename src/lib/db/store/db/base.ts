@@ -5,6 +5,9 @@ import { ulid } from "ulid";
 import type { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { ALLOWED_TABLES, TABLE_ID_COLUMNS, type AllowedTable, type AllowedJsonField } from "@/lib/constants/index.js";
 import { DatabaseConflictError, ResourceNotFoundError, ValidationError } from "@/lib/errors/errors.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Postgres");
 
 /** Scalar value that can appear in a WHERE binding. */
 export type WhereValue = string | number | boolean | null;
@@ -202,7 +205,7 @@ export abstract class BaseStore {
    */
   protected parsePostgresError(error: unknown): never {
     if (error instanceof Error) {
-      console.error("[Postgres]: ", error);
+      log.error("PostgreSQL error: ", error);
       // Postgres unique violation
       if ((error as any).code === "23505") {
         // Extract constraint name from detail: Key (field)=(value) already exists

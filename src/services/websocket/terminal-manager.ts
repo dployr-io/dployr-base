@@ -3,6 +3,9 @@
 
 import WebSocket from "ws";
 import type { TerminalMessage } from "../../types/websocket-message.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("TerminalManager");
 
 /**
  * Terminal session tracking for task-based outbound approach
@@ -50,7 +53,7 @@ export class TerminalManager {
       instanceId,
       createdAt: Date.now(),
     });
-    console.log(`[Terminal] Expecting node connection for session ${sessionId}`);
+    log.info(`Expecting node connection for session ${sessionId}`);
   }
 
   /**
@@ -66,7 +69,7 @@ export class TerminalManager {
   acceptNodeConnection(sessionId: string, nodeWs: WebSocket): boolean {
     const expected = this.expectedSessions.get(sessionId);
     if (!expected) {
-      console.warn(`[Terminal] Unexpected node connection for session ${sessionId}`);
+      log.warn(`Unexpected node connection for session ${sessionId}`);
       return false;
     }
 
@@ -100,22 +103,22 @@ export class TerminalManager {
             }),
           );
         } catch (err) {
-          console.error(`[Terminal] Failed to parse node message:`, err);
+          log.error(`Failed to parse node message:`, { error: err instanceof Error ? err.message : String(err) });
         }
       }
     });
 
     nodeWs.on("close", () => {
-      console.log(`[Terminal] Node disconnected from session ${sessionId}`);
+      log.info(`Node disconnected from session ${sessionId}`);
       this.closeSession(sessionId);
     });
 
     nodeWs.on("error", (err) => {
-      console.error(`[Terminal] Node WebSocket error for session ${sessionId}:`, err);
+      log.error(`Node WebSocket error for session ${sessionId}:`, { error: err instanceof Error ? err.message : String(err) });
       this.closeSession(sessionId);
     });
 
-    console.log(`[Terminal] Node connected for session ${sessionId}`);
+    log.info(`Node connected for session ${sessionId}`);
     return true;
   }
 
@@ -125,13 +128,13 @@ export class TerminalManager {
   handleClientMessage(clientWs: WebSocket, message: TerminalMessage): void {
     const sessionId = this.clientToSession.get(clientWs);
     if (!sessionId) {
-      console.warn(`[Terminal] No active session for client`);
+      log.warn("No active session for client");
       return;
     }
 
     const session = this.sessions.get(sessionId);
     if (!session || !session.nodeWs) {
-      console.warn(`[Terminal] Session ${sessionId} not ready`);
+      log.warn(`Session ${sessionId} not ready`);
       return;
     }
 
@@ -146,7 +149,7 @@ export class TerminalManager {
           }),
         );
       } catch (err) {
-        console.error(`[Terminal] Failed to send message to node:`, err);
+        log.error(`Failed to send message to node:`, { error: err instanceof Error ? err.message : String(err) });
       }
     }
   }
@@ -163,7 +166,7 @@ export class TerminalManager {
         session.nodeWs.send(JSON.stringify({ action: "close" }));
         session.nodeWs.close();
       } catch (err) {
-        console.error(`[Terminal] Error closing node WebSocket:`, err);
+        log.error(`Error closing node WebSocket:`, { error: err instanceof Error ? err.message : String(err) });
       }
     }
 
@@ -177,7 +180,7 @@ export class TerminalManager {
           }),
         );
       } catch (err) {
-        console.error(`[Terminal] Error notifying client:`, err);
+        log.error(`Error notifying client:`, { error: err instanceof Error ? err.message : String(err) });
       }
     }
 
@@ -187,7 +190,7 @@ export class TerminalManager {
     }
     this.sessions.delete(sessionId);
 
-    console.log(`[Terminal] Closed session ${sessionId}`);
+    log.info(`Closed session ${sessionId}`);
   }
 
   /**
@@ -200,7 +203,7 @@ export class TerminalManager {
       // Cleanup stale sessions
       for (const [sessionId, session] of this.sessions.entries()) {
         if (now - session.lastActivity > this.sessionTimeoutMs) {
-          console.log(`[Terminal] Session ${sessionId} timed out`);
+          log.info(`Session ${sessionId} timed out`);
           this.closeSession(sessionId);
         }
       }
@@ -209,7 +212,7 @@ export class TerminalManager {
       for (const [sessionId, expected] of this.expectedSessions.entries()) {
         if (now - expected.createdAt > 60000) {
           // 1 minute timeout
-          console.log(`[Terminal] Expected session ${sessionId} timed out`);
+          log.info(`Expected session ${sessionId} timed out`);
           this.expectedSessions.delete(sessionId);
         }
       }
@@ -237,6 +240,6 @@ export class TerminalManager {
     }
 
     this.expectedSessions.clear();
-    console.log("[Terminal] TerminalManager destroyed");
+    log.info("TerminalManager destroyed");
   }
 }

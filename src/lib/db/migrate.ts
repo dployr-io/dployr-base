@@ -4,6 +4,9 @@
 // Auto-import all migrations
 import * as migrations from '@/lib/db/migrations/index.js';
 import type { PostgresAdapter } from './pg-adapter.js';
+import { Logger } from '@/lib/logger.js';
+
+const log = new Logger('Migrations');
 
 const MIGRATION_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS _migrations (
@@ -37,7 +40,7 @@ function getMigrations(): Record<string, string> {
 }
 
 async function applyMigration(db: PostgresAdapter, filename: string, sql: string): Promise<void> {
-  console.log(`Applying migration: ${filename}`);
+  log.info(`Applying migration: ${filename}`);
 
   // Check if already applied
   try {
@@ -46,7 +49,7 @@ async function applyMigration(db: PostgresAdapter, filename: string, sql: string
       .first();
 
     if (existing) {
-      console.log(`Migration ${filename} already applied, skipping`);
+      log.info(`Migration ${filename} already applied, skipping`);
       return;
     }
   } catch (e) {
@@ -57,7 +60,7 @@ async function applyMigration(db: PostgresAdapter, filename: string, sql: string
   try {
     await db.prepare(sql).run();
   } catch (error) {
-    console.error(`Failed to apply migration: ${filename}`);
+    log.error(`Failed to apply migration: ${filename}`);
     throw error;
   }
 
@@ -65,11 +68,11 @@ async function applyMigration(db: PostgresAdapter, filename: string, sql: string
     .bind(filename)
     .run();
 
-  console.log(`Migration ${filename} applied successfully`);
+  log.info(`Migration ${filename} applied successfully`);
 }
 
 export async function runMigrations(db: PostgresAdapter): Promise<void> {
-  console.log("Starting database migrations...");
+  log.info("Starting database migrations...");
 
   try {
     await db.prepare(MIGRATION_TABLE_DDL).run();
@@ -82,17 +85,17 @@ export async function runMigrations(db: PostgresAdapter): Promise<void> {
   const discoveredMigrations = getMigrations();
   const migrationFiles = Object.keys(discoveredMigrations).sort();
 
-  console.log(`Found ${migrationFiles.length} migration(s): ${migrationFiles.join(', ')}`);
+  log.info(`Found ${migrationFiles.length} migration(s): ${migrationFiles.join(', ')}`);
 
   for (const filename of migrationFiles) {
     if (!appliedMigrations.has(filename)) {
       await applyMigration(db, filename, discoveredMigrations[filename]);
     } else {
-      console.log(`Migration ${filename} already applied, skipping`);
+      log.info(`Migration ${filename} already applied, skipping`);
     }
   }
 
-  console.log("Database migrations completed successfully");
+  log.info("Database migrations completed successfully");
 }
 
 export const initializeDatabase = runMigrations;

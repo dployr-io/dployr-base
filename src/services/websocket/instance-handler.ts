@@ -18,6 +18,7 @@ import { TerminalManager } from "./terminal-manager.js";
 import { parseMessage, type ClusterConnection } from "@/types/websocket-message.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
+import { Logger } from "@/lib/logger.js";
 
 export interface WebSocketHandlerConfig {
   connectionManager?: Partial<ConnectionManagerConfig>;
@@ -38,6 +39,7 @@ export class WebSocketHandler {
   private dbStore: DatabaseStore;
 
   private kvStore: KVStore;
+  private log = new Logger("WebSocket");
 
   constructor(
     private kv: IKVAdapter,
@@ -95,7 +97,7 @@ export class WebSocketHandler {
 
     ws.on("message", (data) => {
       this.handleMessage(conn, data).catch((err) => {
-        console.error(`[WS] Error handling message for cluster ${clusterId}:`, err);
+        this.log.error(`Error handling message for cluster ${clusterId}:`, err);
       });
     });
 
@@ -104,7 +106,7 @@ export class WebSocketHandler {
     });
 
     ws.on("error", (err) => {
-      console.error(`[WS] Error on connection for cluster ${clusterId}:`, err);
+      this.log.error(`Error on connection for cluster ${clusterId}:`, err);
       this.handleDisconnect(conn);
     });
 
@@ -127,7 +129,7 @@ export class WebSocketHandler {
         }),
       );
     } catch (err) {
-      console.error(`[WS] Failed to send hello:`, err);
+      this.log.error(`Failed to send hello:`, err);
     }
   }
 
@@ -142,7 +144,7 @@ export class WebSocketHandler {
         this.kvStore.deleteNodeConnected(conn.instanceTag).catch(() => {});
       }
       this.dployrdHandler.handleNodeDisconnect(conn).catch((err) => {
-        console.error(`[WS] Error deregistering node on disconnect:`, err);
+        this.log.error(`Error deregistering node on disconnect:`, err);
       });
     }
   }
@@ -153,7 +155,7 @@ export class WebSocketHandler {
   private async handleMessage(conn: ClusterConnection, data: unknown): Promise<void> {
     const message = parseMessage(data);
     if (!message) {
-      console.error("[WS] Invalid message format");
+      this.log.error("Invalid message format");
       return;
     }
 
@@ -182,7 +184,7 @@ export class WebSocketHandler {
   public sendTaskToCluster(clusterId: string, task: NodeTask): boolean {
     const nodeConns = this.connectionManager.getNodeConnections(clusterId);
     if (nodeConns.length === 0) {
-      console.warn(`[WS] No node connections for cluster ${clusterId}`);
+      this.log.warn(`No node connections for cluster ${clusterId}`);
       return false;
     }
 
@@ -199,11 +201,11 @@ export class WebSocketHandler {
         nodeConn.ws.send(payload);
         sentCount++;
       } catch (err) {
-        console.error(`[WS] Failed to send task to node:`, err);
+        this.log.error(`Failed to send task to node:`, err);
       }
     }
 
-    console.log(`[WS] Sent task ${task.ID} to ${sentCount}/${nodeConns.length} nodes in cluster ${clusterId}`);
+    this.log.info(`Sent task ${task.ID} to ${sentCount}/${nodeConns.length} nodes in cluster ${clusterId}`);
     return sentCount > 0;
   }
 
@@ -234,6 +236,6 @@ export class WebSocketHandler {
   public shutdown(): void {
     this.connectionManager.stopCleanupLoop();
     this.terminalManager.destroy();
-    console.log("[WS] WebSocket handler shutdown complete");
+    this.log.info("WebSocket handler shutdown complete");
   }
 }

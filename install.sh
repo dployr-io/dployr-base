@@ -105,6 +105,8 @@ configure() {
   prompt "security.encryption_key"       "Encryption key (AES-256, hex 32 bytes)"   true
   prompt "security.session_ttl"          "Session TTL (seconds)"
 
+  prompt "logging.level"                 "Log level (debug|info|warn|error)"
+
   prompt "cors.allowed_origins"          "CORS allowed origins"
 
   prompt "billing.polar_access_token"    "Polar access token"                       true
@@ -180,6 +182,20 @@ StandardError=append:/var/log/dployr-base/output.log
 
 [Install]
 WantedBy=multi-user.target
+EOF
+
+  info "Configuring log rotation..."
+
+  cat > /etc/logrotate.d/dployr-base <<EOF
+/var/log/dployr-base/output.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
 EOF
 
   chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR" "$CONFIG_DIR" /var/log/dployr-base /var/lib/dployr-base

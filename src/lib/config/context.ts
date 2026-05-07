@@ -26,6 +26,9 @@ import { TraefikService } from "@/services/traefik-router.js";
 import { VmProvider } from "@/services/vm/index.js";
 import { InstancePool } from "@/services/pool.js";
 import { EmailProvider } from "@/services/notifications/email/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Config");
 
 // Storage adapter interface
 export interface IStorageAdapter {
@@ -254,9 +257,7 @@ export function getTraefikRouterService(c: AppContext): TraefikService | null {
 
   const redisClient = c.get("traefikRedisClient");
   if (!redisClient) {
-    console.warn("Traefik enabled but Redis client not configured");
-    c.set("_traefikRouter", null);
-    return null;
+    throw new Error("Redis instance for traefik is not fully configured");
   }
 
   const baseDomain = c.env.TRAEFIK_TLD ?? "dployr.run";

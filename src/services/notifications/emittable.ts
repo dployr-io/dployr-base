@@ -1,4 +1,7 @@
 import { KVStore } from "@/lib/db/store/kv/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("EventEmittable");
 
 export abstract class EventEmittable {
   protected readonly kv: KVStore;
@@ -14,7 +17,7 @@ export abstract class EventEmittable {
         targets: [{ id: tag }],
       });
     } catch (err) {
-      console.error(`[pool-event] Failed to emit ${type} for ${tag}:`, err);
+      log.error(`Failed to emit ${type} for ${tag}:`, { error: err instanceof Error ? err.message : String(err) });
     }
   }
 }

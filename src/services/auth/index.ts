@@ -10,6 +10,9 @@ import type { EmailProvider } from "@/services/notifications/email/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode.js";
 import { InstancePool } from "@/services/pool.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("AuthService");
 
 export class AuthService {
   constructor(
@@ -83,7 +86,7 @@ export class AuthService {
     try {
       cluster = await this.db.clusters.upsert(userId);
     } catch (err) {
-      console.error("[Auth] Failed to upsert cluster for user", userId, err);
+      log.error(`Failed to upsert cluster for user ${userId}:`, { error: err instanceof Error ? err.message : String(err) });
       return null;
     }
 
@@ -96,7 +99,7 @@ export class AuthService {
         const service = new InstancePool({ db: this.db, kv: this.kv, vm: vmService, jwt, sshKey: this.env.SSH_KEY });
         await service.spawnPoolInstance({ clusterId: cluster.id });
       } else {
-        console.error("[Auth] Failed to assign pool instance for cluster", cluster.id, error);
+        log.error(`Failed to assign pool instance for cluster ${cluster.id}:`, { error: error instanceof Error ? error.message : String(error) });
       }
     }
 

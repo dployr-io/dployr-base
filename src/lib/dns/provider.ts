@@ -3,6 +3,9 @@
 
 import type { DNSProvider } from "@/types/dns.js";
 import { NS_PATTERNS, OAUTH_SUPPORTED } from "@/lib/constants/dns.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("DNS");
 
 /**
  * Detects the DNS provider for a domain by querying NS records
@@ -27,7 +30,7 @@ export async function detectProvider(domain: string): Promise<{
       }
     }
   } catch (err) {
-    console.error("Provider detection failed:", err);
+    log.error("Provider detection failed:", err);
   }
 
   return { provider: "unknown", hasOAuth: false };

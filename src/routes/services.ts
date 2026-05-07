@@ -11,6 +11,9 @@ import { getDbStore, getWS, getJWTService, getTraefikRouterService } from "@/lib
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { DeploymentSchema } from "@/lib/tasks/types.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Services");
 
 const services = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const dployrdService = new DployrdService();
@@ -141,10 +144,10 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
       return c.json(createErrorResponse({ message: "No node connected to this cluster", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
 
-    console.log(`[Services] Dispatched update task ${taskId} for service ${service.name} in cluster ${clusterId}`);
+    log.info(`Dispatched update task ${taskId} for service ${service.name} in cluster ${clusterId}`);
     return c.json(createSuccessResponse({ service, deployment, taskId }));
   } catch (error) {
-    console.error("[Services] Failed to update service:", error);
+    log.error("Failed to update service:", error);
     return c.json(createErrorResponse({ message: "Failed to update service", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
@@ -181,9 +184,9 @@ services.delete("/:id", resolveCluster("service", { path: "id" }), requireCluste
   if (traefik) {
     try {
       await traefik.unregisterRoute(service.name);
-      console.log(`[Services] Unregistered Traefik route for service ${service.name}`);
+      log.info(`Unregistered Traefik route for service ${service.name}`);
     } catch (err) {
-      console.error(`[Services] Failed to unregister Traefik route for ${service.name}:`, err);
+      log.error(`Failed to unregister Traefik route for ${service.name}:`, err);
     }
   }
 

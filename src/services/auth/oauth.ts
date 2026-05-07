@@ -3,6 +3,9 @@
 
 // services/oauth.ts
 import { OAuthProvider, User, Bindings } from "@/types/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("OAuthService");
 
 interface OAuthConfig {
   authUrl: string;
@@ -89,7 +92,7 @@ export class OAuthService {
 
     if (!response.ok) {
       const error = await response.text();
-      console.error(error);
+      log.error("Token exchange failed", { error });
       throw new Error(`Token exchange failed: ${error}`);
     }
 
@@ -119,7 +122,7 @@ export class OAuthService {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`User info error response: ${errorText}`);
+      log.error("User info error response", { errorText });
       throw new Error(`Failed to fetch user info: ${errorText}`);
     }
 

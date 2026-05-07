@@ -1,15 +1,17 @@
 // routes/admin/admin.ts
 import { Hono } from "hono";
+import * as OTPAuth from "otpauth";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { Bindings, createErrorResponse, createSuccessResponse, Variables } from "@/types/index.js";
 import { getKVStore, getDbStore } from "@/lib/config/context.js";
 import { requireDployrAdministrator, requireDployrAdministratorIPAddress } from "@/middleware/auth.js";
 import instances from "./instances/index.js";
-import * as OTPAuth from "otpauth";
 import { ADMIN_JWT_TTL, ERROR } from "@/lib/constants/index.js";
-import { readFileSync } from "fs";
-import { join } from "path";
 import { getVMService } from "@/lib/config/context.js";
+import { Logger } from "@/lib/logger.js";
 
+const log = new Logger("admin");
 const admin = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Apply IP whitelist and admin middleware
@@ -133,7 +135,7 @@ admin.delete("/remove-instance/:id", async (c) => {
     try {
       await vm.delete(instance.tag);
     } catch (err: any) {
-      console.error(`[Admin] Failed to delete VM: ${err.message}`);
+      log.error(`Failed to delete VM: ${err.message}`);
       throw err;
     }
 

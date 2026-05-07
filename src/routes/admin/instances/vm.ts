@@ -2,16 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
+import { z } from "zod";
+import { ulid } from "ulid";
 import { Bindings, Variables, createErrorResponse, createSuccessResponse } from "@/types/index.js";
 import { DEFAULT_INSTANCE_IMAGE, DEFAULT_INSTANCE_REGION, DEFAULT_INSTANCE_SIZE } from "@/lib/constants/vm.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { z } from "zod";
-import { ulid } from "ulid";
 import type { VMRegion, VMSize, VMImage } from "@/types/vm.js";
 import { getVMService, getJWTService, getDbStore } from "@/lib/config/context.js";
 import { worker } from "@/services/background/index.js";
+import { Logger } from "@/lib/logger.js";
 
 const vm = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+const log = new Logger("Admin/VM");
 
 const createVmSchema = z.object({
   name: z.string().min(1, "Name is required").max(255),
@@ -37,7 +39,7 @@ vm.get("/", async (c) => {
     const droplets = await service.list();
     return c.json(createSuccessResponse({ droplets, total: droplets.length }));
   } catch (error: any) {
-    console.error("[Admin/VM] Failed to list VMs:", error);
+    log.error("Failed to list VMs:", error);
     return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
@@ -77,7 +79,7 @@ vm.post("/", async (c) => {
 
     return c.json(createSuccessResponse({ droplet }), 201);
   } catch (error: any) {
-    console.error("[Admin/VM] Failed to create VM:", error);
+    log.error("Failed to create VM:", error);
     return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
@@ -99,7 +101,7 @@ vm.get("/:id", async (c) => {
 
     return c.json(createSuccessResponse({ droplet }));
   } catch (error: any) {
-    console.error(`[Admin/VM] Failed to get VM ${id}:`, error);
+    log.error(`Failed to get VM ${id}:`, error);
     return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
@@ -116,7 +118,7 @@ vm.delete("/:id", async (c) => {
     await service.delete(id);
     return c.json(createSuccessResponse({ deleted: id }));
   } catch (error: any) {
-    console.error(`[Admin/VM] Failed to delete VM ${id}:`, error);
+    log.error(`Failed to delete VM ${id}:`, error);
     return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
@@ -142,7 +144,7 @@ vm.post("/:id/start", async (c) => {
 
     return c.json(createSuccessResponse({ action }), 202);
   } catch (error: any) {
-    console.error(`[Admin/VM] Failed to start VM ${id}:`, error);
+    log.error(`Failed to start VM ${id}:`, error);
     return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
@@ -168,7 +170,7 @@ vm.post("/:id/stop", async (c) => {
 
     return c.json(createSuccessResponse({ action }), 202);
   } catch (error: any) {
-    console.error(`[Admin/VM] Failed to stop VM ${id}:`, error);
+    log.error(`Failed to stop VM ${id}:`, error);
     return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
@@ -194,7 +196,7 @@ vm.post("/:id/restart", async (c) => {
 
     return c.json(createSuccessResponse({ action }), 202);
   } catch (error: any) {
-    console.error(`[Admin/VM] Failed to restart VM ${id}:`, error);
+    log.error(`Failed to restart VM ${id}:`, error);
     return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
@@ -211,7 +213,7 @@ vm.get("/:id/ping", async (c) => {
     const alive = await service.ping(id);
     return c.json(createSuccessResponse({ id, alive }));
   } catch (error: any) {
-    console.error(`[Admin/VM] Failed to ping VM ${id}:`, error);
+    log.error(`Failed to ping VM ${id}:`, error);
     return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
@@ -229,7 +231,7 @@ vm.get("/:id/metrics", async (c) => {
     const metrics = await service.getMetrics(id);
     return c.json(createSuccessResponse({ id, metrics }));
   } catch (error: any) {
-    console.error(`[Admin/VM] Failed to get metrics for VM ${id}:`, error);
+    log.error(`Failed to get metrics for VM ${id}:`, error);
     return c.json(createErrorResponse({ message: error.message, code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });

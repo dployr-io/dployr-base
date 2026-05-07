@@ -8,6 +8,9 @@ import z from "zod";
 import { authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getDbStore, getKVStore } from "@/lib/config/context.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Users");
 
 const users = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 users.use("*", authMiddleware);
@@ -71,7 +74,7 @@ users.get("/me", async (c) => {
     return c.json(createSuccessResponse({ user, clusters }));
   } catch (error) {
     const helpLink = "https://monitoring.dployr.io";
-    console.error("[Runtime] Failed to save cluster for user", user.id, error);
+    log.error(`Failed to save cluster for user" ${user.id}`, error);
     return c.json(
       createErrorResponse({
         message: "Failed to load user data",

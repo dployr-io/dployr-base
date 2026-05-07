@@ -6,6 +6,9 @@ import type { Bindings, Variables } from "@/types/index.js";
 import { createErrorResponse } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKV } from "@/lib/config/context.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("RateLimit");
 
 /**
  * Configuration options for the rate limit middleware.
@@ -80,7 +83,7 @@ export function rateLimit(config: RateLimitConfig) {
 
       await next();
     } catch (error) {
-      console.error("[Middleware] Rate limit check failed:", error);
+      log.error("Rate limit check failed:", error);
       await next();
     }
   };

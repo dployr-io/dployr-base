@@ -8,6 +8,9 @@ import type { DNSProvider } from "@/types/dns.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware, requireClusterViewer, requireClusterDeveloper, resolveCluster } from "@/middleware/auth.js";
 import { getDbStore, getKVStore, getDnsService, getInstanceService } from "@/lib/config/context.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Domains");
 
 const domains = new Hono<{
   Bindings: Bindings;
@@ -143,7 +146,7 @@ domains.post("/register", async (c) => {
       }),
     );
   } catch (error) {
-    console.error("[Domains] Failed to register instance", error);
+    log.error("Failed to register instance", error);
     return c.json(
       createErrorResponse({
         message: "Instance registration failed",
@@ -238,7 +241,7 @@ domains.post("/:domain/verify", authMiddleware, resolveCluster("domain", { path:
     await db.domains.activate(domain);
     return new Response(null, { status: 204 });
   } catch (err) {
-    console.error("[Domains] Domain verification error:", err);
+    log.error("Domain verification error:", err);
     return c.json(
       createErrorResponse({
         message: "Domain verification failed",
@@ -408,7 +411,7 @@ domains.get("/callback/:provider", async (c) => {
     url.searchParams.set("status", "authorized");
     return c.redirect(url.toString());
   } catch (err) {
-    console.error("[Domains] OAuth callback error:", err);
+    log.error("OAuth callback error:", err);
     return c.json(
       createErrorResponse({
         message: "OAuth callback failed",

@@ -5,6 +5,9 @@ import { EventEmitter } from "events";
 import { initializeAdapters, type Adapters } from "@/lib/config/bootstrap.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Worker");
 
 export interface JobContext {
   db: DatabaseStore;
@@ -73,7 +76,7 @@ export class BackgroundWorker {
     process.on("SIGTERM", () => this.stop());
     process.on("SIGINT", () => this.stop());
 
-    console.log(`[Worker] Started — ${this.scheduled.length} scheduled, ${this.triggered.length} triggered`);
+    log.info(`Started — ${this.scheduled.length} scheduled, ${this.triggered.length} triggered`);
 
     for (const entry of this.triggered) {
       if (entry.runImmediately) {
@@ -87,7 +90,7 @@ export class BackgroundWorker {
       if (entry.timer) clearInterval(entry.timer);
     }
     this.emitter.removeAllListeners();
-    console.log("[Worker] Stopped");
+    log.info("Stopped");
   }
 
   private async run(fn: JobFn, name: string): Promise<void> {
@@ -100,7 +103,7 @@ export class BackgroundWorker {
     try {
       await fn(ctx);
     } catch (err) {
-      console.error(`[Worker] "${name}" failed:`, err);
+      log.error(`"${name}" failed:`, err);
     }
   }
 }

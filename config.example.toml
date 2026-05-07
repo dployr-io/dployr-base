@@ -85,6 +85,9 @@ strict_rate_limit = 10
 # To rotate: generate a new key, run the rewrap migration, then update this value.
 # encryption_key = "bdd5f30db77378..."
 
+[logging]
+level = "info"  # debug | info | warn | error
+
 [cors]
 allowed_origins = "*.dployr.io"
 

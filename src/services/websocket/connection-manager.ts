@@ -9,6 +9,7 @@ import type { ConnectionManagerConfig, Session } from "@/types/index.js";
 import type { NodeTask } from "@/lib/tasks/types.js";
 import type { NodeStateEntity } from "@/lib/constants/node-state.js";
 import { DEFAULT_CONFIG, MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
+import { Logger } from "@/lib/logger.js";
 
 /**
  * Manages WebSocket connections, pending requests, and log stream subscriptions.
@@ -24,6 +25,7 @@ export class ConnectionManager {
   private cleanupTimer: NodeJS.Timeout | null = null;
   private lastActivityMap = new Map<WebSocket, number>();
   private clientVersions = new Map<string, Map<string, number>>();
+  private log = new Logger("ws-connections");
 
   constructor(config: Partial<ConnectionManagerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -83,7 +85,7 @@ export class ConnectionManager {
     this.lastActivityMap.set(ws, Date.now());
     this.requestsByClient.set(ws, new Set());
 
-    console.log(`[WS] ${role} connected to ${connectionKey} (connId: ${connectionId})`);
+    this.log.info(`${role} connected to ${connectionKey} (connId: ${connectionId})`);
     return conn;
   }
 
@@ -110,7 +112,7 @@ export class ConnectionManager {
     this.requestsByClient.delete(conn.ws);
     this.clientVersions.delete(conn.connectionId);
 
-    console.log(`[WS] ${conn.role} disconnected from ${conn.connectionKey}`);
+    this.log.info(`${conn.role} disconnected from ${conn.connectionKey}`);
   }
 
   /**
@@ -172,7 +174,7 @@ export class ConnectionManager {
   sendTask(routingKey: string, task: NodeTask): boolean {
     const nodeConns = this.getNodeConnections(routingKey);
     if (nodeConns.length === 0) {
-      console.warn(`[WS] No node connections for routing key ${routingKey}`);
+      this.log.warn(`No node connections for routing key ${routingKey}`);
       return false;
     }
 
@@ -184,11 +186,11 @@ export class ConnectionManager {
         nodeConn.ws.send(payload);
         sentCount++;
       } catch (err) {
-        console.error(`[WS] Failed to send task to node:`, err);
+        this.log.error("Failed to send task to node", { error: String(err) });
       }
     }
 
-    console.log(`[WS] Sent task ${task.ID} to ${sentCount}/${nodeConns.length} nodes (key: ${routingKey})`);
+    this.log.info(`Sent task ${task.ID} to ${sentCount}/${nodeConns.length} nodes (key: ${routingKey})`);
     return sentCount > 0;
   }
 
@@ -235,7 +237,7 @@ export class ConnectionManager {
     }
     clientRequests.add(taskId);
 
-    console.log(`[WS] Pending request added: ${taskId} (requestId: ${requestId})`);
+    this.log.info(`Pending request added: ${taskId} (requestId: ${requestId})`);
     return true;
   }
 
@@ -254,7 +256,7 @@ export class ConnectionManager {
     if (request) {
       this.pendingRequests.delete(taskId);
       this.requestsByClient.get(request.ws)?.delete(taskId);
-      console.log(`[WS] Pending request removed: ${taskId}`);
+      this.log.info(`Pending request removed: ${taskId}`);
     }
     return request;
   }
@@ -265,7 +267,7 @@ export class ConnectionManager {
   routeResponseToClient(taskId: string, message: unknown): boolean {
     const request = this.removePendingRequest(taskId);
     if (!request) {
-      console.warn(`[WS] No pending request found for taskId: ${taskId}`);
+      this.log.warn(`No pending request found for taskId: ${taskId}`);
       return false;
     }
 
@@ -276,10 +278,10 @@ export class ConnectionManager {
         taskId,
       };
       request.ws.send(JSON.stringify(response));
-      console.log(`[WS] Routed response for taskId: ${taskId} to requestId: ${request.requestId}`);
+      this.log.info(`Routed response for taskId: ${taskId} to requestId: ${request.requestId}`);
       return true;
     } catch (err) {
-      console.error(`[WS] Failed to route response for taskId: ${taskId}`, err);
+      this.log.error(`Failed to route response for taskId: ${taskId}`, { error: String(err) });
       return false;
     }
   }
@@ -298,7 +300,7 @@ export class ConnectionManager {
       request.ws.send(JSON.stringify(error));
       return true;
     } catch (err) {
-      console.error(`[WS] Failed to send error for taskId: ${taskId}`, err);
+      this.log.error(`Failed to send error for taskId: ${taskId}`, { error: String(err) });
       return false;
     }
   }
@@ -317,12 +319,12 @@ export class ConnectionManager {
     }
 
     for (const taskId of timedOut) {
-      console.log(`[WS] Request timed out: ${taskId}`);
+      this.log.info(`Request timed out: ${taskId}`);
       this.sendErrorToClient(taskId, WSErrorCode.NODE_TIMEOUT, "Request timed out");
     }
 
     if (timedOut.length > 0) {
-      console.log(`[WS] Cleaned up ${timedOut.length} timed-out requests`);
+      this.log.info(`Cleaned up ${timedOut.length} timed-out requests`);
     }
   }
 
@@ -337,7 +339,7 @@ export class ConnectionManager {
       const request = this.pendingRequests.get(taskId);
       if (request) {
         this.pendingRequests.delete(taskId);
-        console.log(`[WS] Cleaned up orphaned request: ${taskId}`);
+        this.log.info(`Cleaned up orphaned request: ${taskId}`);
       }
     }
 
@@ -363,7 +365,7 @@ export class ConnectionManager {
     }
 
     for (const conn of dead) {
-      console.log(`[WS] Removing dead connection: ${conn.connectionId}`);
+      this.log.info(`Removing dead connection: ${conn.connectionId}`);
       this.removeConnection(conn);
       try {
         conn.ws.terminate();
@@ -371,7 +373,7 @@ export class ConnectionManager {
     }
 
     if (dead.length > 0) {
-      console.log(`[WS] Cleaned up ${dead.length} dead connections`);
+      this.log.info(`Cleaned up ${dead.length} dead connections`);
     }
   }
 
@@ -382,7 +384,7 @@ export class ConnectionManager {
    */
   addLogStream(subscription: LogStreamSubscription): void {
     this.logStreams.set(subscription.streamId, subscription);
-    console.log(`[WS] Created log stream ${subscription.streamId}`);
+    this.log.info(`Created log stream ${subscription.streamId}`);
   }
 
   /**
@@ -399,7 +401,7 @@ export class ConnectionManager {
     const existing = this.logStreams.get(streamId);
     if (existing) {
       existing.ws = clientWs;
-      console.log(`[WS] Reusing existing log stream ${streamId}`);
+      this.log.info(`Reusing existing log stream ${streamId}`);
       return true;
     }
     return false;
@@ -410,7 +412,7 @@ export class ConnectionManager {
    */
   removeLogStream(streamId: string): void {
     this.logStreams.delete(streamId);
-    console.log(`[WS] Removed log stream ${streamId}`);
+    this.log.info(`Removed log stream ${streamId}`);
   }
 
   /**
@@ -420,7 +422,7 @@ export class ConnectionManager {
     for (const [streamId, subscription] of this.logStreams.entries()) {
       if (subscription.ws === clientWs) {
         this.logStreams.delete(streamId);
-        console.log(`[WS] Cleaned up log stream ${streamId}`);
+        this.log.info(`Cleaned up log stream ${streamId}`);
       }
     }
   }
@@ -442,7 +444,7 @@ export class ConnectionManager {
     }
 
     if (orphaned.length > 0) {
-      console.log(`[WS] Cleaned up ${orphaned.length} orphaned log streams`);
+      this.log.info(`Cleaned up ${orphaned.length} orphaned log streams`);
     }
   }
 
@@ -453,7 +455,7 @@ export class ConnectionManager {
     for (const [streamId, subscription] of this.logStreams.entries()) {
       if (subscription.path === path && subscription.ws === clientWs) {
         this.logStreams.delete(streamId);
-        console.log(`[WS] Removed log stream ${streamId}`);
+        this.log.info(`Removed log stream ${streamId}`);
       }
     }
   }
@@ -468,7 +470,7 @@ export class ConnectionManager {
       this.fileWatchSubscriptions.set(watchKey, new Set());
     }
     this.fileWatchSubscriptions.get(watchKey)!.add(connectionId);
-    console.log(`[WS] Added file watch: ${watchKey} for connection ${connectionId}`);
+    this.log.info(`Added file watch: ${watchKey} for connection ${connectionId}`);
   }
 
   /**
@@ -484,7 +486,7 @@ export class ConnectionManager {
     }
 
     if (removed) {
-      console.log(`[WS] Removed file watch: ${watchKey} for connection ${connectionId}`);
+      this.log.info(`Removed file watch: ${watchKey} for connection ${connectionId}`);
     }
     return removed;
   }

@@ -3,6 +3,9 @@
 
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("CORS");
 
 /**
  * Checks if an origin is allowed based on configured patterns.
@@ -69,14 +72,14 @@ export function createCorsMiddleware(getConfig: () => { allowed_origins?: string
       const raw = corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS;
       
       if (!raw) {
-        console.error("CORS allowed origins are not configured; refusing cross-origin requests.");
-        console.error("Debug: corsConfig =", JSON.stringify(corsConfig));
-        console.error("Debug: process.env.CORS_ALLOWED_ORIGINS =", process.env.CORS_ALLOWED_ORIGINS);
+        log.error("CORS allowed origins are not configured; refusing cross-origin requests.");
+        log.error("Debug: corsConfig =", JSON.stringify(corsConfig));
+        log.error("Debug: process.env.CORS_ALLOWED_ORIGINS =", process.env.CORS_ALLOWED_ORIGINS);
         return null;
       }
 
       if (!origin) {
-        console.warn("CORS check received request with no Origin header; skipping CORS.");
+        log.warn("CORS check received request with no Origin header; skipping CORS.");
         return null;
       }
 
@@ -84,7 +87,7 @@ export function createCorsMiddleware(getConfig: () => { allowed_origins?: string
       const isAllowed = isOriginAllowed(origin, patterns);
 
       if (!isAllowed) {
-        console.warn(`CORS origin not allowed: ${origin}`);
+        log.warn(`CORS origin not allowed: ${origin}`);
         return null;
       }
 

@@ -251,8 +251,6 @@ describe("Instances", () => {
     });
     const body = await res.json() as any;
 
-    console.log("Body: ", body);
-
     if (res.status === 201) {
       assert.equal(body.success, true, `Expected success:true\nBody: ${JSON.stringify(body)}`);
       assert.ok(body.data.instance.id, "Expected instance.id in response");

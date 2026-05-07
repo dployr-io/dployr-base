@@ -13,12 +13,15 @@ import type { Service, Cluster, ServiceType } from "@/types/index.js";
 import type { DeploymentPayload } from "@/lib/tasks/types.js";
 import { DatabaseConflictError } from "../errors/errors.js";
 import { KV_KEYS } from "../constants/kv.js";
+import { Logger } from "@/lib/logger.js";
 
 type ReportedService = { name: string; type: ServiceType; deploymentId?: string };
 type WorkloadService = Record<string, any>;
 type AggregatedWorkloads = { services: Map<string, ReportedService>; nodesWithUpdates: number };
 
 export class WorkloadSupervisor {
+  private log = new Logger("workload-supervisor");
+
   constructor(
     private db: DatabaseStore,
     private kv: KVStore,
@@ -42,19 +45,19 @@ export class WorkloadSupervisor {
       // If no active nodes — we can't distinguish "services gone" from "cluster offline"
       // Do nothing. This is the key correctness guarantee.
       if (activeNodeIds.length === 0) {
-        console.warn("[WorkloadSupervisor] No active nodes present on this cluster", cluster.name);
+        this.log.warn("No active nodes present on this cluster", { cluster: cluster.name });
         return;
       }
 
       const { services: aggregatedServices, nodesWithUpdates } = await this.getAggregatedWorkloads(activeNodeIds);
 
       if (nodesWithUpdates === 0) {
-        console.warn("[WorkloadSupervisor] At least one node was registered but all updates expired. Skipping...", cluster.name);
+        this.log.warn("At least one node was registered but all updates expired. Skipping...", { cluster: cluster.name });
         return;
       }
 
       if (aggregatedServices.size === 0) {
-        console.warn("[WorkloadSupervisor] Active nodes reported no provisioned services. Skipping...", cluster.name);
+        this.log.warn("Active nodes reported no provisioned services. Skipping...", { cluster: cluster.name });
         return;
       }
 
@@ -79,7 +82,7 @@ export class WorkloadSupervisor {
         this.clientNotifier.notifyRefresh(cluster.id, "services");
       }
     } catch (err) {
-      console.error(`[WorkloadSupervisor] Error supervising cluster ${cluster.name}:`, err);
+      this.log.error(`Error supervising cluster ${cluster.name}`, { error: String(err) });
     }
   }
 
@@ -131,13 +134,13 @@ export class WorkloadSupervisor {
           type: svc.type,
           deploymentId: deployment?.id,
         });
-        console.log(`[WorkloadSupervisor] ${deployment ? "Updated" : "Created"} service ${svc.name} for cluster ${cluster.name}`);
+        this.log.info(`${deployment ? "Updated" : "Created"} service ${svc.name} for cluster ${cluster.name}`);
 
         await this.registerTraefikRoute({ activeNodeIds, serviceName: svc.name, fallbackPort: deployment?.port });
         changed = true;
       } catch (error) {
         if (error instanceof DatabaseConflictError) continue;
-        console.error(`[WorkloadSupervisor] Failed to create service ${svc.name}:`, error);
+        this.log.error(`Failed to create service ${svc.name}`, { error: String(error) });
       }
     }
 
@@ -154,24 +157,24 @@ export class WorkloadSupervisor {
 
         const instance = await this.db.instances.find({ tag });
         if (!instance?.address) {
-          console.warn(`[WorkloadSupervisor] Instance ${tag} has service ${serviceName} but no address, skipping Traefik registration`);
+          this.log.warn(`Instance ${tag} has service ${serviceName} but no address, skipping Traefik registration`);
           continue;
         }
 
         const port = Number(workloadService.port ?? fallbackPort);
         if (!Number.isInteger(port) || port <= 0) {
-          console.error("[WorkloadSupervisor] Port is not set. Unable to register route.", serviceName);
+          this.log.error("Port is not set. Unable to register route.", { service: serviceName });
           continue;
         }
 
         await this.traefik.registerRoute({ serviceName, instanceAddress: instance.address, instancePort: port });
-        console.log(`[WorkloadSupervisor] Registered Traefik route for service ${serviceName}`);
+        this.log.info(`Registered Traefik route for service ${serviceName}`);
         return;
       }
 
-      console.warn(`[WorkloadSupervisor] No active node reported service ${serviceName}, skipping Traefik registration`);
+      this.log.warn(`No active node reported service ${serviceName}, skipping Traefik registration`);
     } catch (err) {
-      console.error(`[WorkloadSupervisor] Failed to register Traefik route for ${serviceName}:`, err);
+      this.log.error(`Failed to register Traefik route for ${serviceName}`, { error: String(err) });
     }
   }
 
@@ -200,7 +203,7 @@ export class WorkloadSupervisor {
         type: service.type,
         deploymentId: deployment.id,
       });
-      console.log(`[WorkloadSupervisor] Linked service ${service.name} to deployment ${deployment.id}`);
+      this.log.info(`Linked service ${service.name} to deployment ${deployment.id}`);
       changed = true;
     }
 
@@ -209,19 +212,19 @@ export class WorkloadSupervisor {
 
   private async reprovisionService(service: Service, cluster: Cluster): Promise<void> {
     if (!service.deploymentId) {
-      console.warn(`[WorkloadSupervisor] Service ${service.name} has no deployment reference — skipping reprovision`);
+      this.log.warn(`Service ${service.name} has no deployment reference — skipping reprovision`);
       return;
     }
 
     if (!this.db.serviceSecrets) {
-      console.warn(`[WorkloadSupervisor] Cannot reprovision ${service.name}: encryption not configured`);
+      this.log.warn(`Cannot reprovision ${service.name}: encryption not configured`);
       return;
     }
 
     try {
       const deployment = await this.db.deployments.get(service.deploymentId);
       if (!deployment) {
-        console.warn(`[WorkloadSupervisor] Deployment ${service.deploymentId} not found for service ${service.name} — skipping`);
+        this.log.warn(`Deployment ${service.deploymentId} not found for service ${service.name} — skipping`);
         return;
       }
 
@@ -254,7 +257,7 @@ export class WorkloadSupervisor {
       if (secretKeys.length > 0) {
         const { values, missing } = await this.db.serviceSecrets.getDecrypted({ serviceId: service.id, keys: secretKeys });
         if (missing.length > 0) {
-          console.error(`[WorkloadSupervisor] Cannot reprovision ${service.name}: secrets missing — [${missing.join(", ")}]`);
+          this.log.error(`Cannot reprovision ${service.name}: secrets missing — [${missing.join(", ")}]`);
           return;
         }
         blueprint.secrets = values;
@@ -263,7 +266,7 @@ export class WorkloadSupervisor {
       const routingKey = await this.getRoutingKey(cluster);
 
       if (!routingKey) {
-        console.warn(`[WorkloadSupervisor] No instance found for cluster ${cluster.name}`);
+        this.log.warn(`No instance found for cluster ${cluster.name}`);
         return;
       }
 
@@ -273,12 +276,12 @@ export class WorkloadSupervisor {
 
       const sent = this.connectionManager.sendTask(routingKey, task);
       if (sent) {
-        console.log(`[WorkloadSupervisor] Reprovisioning service ${service.name} via task ${taskId}`);
+        this.log.info(`Reprovisioning service ${service.name} via task ${taskId}`);
       } else {
-        console.warn(`[WorkloadSupervisor] No connected node to reprovision ${service.name}`);
+        this.log.warn(`No connected node to reprovision ${service.name}`);
       }
     } catch (err) {
-      console.error(`[WorkloadSupervisor] Failed to reprovision service ${service.name}:`, err);
+      this.log.error(`Failed to reprovision service ${service.name}`, { error: String(err) });
     }
   }
 

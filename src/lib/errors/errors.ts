@@ -4,6 +4,9 @@
 import { createErrorResponse } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
 import type { Context } from "hono";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Errors");
 
 export class DatabaseConflictError extends Error {
   constructor(
@@ -151,7 +154,7 @@ export function handleInstanceError(c: Context, error: unknown, fallbackMessage:
       ERROR.REQUEST.BAD_REQUEST.status,
     );
   }
-  console.error(fallbackMessage, error);
+  log.error(fallbackMessage, error);
   return c.json(
     createErrorResponse({
       message: fallbackMessage,

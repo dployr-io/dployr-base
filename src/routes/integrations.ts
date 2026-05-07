@@ -9,6 +9,9 @@ import { ERROR } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
 import { GitLabAuthenticationError, GitLabPermissionError, GitLabNotFoundError, GitLabRateLimitError, GitLabAPIError } from "@/lib/errors/errors.js";
 import { getKVStore, getGitHubService, getGitLabService, getBitBucketService, getIntegrationsService, getDbStore } from "@/lib/config/context.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Integrations");
 
 const integrations = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -70,7 +73,7 @@ integrations.post("/github/webhook", async (c) => {
 
     return c.json(createSuccessResponse({}, "Webhook processed"));
   } catch (error) {
-    console.error("[Integrations] Webhook error:", error);
+    log.error("Webhook error:", error);
     const helpLink = "https://monitoring.dployr.io";
     return c.json(
       createErrorResponse({
@@ -127,7 +130,7 @@ integrations.get("/github/callback", async (c) => {
     const installation = await githubService.getInstallation(parseInt(installationId));
 
     if (!installation) {
-      console.error("[Integrations] Failed to fetch GitHub installation:", installationId);
+      log.error("Failed to fetch GitHub installation:", installationId);
       if (clusterId) {
         if (userId) await kv.deletePendingGitHubInstall(userId);
         return c.redirect(`${appUrl}/clusters/${clusterId}/settings/integrations?error=installation_not_found`, 302);
@@ -150,7 +153,7 @@ integrations.get("/github/callback", async (c) => {
 
     return c.redirect(`${appUrl}/clusters/${clusterId}/settings/integrations?success=github`, 302);
   } catch (error) {
-    console.error("[Integrations] GitHub callback error:", error);
+    log.error("GitHub callback error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -177,7 +180,7 @@ integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ enabled }, "GitLab integration configured"));
   } catch (error) {
-    console.error("[Integrations] GitLab setup error:", error);
+    log.error("GitLab setup error:", error);
 
     if (error instanceof GitLabAuthenticationError) {
       return c.json(
@@ -256,7 +259,7 @@ integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ enabled }, "BitBucket integration configured"));
   } catch (error) {
-    console.error("[Integrations] BitBucket setup error:", error);
+    log.error("BitBucket setup error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -276,7 +279,7 @@ integrations.get("/list", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse(integrations, "Integrations retrieved"));
   } catch (error) {
-    console.error("[Integrations] List integrations error:", error);
+    log.error("List integrations error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",
@@ -298,7 +301,7 @@ integrations.get("/remotes", requireClusterDeveloper, async (c) => {
 
     return c.json(createSuccessResponse({ remotes }, "Remotes retrieved"));
   } catch (error) {
-    console.error("[Integrations] List remotes error:", error);
+    log.error("List remotes error:", error);
     return c.json(
       createErrorResponse({
         message: "Internal server error",

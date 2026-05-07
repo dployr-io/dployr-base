@@ -3,6 +3,9 @@
 
 import { Bindings } from "@/types/index.js";
 import { EmailPayload, EmailProvider } from "./index.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("ZeptoProvider");
 
 export class ZeptoProvider implements EmailProvider {
   private fromAddress: string;
@@ -13,7 +16,7 @@ export class ZeptoProvider implements EmailProvider {
 
   async sendEmail({ name, to, subject, body }: EmailPayload): Promise<{ success: boolean; error?: string }> {
     if (!this.fromAddress) {
-      console.error("EMAIL_FROM is not configured");
+      log.error("EMAIL_FROM is not configured");
       return { success: false, error: "EMAIL_FROM is not configured" };
     }
 
@@ -45,7 +48,7 @@ export class ZeptoProvider implements EmailProvider {
 
     if (!response.ok) {
       const error = await response.text();
-      console.error("Zepto API error:", error);
+      log.error("Zepto API error:", { error });
       return { success: false, error: "Failed to send email" };
     }
 

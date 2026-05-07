@@ -8,6 +8,9 @@ import { type NotificationEvent } from "./notifier.js";
 import { DiscordService } from "../integrations/discord.js";
 import { SlackService } from "../integrations/slack.js";
 import { WebhookService } from "../integrations/webhook.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("NotificationService");
 
 export class NotificationService {
   private discordService: DiscordService;
@@ -44,7 +47,7 @@ export class NotificationService {
               event,
               data,
             })
-            .catch((err) => console.error(`Discord notification failed:`, err)),
+            .catch((err) => log.error(`Discord notification failed:`, { error: err instanceof Error ? err.message : String(err) })),
         );
       }
 
@@ -57,7 +60,7 @@ export class NotificationService {
               event,
               data,
             })
-            .catch((err) => console.error(`Slack notification failed:`, err)),
+            .catch((err) => log.error(`Slack notification failed:`, { error: err instanceof Error ? err.message : String(err) })),
         );
       }
 
@@ -70,7 +73,7 @@ export class NotificationService {
               event,
               data,
             })
-            .catch((err) => console.error(`Custom webhook notification failed:`, err)),
+            .catch((err) => log.error(`Custom webhook notification failed:`, { error: err instanceof Error ? err.message : String(err) })),
         );
       }
 
@@ -87,7 +90,7 @@ export class NotificationService {
                   data,
                   to: owner.email,
                 })
-                .catch((err) => console.error(`Email notification failed:`, err)),
+                .catch((err) => log.error(`Email notification failed:`, { error: err instanceof Error ? err.message : String(err) })),
             );
           }
         }
@@ -95,7 +98,7 @@ export class NotificationService {
 
       await Promise.allSettled(promises);
     } catch (error) {
-      console.error(`Failed to trigger notifications for event ${event}:`, error);
+      log.error(`Failed to trigger notifications for event ${event}:`, { error: error instanceof Error ? error.message : String(error) });
     }
   }
 }

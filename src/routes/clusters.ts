@@ -10,6 +10,9 @@ import { getKVStore, getGitHubService, getDbStore } from "@/lib/config/context.j
 import { worker } from "@/services/background/index.js";
 import { notify } from "@/services/background/jobs/notify.js";
 import { ResourceNotFoundError, ValidationError } from "@/lib/errors/errors.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Clusters");
 
 const clusters = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 clusters.use("*", authMiddleware);
@@ -59,7 +62,7 @@ clusters.get("/users/invites", async (c) => {
 
     return c.json(createSuccessResponse({ invites: clusterIds }));
   } catch (error) {
-    console.error("[Clusters] Get invites error:", error);
+    log.error("Get invites error:", error);
     return c.json(
       createErrorResponse({
         message: "Failed to get invites",
@@ -103,7 +106,7 @@ clusters.get("/:id/users/invites/accept", async (c) => {
 
     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
   } catch (error) {
-    console.error("[Clusters] Accept invite error:", error);
+    log.error("Accept invite error:", error);
     if (error instanceof ResourceNotFoundError) {
       return c.json(
         createErrorResponse({
@@ -153,7 +156,7 @@ clusters.get("/:id/users/invites/decline", async (c) => {
 
     return c.json(createSuccessResponse({ clusterId }, "Invite declined"));
   } catch (error) {
-    console.error("[Clusters] Decline invite error:", error);
+    log.error("Decline invite error:", error);
     if (error instanceof ResourceNotFoundError) {
       return c.json(
         createErrorResponse({
@@ -238,7 +241,7 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
 
     return c.json(createSuccessResponse({ users }, "Invites sent successfully"));
   } catch (error) {
-    console.error("[Clusters] Add users error:", error);
+    log.error("Add users error:", error);
 
     const helpLink = "https://monitoring.dployr.io";
 
@@ -307,7 +310,7 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
 
     return c.json(createSuccessResponse({ users }, "Users removed successfully"));
   } catch (error) {
-    console.error("[Clusters] Remove users error:", error);
+    log.error("Remove users error:", error);
     if (error instanceof ValidationError) {
       return c.json(
         createErrorResponse({
@@ -396,7 +399,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
 
     return c.json(createSuccessResponse({ cluster }, "Roles updated successfully"));
   } catch (error) {
-    console.error("[Clusters] Update roles error:", error);
+    log.error("Update roles error:", error);
     if (error instanceof ValidationError) {
       return c.json(
         createErrorResponse({
@@ -464,7 +467,7 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
 
     return c.json(createSuccessResponse({ newOwnerId, previousOwnerRole }, "Ownership transferred successfully"));
   } catch (error) {
-    console.error("[Clusters] Transfer ownership error:", error);
+    log.error("Transfer ownership error:", error);
     const helpLink = "https://monitoring.dployr.io";
     return c.json(
       createErrorResponse({
@@ -501,7 +504,7 @@ clusters.get("/:id/integrations", requireClusterViewer, async (c) => {
 
     return c.json(createSuccessResponse(integrations));
   } catch (error) {
-    console.error("[Clusters] List remotes error:", error);
+    log.error("List remotes error:", error);
     const helpLink = "https://monitoring.dployr.io";
     return c.json(
       createErrorResponse({
@@ -534,7 +537,7 @@ clusters.get("/:id/remotes", requireClusterViewer, async (c) => {
 
     return c.json(createSuccessResponse(paginatedData));
   } catch (error) {
-    console.error("[Clusters] List remotes error:", error);
+    log.error("List remotes error:", error);
     const helpLink = "https://monitoring.dployr.io";
     return c.json(
       createErrorResponse({

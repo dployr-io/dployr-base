@@ -13,6 +13,9 @@ import { DployrdService } from "@/services/dployrd.js";
 import { DeploymentPayload, DeploymentSchema } from "@/lib/tasks/types.js";
 import { DatabaseConflictError } from "@/lib/errors/errors.js";
 import { validateString } from "@/lib/validators/string-sanitizer.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Deployments");
 
 const deployments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const dployrdService = new DployrdService();
@@ -100,13 +103,13 @@ deployments.post("/finish", async (c) => {
       if (synced && payload) {
         if (payload.env_vars && typeof payload.env_vars === "object") {
           await db.serviceEnvs.set({ deploymentId: synced.id, envs: payload.env_vars }).catch((error) => {
-            console.error(`[Deployments] Failed to set envs for deployment ${synced.id}:`, error);
+            log.error(`Failed to set envs for deployment ${synced.id}:`, error);
           });
         }
 
         if (payload.secrets && typeof payload.secrets === "object" && db.serviceSecrets) {
           await db.serviceSecrets.set({ deploymentId: synced.id, secrets: payload.secrets }).catch((error) => {
-            console.error(`[Deployments] Failed to set secrets for deployment ${synced.id}:`, error);
+            log.error(`Failed to set secrets for deployment ${synced.id}:`, error);
           });
         }
       }
@@ -136,7 +139,7 @@ deployments.post("/finish", async (c) => {
         ERROR.RESOURCE.CONFLICT.status,
       );
     }
-    console.error("[Deployments] Failed to finish deployment", error);
+    log.error("Failed to finish deployment", error);
     return c.json(
       createErrorResponse({
         message: "Failed to update deployment logs",
@@ -202,18 +205,18 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     try {
       dispatched = getWS(c).sendTask(routingKey, task);
     } catch (error) {
-      console.error("[Deployments] Failed to dispatch deployment task:", error);
+      log.error("Failed to dispatch deployment task:", error);
     }
 
     if (!dispatched) {
-      console.warn(`[Deployments] No node available to dispatch deploy task ${taskId} for cluster ${clusterId}`);
+      log.warn(`No node available to dispatch deploy task ${taskId} for cluster ${clusterId}`);
       return c.json(createErrorResponse({ message: "No node connected to this cluster", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
     }
 
-    console.log(`[Deployments] Dispatched deploy task ${taskId} for cluster ${clusterId}`);
+    log.info(`Dispatched deploy task ${taskId} for cluster ${clusterId}`);
     return c.json(createSuccessResponse({ deployPayload, taskId }), SUCCESS.ACCEPTED.status);
   } catch (error) {
-    console.error("[Deployments] Unable to deploy task:", error);
+    log.error("Unable to deploy task:", error);
     return c.json(createErrorResponse({ message: "Failed to create deployment", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });

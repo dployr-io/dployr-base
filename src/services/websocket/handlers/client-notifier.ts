@@ -7,6 +7,7 @@ import { KVStore } from "@/lib/db/store/kv/index.js";
 import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import type { NodeStateEntity } from "@/lib/constants/node-state.js";
+import { Logger } from "@/lib/logger.js";
 
 /**
  * Handles broadcasting messages to connected clients.
@@ -15,6 +16,8 @@ import type { NodeStateEntity } from "@/lib/constants/node-state.js";
  * File operation responses are routed directly via ConnectionManager.
  */
 export class ClientNotifier {
+  private log = new Logger("ws-notifier");
+
   constructor(
     private conn: ConnectionManager,
     private kv: KVStore,
@@ -33,7 +36,7 @@ export class ClientNotifier {
       try {
         client.ws.send(payload);
       } catch (err) {
-        console.error(`[WS] Failed to send refresh signal to client:`, err);
+        this.log.error("Failed to send refresh signal to client", { error: String(err) });
       }
     }
   }
@@ -68,7 +71,7 @@ export class ClientNotifier {
           this.conn.setClientVersion(client.connectionId, instanceId, section as NodeStateEntity, version);
         }
       } catch (err) {
-        console.error(`[WS] Failed to send delta to client ${client.connectionId}:`, err);
+        this.log.error(`Failed to send delta to client ${client.connectionId}`, { error: String(err) });
       }
     }
   }
@@ -81,7 +84,7 @@ export class ClientNotifier {
     const target = clients.find((c) => c.connectionId === connectionId);
 
     if (!target) {
-      console.warn(`[WS] Client ${connectionId} not found in cluster ${clusterId}`);
+      this.log.warn(`Client ${connectionId} not found in cluster ${clusterId}`);
       return false;
     }
 
@@ -89,7 +92,7 @@ export class ClientNotifier {
       target.ws.send(JSON.stringify(message));
       return true;
     } catch (err) {
-      console.error(`[WS] Failed to send to client ${connectionId}:`, err);
+      this.log.error(`Failed to send to client ${connectionId}`, { error: String(err) });
       return false;
     }
   }
@@ -109,7 +112,7 @@ export class ClientNotifier {
       }
     }
 
-    console.log(`[WS] Replayed ${replayed} unacked messages to client ${connectionId}`);
+    this.log.info(`Replayed ${replayed} unacked messages to client ${connectionId}`);
     return replayed;
   }
 }

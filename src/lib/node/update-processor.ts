@@ -6,6 +6,7 @@ import { KVStore } from "@/lib/db/store/kv/index.js";
 import { NodeUpdate, NodeUpdateV1_1 } from "@/types/node.js";
 import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import { Logger } from "@/lib/logger.js";
 
 /**
  * Processes a single node update message — short-lived, one instance per message.
@@ -21,6 +22,7 @@ export class UpdateProcessor {
   private message: NodeUpdate | NodeUpdateV1_1;
   private tasks: Promise<any>[];
   private deploymentsChanged = false;
+  private log: Logger;
 
   constructor({ db, kv, tag, message }: { db: DatabaseStore; kv: KVStore; tag: string; message: NodeUpdate | NodeUpdateV1_1 }) {
     this.db = db;
@@ -28,12 +30,13 @@ export class UpdateProcessor {
     this.tag = tag;
     this.message = message;
     this.tasks = [];
+    this.log = new Logger("update-processor");
   }
 
   /** Entry point — fans out to schema-specific handlers then awaits all queued tasks. */
   async processUpdate(): Promise<{ deploymentsChanged: boolean }> {
     if (!this.message.instance_id) {
-      console.warn(`[UpdateProcessor] Update missing instance_id`);
+      this.log.warn("Update missing instance_id");
       return { deploymentsChanged: false };
     }
 
@@ -54,7 +57,7 @@ export class UpdateProcessor {
     try {
       await this.kv.saveProcessSnapshot({ tag: this.tag, seq, snapshot });
     } catch (error) {
-      console.error(`[UpdateProcessor] Failed to save process snapshot:`, error);
+      this.log.error("Failed to save process snapshot", { error: String(error) });
     }
   }
 
@@ -72,7 +75,7 @@ export class UpdateProcessor {
 
   private async syncDeployments(deployments: Record<string, unknown>[]): Promise<void> {
     if (!Array.isArray(deployments)) {
-      console.error("[UpdateProcessor] Invalid format ", typeof deployments, deployments);
+      this.log.error("Invalid format", { type: typeof deployments });
       return;
     }
 
@@ -84,7 +87,7 @@ export class UpdateProcessor {
           const cluster = await this.db.clusters.find({ ownerId: d.user_id });
 
           if (!d.name || !cluster) {
-            console.warn(`[UpdateProcessor] Skipping incomplete deployment ${d.id}: missing required fields`, d);
+            this.log.warn(`Skipping incomplete deployment ${d.id}: missing required fields`);
             return;
           }
 
@@ -95,7 +98,7 @@ export class UpdateProcessor {
             const source = d.source ?? payload?.source;
 
             if (!type || !source) {
-              console.warn(`[UpdateProcessor] Skipping incomplete deployment ${d.id}: missing required fields`, d);
+              this.log.warn(`Skipping incomplete deployment ${d.id}: missing required fields`);
               return;
             }
 
@@ -131,23 +134,23 @@ export class UpdateProcessor {
             if (synced && payload) {
               if (payload.env_vars && typeof payload.env_vars === "object") {
                 await this.db.serviceEnvs.set({ deploymentId: synced.id, envs: payload.env_vars }).catch((error) => {
-                  console.error(`[UpdateProcessor] Failed to set envs for deployment ${synced.id}:`, error);
+                  this.log.error(`Failed to set envs for deployment ${synced.id}`, { error: String(error) });
                 });
               }
 
               if (payload.secrets && typeof payload.secrets === "object" && this.db.serviceSecrets) {
                 await this.db.serviceSecrets.set({ deploymentId: synced.id, secrets: payload.secrets }).catch((error) => {
-                  console.error(`[UpdateProcessor] Failed to set secrets for deployment ${synced.id}:`, error);
+                  this.log.error(`Failed to set secrets for deployment ${synced.id}`, { error: String(error) });
                 });
               }
             }
           } catch (error) {
-            console.error(`[UpdateProcessor] Failed to sync deployment ${d.id}:`, error);
+            this.log.error(`Failed to sync deployment ${d.id}`, { error: String(error) });
           }
         }),
       );
     } catch (error) {
-      console.error(`[UpdateProcessor] Failed to sync deployments:`, error);
+      this.log.error("Failed to sync deployments", { error: String(error) });
     }
   }
 }

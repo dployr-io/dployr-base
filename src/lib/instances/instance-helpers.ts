@@ -10,6 +10,9 @@ import z from "zod";
 import { DatabaseConflictError, handleInstanceError } from "../errors/errors.js";
 import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Instances");
 
 export const createInstanceSchema = z.object({
   clusterId: z.ulid("Cluster ID is required"),
@@ -73,7 +76,7 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
         );
       }
 
-      console.error(`[Instances] Failed to create instance for user ${sessionId ?? session.userId}:`, error);
+      log.error(`Failed to create instance for user ${sessionId ?? session.userId}:`, error);
 
       return c.json(
         createErrorResponse({

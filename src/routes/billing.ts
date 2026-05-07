@@ -10,6 +10,9 @@ import { PolarRequestValidationError } from "@/lib/errors/errors.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getKVStore, getBillingProvider, getBillingService, getDbStore } from "@/lib/config/context.js";
 import { PLANS } from "@/lib/constants/billing.js";
+import { Logger } from "@/lib/logger.js";
+
+const log = new Logger("Billing");
 
 const billing = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -74,7 +77,7 @@ billing.post("/checkout", requireClusterOwner, async (c) => {
   const db = getDbStore(c);
   const billingService = getBillingService(c);
   if (!billingService) {
-    console.error("[Billing] Billing provider not configured");
+    log.error("Billing provider not configured");
     return c.json(
       createErrorResponse({
         message: "Billing is not configured",
@@ -119,7 +122,7 @@ billing.post("/checkout", requireClusterOwner, async (c) => {
         ERROR.REQUEST.BAD_REQUEST.status,
       );
     }
-    console.error("[Billing] Billing checkout error:", error);
+    log.error("Billing checkout error:", error);
     return c.json(
       createErrorResponse({
         message: "Failed to create checkout session",
@@ -137,13 +140,13 @@ billing.post("/webhook", async (c) => {
   const rawBody = (await c.req.text()).trim();
 
   if (!c.env.POLAR_WEBHOOK_SECRET) {
-    console.error("[Billing] POLAR_WEBHOOK_SECRET not configured");
+    log.error("POLAR_WEBHOOK_SECRET not configured");
     return c.json({ received: false }, 500);
   }
 
   const billingProvider = getBillingProvider(c);
   if (!billingProvider) {
-    console.error("[Billing] Billing provider not configured");
+    log.error("Billing provider not configured");
     return c.json({ received: false }, 500);
   }
 
@@ -155,7 +158,7 @@ billing.post("/webhook", async (c) => {
   });
 
   if (!isValid) {
-    console.warn("[Billing] Invalid webhook signature");
+    log.warn("Invalid webhook signature");
     return c.json({ received: false }, 400);
   }
 
@@ -172,7 +175,7 @@ billing.post("/webhook", async (c) => {
   try {
     await getBillingService(c)!.handleWebhook(event, db, kv);
   } catch (error) {
-    console.error("[Billing] Webhook handler error:", error);
+    log.error("Webhook handler error:", error);
     return c.json({ received: true, error: "handler_error" }, 200);
   }
 

@@ -159,6 +159,9 @@ export const CONFIG_SCHEMA = z.object({
       ssh_key: z.number().int().positive().optional(),
     })
     .optional(),
+  logging: z.object({
+    level: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  }).optional(),
 }).superRefine((val, ctx) => {
   const isTest = process.env.NODE_ENV === "test";
 
