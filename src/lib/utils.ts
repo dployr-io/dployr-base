@@ -44,3 +44,10 @@ export function sanitizeReturnTo(returnTo: string) {
   }
   return "/dashboard";
 }
+
+/** Convert a numeric timestamp (ms) or ISO string to ISO string, falling back to now. */
+export function toISO(value: number | string | null | undefined): string {
+  if (value == null) return new Date().toISOString();
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
