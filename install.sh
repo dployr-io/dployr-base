@@ -42,14 +42,17 @@ require() { command -v "$1" >/dev/null 2>&1 || error "$1 is required but not ins
 NODE_BIN=""
 
 detect_node() {
-  local candidates=()
+  local candidates=() seen_versions=()
   while IFS= read -r p; do
+    local ver; ver="$("$p" --version 2>/dev/null || echo "")"
+    [[ -z "$ver" || " ${seen_versions[*]} " == *" $ver "* ]] && continue
+    seen_versions+=("$ver")
     candidates+=("$p")
   done < <(find /usr/local/bin /usr/bin /usr/local/sbin /usr/sbin \
     /root/.nvm/versions/node/*/bin \
     /home/*/.nvm/versions/node/*/bin \
-    -maxdepth 1 -name node -type f 2>/dev/null \
-    | sort -t/ -k7 -V -r | uniq)
+    -maxdepth 1 -name node 2>/dev/null \
+    | sort -t/ -k7 -V -r)
 
   [ ${#candidates[@]} -eq 0 ] && error "node is required but not found on this system"
 
