@@ -40,6 +40,41 @@ error() { echo "[ERROR] $*"; exit 1; }
 
 require() { command -v "$1" >/dev/null 2>&1 || error "$1 is required but not installed"; }
 
+NODE_BIN=""
+
+detect_node() {
+  local candidates=()
+  while IFS= read -r p; do
+    candidates+=("$p")
+  done < <(find /usr/local/bin /usr/bin /usr/local/sbin /usr/sbin \
+    /root/.nvm/versions/node/*/bin \
+    /home/*/.nvm/versions/node/*/bin \
+    -maxdepth 1 -name node -type f 2>/dev/null \
+    | sort -t/ -k7 -V -r | uniq)
+
+  [ ${#candidates[@]} -eq 0 ] && error "node is required but not found on this system"
+
+  if [ ${#candidates[@]} -eq 1 ] || $SKIP_PROMPTS; then
+    NODE_BIN="${candidates[0]}"
+  else
+    echo ""
+    echo "Node.js installations found:"
+    local i=1
+    for p in "${candidates[@]}"; do
+      local ver; ver="$("$p" --version 2>/dev/null || echo unknown)"
+      printf "  %d) %s  (%s)\n" "$i" "$p" "$ver"
+      ((i++))
+    done
+    echo ""
+    printf "Select node to use [1]: "
+    local choice; read -r choice </dev/tty
+    choice="${choice:-1}"
+    NODE_BIN="${candidates[$((choice - 1))]}"
+  fi
+
+  info "Using node: $NODE_BIN ($($NODE_BIN --version))"
+}
+
 install_tomato() {
   if command -v tomato >/dev/null 2>&1; then return; fi
   info "Installing tomato v${TOMATO_VERSION}..."
@@ -66,7 +101,7 @@ prompt() {
     $secret && display="[set]"
     printf "%s [%s] Keep this value? (y/n): " "$label" "$display"
     local choice
-    read -r choice
+    read -r choice </dev/tty
     case "$choice" in
       ""|"y"|"Y") return 0 ;;
       "n"|"N") ;;
@@ -76,7 +111,7 @@ prompt() {
 
   printf "%s: " "$label"
   local val
-  read -r val
+  read -r val </dev/tty
   [ -n "$val" ] && tset "$key" "$val"
   return 0
 }
@@ -135,8 +170,8 @@ main() {
   [ ! -t 0 ] && ! $SKIP_PROMPTS && error "Interactive mode requires a terminal. Use --non-interactive."
   require curl
   require jq
-  require node
 
+  detect_node
   install_tomato
 
   local gh_args=(-fsSL)
@@ -190,7 +225,7 @@ WorkingDirectory=$INSTALL_DIR
 Environment="NODE_ENV=production"
 Environment="CONFIG_PATH=$CONFIG_DIR/config.toml"
 Environment="BASE_VERSION=$VERSION"
-ExecStart=/usr/bin/node --import tsx $INSTALL_DIR/src/index.ts
+ExecStart=$NODE_BIN --import tsx $INSTALL_DIR/src/index.ts
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/dployr-base/output.log
