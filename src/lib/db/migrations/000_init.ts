@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS bootstrap_tokens (
   instance_id TEXT PRIMARY KEY,
   nonce TEXT UNIQUE NOT NULL,
   used_at BIGINT NULL,
-  created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
+  created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+  FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS domains (
@@ -308,6 +309,10 @@ EXECUTE FUNCTION enforce_single_owner_on_update();
 CREATE OR REPLACE FUNCTION enforce_service_name_global_uniqueness()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Acquire a session-level advisory lock keyed on the service name hash so
+  -- concurrent inserts with the same name are serialized. The UNIQUE constraint
+  -- on services.name is the hard guarantee; the lock just produces a nicer error.
+  PERFORM pg_advisory_xact_lock(hashtext(NEW.name));
   IF EXISTS (
     SELECT 1 FROM services
     WHERE name = NEW.name

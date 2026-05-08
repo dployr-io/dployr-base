@@ -23,8 +23,7 @@ const dployrdService = new DployrdService();
 const finishDeploymentSchema = z.object({
   token: z.string().min(1, "Token is required"),
   id: z.ulid("Invalid deployment ID"),
-  blueprint: z.record(z.string(), z.any()),
-  userId: z.ulid(),
+  blueprint: z.record(z.string(), z.any()).optional().default({}),
   logs: z.string().min(1, "Logs are required"),
 });
 
@@ -47,13 +46,25 @@ deployments.post("/finish", async (c) => {
       );
     }
 
-    const { token, id, logs, userId, blueprint } = validation.data;
+    const { token, id, logs, blueprint } = validation.data;
     const jwtService = getJWTService(c);
     const decoded = await jwtService.verifyToken(token);
     if (!decoded) {
       return c.json(
         createErrorResponse({
           message: "Invalid or expired token",
+          code: ERROR.AUTH.BAD_TOKEN.code,
+        }),
+        ERROR.AUTH.BAD_TOKEN.status,
+      );
+    }
+
+    // Use the userId from the verified JWT claims, not the request body.
+    const userId = decoded.sub as string;
+    if (!userId) {
+      return c.json(
+        createErrorResponse({
+          message: "Invalid token: missing subject",
           code: ERROR.AUTH.BAD_TOKEN.code,
         }),
         ERROR.AUTH.BAD_TOKEN.status,

@@ -23,37 +23,27 @@ interface RateLimitConfig {
 }
 
 /**
- * Rate limit middleware with per-second bucket sliding window.
+ * Rate limit middleware using atomic fixed-window counters.
  *
- * Uses a sliding window with per-second buckets to reduce race conditions.
- * Each bucket key format: ratelimit:{prefix}:{identifier}:{windowBucket}
- * where windowBucket = Math.floor(Date.now() / 1000)
- *
- * Note: This implementation still has a small race window between get and put operations.
- * For true atomicity, Redis INCR + EXPIRE should be used. The MemoryKV and Redis adapters
- * would need native increment support (INCR) for strict enforcement.
- */
+ * Each window is keyed by floor(now / windowMs). */
 export function rateLimit(config: RateLimitConfig) {
   return async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
     const userId = c.get("session")?.userId;
     const ip = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || "unknown";
 
     const identifier = userId || ip;
-    const currentBucket = Math.floor(Date.now() / 1000);
-    const key = `ratelimit:${config.keyPrefix}:${identifier}:${currentBucket}`;
+    const windowSizeMs = config.windowMs;
+    const windowSizeSec = Math.ceil(windowSizeMs / 1000);
+    const currentWindow = Math.floor(Date.now() / windowSizeMs);
+    const key = `ratelimit:${config.keyPrefix}:${identifier}:${currentWindow}`;
+    const resetAt = (currentWindow + 1) * windowSizeSec;
 
     try {
       const kv = getKV(c);
-      const now = Date.now();
-      const windowStart = now - config.windowMs;
+      const count = await kv.incr(key, windowSizeSec * 2);
 
-      const data = await kv.get(key);
-      let count = data ? parseInt(data, 10) : 0;
-
-      if (count >= config.maxRequests) {
-        const oldestTimestamp = currentBucket;
-        const retryAfter = Math.ceil(oldestTimestamp + Math.ceil(config.windowMs / 1000) - now / 1000);
-
+      if (count > config.maxRequests) {
+        const retryAfter = Math.max(1, resetAt - Math.floor(Date.now() / 1000));
         return c.json(
           createErrorResponse({
             message: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
@@ -62,24 +52,18 @@ export function rateLimit(config: RateLimitConfig) {
           {
             status: ERROR.REQUEST.TOO_MANY_REQUESTS.status,
             headers: {
-              "Retry-After": String(Math.max(1, retryAfter)),
+              "Retry-After": String(retryAfter),
               "X-RateLimit-Limit": String(config.maxRequests),
               "X-RateLimit-Remaining": "0",
-              "X-RateLimit-Reset": String(currentBucket + Math.ceil(config.windowMs / 1000)),
+              "X-RateLimit-Reset": String(resetAt),
             },
           },
         );
       }
 
-      count++;
-      const ttlSeconds = Math.ceil(config.windowMs / 1000) * 2;
-      await kv.put(key, String(count), {
-        ttl: ttlSeconds,
-      });
-
       c.header("X-RateLimit-Limit", String(config.maxRequests));
-      c.header("X-RateLimit-Remaining", String(config.maxRequests - count));
-      c.header("X-RateLimit-Reset", String(currentBucket + Math.ceil(config.windowMs / 1000)));
+      c.header("X-RateLimit-Remaining", String(Math.max(0, config.maxRequests - count)));
+      c.header("X-RateLimit-Reset", String(resetAt));
 
       await next();
     } catch (error) {

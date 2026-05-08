@@ -1,7 +1,6 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { ulid } from "ulid";
 import { Instance } from "@/types/index.js";
 import { VmProvider } from "./vm/index.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
@@ -65,7 +64,6 @@ export class InstancePool extends EventEmittable {
   private async createPoolInstance(): Promise<void> {
     if (!this.vm || !this.jwt) return;
 
-    const instanceId = ulid();
     const name = INSTANCE_NAMES[Math.floor(Math.random() * INSTANCE_NAMES.length)];
     const num = String(Math.floor(Math.random() * 100)).padStart(2, "0");
     const suffix = randomBytes(4).toString("base64url").slice(0, 5);
@@ -73,7 +71,6 @@ export class InstancePool extends EventEmittable {
 
     const token = await this.jwt.createBootstrapToken(tag);
     const decoded = await this.jwt.verifyToken(token);
-    await this.db.bootstrapTokens.create(instanceId, decoded.nonce as string);
 
     const droplet = await this.vm.create({
       image: DEFAULT_INSTANCE_IMAGE,
@@ -85,13 +82,16 @@ export class InstancePool extends EventEmittable {
       userData: buildInstallScript(token, tag),
     });
 
-    await this.db.instances.addPool({
+    // Create instance row before bootstrap token so the FK is satisfied.
+    const instance = await this.db.instances.addPool({
       address: droplet.ipv4 ?? null,
       capacity: DEFAULT_CAPACITY,
       tag,
       region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
       status: "provisioning",
     });
+
+    await this.db.bootstrapTokens.create(instance.id, decoded.nonce as string);
   }
 
   public async allocateSharedPool(clusterId: string): Promise<void> {
@@ -109,17 +109,23 @@ export class InstancePool extends EventEmittable {
         return;
       }
 
-      if (await this.kv.kv.get(KV_KEYS.POOL.PROVISION_LOCK)) {
+      const lockCount = await this.kv.kv.incr(KV_KEYS.POOL.PROVISION_LOCK, POOL_PROVISION_LOCK_TTL);
+      if (lockCount > 1) {
         this.log.warn("Pool allocation and scheduling ongoing. Skipping...");
         return;
       }
 
       this.log.info(`Pool at capacity — provisioning new instance for cluster ${clusterName}`);
-      await this.kv.kv.put(KV_KEYS.POOL.PROVISION_LOCK, "1", { ttl: POOL_PROVISION_LOCK_TTL });
       await this.createPoolInstance();
       await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId);
-      await this.db.instances.assignPool(clusterId);
-      await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
+
+      // Another concurrent caller may have already assigned a pool instance while we
+      // were provisioning. Re-try only if this cluster is still unassigned.
+      const alreadyAssigned = await this.db.instances.getClusterPoolInstance(clusterId);
+      if (!alreadyAssigned) {
+        await this.db.instances.assignPool(clusterId);
+        await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
+      }
       this.log.info(`Provisioned and assigned new instance to cluster ${clusterName}`);
     }
   }

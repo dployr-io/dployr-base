@@ -13,6 +13,8 @@ export interface IKVAdapter {
   put(key: string, value: string, options?: { ttl?: number }): Promise<void>;
   delete(key: string): Promise<void>;
   list(options: { prefix: string; limit?: number }): Promise<Array<{ name: string }>>;
+  /** Atomically increment a counter and return the new value. Sets TTL on first creation. */
+  incr(key: string, ttl?: number): Promise<number>;
 }
 
 /**
@@ -75,6 +77,14 @@ export class RedisKV implements IKVAdapter {
     }
     return keys.map(name => ({ name }));
   }
+
+  async incr(key: string, ttl?: number): Promise<number> {
+    const count = await this.client.incr(key);
+    if (count === 1 && ttl) {
+      await this.client.expire(key, ttl);
+    }
+    return count;
+  }
 }
 
 /**
@@ -108,5 +118,18 @@ export class MemoryKV implements IKVAdapter {
       .slice(0, options.limit)
       .map(name => ({ name }));
     return keys;
+  }
+
+  async incr(key: string, ttl?: number): Promise<number> {
+    const item = this.store.get(key);
+    const now = Date.now();
+    if (!item || (item.expiresAt && now > item.expiresAt)) {
+      const expiresAt = ttl ? now + ttl * 1000 : undefined;
+      this.store.set(key, { value: '1', expiresAt });
+      return 1;
+    }
+    const newValue = parseInt(item.value, 10) + 1;
+    this.store.set(key, { ...item, value: String(newValue) });
+    return newValue;
   }
 }

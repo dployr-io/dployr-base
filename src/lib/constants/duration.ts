@@ -88,8 +88,8 @@ export const ADMIN_JWT_TTL = TTL_30_MINUTES;
 /** Billing notification cache: 24 hours */
 export const BILLING_NOTIFICATION_TTL = TTL_24_HOURS;
 
-/** Pool provision lock duration: 100 seconds */
-export const POOL_PROVISION_LOCK_TTL = 100;
+/** Pool provision lock duration: 300 seconds */
+export const POOL_PROVISION_LOCK_TTL = 300;
 
 /** Node connected heartbeat refresh: 60 seconds */
 export const NODE_CONNECTED_TTL = TTL_1_MINUTE;

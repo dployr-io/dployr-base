@@ -154,6 +154,21 @@ export class WebSocketHandler {
   }
 
   /**
+   * Forcibly terminate all node connections for a given instance tag.
+   * Call this immediately after deleting an instance so stale routing entries are evicted.
+   */
+  evictNodeByTag(tag: string): void {
+    const conns = this.connectionManager.getNodeConnections(tag);
+    for (const conn of conns) {
+      this.handleDisconnect(conn);
+      try { conn.ws.terminate(); } catch {}
+    }
+    if (conns.length > 0) {
+      this.log.info(`Evicted ${conns.length} WS connection(s) for deleted instance ${tag}`);
+    }
+  }
+
+  /**
    * Route incoming messages to the appropriate handler
    */
   private async handleMessage(conn: ClusterConnection, data: unknown): Promise<void> {

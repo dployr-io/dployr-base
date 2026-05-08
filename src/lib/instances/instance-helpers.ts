@@ -3,7 +3,7 @@
 
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { ERROR, SUCCESS } from "@/lib/constants/index.js";
-import { getDbStore, getInstancePoolService, getInstanceService, getKVStore, getVMService } from "@/lib/config/context.js";
+import { getDbStore, getInstancePoolService, getInstanceService, getKVStore, getVMService, getWS } from "@/lib/config/context.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
@@ -149,6 +149,7 @@ export function attachDeleteInstance(app: Hono<{ Bindings: Bindings; Variables: 
       }
 
       await db.instances.delete({ id: instance.id });
+      getWS(c).evictNodeByTag(instance.tag);
       return c.json({ success: true, data: { deleted: true, instance: instance.tag } });
     } catch {
       return c.json(

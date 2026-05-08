@@ -229,7 +229,8 @@ export class InstanceStore extends BaseStore {
            AND i.status = 'healthy'
            AND (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = i.id) < COALESCE(i.capacity, 10)
          ORDER BY (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = i.id) ASC
-         LIMIT 1`,
+         LIMIT 1
+         FOR UPDATE OF i`,
         [],
       );
 
