@@ -32,7 +32,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[ ! -t 0 ] && ! [ -t 1 ] && ! [ -e /dev/tty ] && SKIP_PROMPTS=true
 
 info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*"; }
@@ -95,6 +94,7 @@ prompt() {
   local current; current="$(tget "$key")"
 
   $SKIP_PROMPTS && return
+  [ ! -e /dev/tty ] && return
 
   if [ -n "$current" ]; then
     local display="$current"
@@ -167,7 +167,6 @@ main() {
   echo ""
 
   [ "$EUID" -ne 0 ] && error "Run as root"
-  [ ! -e /dev/tty ] && ! $SKIP_PROMPTS && error "Interactive mode requires a terminal. Use --non-interactive."
   require curl
   require jq
 
