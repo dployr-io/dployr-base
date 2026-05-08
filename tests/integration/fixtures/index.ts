@@ -22,8 +22,6 @@ const TIMEOUT_SERVER_STARTUP = 20_000;
 const TIMEOUT_SERVER_HEALTH = 30_000;
 const TIMEOUT_SESSION = 10_000;
 const TIMEOUT_CLUSTER = 10_000;
-const TIMEOUT_FIXTURE_SETUP = 180_000;
-const TIMEOUT_CLEANUP = 60_000;
 
 function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -38,6 +36,7 @@ function getFreePort(): Promise<number> {
 
 export interface TestFixtures {
   session: string;
+  otherSession: string;
   clusterId: string;
   otherClusterId: string;
   baseUrl: string;
@@ -203,6 +202,7 @@ export async function setupFixtures(): Promise<TestFixtures> {
 
    return {
      session: sessionCookie,
+     otherSession: otherSessionCookie,
      clusterId,
      otherClusterId,
      baseUrl,
