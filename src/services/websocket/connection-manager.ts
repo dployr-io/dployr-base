@@ -397,8 +397,6 @@ export class ConnectionManager {
     }
   }
 
-  // ==================== Log Stream Management ====================
-
   /**
    * Add a log stream subscription
    */
@@ -480,8 +478,6 @@ export class ConnectionManager {
     }
   }
 
-  // ==================== File Watch Management ====================
-
   /**
    * Add a file watch subscription
    */
@@ -538,8 +534,6 @@ export class ConnectionManager {
     return subscribers ? subscribers.size > 0 : false;
   }
 
-  // ==================== Acknowledgment System ====================
-
   /**
    * Store message for potential retry on reconnect
    */
@@ -581,13 +575,13 @@ export class ConnectionManager {
     return messages;
   }
 
-  // ==================== Metrics ====================
-
   /**
    * Get connection manager stats for monitoring
    */
   getStats(): {
     totalConnections: number;
+    nodeConnections: number;
+    clientConnections: number;
     connectionsByCluster: Record<string, number>;
     pendingRequests: number;
     logStreams: number;
@@ -596,14 +590,20 @@ export class ConnectionManager {
   } {
     const connectionsByCluster: Record<string, number> = {};
     let totalConnections = 0;
+    let nodeConnections = 0;
+    let clientConnections = 0;
 
     for (const [clusterId, conns] of this.connections) {
       connectionsByCluster[clusterId] = conns.size;
       totalConnections += conns.size;
+      nodeConnections += Array.from(conns).filter((c) => c.role === "node").length;
     }
+    clientConnections = totalConnections - nodeConnections;
 
     return {
       totalConnections,
+      nodeConnections,
+      clientConnections,
       connectionsByCluster,
       pendingRequests: this.pendingRequests.size,
       logStreams: this.logStreams.size,
