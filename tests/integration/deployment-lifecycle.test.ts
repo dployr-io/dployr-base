@@ -3,8 +3,8 @@
 
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import type { TestFixtures } from "./fixtures/index.js";
-import { FakeNode, createTestInstance, deleteTestInstance } from "./fixtures/fake-node.js";
+import type { TestFixtures } from "./fixtures/index.test.js";
+import { FakeNode, createTestInstance, deleteTestInstance } from "./fixtures/fake-node.test.js";
 
 export function registerDeploymentLifecycleTests(getFx: () => TestFixtures) {
   describe("Deployment lifecycle", () => {

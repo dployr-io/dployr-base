@@ -3,8 +3,8 @@
 
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import type { TestFixtures } from "./fixtures/index.js";
-import { createTestInstance, deleteTestInstance } from "./fixtures/fake-node.js";
+import type { TestFixtures } from "./fixtures/index.test.js";
+import { createTestInstance, deleteTestInstance } from "./fixtures/fake-node.test.js";
 
 /**
  * Cluster isolation tests.

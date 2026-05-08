@@ -3,7 +3,7 @@
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { setupFixtures, type TestFixtures } from "./fixtures/index.js";
+import { setupFixtures, type TestFixtures } from "./fixtures/index.test.js";
 import { registerNodeAuthTests } from "./node-auth.test.js";
 import { registerDeploymentLifecycleTests } from "./deployment-lifecycle.test.js";
 import { registerRateLimitTests } from "./rate-limit.test.js";

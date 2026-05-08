@@ -3,7 +3,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type { TestFixtures } from "./fixtures/index.js";
+import type { TestFixtures } from "./fixtures/index.test.js";
 
 /**
  * Rate limiting integration tests.
