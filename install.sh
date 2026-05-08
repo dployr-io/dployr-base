@@ -83,6 +83,36 @@ detect_node() {
   NODE_BIN="/usr/local/bin/node"
 }
 
+install_caddy() {
+  if command -v caddy >/dev/null 2>&1; then
+    info "Caddy already installed: $(caddy version)"
+    return
+  fi
+  info "Installing Caddy..."
+  apt-get install -y debian-keyring debian-archive-keyring apt-transport-https >/dev/null 2>&1
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+    | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+    | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
+  apt-get update >/dev/null 2>&1
+  apt-get install -y caddy >/dev/null 2>&1
+}
+
+setup_caddy() {
+  local domain="$1" app_port="$2"
+
+  cat > /etc/caddy/Caddyfile <<EOF
+${domain} {
+    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+    reverse_proxy localhost:${app_port}
+}
+EOF
+
+  systemctl enable caddy >/dev/null 2>&1
+  systemctl restart caddy
+  info "Caddy configured: https://${domain} → localhost:${app_port}"
+}
+
 install_tomato() {
   if command -v tomato >/dev/null 2>&1; then return; fi
   info "Installing tomato v${TOMATO_VERSION}..."
@@ -169,6 +199,53 @@ configure() {
   prompt "virtual_machines.ssh_key"      "DigitalOcean SSH key ID"
 }
 
+read_pem() {
+  local label="$1" dest="$2"
+  echo ""
+  echo "$label"
+  echo "  [p] Paste content  [f] Enter file path"
+  printf "  Choice [p]: "; local mode; read -r mode; mode="${mode:-p}"
+
+  mkdir -p /etc/caddy/certs
+
+  if [[ "$mode" == "f" ]]; then
+    while true; do
+      printf "  File path: "; local fpath; read -r fpath
+      [ -f "$fpath" ] && break
+      echo "  File not found: $fpath"
+    done
+    cp "$fpath" "$dest"
+  else
+    echo "  Paste content below (reads until -----END line):"
+    local line content=""
+    while IFS= read -r line; do
+      content+="${line}"$'\n'
+      [[ "$line" == -----END* ]] && break
+    done
+    printf '%s' "$content" > "$dest"
+  fi
+}
+
+prompt_caddy() {
+  $SKIP_PROMPTS && return
+
+  echo ""
+  printf "Set up Caddy reverse proxy? (y/n): "
+  local choice; read -r choice
+  [[ "$choice" != "y" && "$choice" != "Y" ]] && return
+
+  local domain app_port
+  printf "Domain [base.dployr.io]: "; read -r domain; domain="${domain:-base.dployr.io}"
+  printf "App port [7878]: "; read -r app_port; app_port="${app_port:-7878}"
+
+  read_pem "Cloudflare origin certificate" /etc/caddy/certs/origin.pem
+  read_pem "Cloudflare origin private key"  /etc/caddy/certs/origin.key
+  chmod 600 /etc/caddy/certs/origin.key
+
+  install_caddy
+  setup_caddy "$domain" "$app_port"
+}
+
 main() {
   echo ""
   echo "Dployr Base Installer"
@@ -222,6 +299,7 @@ main() {
   fi
 
   configure
+  prompt_caddy
 
   info "Creating systemd service..."
 
@@ -286,4 +364,5 @@ EOF
   echo "To reconfigure: sudo bash $0"
 }
 
-main
+main "$@"
+exit 0
