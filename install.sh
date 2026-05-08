@@ -139,10 +139,12 @@ main() {
   install_tomato
 
   if [ "$VERSION" = "latest" ]; then
-    VERSION="$(curl -fsSL https://api.github.com/repos/${REPO}/releases/latest \
+    local curl_args=()
+    [ -n "${GITHUB_TOKEN:-}" ] && curl_args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    VERSION="$(curl -fsSL "${curl_args[@]}" "https://api.github.com/repos/${REPO}/releases/latest" \
       | grep -m1 '"tag_name"' \
       | sed 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/')"
-    [ -z "$VERSION" ] && error "Failed to resolve latest version"
+    [ -z "$VERSION" ] && error "Failed to resolve latest version — for private repos, set GITHUB_TOKEN"
   fi
 
   info "Version: $VERSION"
@@ -152,7 +154,9 @@ main() {
   mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" /var/log/dployr-base /var/lib/dployr-base/storage
 
   DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/dployr-base-${VERSION}.tar.gz"
-  curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
+  local dl_args=(-fsSL -H "Accept: application/octet-stream")
+  [ -n "${GITHUB_TOKEN:-}" ] && dl_args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  curl "${dl_args[@]}" "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
 
   info "Installing dependencies..."
   cd "$INSTALL_DIR"
