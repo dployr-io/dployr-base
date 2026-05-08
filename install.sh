@@ -77,8 +77,9 @@ detect_node() {
   info "Using node: $NODE_BIN ($($NODE_BIN --version))"
 
   if [ "$NODE_BIN" != "/usr/local/bin/node" ]; then
-    local target_ver; target_ver="$(/usr/local/bin/node --version 2>/dev/null || echo "")"
-    if [ "$target_ver" != "$($NODE_BIN --version)" ]; then
+    if /usr/local/bin/node --version >/dev/null 2>&1; then
+      info "node already at /usr/local/bin/node ($(/usr/local/bin/node --version))"
+    else
       systemctl stop dployr-base 2>/dev/null || true
       cp "$NODE_BIN" /usr/local/bin/node
       chmod 755 /usr/local/bin/node
