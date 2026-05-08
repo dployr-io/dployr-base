@@ -72,6 +72,7 @@ jobs:
           tomato set kv.url "redis://localhost:6379" config.test.toml
           tomato set server.base_url "http://localhost:7878" config.test.toml
           tomato set cors.allowed_origins "*" config.test.toml
+          tomato set traefik.enabled false config.test.toml
 
       - name: Run unit tests
         run: pnpm test:unit
