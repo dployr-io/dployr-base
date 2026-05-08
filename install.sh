@@ -123,18 +123,15 @@ ${domain} {
 }
 EOF
 
-  if command -v ufw >/dev/null 2>&1; then
-    info "Configuring firewall..."
-    ufw allow 22/tcp    >/dev/null 2>&1
-    ufw allow 80/tcp    >/dev/null 2>&1
-    ufw allow 443/tcp   >/dev/null 2>&1
-    ufw deny "${app_port}/tcp" >/dev/null 2>&1
-    ufw --force enable  >/dev/null 2>&1
-    info "ufw: allowed 22, 80, 443 — blocked ${app_port} externally"
-    warn "For additional hardening, restrict ports 80/443 to Cloudflare IPs only in your Cloud Provider's Firewall"
-  else
-    warn "ufw not found — manually block port ${app_port} from external access"
-  fi
+  info "Configuring firewall..."
+  command -v ufw >/dev/null 2>&1 || apt-get install -y ufw >/dev/null 2>&1
+  ufw allow 22/tcp           >/dev/null 2>&1
+  ufw allow 80/tcp           >/dev/null 2>&1
+  ufw allow 443/tcp          >/dev/null 2>&1
+  ufw deny "${app_port}/tcp" >/dev/null 2>&1
+  ufw --force enable         >/dev/null 2>&1
+  info "ufw: allowed 22, 80, 443 — blocked ${app_port} externally"
+  warn "For additional hardening, restrict ports 80/443 to Cloudflare IPs only in your cloud provider's firewall"
 
   systemctl enable caddy >/dev/null 2>&1
   systemctl restart caddy
