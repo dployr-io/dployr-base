@@ -72,6 +72,12 @@ detect_node() {
   fi
 
   info "Using node: $NODE_BIN ($($NODE_BIN --version))"
+
+  if [ "$NODE_BIN" != "/usr/local/bin/node" ] && [ "$NODE_BIN" != "/usr/bin/node" ]; then
+    ln -sf "$NODE_BIN" /usr/local/bin/node
+    info "Symlinked node to /usr/local/bin/node"
+  fi
+  NODE_BIN="/usr/local/bin/node"
 }
 
 install_tomato() {
