@@ -134,17 +134,18 @@ main() {
   [ "$EUID" -ne 0 ] && error "Run as root"
   [ ! -t 0 ] && ! $SKIP_PROMPTS && error "Interactive mode requires a terminal. Use --non-interactive."
   require curl
+  require jq
   require node
 
   install_tomato
 
+  local gh_args=(-fsSL)
+  [ -n "${GITHUB_TOKEN:-}" ] && gh_args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+
   if [ "$VERSION" = "latest" ]; then
-    local curl_args=()
-    [ -n "${GITHUB_TOKEN:-}" ] && curl_args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
-    VERSION="$(curl -fsSL "${curl_args[@]}" "https://api.github.com/repos/${REPO}/releases/latest" \
-      | grep -m1 '"tag_name"' \
-      | sed 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/')"
-    [ -z "$VERSION" ] && error "Failed to resolve latest version — for private repos, set GITHUB_TOKEN"
+    VERSION="$(curl "${gh_args[@]}" "https://api.github.com/repos/${REPO}/releases/latest" \
+      | jq -r '.tag_name')"
+    [ -z "$VERSION" ] || [ "$VERSION" = "null" ] && error "Failed to resolve latest version — for private repos, set GITHUB_TOKEN"
   fi
 
   info "Version: $VERSION"
@@ -153,10 +154,13 @@ main() {
   id "$SERVICE_USER" &>/dev/null || useradd --system --no-create-home --shell /bin/false "$SERVICE_USER"
   mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" /var/log/dployr-base /var/lib/dployr-base/storage
 
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/dployr-base-${VERSION}.tar.gz"
-  local dl_args=(-fsSL -H "Accept: application/octet-stream")
-  [ -n "${GITHUB_TOKEN:-}" ] && dl_args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
-  curl "${dl_args[@]}" "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
+  local asset_name="dployr-base-${VERSION}.tar.gz"
+  local asset_url
+  asset_url="$(curl "${gh_args[@]}" "https://api.github.com/repos/${REPO}/releases/tags/${VERSION}" \
+    | jq -r --arg name "$asset_name" '.assets[] | select(.name == $name) | .url')"
+  [ -z "$asset_url" ] || [ "$asset_url" = "null" ] && error "Failed to find release asset: ${asset_name}"
+
+  curl "${gh_args[@]}" -H "Accept: application/octet-stream" "$asset_url" | tar -xz -C "$INSTALL_DIR"
 
   info "Installing dependencies..."
   cd "$INSTALL_DIR"
