@@ -74,7 +74,8 @@ detect_node() {
   info "Using node: $NODE_BIN ($($NODE_BIN --version))"
 
   if [ "$NODE_BIN" != "/usr/local/bin/node" ]; then
-    ln -sf "$NODE_BIN" /usr/local/bin/node
+    cp "$NODE_BIN" /usr/local/bin/node
+    chmod 755 /usr/local/bin/node
   fi
   NODE_BIN="/usr/local/bin/node"
 }
