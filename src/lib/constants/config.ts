@@ -45,7 +45,7 @@ export const CONFIG_SCHEMA = z.object({
      *
      * Default: false. Set to `true` in any environment where the connection crosses a network.
      */
-    pool_ssl: z.union([z.boolean(), z.literal("no-verify")]).default(false),
+    pool_ssl: z.union([z.boolean(), z.literal("no-verify"), z.literal("disable")]).default(false),
   }),
   kv: z.object({
     type: z.enum(["redis", "upstash", "memory"]),
