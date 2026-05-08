@@ -78,6 +78,7 @@ export const CONFIG_SCHEMA = z.object({
     admin_api_key: z.string().optional().default(""),
     allowed_ips: z.array(z.string()).default([]),
     totp_secret: z.string().optional().default(""),
+    metrics_scrape_token: z.string().optional(),
   }),
   integrations: z
     .object({

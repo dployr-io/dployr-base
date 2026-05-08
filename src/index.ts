@@ -12,6 +12,7 @@ import { globalRateLimit } from "@/middleware/ratelimit.js";
 import { loadSession } from "@/middleware/auth.js";
 import { registerRoutes } from "@/routes/index.js";
 import admin from "@/routes/admin/index.js";
+import metrics from "@/routes/metrics.js";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -37,6 +38,9 @@ app.use("*", bootstrapMiddleware);
 
 // Restricted admin API - for management
 app.route("/v1/admin", admin);
+
+// Prometheus-format metrics 
+app.route("/metrics", metrics);
 
 // Load session before rate limiting so authenticated users get per-user buckets
 app.use("/v1/*", loadSession);
