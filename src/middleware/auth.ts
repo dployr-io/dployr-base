@@ -172,6 +172,16 @@ export function resolveCluster(entity: "instance" | "domain" | "service" | "prox
 }
 
 /**
+ * Best-effort session loader — sets `session` in context if a valid cookie is present.
+ * Does NOT reject unauthenticated requests; use authMiddleware for that.
+ * Apply this before rate-limit middleware so authenticated users get per-user buckets.
+ */
+export async function loadSession(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) {
+  await authenticate(c);
+  await next();
+}
+
+/**
  * Basic authentication middleware.
  * Requires a valid session cookie. Sets 401 if authentication fails.
  *

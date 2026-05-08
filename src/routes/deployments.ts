@@ -48,7 +48,18 @@ deployments.post("/finish", async (c) => {
 
     const { token, id, logs, blueprint } = validation.data;
     const jwtService = getJWTService(c);
-    const decoded = await jwtService.verifyToken(token);
+    let decoded: Awaited<ReturnType<typeof jwtService.verifyToken>>;
+    try {
+      decoded = await jwtService.verifyToken(token);
+    } catch {
+      return c.json(
+        createErrorResponse({
+          message: "Invalid or expired token",
+          code: ERROR.AUTH.BAD_TOKEN.code,
+        }),
+        ERROR.AUTH.BAD_TOKEN.status,
+      );
+    }
     if (!decoded) {
       return c.json(
         createErrorResponse({
@@ -103,9 +114,9 @@ deployments.post("/finish", async (c) => {
         staticDir: blueprint.static_dir ?? payload?.static_dir,
         image: blueprint.image ?? payload?.image,
         domain: blueprint.domain ?? payload?.domain,
-        runtimeType: blueprint.runtime_type ?? blueprint.runtime.type ?? payload?.runtime,
-        runtimeVersion: blueprint.runtime_version ?? blueprint.runtime.version ?? payload?.version,
-        remoteUrl: blueprint.remote_url ?? blueprint.remote.url ?? payload?.remote?.url,
+        runtimeType: blueprint.runtime_type ?? blueprint.runtime?.type ?? payload?.runtime,
+        runtimeVersion: blueprint.runtime_version ?? blueprint.runtime?.version ?? payload?.version,
+        remoteUrl: blueprint.remote_url ?? blueprint.remote?.url ?? payload?.remote?.url,
         remoteBranch: blueprint.remote_branch ?? blueprint.remote?.branch ?? payload?.remote?.branch,
         remoteCommitHash: blueprint.remote_commit_hash ?? blueprint.remote?.commit_hash ?? payload?.remote?.commit_hash,
         logs,

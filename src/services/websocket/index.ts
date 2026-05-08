@@ -10,6 +10,7 @@ import type { Hono } from "hono";
 import { initializeAdapters, type Adapters } from "@/lib/config/bootstrap.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
+import { JWTService } from "@/services/auth/jwt.js";
 import type { Session } from "@/types/index.js";
 import { Logger } from "@/lib/logger.js";
 
@@ -210,6 +211,16 @@ export class WebSocketService {
             socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
             socket.destroy();
             return;
+          }
+          if (this.adapters?.kv) {
+            const jwtService = new JWTService(new KVStore(this.adapters.kv));
+            try {
+              await jwtService.verifyToken(auth.slice(7));
+            } catch {
+              socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+              socket.destroy();
+              return;
+            }
           }
         }
 

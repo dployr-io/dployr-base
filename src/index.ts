@@ -9,6 +9,7 @@ import { registerJobs } from "@/services/background/jobs/index.js";
 import { bootstrapMiddleware, getCorsConfig } from "@/lib/config/bootstrap.js";
 import { createCorsMiddleware } from "@/middleware/cors.js";
 import { globalRateLimit } from "@/middleware/ratelimit.js";
+import { loadSession } from "@/middleware/auth.js";
 import { registerRoutes } from "@/routes/index.js";
 import admin from "@/routes/admin/index.js";
 import { readFileSync } from "fs";
@@ -36,6 +37,9 @@ app.use("*", bootstrapMiddleware);
 
 // Restricted admin API - for management
 app.route("/v1/admin", admin);
+
+// Load session before rate limiting so authenticated users get per-user buckets
+app.use("/v1/*", loadSession);
 
 // Global rate limiting
 app.use("/v1/*", globalRateLimit);

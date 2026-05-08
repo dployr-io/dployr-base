@@ -218,7 +218,7 @@ export class DeploymentStore extends BaseStore {
 
   async updateLogs(id: string, logs: string): Promise<Deployment | null> {
     const result = await this.db
-      .prepare(`UPDATE deployments SET logs = $1, updated_at = $2 WHERE id = $3 RETURNING id, cluster_id, service_id, name, type, source, status, blueprint, logs, created_at, finished_at`)
+      .prepare(`UPDATE deployments SET logs = $1, updated_at = $2 WHERE id = $3 RETURNING id, cluster_id, service_id, name, type, source, status, logs, created_at, finished_at`)
       .bind(logs, this.now(), id)
       .first();
 
