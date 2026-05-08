@@ -205,7 +205,6 @@ export abstract class BaseStore {
    */
   protected parsePostgresError(error: unknown): never {
     if (error instanceof Error) {
-      log.error("PostgreSQL error: ", error);
       // Postgres unique violation
       if ((error as any).code === "23505") {
         // Extract constraint name from detail: Key (field)=(value) already exists
