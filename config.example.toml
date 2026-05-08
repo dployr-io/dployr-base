@@ -61,6 +61,8 @@ github_client_secret = ""
 admin_api_key = "12345"
 allowed_ips = ["192.168.100.20", "127.0.0.1"]
 totp_secret = "123456789"
+# Generate with: openssl rand -hex 32
+# metrics_scrape_token = ""
 
 [integrations]
 github_token = ""

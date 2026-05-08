@@ -1247,6 +1247,12 @@
           </svg>
           Services
         </button>
+        <button class="nav-item" data-view="metrics">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          Metrics
+        </button>
         <div class="nav-divider"></div>
         <div class="nav-section-label">System</div>
         <button class="nav-item" data-view="token">
@@ -1609,6 +1615,96 @@
             </div>
           </div>
         </div>
+
+        <!-- metrics view -->
+        <div id="view-metrics" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Metrics</div>
+              <div class="page-subtitle">Live system health snapshot</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="refresh-metrics">Refresh</button>
+          </div>
+          <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">CLUSTERS &amp; SERVICES</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-cl-total">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Total clusters</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-cl-paid">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Paid clusters</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--text-dim);font-family:var(--mono)" id="m-cl-free">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Free clusters</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--accent);font-family:var(--mono)" id="m-svc-total">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Total services</div>
+            </div></div>
+          </div>
+
+          <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">INSTANCES</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-inst-total">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Total instances</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-inst-healthy">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Healthy</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--yellow);font-family:var(--mono)" id="m-inst-degraded">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Degraded</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-inst-offline">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Offline / Unreachable</div>
+            </div></div>
+          </div>
+
+          <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">WEBSOCKET</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--accent);font-family:var(--mono)" id="m-ws-total">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Active connections</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-ws-nodes">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Connected nodes</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-ws-clients">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Client connections</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--yellow);font-family:var(--mono)" id="m-ws-pending-req">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Pending WS requests</div>
+            </div></div>
+          </div>
+
+          <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">DEPLOYMENTS</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-dep-pending">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Pending</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-dep-stale">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Stale (&gt;5 min)</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-dep-success">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Succeeded (recent)</div>
+            </div></div>
+            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
+              <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-dep-failed">—</div>
+              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Failed (recent)</div>
+            </div></div>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -1770,6 +1866,7 @@
         if (name === 'events') loadEvents();
         if (name === 'deployments') loadDeployments();
         if (name === 'services') loadServices();
+        if (name === 'metrics') loadMetrics();
         if (name === 'token') populateTokenView();
         startAutoRefresh(name);
       }
@@ -1933,6 +2030,10 @@
 
       function renderInstances(instances) {
         const tbody = $('#instances-tbody');
+        // remember which tags were expanded before wiping the DOM
+        const expandedTags = new Set(
+          Array.from(tbody.querySelectorAll('.cell-tag-btn.expanded')).map(btn => btn.closest('tr').dataset.tag)
+        );
         tbody.innerHTML = '';
 
         if (!instances.length) {
@@ -2011,6 +2112,9 @@
           });
 
           tbody.appendChild(tr);
+
+          // re-open panel if this tag was expanded before the refresh
+          if (expandedTags.has(inst.tag)) tagBtn.click();
         });
       }
 
@@ -2330,6 +2434,54 @@
         }
       }
 
+      function setMetric(id, value, color) {
+        const el = $(`#${id}`);
+        if (!el) return;
+        el.textContent = value;
+        if (color !== undefined) el.style.color = color;
+      }
+
+      async function loadMetrics() {
+        try {
+          const body = await apiRequest(`${API_BASE}/v1/admin/metrics`, { headers: apiHeaders() });
+          const d = body.data;
+          const ws = d.ws;
+          const dep = d.deployments;
+          const cl = d.clusters ?? {};
+          const inst = d.instances ?? {};
+
+          // clusters
+          setMetric('m-cl-total', cl.total ?? '—');
+          setMetric('m-cl-paid', cl.paid ?? '—', cl.paid > 0 ? 'var(--green)' : 'var(--text-dim)');
+          setMetric('m-cl-free', cl.free ?? '—');
+          const planText = Object.entries(cl.byPlan ?? {}).map(([p, n]) => `${p}:${n}`).join('  ') || '—';
+          setMetric('m-cl-plans', planText);
+
+          // instances
+          setMetric('m-inst-total', inst.total ?? '—');
+          setMetric('m-inst-healthy', inst.healthy ?? '—', inst.healthy > 0 ? 'var(--green)' : 'var(--text-dim)');
+          setMetric('m-inst-degraded', inst.degraded ?? '—', inst.degraded > 0 ? 'var(--yellow)' : 'var(--text-dim)');
+          setMetric('m-inst-offline', inst.offline ?? '—', inst.offline > 0 ? 'var(--red)' : 'var(--text-dim)');
+
+          // ws
+          setMetric('m-ws-total', ws ? ws.totalConnections : 'N/A');
+          setMetric('m-ws-nodes', ws ? ws.nodeConnections : 'N/A');
+          setMetric('m-ws-clients', ws ? ws.clientConnections : 'N/A');
+          setMetric('m-ws-pending-req', ws ? ws.pendingRequests : 'N/A', ws?.pendingRequests > 0 ? 'var(--yellow)' : 'var(--text-dim)');
+
+          // deployments
+          setMetric('m-dep-pending', dep.pending, dep.pending > 0 ? 'var(--yellow)' : 'var(--text)');
+          setMetric('m-dep-stale', dep.stalePendingOver5m, dep.stalePendingOver5m > 0 ? 'var(--red)' : 'var(--text-dim)');
+          setMetric('m-dep-success', dep.recentSuccess, dep.recentSuccess > 0 ? 'var(--green)' : 'var(--text-dim)');
+          setMetric('m-dep-failed', dep.recentFailed, dep.recentFailed > 0 ? 'var(--red)' : 'var(--text-dim)');
+
+          // services
+          setMetric('m-svc-total', d.services?.total ?? '—');
+        } catch (e) {
+          console.error('metrics load error', e);
+        }
+      }
+
       // auto-refresh: every 10s re-load whatever view is currently active
       let _autoRefreshTimer = null;
       const VIEW_LOADERS = {
@@ -2337,6 +2489,7 @@
         events: loadEvents,
         deployments: loadDeployments,
         services: loadServices,
+        metrics: loadMetrics,
       };
 
       function startAutoRefresh(viewName) {
@@ -2463,6 +2616,7 @@
         $('#refresh-events').addEventListener('click', loadEvents);
         $('#refresh-deployments').addEventListener('click', loadDeployments);
         $('#refresh-services').addEventListener('click', loadServices);
+        $('#refresh-metrics').addEventListener('click', loadMetrics);
 
         // add instance
         $('#add-btn').addEventListener('click', addInstance);
