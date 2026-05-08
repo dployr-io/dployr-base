@@ -5,6 +5,8 @@
 
 set -eu
 
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH"
+
 VERSION="${VERSION:-latest}"
 TOMATO_VERSION="${TOMATO_VERSION:-1.0.0}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/dployr-base}"
