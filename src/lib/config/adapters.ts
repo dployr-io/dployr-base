@@ -101,7 +101,7 @@ export async function createDatabaseFromConfig(config: Config): Promise<Postgres
     connectionTimeoutMillis: config.database.pool_connection_timeout_ms,
     keepAlive: config.database.pool_keep_alive,
     keepAliveInitialDelayMillis: 10_000,
-    ssl: config.database.pool_ssl === "no-verify" ? { rejectUnauthorized: false } : config.database.pool_ssl || undefined,
+    ssl: config.database.pool_ssl === "no-verify" ? { rejectUnauthorized: false } : config.database.pool_ssl || { rejectUnauthorized: false },
   });
 }
 
