@@ -246,6 +246,8 @@ prompt_caddy() {
 
   read_pem "Cloudflare origin certificate" /etc/caddy/certs/origin.pem
   read_pem "Cloudflare origin private key"  /etc/caddy/certs/origin.key
+  chown caddy:caddy /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+  chmod 640 /etc/caddy/certs/origin.pem
   chmod 600 /etc/caddy/certs/origin.key
 
   install_caddy
