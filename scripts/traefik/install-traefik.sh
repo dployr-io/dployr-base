@@ -89,7 +89,8 @@ configure() {
   prompt "redis.tls"          "Redis TLS (true/false)"
   prompt "tls.acme_email"     "ACME email"
   prompt "tls.cf_api_token"   "Cloudflare API token"     true
-  prompt "dashboard.username" "Dashboard username"
+  prompt "dashboard.username"    "Dashboard username"
+  prompt "dashboard.allowed_ips" "Allowed IPs for dashboard (TOML array, e.g. [\"1.2.3.4\"])"
 
   local current_pass; current_pass="$(tget 'dashboard.password_hash')"
   if ! $SKIP_PROMPTS; then
@@ -209,6 +210,29 @@ EOF
   hash="${hash#*:}"
   local dashboard_domain="traefik-${instance}.${tld}"
 
+  local allowed_ips_raw; allowed_ips_raw="$(tget 'dashboard.allowed_ips')"
+  local allowed_ips=()
+  if [ -n "$allowed_ips_raw" ]; then
+    while IFS= read -r ip; do
+      ip="$(echo "$ip" | tr -d ' "')"
+      [ -n "$ip" ] && allowed_ips+=("$ip")
+    done < <(echo "$allowed_ips_raw" | tr -d '[]' | tr ',' '\n')
+  fi
+
+  local ip_middleware_ref=""
+  local ip_middleware_block=""
+  if [ ${#allowed_ips[@]} -gt 0 ]; then
+    local source_ranges=""
+    for ip in "${allowed_ips[@]}"; do
+      source_ranges+="          - \"${ip}\""$'\n'
+    done
+    ip_middleware_ref="        - dashboard-ip"$'\n'
+    ip_middleware_block="    dashboard-ip:
+      ipAllowList:
+        sourceRange:
+${source_ranges}"
+  fi
+
   mkdir -p "$CONFIG_DIR/dynamic"
   cat > "$CONFIG_DIR/dynamic/dashboard.yml" <<EOF
 http:
@@ -219,11 +243,11 @@ http:
       entryPoints:
         - websecure
       middlewares:
-        - dashboard-auth
+${ip_middleware_ref}        - dashboard-auth
       tls: {}
 
   middlewares:
-    dashboard-auth:
+${ip_middleware_block}    dashboard-auth:
       basicAuth:
         users:
           - '${user}:${hash}'
