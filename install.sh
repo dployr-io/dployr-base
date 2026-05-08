@@ -53,7 +53,7 @@ detect_node() {
 
   [ ${#candidates[@]} -eq 0 ] && error "node is required but not found on this system"
 
-  if [ ${#candidates[@]} -eq 1 ] || $SKIP_PROMPTS; then
+  if $SKIP_PROMPTS; then
     NODE_BIN="${candidates[0]}"
   else
     echo ""
@@ -73,9 +73,8 @@ detect_node() {
 
   info "Using node: $NODE_BIN ($($NODE_BIN --version))"
 
-  if [ "$NODE_BIN" != "/usr/local/bin/node" ] && [ "$NODE_BIN" != "/usr/bin/node" ]; then
+  if [ "$NODE_BIN" != "/usr/local/bin/node" ]; then
     ln -sf "$NODE_BIN" /usr/local/bin/node
-    info "Symlinked node to /usr/local/bin/node"
   fi
   NODE_BIN="/usr/local/bin/node"
 }
