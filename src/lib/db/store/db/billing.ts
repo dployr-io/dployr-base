@@ -111,6 +111,18 @@ export class BillingStore extends BaseStore {
     }
   }
 
+  async count(filter?: { status?: string; plan?: string }): Promise<number> {
+    const { clause, bindings } = this.buildWhere({
+      status: filter?.status,
+      plan: filter?.plan,
+    });
+    const row = await (bindings.length
+      ? this.db.prepare(`SELECT COUNT(*) AS count FROM billing ${clause}`).bind(...bindings).first<{ count: string }>()
+      : this.db.prepare(`SELECT COUNT(*) AS count FROM billing`).first<{ count: string }>());
+    return Number(row?.count ?? 0);
+  }
+
+
   async getEffectivePlan(clusterId: string): Promise<SubscriptionPlan> {
     const sub = await this.get(clusterId);
     if (!sub) return "hobby";

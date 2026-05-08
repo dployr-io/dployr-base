@@ -4,7 +4,7 @@ import * as OTPAuth from "otpauth";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { Bindings, createErrorResponse, createSuccessResponse, Variables } from "@/types/index.js";
-import { getKVStore, getDbStore } from "@/lib/config/context.js";
+import { getKVStore, getDbStore, getWS } from "@/lib/config/context.js";
 import { requireDployrAdministrator, requireDployrAdministratorIPAddress } from "@/middleware/auth.js";
 import instances from "./instances/index.js";
 import { ADMIN_JWT_TTL, ERROR } from "@/lib/constants/index.js";
@@ -104,6 +104,83 @@ admin.get("/services", async (c) => {
   const db = getDbStore(c);
   const { services, total } = await db.services.list();
   return c.json(createSuccessResponse({ services, total }));
+});
+
+admin.get("/metrics", async (c) => {
+  const db = getDbStore(c);
+
+  const [
+    { deployments: pending },
+    { deployments: allDeployments },
+    { total: totalServices },
+    { instances: allInstances },
+    totalClusters,
+    paidIndieCount,
+    paidProCount,
+  ] = await Promise.all([
+    db.deployments.list({ status: "pending" }),
+    db.deployments.list({ limit: 200 }),
+    db.services.list(),
+    db.instances.list(),
+    db.clusters.count(),
+    db.billing.count({ plan: "indie", status: "active" }),
+    db.billing.count({ plan: "pro", status: "active" }),
+  ]);
+
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  const stalePending = pending.filter((d) => (d.createdAt as unknown as number) < fiveMinutesAgo).length;
+
+  const recentFailed = allDeployments.filter((d) => d.status === "failed").length;
+  const recentSuccess = allDeployments.filter((d) => d.status === "success").length;
+
+  const planCounts = { indie: paidIndieCount, pro: paidProCount };
+  const paidClusters = paidIndieCount + paidProCount;
+
+  const instancesByStatus: Record<string, number> = {};
+  for (const inst of allInstances) {
+    const s = inst.status ?? "unknown";
+    instancesByStatus[s] = (instancesByStatus[s] ?? 0) + 1;
+  }
+
+  let wsStats: ReturnType<ReturnType<typeof getWS>["connectionManager"]["getStats"]> | null = null;
+  try {
+    wsStats = getWS(c).connectionManager.getStats();
+  } catch {
+    // wsHandler not initialized in this request context
+  }
+
+  return c.json(
+    createSuccessResponse({
+      ws: wsStats
+        ? {
+            totalConnections: wsStats.totalConnections,
+            nodeConnections: wsStats.nodeConnections,
+            clientConnections: wsStats.clientConnections,
+            pendingRequests: wsStats.pendingRequests,
+          }
+        : null,
+      clusters: {
+        total: totalClusters,
+        paid: paidClusters,
+        free: totalClusters - paidClusters,
+        byPlan: planCounts,
+      },
+      instances: {
+        total: allInstances.length,
+        byStatus: instancesByStatus,
+        healthy: instancesByStatus["healthy"] ?? 0,
+        degraded: instancesByStatus["degraded"] ?? 0,
+        offline: (instancesByStatus["offline"] ?? 0) + (instancesByStatus["unreachable"] ?? 0),
+      },
+      deployments: {
+        pending: pending.length,
+        stalePendingOver5m: stalePending,
+        recentFailed,
+        recentSuccess,
+      },
+      services: { total: totalServices },
+    }),
+  );
 });
 
 /**

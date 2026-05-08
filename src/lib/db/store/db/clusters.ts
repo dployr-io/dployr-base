@@ -1022,4 +1022,15 @@ export class ClusterStore extends BaseStore {
 
     return statements;
   }
+
+  async count(filter?: { id?: string; name?: string }): Promise<number> {
+    const { clause, bindings } = this.buildWhere({
+      id: filter?.id,
+      name: filter?.name,
+    });
+    const row = await (bindings.length
+      ? this.db.prepare(`SELECT COUNT(*) AS count FROM clusters ${clause}`).bind(...bindings).first<{ count: string }>()
+      : this.db.prepare(`SELECT COUNT(*) AS count FROM clusters`).first<{ count: string }>());
+    return Number(row?.count ?? 0);
+  }
 }
