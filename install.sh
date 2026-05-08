@@ -7,6 +7,12 @@ set -eu
 
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH"
 
+# Include nvm-managed node if present
+if [ -d "/root/.nvm/versions/node" ]; then
+  NVM_NODE_BIN=$(find /root/.nvm/versions/node -maxdepth 2 -name bin -type d 2>/dev/null | sort -V | tail -1)
+  [ -n "$NVM_NODE_BIN" ] && export PATH="$NVM_NODE_BIN:$PATH"
+fi
+
 VERSION="${VERSION:-latest}"
 TOMATO_VERSION="${TOMATO_VERSION:-1.0.0}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/dployr-base}"
