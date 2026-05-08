@@ -42,6 +42,12 @@ require() { command -v "$1" >/dev/null 2>&1 || error "$1 is required but not ins
 NODE_BIN=""
 
 detect_node() {
+  if /usr/local/bin/node --version >/dev/null 2>&1; then
+    NODE_BIN="/usr/local/bin/node"
+    info "Using node: $NODE_BIN ($($NODE_BIN --version))"
+    return
+  fi
+
   local candidates=() seen_versions=()
   while IFS= read -r p; do
     local ver; ver="$("$p" --version 2>/dev/null || echo "")"
@@ -56,7 +62,7 @@ detect_node() {
 
   [ ${#candidates[@]} -eq 0 ] && error "node is required but not found on this system"
 
-  if $SKIP_PROMPTS; then
+  if [ ${#candidates[@]} -eq 1 ] || $SKIP_PROMPTS; then
     NODE_BIN="${candidates[0]}"
   else
     echo ""
@@ -69,22 +75,14 @@ detect_node() {
     done
     echo ""
     printf "Select node to use [1]: "
-    local choice; read -r choice </dev/tty
+    local choice; read -r choice
     choice="${choice:-1}"
     NODE_BIN="${candidates[$((choice - 1))]}"
   fi
 
   info "Using node: $NODE_BIN ($($NODE_BIN --version))"
-
-  if [ "$NODE_BIN" != "/usr/local/bin/node" ]; then
-    if /usr/local/bin/node --version >/dev/null 2>&1; then
-      info "node already at /usr/local/bin/node ($(/usr/local/bin/node --version))"
-    else
-      systemctl stop dployr-base 2>/dev/null || true
-      cp "$NODE_BIN" /usr/local/bin/node
-      chmod 755 /usr/local/bin/node
-    fi
-  fi
+  cp "$NODE_BIN" /usr/local/bin/node
+  chmod 755 /usr/local/bin/node
   NODE_BIN="/usr/local/bin/node"
 }
 
