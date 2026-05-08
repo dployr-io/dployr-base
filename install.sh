@@ -218,25 +218,36 @@ read_pem() {
     [[ "$keep" == "y" || "$keep" == "Y" ]] && return
   fi
 
-  echo "  [p] Paste content  [f] Enter file path"
-  printf "  Choice [p]: "; local mode; read -r mode; mode="${mode:-p}"
+  while true; do
+    echo "  [p] Paste content  [f] Enter file path"
+    printf "  Choice [p]: "; local mode; read -r mode; mode="${mode:-p}"
 
-  if [[ "$mode" == "f" ]]; then
-    while true; do
-      printf "  File path: "; local fpath; read -r fpath
-      [ -f "$fpath" ] && break
-      echo "  File not found: $fpath"
-    done
-    cp "$fpath" "$dest"
-  else
-    echo "  Paste content below (reads until -----END line):"
-    local line content=""
-    while IFS= read -r line; do
-      content+="${line}"$'\n'
-      [[ "$line" == -----END* ]] && break
-    done
-    printf '%s' "$content" > "$dest"
-  fi
+    if [[ "$mode" == "f" ]]; then
+      while true; do
+        printf "  File path: "; local fpath; read -r fpath
+        [ -f "$fpath" ] && break
+        echo "  File not found: $fpath"
+      done
+      cp "$fpath" "$dest"
+    else
+      echo "  Paste content below (reads until -----END line):"
+      local line content=""
+      while IFS= read -r line; do
+        content+="${line}"$'\n'
+        [[ "$line" == -----END* ]] && break
+      done
+      printf '%s' "$content" > "$dest"
+    fi
+
+    if openssl pkey -in "$dest" -noout >/dev/null 2>&1; then
+      return
+    elif openssl x509 -in "$dest" -noout >/dev/null 2>&1; then
+      return
+    else
+      echo "  ERROR: Invalid PEM file. Please try again."
+      rm -f "$dest"
+    fi
+  done
 }
 
 prompt_caddy() {
