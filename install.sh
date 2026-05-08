@@ -81,8 +81,11 @@ detect_node() {
   fi
 
   info "Using node: $NODE_BIN ($($NODE_BIN --version))"
-  cp "$NODE_BIN" /usr/local/bin/node
-  chmod 755 /usr/local/bin/node
+  if [ "$NODE_BIN" != "/usr/local/bin/node" ]; then
+    cp "$NODE_BIN" /usr/local/bin/node.new
+    mv /usr/local/bin/node.new /usr/local/bin/node
+    chmod 755 /usr/local/bin/node
+  fi
   NODE_BIN="/usr/local/bin/node"
 }
 
