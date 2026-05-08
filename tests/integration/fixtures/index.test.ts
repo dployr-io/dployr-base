@@ -159,69 +159,90 @@ async function resolveCluster(baseUrl: string, authCookie: string): Promise<stri
 }
 
 export async function setupFixtures(): Promise<TestFixtures> {
-   console.log("[fixtures] Starting embedded PostgreSQL...");
-   const { pg, connectionString } = await withTimeout(startPostgres(), TIMEOUT_POSTGRES_STARTUP, "PostgreSQL startup");
+  const externalDb = process.env.DATABASE_URL;
+  const externalRedis = process.env.REDIS_URL;
 
-   console.log("[fixtures] Running migrations...");
-   const db = new PostgresAdapter(connectionString);
-   await withTimeout(runMigrations(db), TIMEOUT_MIGRATIONS, "Database migrations");
-   await db.close();
+  let pg: EmbeddedPostgres | null = null;
+  let redisServer: RedisMemoryServer | null = null;
+  let connectionString: string;
+  let redisConnectionString: string;
 
-   console.log("[fixtures] Starting embedded Redis...");
-   const { server: redisServer, connectionString: redisConnectionString } = await withTimeout(
-     startRedis(),
-     TIMEOUT_REDIS_STARTUP,
-     "Redis startup"
-   );
+  if (externalDb) {
+    console.log("[fixtures] Using external PostgreSQL:", externalDb);
+    connectionString = externalDb;
+  } else {
+    console.log("[fixtures] Starting embedded PostgreSQL...");
+    const result = await withTimeout(startPostgres(), TIMEOUT_POSTGRES_STARTUP, "PostgreSQL startup");
+    pg = result.pg;
+    connectionString = result.connectionString;
+  }
 
-   console.log("[fixtures] Spawning server...");
-   const { proc, port } = await withTimeout(
-     spawnServer(connectionString, redisConnectionString),
-     TIMEOUT_SERVER_STARTUP,
-     "Server startup"
-   );
-   const baseUrl = `http://localhost:${port}`;
+  console.log("[fixtures] Running migrations...");
+  const db = new PostgresAdapter(connectionString);
+  await withTimeout(runMigrations(db), TIMEOUT_MIGRATIONS, "Database migrations");
+  await db.close();
 
-   console.log("[fixtures] Waiting for server to be healthy...");
-   await withTimeout(waitForHealth(baseUrl), TIMEOUT_SERVER_HEALTH, "Server health check");
-   console.log("[fixtures] Server ready");
+  if (externalRedis) {
+    console.log("[fixtures] Using external Redis:", externalRedis);
+    redisConnectionString = externalRedis;
+  } else {
+    console.log("[fixtures] Starting embedded Redis...");
+    const result = await withTimeout(startRedis(), TIMEOUT_REDIS_STARTUP, "Redis startup");
+    redisServer = result.server;
+    redisConnectionString = result.connectionString;
+  }
 
-   const sessionCookie = await withTimeout(getSession(baseUrl), TIMEOUT_SESSION, "Session creation");
-   console.log("[fixtures] Session obtained");
+  console.log("[fixtures] Spawning server...");
+  const { proc, port } = await withTimeout(
+    spawnServer(connectionString, redisConnectionString),
+    TIMEOUT_SERVER_STARTUP,
+    "Server startup"
+  );
+  const baseUrl = `http://localhost:${port}`;
 
-   const clusterId = await withTimeout(resolveCluster(baseUrl, sessionCookie), TIMEOUT_CLUSTER, "Cluster resolution");
-   console.log(`[fixtures] Using cluster: ${clusterId}`);
+  console.log("[fixtures] Waiting for server to be healthy...");
+  await withTimeout(waitForHealth(baseUrl), TIMEOUT_SERVER_HEALTH, "Server health check");
+  console.log("[fixtures] Server ready");
 
-   const otherSessionCookie = await withTimeout(getSession(baseUrl, OTHER_EMAIL), TIMEOUT_SESSION, "Other session creation");
-   const otherClusterId = await withTimeout(
-     resolveCluster(baseUrl, otherSessionCookie),
-     TIMEOUT_CLUSTER,
-     "Other cluster resolution"
-   );
-   console.log(`[fixtures] Other cluster: ${otherClusterId}`);
+  const sessionCookie = await withTimeout(getSession(baseUrl), TIMEOUT_SESSION, "Session creation");
+  console.log("[fixtures] Session obtained");
 
-   return {
-     session: sessionCookie,
-     otherSession: otherSessionCookie,
-     clusterId,
-     otherClusterId,
-     baseUrl,
-     cleanup: async () => {
-       console.log("[fixtures] Killing server...");
-       proc.kill("SIGTERM");
-       await new Promise<void>((resolve) => {
-         proc.once("exit", () => resolve());
-         setTimeout(resolve, 5000);
-       });
+  const clusterId = await withTimeout(resolveCluster(baseUrl, sessionCookie), TIMEOUT_CLUSTER, "Cluster resolution");
+  console.log(`[fixtures] Using cluster: ${clusterId}`);
 
-       console.log("[fixtures] Stopping PostgreSQL (data discarded)...");
-       await pg.stop();
+  const otherSessionCookie = await withTimeout(getSession(baseUrl, OTHER_EMAIL), TIMEOUT_SESSION, "Other session creation");
+  const otherClusterId = await withTimeout(
+    resolveCluster(baseUrl, otherSessionCookie),
+    TIMEOUT_CLUSTER,
+    "Other cluster resolution"
+  );
+  console.log(`[fixtures] Other cluster: ${otherClusterId}`);
 
-       console.log("[fixtures] Stopping embedded Redis...");
-       await redisServer.stop();
-     },
-   };
- }
+  return {
+    session: sessionCookie,
+    otherSession: otherSessionCookie,
+    clusterId,
+    otherClusterId,
+    baseUrl,
+    cleanup: async () => {
+      console.log("[fixtures] Killing server...");
+      proc.kill("SIGTERM");
+      await new Promise<void>((resolve) => {
+        proc.once("exit", () => resolve());
+        setTimeout(resolve, 5000);
+      });
+
+      if (pg) {
+        console.log("[fixtures] Stopping embedded PostgreSQL...");
+        await pg.stop();
+      }
+      if (redisServer) {
+        console.log("[fixtures] Stopping embedded Redis...");
+        await redisServer.stop();
+      }
+    },
+  };
+}
 
 function apiFetch(baseUrl: string, path: string, authCookie: string, init: RequestInit = {}) {
   return fetch(`${baseUrl}${path}`, {

@@ -67,16 +67,6 @@ jobs:
             -e 's|url = "redis://.*"|host = "localhost"\nport = 6379|' \
             config.example.toml > config.test.toml
 
-      - name: Start server
-        run: pnpm run dev:app:test & 
-
-      - name: Wait for server
-        run: |
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:7878/v1/health && break
-            sleep 1
-          done
-
       - name: Run unit tests
         run: pnpm test:unit
 
