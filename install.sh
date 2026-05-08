@@ -209,10 +209,17 @@ read_pem() {
   local label="$1" dest="$2"
   echo ""
   echo "$label"
-  echo "  [p] Paste content  [f] Enter file path"
-  printf "  Choice [p]: "; local mode; read -r mode; mode="${mode:-p}"
 
   mkdir -p /etc/caddy/certs
+
+  if [ -f "$dest" ]; then
+    printf "  Already set. Keep existing value? (y/n) [y]: "
+    local keep; read -r keep; keep="${keep:-y}"
+    [[ "$keep" == "y" || "$keep" == "Y" ]] && return
+  fi
+
+  echo "  [p] Paste content  [f] Enter file path"
+  printf "  Choice [p]: "; local mode; read -r mode; mode="${mode:-p}"
 
   if [[ "$mode" == "f" ]]; then
     while true; do
