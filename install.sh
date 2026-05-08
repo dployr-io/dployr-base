@@ -108,7 +108,11 @@ setup_caddy() {
   local domain="$1" app_port="$2"
 
   cat > /etc/caddy/Caddyfile <<EOF
-:80, :443 {
+:80 {
+    error 403
+}
+
+:443 {
     tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
     error 403
 }
