@@ -73,6 +73,7 @@ jobs:
           tomato set server.base_url "http://localhost:7878" config.test.toml
           tomato set cors.allowed_origins "*" config.test.toml
           tomato set traefik.enabled false config.test.toml
+          tomato set database.pool_ssl "disable" config.test.toml
 
       - name: Run unit tests
         run: pnpm test:unit

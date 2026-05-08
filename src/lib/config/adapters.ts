@@ -89,6 +89,12 @@ export async function createKVFromConfig(config: Config): Promise<IKVAdapter> {
 /**
  * Create database connection from config
  */
+function resolveSsl(poolSsl: string | boolean | undefined): object | boolean | undefined {
+  if (poolSsl === "disable") return false;
+  if (!poolSsl || poolSsl === "no-verify") return { rejectUnauthorized: false };
+  return poolSsl as any;
+}
+
 export async function createDatabaseFromConfig(config: Config): Promise<PostgresAdapter> {
   const url = config.database.url || process.env.DATABASE_URL;
   if (!url) {
@@ -101,7 +107,7 @@ export async function createDatabaseFromConfig(config: Config): Promise<Postgres
     connectionTimeoutMillis: config.database.pool_connection_timeout_ms,
     keepAlive: config.database.pool_keep_alive,
     keepAliveInitialDelayMillis: 10_000,
-    ssl: config.database.pool_ssl === "no-verify" ? { rejectUnauthorized: false } : config.database.pool_ssl || { rejectUnauthorized: false },
+    ssl: resolveSsl(config.database.pool_ssl),
   });
 }
 
