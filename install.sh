@@ -94,14 +94,13 @@ prompt() {
   local current; current="$(tget "$key")"
 
   $SKIP_PROMPTS && return
-  [ ! -e /dev/tty ] && return
 
   if [ -n "$current" ]; then
     local display="$current"
     $secret && display="[set]"
     printf "%s [%s] Keep this value? (y/n): " "$label" "$display"
     local choice
-    read -r choice </dev/tty
+    read -r choice
     case "$choice" in
       ""|"y"|"Y") return 0 ;;
       "n"|"N") ;;
@@ -111,7 +110,7 @@ prompt() {
 
   printf "%s: " "$label"
   local val
-  read -r val </dev/tty
+  read -r val
   [ -n "$val" ] && tset "$key" "$val"
   return 0
 }
@@ -167,6 +166,12 @@ main() {
   echo ""
 
   [ "$EUID" -ne 0 ] && error "Run as root"
+
+  if ! $SKIP_PROMPTS && [ -e /dev/tty ]; then
+    exec < /dev/tty
+  elif ! $SKIP_PROMPTS; then
+    SKIP_PROMPTS=true
+  fi
   require curl
   require jq
 
