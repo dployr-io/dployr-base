@@ -29,6 +29,7 @@ export class PostgresAdapter {
       connectionTimeoutMillis: 5_000,
       keepAlive: true,
       keepAliveInitialDelayMillis: 10_000,
+      ssl: { rejectUnauthorized: false },
       ...poolOptions,
     });
   }
