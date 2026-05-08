@@ -58,14 +58,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install tomato
+        run: |
+          curl -fsSL https://github.com/ceejbot/tomato/releases/download/v1.0.0/tomato-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C /tmp
+          mv /tmp/target/release/tomato /usr/local/bin/tomato
+          chmod +x /usr/local/bin/tomato
+
       - name: Create config
         run: |
-          sed \
-            -e 's|url = "postgresql://.*"|url = "postgresql://postgres:postgres@localhost:5432/dployr_test"|' \
-            -e 's|allowed_origins = ".*"|allowed_origins = "*"|' \
-            -e 's|base_url = "https://.*"|base_url = "http://localhost:7878"|' \
-            -e 's|url = "redis://.*"|host = "localhost"\nport = 6379|' \
-            config.example.toml > config.test.toml
+          cp config.example.toml config.test.toml
+          tomato set database.url "postgresql://postgres:postgres@localhost:5432/dployr_test" config.test.toml
+          tomato set kv.url "redis://localhost:6379" config.test.toml
+          tomato set server.base_url "http://localhost:7878" config.test.toml
+          tomato set cors.allowed_origins "*" config.test.toml
 
       - name: Run unit tests
         run: pnpm test:unit
