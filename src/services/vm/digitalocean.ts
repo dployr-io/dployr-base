@@ -21,6 +21,7 @@ interface DODroplet {
   networks: {
     v4: DONetwork[];
   };
+  tags: string[];
   created_at: string;
 }
 
@@ -79,6 +80,7 @@ export class DigitalOceanVMService implements VmProvider {
       status: d.status,
       ipv4: publicNet?.ip_address,
       privateIpv4: privateNet?.ip_address,
+      tags: d.tags ?? [],
       createdAt: d.created_at,
     };
   }

@@ -15,10 +15,16 @@ const isProd = process.env.NODE_ENV === "production";
 /** Primary tag used to filter instances belonging to this environment. */
 export const INSTANCE_ENV_TAG = isProd ? "production" : "development";
 
+/** Tag applied to all droplets managed by dployr. Used to distinguish managed instances from unrelated infrastructure. */
+export const INSTANCE_MANAGED_TAG = "managed";
+
+/** Tag that permanently protects a droplet from automated deletion. */
+export const INSTANCE_DO_NOT_REMOVE_TAG = "DO_NOT_REMOVE";
+
 /** Build the full tag set for a new instance. */
 export function buildInstanceTags(tier: SubscriptionPlan): string[] {
   const envTags = isProd ? ["production", "prod"] : ["development", "dev"];
-  return ["managed", ...envTags, tier];
+  return [INSTANCE_MANAGED_TAG, ...envTags, tier];
 }
 
 export const VM_SIZES: Record<VMSize, { label: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: number }> = {

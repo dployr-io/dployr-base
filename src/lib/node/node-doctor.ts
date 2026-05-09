@@ -11,7 +11,7 @@ import { ConnectionManager } from "@/services/websocket/connection-manager.js";
 import { VirtualMachine } from "@/types/vm.js";
 import { INSTANCE_POOL_QUOTA } from "../constants/instances.js";
 import { KV_KEYS } from "../constants/kv.js";
-import { DEFAULT_CAPACITY, INSTANCE_ENV_TAG, PROVIDER_TO_INSTANCE_REGION } from "../constants/vm.js";
+import { DEFAULT_CAPACITY, INSTANCE_ENV_TAG, INSTANCE_MANAGED_TAG, INSTANCE_DO_NOT_REMOVE_TAG, PROVIDER_TO_INSTANCE_REGION } from "../constants/vm.js";
 import { POOL_CAPACITY_BY_TIER } from "../constants/instances.js";
 import { InstancePool } from "@/services/pool.js";
 import { InstancePayload } from "../db/store/db/instances.js";
@@ -109,10 +109,11 @@ export class NodeDoctor extends EventEmittable {
   /** Phase 1: upsert each provider droplet into the DB. */
   private async syncDropletsAndInstances(droplets: VirtualMachine[], poolMap: Map<string, InstancePayload & { id: string }>): Promise<void> {
     for (const droplet of droplets) {
+      if (!(droplet.tags ?? []).includes(INSTANCE_MANAGED_TAG)) continue;
       const existing = poolMap.get(droplet.name);
       const status = this.resolveProviderStatus(droplet) as InstanceStatus;
       const metadata = {
-        managed: (droplet.tags ?? []).includes("managed"),
+        managed: (droplet.tags ?? []).includes(INSTANCE_MANAGED_TAG),
         tier: this.extractTier(droplet.tags),
       };
 
@@ -292,6 +293,10 @@ export class NodeDoctor extends EventEmittable {
   private async destroyDroplet(instance: { id: string; tag: string }, dropletMap: Map<string, VirtualMachine & { id?: number | string }>): Promise<void> {
     const droplet = dropletMap.get(instance.tag);
     if (droplet) {
+      if ((droplet.tags ?? []).includes(INSTANCE_DO_NOT_REMOVE_TAG)) {
+        this.log.warn("Refusing to destroy protected droplet", { droplet: instance.tag });
+        return;
+      }
       try {
         await this.vm!.delete(instance.tag);
         await this.emit(EVENTS.NODE.DRAINED.code, droplet.name);
