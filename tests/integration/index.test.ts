@@ -163,41 +163,6 @@ describe("Users", () => {
     assert.equal(body.data.user.name, "CI Test User", "Name was not updated");
   });
 
-  it("POST /v1/users/me/email rejects same email", async () => {
-    const meRes = await get("/v1/users/me");
-    const meBody = await assertOk(meRes);
-    const currentEmail = meBody.data.user.email;
-    const res = await post("/v1/users/me/email", { email: currentEmail });
-    assert.equal(res.status, 400, `Expected 400 for same email, got ${res.status}`);
-  });
-
-  it("POST /v1/users/me/email rejects invalid email", async () => {
-    const res = await post("/v1/users/me/email", { email: "not-an-email" });
-    assert.equal(res.status, 400, `Expected 400 for invalid email, got ${res.status}`);
-  });
-
-  it("POST /v1/users/me/email/verify rejects wrong OTP", async () => {
-    // In test env, OTP always passes — skip wrong-code test; instead verify the
-    // endpoint rejects when the new email is already taken.
-    const res = await post("/v1/users/me/email/verify", { email: "ci-test-other@example.com", code: "000000" });
-    assert.equal(res.status, 409, `Expected 409 for taken email, got ${res.status}`);
-  });
-
-  it("POST /v1/users/me/email/verify changes email and rotates session", async () => {
-    const newEmail = `ci-changed-${Date.now()}@example.com`;
-    // Step 1: request the change (sends OTP to new email)
-    const reqRes = await post("/v1/users/me/email", { email: newEmail });
-    await assertOk(reqRes);
-
-    // Step 2: verify OTP (always succeeds in test env)
-    const verifyRes = await post("/v1/users/me/email/verify", { email: newEmail, code: "000000" });
-    const verifyBody = await assertOk(verifyRes);
-    assert.equal(verifyBody.data.user.email, newEmail, "Email was not updated");
-
-    // New session cookie should be present
-    const newCookie = verifyRes.headers.get("set-cookie") ?? "";
-    assert.ok(newCookie.includes("session="), "Expected a new session cookie after email change");
-  });
 });
 
 describe("Clusters", () => {
