@@ -20,7 +20,6 @@ CONFIG_DIR="/etc/dployr-base"
 CONFIG_PATH="$CONFIG_DIR/config.toml"
 SERVICE_USER="dployr"
 REPO="dployr-io/dployr-base"
-RAW="https://raw.githubusercontent.com/${REPO}"
 
 SKIP_PROMPTS=false
 
@@ -419,8 +418,10 @@ main() {
 
   if [ ! -f "$CONFIG_PATH" ]; then
     info "Downloading config template..."
-    curl "${gh_args[@]}" "${RAW}/${VERSION}/config.example.toml" -o "$CONFIG_PATH" \
-      || curl "${gh_args[@]}" "${RAW}/main/config.example.toml" -o "$CONFIG_PATH" \
+    curl "${gh_args[@]}" -H "Accept: application/vnd.github.raw" \
+        "https://api.github.com/repos/${REPO}/contents/config.example.toml?ref=${VERSION}" -o "$CONFIG_PATH" \
+      || curl "${gh_args[@]}" -H "Accept: application/vnd.github.raw" \
+        "https://api.github.com/repos/${REPO}/contents/config.example.toml?ref=main" -o "$CONFIG_PATH" \
       || error "Failed to download config template"
   fi
 
