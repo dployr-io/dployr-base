@@ -308,8 +308,13 @@ export async function createTraefikRedisFromConfig(config: Config): Promise<any 
  * Initialize all adapters from config (one-liner setup)
  */
 export async function initializeFromConfig(config: Config) {
-  if (config.security?.encryption_key) {
-    process.env.ENCRYPTION_KEY = config.security.encryption_key;
+  const isProd = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "prod";
+  const encryptionKey = config.security?.encryption_key;
+  if (!encryptionKey && isProd) {
+    throw new Error("security.encryption_key is required in production");
+  }
+  if (encryptionKey) {
+    process.env.ENCRYPTION_KEY = encryptionKey;
   }
 
   const kv = await createKVFromConfig(config);
