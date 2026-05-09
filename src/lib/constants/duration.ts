@@ -82,8 +82,8 @@ export const DEDUP_TTL = TTL_1_HOUR;
 /** Pending GitHub app installation cache: 10 minutes */
 export const PENDING_GITHUB_INSTALL_TTL = TTL_10_MINUTES;
 
-/** Admin JWT token lifetime: 30 minutes */
-export const ADMIN_JWT_TTL = TTL_30_MINUTES;
+/** Admin JWT token lifetime: 8 hours (1 working day) */
+export const ADMIN_JWT_TTL = 8 * HOUR;
 
 /** Billing notification cache: 24 hours */
 export const BILLING_NOTIFICATION_TTL = TTL_24_HOURS;
