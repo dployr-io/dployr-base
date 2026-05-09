@@ -419,8 +419,8 @@ main() {
 
   if [ ! -f "$CONFIG_PATH" ]; then
     info "Downloading config template..."
-    curl -fsSL "${RAW}/${VERSION}/config.example.toml" -o "$CONFIG_PATH" \
-      || curl -fsSL "${RAW}/main/config.example.toml" -o "$CONFIG_PATH" \
+    curl "${gh_args[@]}" "${RAW}/${VERSION}/config.example.toml" -o "$CONFIG_PATH" \
+      || curl "${gh_args[@]}" "${RAW}/main/config.example.toml" -o "$CONFIG_PATH" \
       || error "Failed to download config template"
   fi
 
