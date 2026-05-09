@@ -91,6 +91,8 @@ configure() {
   prompt "tls.cf_api_token"   "Cloudflare API token"     true
   prompt "dashboard.username"    "Dashboard username"
   prompt "dashboard.allowed_ips" "Allowed IPs for dashboard (TOML array, e.g. [\"1.2.3.4\"])"
+  prompt "logging.betterstack_endpoint" "Better Stack ingestion endpoint (leave blank to skip)"
+  prompt "logging.betterstack_token"    "Better Stack source token"                              true
 
   local current_pass; current_pass="$(tget 'dashboard.password_hash')"
   if ! $SKIP_PROMPTS; then
@@ -265,6 +267,62 @@ install_traefik() {
   rm -rf "$tmp"
 }
 
+install_vector() {
+  if ! command -v vector >/dev/null 2>&1; then
+    info "Installing Vector..."
+    curl -1sLf 'https://setup.vector.dev' | bash >/dev/null 2>&1
+    apt-get install -y vector >/dev/null 2>&1
+  else
+    info "Vector already installed: $(vector --version 2>&1 | head -1)"
+  fi
+  rm -f /etc/vector/vector.yaml
+  rm -rf /etc/vector/examples
+}
+
+setup_vector() {
+  local endpoint; endpoint="$(tget 'logging.betterstack_endpoint')"
+  local token;    token="$(tget 'logging.betterstack_token')"
+
+  [ -z "$endpoint" ] || [ -z "$token" ] && return
+
+  install_vector
+
+  mkdir -p /etc/vector
+
+  cat > /etc/vector/vector.toml <<EOF
+[sources.traefik]
+type = "file"
+include = ["/var/log/traefik/*.log"]
+
+[sinks.better_stack]
+type = "http"
+inputs = ["traefik"]
+uri = "${endpoint}"
+encoding.codec = "json"
+
+[sinks.better_stack.auth]
+strategy = "bearer"
+token = "${token}"
+EOF
+
+  mkdir -p /etc/systemd/system/vector.service.d
+  cat > /etc/systemd/system/vector.service.d/override.conf <<EOF
+[Service]
+ExecStartPre=
+ExecStart=
+ExecStartPre=/usr/bin/vector validate /etc/vector/vector.toml
+ExecStart=/usr/bin/vector --config-dir /etc/vector
+EOF
+
+  usermod -aG "$SERVICE_USER" vector >/dev/null 2>&1 || true
+  chmod g+rX "$LOG_DIR" >/dev/null 2>&1 || true
+
+  systemctl daemon-reload
+  systemctl enable vector >/dev/null 2>&1
+  systemctl restart vector
+  info "Vector configured → Better Stack"
+}
+
 setup_service() {
   local cf_token; cf_token="$(tget 'tls.cf_api_token')"
   [ -z "$cf_token" ] && warn "Cloudflare API token not set — TLS issuance will fail"
@@ -348,6 +406,7 @@ main() {
 
   install_traefik
   setup_service
+  setup_vector
 
   sleep 2
 

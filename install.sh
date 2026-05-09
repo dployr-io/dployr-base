@@ -235,6 +235,8 @@ configure() {
   prompt "security.session_ttl"          "Session TTL (seconds)"
 
   prompt "logging.level"                 "Log level (debug|info|warn|error)"
+  prompt "logging.betterstack_endpoint"  "Better Stack ingestion endpoint (leave blank to skip)"
+  prompt "logging.betterstack_token"     "Better Stack source token"                              true
 
   prompt "cors.allowed_origins"          "CORS allowed origins"
 
@@ -290,6 +292,62 @@ read_pem() {
       rm -f "$dest"
     fi
   done
+}
+
+install_vector() {
+  if ! command -v vector >/dev/null 2>&1; then
+    info "Installing Vector..."
+    curl -1sLf 'https://setup.vector.dev' | bash >/dev/null 2>&1
+    apt-get install -y vector >/dev/null 2>&1
+  else
+    info "Vector already installed: $(vector --version 2>&1 | head -1)"
+  fi
+  rm -f /etc/vector/vector.yaml
+  rm -rf /etc/vector/examples
+}
+
+setup_vector() {
+  local endpoint; endpoint="$(tget 'logging.betterstack_endpoint')"
+  local token;    token="$(tget 'logging.betterstack_token')"
+
+  [ -z "$endpoint" ] || [ -z "$token" ] && return
+
+  install_vector
+
+  mkdir -p /etc/vector
+
+  cat > /etc/vector/vector.toml <<EOF
+[sources.dployr_base]
+type = "file"
+include = ["/var/log/dployr-base/output.log"]
+
+[sinks.better_stack]
+type = "http"
+inputs = ["dployr_base"]
+uri = "${endpoint}"
+encoding.codec = "json"
+
+[sinks.better_stack.auth]
+strategy = "bearer"
+token = "${token}"
+EOF
+
+  mkdir -p /etc/systemd/system/vector.service.d
+  cat > /etc/systemd/system/vector.service.d/override.conf <<EOF
+[Service]
+ExecStartPre=
+ExecStart=
+ExecStartPre=/usr/bin/vector validate /etc/vector/vector.toml
+ExecStart=/usr/bin/vector --config-dir /etc/vector
+EOF
+
+  usermod -aG "$SERVICE_USER" vector >/dev/null 2>&1 || true
+  chmod g+rX /var/log/dployr-base >/dev/null 2>&1 || true
+
+  systemctl daemon-reload
+  systemctl enable vector >/dev/null 2>&1
+  systemctl restart vector
+  info "Vector configured → Better Stack"
 }
 
 prompt_caddy() {
@@ -368,6 +426,7 @@ main() {
 
   configure
   prompt_caddy
+  setup_vector
 
   info "Creating systemd service..."
 
