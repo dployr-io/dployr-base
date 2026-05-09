@@ -9,7 +9,6 @@ TRAEFIK_VERSION="${TRAEFIK_VERSION:-3.3.4}"
 TOMATO_VERSION="${TOMATO_VERSION:-1.0.0}"
 REPO="dployr-io/dployr-base"
 BRANCH="${BRANCH:-main}"
-RAW="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 
 CONFIG_DIR="/etc/traefik"
 DATA_DIR="/var/lib/traefik"
@@ -39,7 +38,7 @@ install_tomato() {
   if command -v tomato >/dev/null 2>&1; then return; fi
   info "Installing tomato v${TOMATO_VERSION}..."
   local url="https://github.com/ceejbot/tomato/releases/download/v${TOMATO_VERSION}/tomato-x86_64-unknown-linux-gnu.tar.gz"
-  local tmp; tmp="$(mktemp -d -p /var/lib/traefik)" || error "Failed to create temp directory"
+  local tmp; tmp="$(mktemp -d)" || error "Failed to create temp directory"
   curl -fsSL "$url" -o "$tmp/tomato.tar.gz" || { rm -rf "$tmp"; error "Failed to download tomato"; }
   tar -xzf "$tmp/tomato.tar.gz" -C "$tmp" || { rm -rf "$tmp"; error "Failed to extract tomato"; }
   mv "$tmp/target/release/tomato" /usr/local/bin/tomato || { rm -rf "$tmp"; error "Failed to install tomato binary"; }
@@ -259,7 +258,7 @@ EOF
 install_traefik() {
   info "Downloading Traefik v${TRAEFIK_VERSION}..."
   local url="https://github.com/traefik/traefik/releases/download/v${TRAEFIK_VERSION}/traefik_v${TRAEFIK_VERSION}_linux_amd64.tar.gz"
-  local tmp; tmp="$(mktemp -d -p /var/lib/traefik)" || error "Failed to create temp directory"
+  local tmp; tmp="$(mktemp -d)" || error "Failed to create temp directory"
   curl -fsSL "$url" -o "$tmp/traefik.tar.gz" || { rm -rf "$tmp"; error "Failed to download Traefik"; }
   tar -xzf "$tmp/traefik.tar.gz" -C "$tmp" || { rm -rf "$tmp"; error "Failed to extract Traefik"; }
   mv "$tmp/traefik" /usr/local/bin/traefik || { rm -rf "$tmp"; error "Failed to install Traefik binary"; }
@@ -392,7 +391,10 @@ main() {
 
   if [ ! -f "$CONFIG_PATH" ]; then
     info "Downloading config template..."
-    curl -fsSL "${RAW}/scripts/traefik/config.example.toml" -o "$CONFIG_PATH" \
+    local gh_args=(-fsSL)
+    [ -n "${GITHUB_TOKEN:-}" ] && gh_args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    curl "${gh_args[@]}" -H "Accept: application/vnd.github.raw" \
+        "https://api.github.com/repos/${REPO}/contents/scripts/traefik/config.example.toml?ref=${BRANCH}" -o "$CONFIG_PATH" \
       || error "Failed to download config template"
     chmod 600 "$CONFIG_PATH"
   fi
