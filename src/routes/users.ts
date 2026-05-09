@@ -126,7 +126,7 @@ users.patch("/me", async (c) => {
 
     return c.json(
       createErrorResponse({
-        message: "Invalid request body: " + errorMessage,
+        message: errorMessage,
         code: ERROR.REQUEST.BAD_REQUEST.code,
       }),
       ERROR.REQUEST.BAD_REQUEST.status,

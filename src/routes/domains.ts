@@ -162,14 +162,7 @@ domains.post("/", authMiddleware, resolveCluster("instance", { body: "instanceId
   const db = getDbStore(c);
   const kv = getKVStore(c);
   const dns = getDnsService(c);
-
-  let body;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(createErrorResponse({ message: "Invalid request body", code: ERROR.REQUEST.BAD_REQUEST.code }), 400);
-  }
-
+  const body = await c.req.json();
   const validation = setupSchema.safeParse(body);
   if (!validation.success) {
     const msg = validation.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");

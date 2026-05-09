@@ -17,6 +17,10 @@ const log = new Logger("Clusters");
 const clusters = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 clusters.use("*", authMiddleware);
 
+const renameClusterSchema = z.object({
+  name: z.string().min(1).max(64),
+});
+
 const addUsersSchema = z.object({
   users: z.array(z.email()),
 });
@@ -545,6 +549,71 @@ clusters.get("/:id/remotes", requireClusterViewer, async (c) => {
         code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
         helpLink,
       }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
+});
+
+/**
+ * Rename a cluster (owner only).
+ * Limited to 3 renames per rolling 12-month window.
+ * Admins can unlock a cluster by calling kv.clearRenameHistory(clusterId).
+ */
+clusters.patch("/:id", requireClusterOwner, async (c) => {
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
+  const clusterId = c.req.param("id");
+
+  const data = await c.req.json().catch(() => null);
+  const validation = renameClusterSchema.safeParse(data);
+
+  if (!validation.success) {
+    return c.json(
+      createErrorResponse({ message: "Validation failed: name must be a non-empty string (max 64 chars)", code: ERROR.REQUEST.BAD_REQUEST.code }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
+  }
+
+  const { name } = validation.data;
+
+  const block = await kv.recordRename(clusterId);
+  if (block) {
+    const { oldestAt, lastRenameAt } = await kv.getRenameQuota(clusterId);
+    const fmt = (ts: number, offsetMs: number) =>
+      new Date(ts + offsetMs).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
+    const message =
+      block === "monthly_cooldown"
+        ? `You can only rename once per month. Try again after ${lastRenameAt ? fmt(lastRenameAt, 30 * 24 * 60 * 60 * 1000) : "30 days"}.`
+        : `You've used all 3 renames for this year. Try again after ${oldestAt ? fmt(oldestAt, 365 * 24 * 60 * 60 * 1000) : "12 months"}.`;
+
+    return c.json(
+      createErrorResponse({ message, code: ERROR.REQUEST.TOO_MANY_REQUESTS.code }),
+      ERROR.REQUEST.TOO_MANY_REQUESTS.status,
+    );
+  }
+
+  try {
+    const cluster = await db.clusters.update(clusterId, { name });
+    log.info(`Cluster "${cluster?.name}" renamed`);
+
+    // Refresh sessions for all cluster members so their cached cluster name is up to date.
+    const { users } = await db.clusters.listUsers(clusterId, { invited: false });
+    await Promise.all(
+      users.map(async (user) => {
+        const sessionId = await kv.getSessionIdByUserId(user.id);
+        if (sessionId) {
+          const clusters = await db.clusters.listUserClusters(user.id);
+          await kv.refreshSession({ sessionId, updates: { clusters } });
+        }
+      }),
+    );
+
+    return c.json(createSuccessResponse({ cluster }, "Cluster renamed successfully"));
+  } catch (error) {
+    log.error("Rename cluster error:", error);
+    return c.json(
+      createErrorResponse({ message: "Failed to rename cluster", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }),
       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
     );
   }

@@ -47,20 +47,7 @@ billing.get("/status", requireClusterViewer, async (c) => {
 
 billing.post("/checkout", requireClusterOwner, async (c) => {
   const session = c.get("session")!;
-
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(
-      createErrorResponse({
-        message: "Invalid request body",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
-      ERROR.REQUEST.BAD_REQUEST.status,
-    );
-  }
-
+  const  body = await c.req.json();
   const validation = checkoutSchema.safeParse(body);
   if (!validation.success) {
     const message = validation.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");

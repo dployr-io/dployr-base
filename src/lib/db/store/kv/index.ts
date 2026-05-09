@@ -7,6 +7,7 @@ import { IntegrationsStore } from "./integrations.js";
 import { BillingStore } from "./billing.js";
 import { EntityStore } from "./entity.js";
 import { PayloadStore } from "./payload.js";
+import { ClusterStore } from "./cluster.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 
 export class KVStore {
@@ -19,6 +20,7 @@ export class KVStore {
   public readonly billing: BillingStore;
   public readonly entities: EntityStore;
   public readonly payloads: PayloadStore;
+  public readonly clusters: ClusterStore;
 
   constructor(
     public kv: IKVAdapter,
@@ -33,6 +35,7 @@ export class KVStore {
     this.billing = new BillingStore(kv);
     this.entities = new EntityStore(kv);
     this.payloads = new PayloadStore(kv);
+    this.clusters = new ClusterStore(kv);
   }
 
   // SessionStore delegation
@@ -106,4 +109,9 @@ export class KVStore {
   saveDeploymentPayload = (...args: Parameters<PayloadStore["saveDeploymentPayload"]>) => this.payloads.saveDeploymentPayload(...args);
   consumeDeploymentPayload = (...args: Parameters<PayloadStore["consumeDeploymentPayload"]>) => this.payloads.consumeDeploymentPayload(...args);
   listDeploymentPayloads = (...args: Parameters<PayloadStore["listDeploymentPayloads"]>) => this.payloads.listDeploymentPayloads(...args);
+
+  // ClusterStore delegation
+  getRenameQuota = (...args: Parameters<ClusterStore["getRenameQuota"]>) => this.clusters.getRenameQuota(...args);
+  recordRename = (...args: Parameters<ClusterStore["recordRename"]>) => this.clusters.recordRename(...args);
+  clearRenameHistory = (...args: Parameters<ClusterStore["clearRenameHistory"]>) => this.clusters.clearRenameHistory(...args);
 }

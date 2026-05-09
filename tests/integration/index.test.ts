@@ -209,6 +209,48 @@ describe("Clusters", () => {
     const res = await get(`/v1/clusters/${fx.otherClusterId}/remotes`);
     assert.equal(res.status, 403, `Expected 403 for foreign cluster remotes, got ${res.status}`);
   });
+
+  it("PATCH /v1/clusters/:id renames the cluster", async () => {
+    const res = await patch(`/v1/clusters/${fx.clusterId}`, { name: "renamed-cluster" });
+    const body = await assertOk(res);
+    assert.equal(body.data.cluster.name, "renamed-cluster", "Expected cluster name to be updated");
+  });
+
+  it("GET /v1/clusters reflects new name after rename (session stays valid)", async () => {
+    // Rename the cluster first, then verify the same session can still list clusters
+    // and the returned name is updated. This exercises the session refresh path:
+    // if refreshSession failed or corrupted the session the request would return 401.
+    await patch(`/v1/clusters/${fx.clusterId}`, { name: "session-refresh-test" });
+    const res = await get("/v1/clusters");
+    const body = await assertOk(res, 200);
+    const cluster = (body.data.clusters as any[]).find((c: any) => c.id === fx.clusterId);
+    assert.ok(cluster, "Cluster should still be visible after rename");
+    assert.equal(cluster.name, "session-refresh-test", "Cluster name should reflect the rename in the same session");
+  });
+
+  it("PATCH /v1/clusters/:id rejects empty name", async () => {
+    const res = await patch(`/v1/clusters/${fx.clusterId}`, { name: "" });
+    assert.equal(res.status, 400, `Expected 400 for empty name, got ${res.status}`);
+  });
+
+  it("PATCH /v1/clusters/:id rejects missing name", async () => {
+    const res = await patch(`/v1/clusters/${fx.clusterId}`, {});
+    assert.equal(res.status, 400, `Expected 400 for missing name, got ${res.status}`);
+  });
+
+  it("PATCH /v1/clusters/:id rejects unauthenticated", async () => {
+    const res = await pub(`/v1/clusters/${fx.clusterId}`, { method: "PATCH", body: JSON.stringify({ name: "hacked" }) });
+    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
+  });
+
+  it("PATCH /v1/clusters/:id rejects non-owner (other cluster session)", async () => {
+    const res = await fetch(`${BASE_URL}/v1/clusters/${fx.otherClusterId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: fx.session },
+      body: JSON.stringify({ name: "should-fail" }),
+    });
+    assert.equal(res.status, 403, `Expected 403 for non-owner rename, got ${res.status}`);
+  });
 });
 
 describe("Instances", () => {

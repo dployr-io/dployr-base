@@ -57,6 +57,7 @@ export const KV_KEYS = {
     NODE: (clusterId: string, instanceId: string) => `cluster:${clusterId}:nodes:${instanceId}`,
     NODES_PREFIX: (clusterId: string) => `cluster:${clusterId}:nodes:`,
     STATUS: (clusterId: string) => `cluster:${clusterId}:status`,
+    RENAME_HISTORY: (clusterId: string) => `cluster:${clusterId}:renames`,
   },
   GITHUB: {
     PENDING_INSTALL: (userId: string) => `pending_github_install:${userId}`,
