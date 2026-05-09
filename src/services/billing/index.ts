@@ -199,20 +199,8 @@ export class BillingService {
 
     await db.billing.upsert({ clusterId, plan, polarCustomerId, polarSubscriptionId, status, canceledAt, periodEnd });
 
-    if (previousPlan === "hobby" && plan !== "hobby") {
-      try {
-        await db.instances.releasePoolInstance(clusterId);
-        log.info(`Released free instance for cluster ${clusterId} (upgraded from hobby to ${plan})`);
-      } catch (error) {
-        log.error(`Failed to release free instance for cluster ${clusterId}:`, { error: error instanceof Error ? error.message : String(error) });
-      }
-    } else if (previousPlan !== "hobby" && plan === "hobby") {
-      try {
-        await db.instances.assignPool(clusterId);
-        log.info(`Assigned free instance for cluster ${clusterId} (downgraded back to hobby)`);
-      } catch (error) {
-        log.error(`Failed to assign free instance for cluster ${clusterId}:`, { error: error instanceof Error ? error.message : String(error) });
-      }
+    if (previousPlan !== plan) {
+      await this.transitionPlan({ clusterId, from: previousPlan, to: plan, db });
     }
 
     await this.sendBillingNotification(polarStatus === "past_due" ? EVENTS.BILLING.PAYMENT_FAILED.code : EVENTS.BILLING.PAYMENT_SUCCESSFUL.code, clusterId, db, kv);
@@ -280,12 +268,7 @@ export class BillingService {
     });
 
     if (previousPlan !== "hobby") {
-      try {
-        await db.instances.assignPool(existing.clusterId);
-        log.info(`Assigned free instance for cluster ${existing.clusterId} (subscription revoked, downgraded to hobby)`);
-      } catch (error) {
-        log.error(`Failed to assign free instance for cluster ${existing.clusterId}:`, { error: error instanceof Error ? error.message : String(error) });
-      }
+      await this.transitionPlan({ clusterId: existing.clusterId, from: previousPlan, to: "hobby", db });
     }
 
     await this.sendBillingNotification(EVENTS.BILLING.SUBSCRIPTION_EXPIRED.code, existing.clusterId, db, kv);
@@ -311,17 +294,53 @@ export class BillingService {
       periodEnd: null,
     });
 
-    if (previousPlan === "hobby" && existing.plan !== "hobby") {
-      try {
-        await db.instances.releasePoolInstance(existing.clusterId);
-        log.info(`Released free instance for cluster ${existing.clusterId} (subscription uncanceled, upgraded back to ${existing.plan})`);
-      } catch (error) {
-        log.error(`Failed to release free instance for cluster ${existing.clusterId}:`, { error: error instanceof Error ? error.message : String(error) });
-      }
+    if (previousPlan !== existing.plan) {
+      await this.transitionPlan({ clusterId: existing.clusterId, from: previousPlan, to: existing.plan, db });
     }
 
     await this.sendBillingNotification(EVENTS.BILLING.SUBSCRIPTION_RESUMED.code, existing.clusterId, db, kv);
     log.info(`Cluster ${existing.clusterId} uncanceled, restored to ${existing.plan}`);
+  }
+
+  /**
+   * Handle all instance reassignment when a cluster moves between plans.
+   *
+   * hobby ↔ indie : pool swap (different tier, different capacity)
+   * any   → pro   : release pool; node-doctor provisions dedicated on next sync
+   * pro   → any   : assign target pool; dedicated instance stays running until decommissioned
+   */
+  private async transitionPlan({ clusterId, from, to, db }: { clusterId: string; from: SubscriptionPlan; to: SubscriptionPlan; db: DatabaseStore }): Promise<void> {
+    const cluster = await db.clusters.get(clusterId);
+    const name = cluster?.name;
+
+    try {
+      // Upgrading to pro:
+      // remove the cluster from the shared pool system
+      if (to === "pro") {
+        await db.instances.releasePoolInstance(clusterId);
+        log.info(`Released pool instance for "${name}" (upgrading to pro)`);
+        return;
+      }
+
+      // Downgrading from pro:
+      // assign the cluster to the target shared pool
+      if (from === "pro") {
+        await db.instances.assignPool(clusterId, to);
+        log.info(`Assigned "${name}" to ${to} pool (downgrading from pro)`);
+        return;
+      }
+
+      // Moving between shared tiers (hobby ↔ indie):
+      // move the cluster from one pool to another
+      await db.instances.releasePoolInstance(clusterId);
+      await db.instances.assignPool(clusterId, to);
+
+      log.info(`Moved "${name}" from ${from} pool to ${to} pool`);
+    } catch (error) {
+      log.error(`Failed to transition "${name}" from ${from} to ${to}`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async onSubscriptionPastDue(data: Record<string, unknown>, db: DatabaseStore, kv: KVStore): Promise<void> {

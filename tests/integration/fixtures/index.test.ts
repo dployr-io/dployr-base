@@ -58,7 +58,7 @@ async function startPostgres(): Promise<{ pg: EmbeddedPostgres; connectionString
    await pg.initialise();
    await pg.start();
 
-   const connectionString = `postgresql://postgres:postgres@localhost:${port}/postgres`;
+   const connectionString = `postgresql://postgres:postgres@localhost:${port}/postgres?sslmode=disable`;
    return { pg, connectionString };
  }
 

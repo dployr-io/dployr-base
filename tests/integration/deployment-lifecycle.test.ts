@@ -12,6 +12,7 @@ export function registerDeploymentLifecycleTests(getFx: () => TestFixtures) {
     let tag = "";
     let bootstrapToken = "";
     let node: FakeNode | null = null;
+    const svcName = `ci-svc-${Date.now().toString(36)}`;
 
     it("setup: create instance and connect fake node", async () => {
       const { baseUrl, session, clusterId } = getFx();
@@ -33,7 +34,7 @@ export function registerDeploymentLifecycleTests(getFx: () => TestFixtures) {
       const taskPromise = node.waitForTask(8_000);
 
       const deployPayload = {
-        name: `ci-svc-${Date.now().toString(36)}`,
+        name: svcName,
         description: "CI test service",
         user_id: "ci-user",
         type: "web",
@@ -65,7 +66,6 @@ export function registerDeploymentLifecycleTests(getFx: () => TestFixtures) {
 
       const taskPromise = node.waitForTask(8_000);
 
-      const svcName = `ci-finish-${Date.now().toString(36)}`;
       const dispatchRes = await fetch(`${baseUrl}/v1/deployments?clusterId=${clusterId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: session },

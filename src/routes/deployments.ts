@@ -13,6 +13,7 @@ import { DployrdService } from "@/services/dployrd.js";
 import { DeploymentPayload, DeploymentSchema } from "@/lib/tasks/types.js";
 import { DatabaseConflictError } from "@/lib/errors/errors.js";
 import { validateString } from "@/lib/validators/string-sanitizer.js";
+import { SERVICE_LIMIT_BY_TIER } from "@/lib/constants/instances.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("Deployments");
@@ -205,6 +206,22 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
   const nameValidation = validateString(deployPayload.name, "name");
   if (!nameValidation.valid) {
     return c.json(createErrorResponse({ message: nameValidation.error || "This name is not allowed", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
+  }
+
+  // Enforce per-plan service limit for new services (re-deploys of existing services are always allowed)
+  const existingService = await db.services.find({ clusterId, name: deployPayload.name });
+  if (!existingService) {
+    const plan = await db.billing.getEffectivePlan(clusterId);
+    const { total: serviceCount } = await db.services.list({ clusterId });
+    const limit = SERVICE_LIMIT_BY_TIER[plan];
+    if (serviceCount >= limit) {
+      const cluster = await db.clusters.get(clusterId);
+      log.warn(`Service limit reached for "${cluster?.name}" on plan "${plan}" (max ${limit})`);
+      return c.json(
+        createErrorResponse({ message: `Service limit reached for the ${plan} plan (${limit} service${limit === 1 ? "" : "s"} max). Remove an existing service to deploy a new one.`, code: ERROR.REQUEST.BAD_REQUEST.code }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
   }
 
   // Dispatch task to instance

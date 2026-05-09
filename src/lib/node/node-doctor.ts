@@ -11,7 +11,8 @@ import { ConnectionManager } from "@/services/websocket/connection-manager.js";
 import { VirtualMachine } from "@/types/vm.js";
 import { INSTANCE_POOL_QUOTA } from "../constants/instances.js";
 import { KV_KEYS } from "../constants/kv.js";
-import { DEFAULT_CAPACITY, PROVIDER_TO_INSTANCE_REGION } from "../constants/vm.js";
+import { DEFAULT_CAPACITY, INSTANCE_ENV_TAG, PROVIDER_TO_INSTANCE_REGION } from "../constants/vm.js";
+import { POOL_CAPACITY_BY_TIER } from "../constants/instances.js";
 import { InstancePool } from "@/services/pool.js";
 import { InstancePayload } from "../db/store/db/instances.js";
 import { Logger } from "@/lib/logger.js";
@@ -87,7 +88,7 @@ export class NodeDoctor extends EventEmittable {
     }
 
     const [droplets, { instances: poolEntries }, { instances: dedicatedInstances }] = await Promise.all([
-      this.vm.list({ tagName: "managed", perPage: 200 }),
+      this.vm.list({ tagName: INSTANCE_ENV_TAG, perPage: 200 }),
       this.db.instances.list({ managed: true, kind: "pool" }),
       this.db.instances.list({ managed: true, kind: "dedicated" }),
     ]);
@@ -119,7 +120,7 @@ export class NodeDoctor extends EventEmittable {
         const added = await this.db.instances.addPool({
           tag: droplet.name,
           address: droplet.ipv4 ?? null,
-          capacity: DEFAULT_CAPACITY,
+          capacity: POOL_CAPACITY_BY_TIER[metadata.tier as keyof typeof POOL_CAPACITY_BY_TIER] ?? DEFAULT_CAPACITY,
           region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
           status,
           metadata,
@@ -238,7 +239,7 @@ export class NodeDoctor extends EventEmittable {
     this.log.debug("Maintenance instances detected", { count: maintenanceInstances.length });
     if (maintenanceInstances.length === 0) return;
 
-    const [clusterMap, droplets] = await Promise.all([this.db.instances.getPoolClustersMap(), this.vm.list({ tagName: "managed", perPage: 200 })]);
+    const [clusterMap, droplets] = await Promise.all([this.db.instances.getPoolClustersMap(), this.vm.list({ tagName: INSTANCE_ENV_TAG, perPage: 200 })]);
     const dropletMap = new Map(droplets.map((d) => [d.name, d]));
 
     for (const instance of maintenanceInstances) {
@@ -259,7 +260,8 @@ export class NodeDoctor extends EventEmittable {
 
     for (const clusterId of clusterIds) {
       try {
-        await this.pool.allocateSharedPool(clusterId);
+        const plan = await this.db.billing.getEffectivePlan(clusterId);
+        await this.pool.allocateSharedPool(clusterId, plan);
         await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
         await this.nudgePoolNode(clusterId);
       } catch (err) {
@@ -422,13 +424,11 @@ export class NodeDoctor extends EventEmittable {
   private async allocateForPlan(clusterId: string, clusterName: string, plan: SubscriptionPlan): Promise<void> {
     switch (plan) {
       case "hobby":
-        await this.pool.allocateSharedPool(clusterId);
-        break;
       case "indie":
-        this.log.info(`Indie allocation not yet implemented for cluster ${clusterName}`);
+        await this.pool.allocateSharedPool(clusterId, plan);
         break;
       case "pro":
-        this.log.info(`Pro dedicated instance not yet implemented for cluster ${clusterName}`);
+        await this.pool.spawnDedicatedInstance({ clusterId, clusterName });
         break;
     }
   }

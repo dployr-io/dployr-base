@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { buildInstallScript, DEFAULT_INSTANCE_TAGS, VM_POLL_INTERVAL_MS, VM_POLL_MAX_ATTEMPTS } from "@/lib/constants/vm.js";
+import { buildInstallScript, VM_POLL_INTERVAL_MS, VM_POLL_MAX_ATTEMPTS } from "@/lib/constants/vm.js";
 import type { VirtualMachine, VMCreateOptions, VMActionResult, VMMetrics, VMStatus, VMListOptions } from "@/types/vm.js";
 import { VmProvider } from "./index.js";
 
@@ -116,7 +116,7 @@ export class DigitalOceanVMService implements VmProvider {
       image,
       region,
       user_data: userData ?? (token ? buildInstallScript(token, name) : undefined),
-      tags: [...DEFAULT_INSTANCE_TAGS, ...tags],
+      tags,
       private_networking: privateNetworking,
     };
 

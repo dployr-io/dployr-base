@@ -2,13 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { VMSize, VMImage, VMRegion } from "@/types/vm.js";
+import type { SubscriptionPlan } from "@/types/index.js";
 import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
 
 export const DEFAULT_CAPACITY = 10;
 export const DEFAULT_INSTANCE_SIZE: VMSize = "s-1vcpu-512mb-10gb";
 export const DEFAULT_INSTANCE_IMAGE: VMImage = "debian-12-x64";
 export const DEFAULT_INSTANCE_REGION: VMRegion = "nyc1";
-export const DEFAULT_INSTANCE_TAGS = ["managed", "hobby"];
+
+const isProd = process.env.NODE_ENV === "production";
+
+/** Primary tag used to filter instances belonging to this environment. */
+export const INSTANCE_ENV_TAG = isProd ? "production" : "development";
+
+/** Build the full tag set for a new instance. */
+export function buildInstanceTags(tier: SubscriptionPlan): string[] {
+  const envTags = isProd ? ["production", "prod"] : ["development", "dev"];
+  return ["managed", ...envTags, tier];
+}
 
 export const VM_SIZES: Record<VMSize, { label: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: number }> = {
   "s-1vcpu-512mb-10gb": { label: "Starter", vcpu: 1, memoryMb: 512, diskGb: 10, priceMonthly: 4 },

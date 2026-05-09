@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Instance, InstanceKind, InstanceStatus } from "@/types/index.js";
+import { Instance, InstanceKind, InstanceStatus, SubscriptionPlan } from "@/types/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { type AllowedTable } from "@/lib/constants/index.js";
 import { BaseStore, type Pagination } from "./base.js";
@@ -217,21 +217,22 @@ export class InstanceStore extends BaseStore {
   }
 
   /**
-   * Assigns the least-loaded healthy pool instance to a cluster.
+   * Assigns the least-loaded healthy pool instance of the given tier to a cluster.
    * Throws PoolCapacityExceededError if no instance has remaining capacity.
    */
-  async assignPool(clusterId: string): Promise<string> {
+  async assignPool(clusterId: string, tier: SubscriptionPlan = "hobby"): Promise<string> {
     return this.db.withTransaction(async (client) => {
       const result = await client.query(
         `SELECT i.id
          FROM instances i
          WHERE i.kind = 'pool'
            AND i.status = 'healthy'
+           AND i.metadata->>'tier' = $1
            AND (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = i.id) < COALESCE(i.capacity, 10)
          ORDER BY (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = i.id) ASC
          LIMIT 1
          FOR UPDATE OF i`,
-        [],
+        [tier],
       );
 
       if (!result.rows.length) throw new PoolCapacityExceededError();
@@ -287,7 +288,16 @@ export class InstanceStore extends BaseStore {
   }
 
   async listUnassignedClusters(): Promise<{ id: string; name: string }[]> {
-    const result = await this.db.prepare(`SELECT id, name FROM clusters WHERE pool_instance_id IS NULL`).all();
+    const result = await this.db
+      .prepare(
+        `SELECT id, name FROM clusters
+         WHERE pool_instance_id IS NULL
+           AND id NOT IN (
+             SELECT cluster_id FROM instances
+             WHERE kind = 'dedicated' AND cluster_id IS NOT NULL
+           )`,
+      )
+      .all();
     return result.results.map((r) => ({ id: r.id as string, name: r.name as string }));
   }
 
