@@ -57,6 +57,7 @@ export class AuthService {
    */
   async sendOTP({ email, emailProvider }: { email: string; emailProvider: EmailProvider }): Promise<void> {
     const code = await this.kv.createOTP(email);
+    if (process.env.NODE_ENV === "test") return;
     const name = email.split("@")[0] ?? email;
     await emailProvider.sendEmail({
       to: email,

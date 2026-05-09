@@ -19,6 +19,8 @@ describe("ClusterStore.recordRename", () => {
     assert.equal(await store.recordRename(clusterId), null, "2nd rename should be allowed");
     await kv.put(`cluster:${clusterId}:renames`, JSON.stringify([Date.now() - MONTHLY_COOLDOWN_MS * 2, Date.now() - MONTHLY_COOLDOWN_MS - 1000]));
     assert.equal(await store.recordRename(clusterId), null, "3rd rename should be allowed");
+    // Backdate the 3rd rename so monthly cooldown doesn't fire before annual limit check
+    await kv.put(`cluster:${clusterId}:renames`, JSON.stringify([Date.now() - MONTHLY_COOLDOWN_MS * 3, Date.now() - MONTHLY_COOLDOWN_MS * 2, Date.now() - MONTHLY_COOLDOWN_MS - 1000]));
     assert.equal(await store.recordRename(clusterId), "annual_limit", "4th rename should be blocked by annual limit");
   });
 
@@ -60,19 +62,24 @@ describe("ClusterStore.recordRename", () => {
     const clusterId = "test-cluster-4";
     const ROLLING_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
 
-    // Seed two renames that are just over a year old and one recent one.
+    // Seed two renames that are just over a year old and one that is within
+    // the rolling window but past the monthly cooldown.
+    const MONTHLY_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
     const expired = Date.now() - ROLLING_WINDOW_MS - 1000;
-    await kv.put(`cluster:${clusterId}:renames`, JSON.stringify([expired, expired, Date.now()]));
+    await kv.put(`cluster:${clusterId}:renames`, JSON.stringify([expired, expired, Date.now() - MONTHLY_COOLDOWN_MS - 1000]));
 
     // Only the recent entry should count — 2 expired entries are pruned,
     // leaving 2 free slots, so two more renames should succeed.
     assert.equal(await store.recordRename(clusterId), null, "Should allow after expired entries pruned (slot 2)");
     // Advance past monthly cooldown before next rename
-    const MONTHLY_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
     const history = JSON.parse((await kv.get(`cluster:${clusterId}:renames`))!);
     history[history.length - 1] = Date.now() - MONTHLY_COOLDOWN_MS - 1000;
     await kv.put(`cluster:${clusterId}:renames`, JSON.stringify(history));
     assert.equal(await store.recordRename(clusterId), null, "Should allow (slot 3)");
+    // Backdate slot 3 so the final call hits annual_limit, not monthly_cooldown
+    const history2 = JSON.parse((await kv.get(`cluster:${clusterId}:renames`))!);
+    history2[history2.length - 1] = Date.now() - MONTHLY_COOLDOWN_MS - 1000;
+    await kv.put(`cluster:${clusterId}:renames`, JSON.stringify(history2));
     assert.equal(await store.recordRename(clusterId), "annual_limit", "Should block at annual limit");
   });
 });

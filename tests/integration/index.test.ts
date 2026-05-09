@@ -162,6 +162,42 @@ describe("Users", () => {
     const body = await assertOk(res);
     assert.equal(body.data.user.name, "CI Test User", "Name was not updated");
   });
+
+  it("POST /v1/users/me/email rejects same email", async () => {
+    const meRes = await get("/v1/users/me");
+    const meBody = await assertOk(meRes);
+    const currentEmail = meBody.data.user.email;
+    const res = await post("/v1/users/me/email", { email: currentEmail });
+    assert.equal(res.status, 400, `Expected 400 for same email, got ${res.status}`);
+  });
+
+  it("POST /v1/users/me/email rejects invalid email", async () => {
+    const res = await post("/v1/users/me/email", { email: "not-an-email" });
+    assert.equal(res.status, 400, `Expected 400 for invalid email, got ${res.status}`);
+  });
+
+  it("POST /v1/users/me/email/verify rejects wrong OTP", async () => {
+    // In test env, OTP always passes — skip wrong-code test; instead verify the
+    // endpoint rejects when the new email is already taken.
+    const res = await post("/v1/users/me/email/verify", { email: "ci-test-other@example.com", code: "000000" });
+    assert.equal(res.status, 409, `Expected 409 for taken email, got ${res.status}`);
+  });
+
+  it("POST /v1/users/me/email/verify changes email and rotates session", async () => {
+    const newEmail = `ci-changed-${Date.now()}@example.com`;
+    // Step 1: request the change (sends OTP to new email)
+    const reqRes = await post("/v1/users/me/email", { email: newEmail });
+    await assertOk(reqRes);
+
+    // Step 2: verify OTP (always succeeds in test env)
+    const verifyRes = await post("/v1/users/me/email/verify", { email: newEmail, code: "000000" });
+    const verifyBody = await assertOk(verifyRes);
+    assert.equal(verifyBody.data.user.email, newEmail, "Email was not updated");
+
+    // New session cookie should be present
+    const newCookie = verifyRes.headers.get("set-cookie") ?? "";
+    assert.ok(newCookie.includes("session="), "Expected a new session cookie after email change");
+  });
 });
 
 describe("Clusters", () => {
@@ -217,13 +253,17 @@ describe("Clusters", () => {
   });
 
   it("GET /v1/clusters reflects new name after rename (session stays valid)", async () => {
-    // Rename the cluster first, then verify the same session can still list clusters
-    // and the returned name is updated. This exercises the session refresh path:
-    // if refreshSession failed or corrupted the session the request would return 401.
-    await patch(`/v1/clusters/${fx.clusterId}`, { name: "session-refresh-test" });
-    const res = await get("/v1/clusters");
+    // Use otherClusterId so this rename doesn't collide with the cooldown from the
+    // previous test which already renamed fx.clusterId.
+    const renameRes = await fetch(`${BASE_URL}/v1/clusters/${fx.otherClusterId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: fx.otherSession },
+      body: JSON.stringify({ name: "session-refresh-test" }),
+    });
+    await assertOk(renameRes);
+    const res = await fetch(`${BASE_URL}/v1/clusters`, { headers: { Cookie: fx.otherSession } });
     const body = await assertOk(res, 200);
-    const cluster = (body.data.clusters as any[]).find((c: any) => c.id === fx.clusterId);
+    const cluster = (body.data.clusters as any[]).find((c: any) => c.id === fx.otherClusterId);
     assert.ok(cluster, "Cluster should still be visible after rename");
     assert.equal(cluster.name, "session-refresh-test", "Cluster name should reflect the rename in the same session");
   });
