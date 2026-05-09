@@ -361,13 +361,13 @@ prompt_caddy() {
   printf "Domain [base.dployr.io]: "; read -r domain; domain="${domain:-base.dployr.io}"
   printf "App port [7878]: "; read -r app_port; app_port="${app_port:-7878}"
 
+  install_caddy
   read_pem "Cloudflare origin certificate" /etc/caddy/certs/origin.pem
   read_pem "Cloudflare origin private key"  /etc/caddy/certs/origin.key
   chown caddy:caddy /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
   chmod 640 /etc/caddy/certs/origin.pem
   chmod 600 /etc/caddy/certs/origin.key
 
-  install_caddy
   setup_caddy "$domain" "$app_port"
 }
 
