@@ -1011,7 +1011,7 @@
       color: var(--accent);
     }
 
-    tr.instance-detail > td {
+    tr.instance-detail>td {
       padding: 0;
       background: var(--bg-1);
       border-bottom: 1px solid var(--border);
@@ -1047,9 +1047,17 @@
       flex-shrink: 0;
     }
 
-    .health-dot.ok::before { background: var(--green); }
-    .health-dot.down::before { background: var(--red); }
-    .health-dot.degraded::before { background: var(--yellow); }
+    .health-dot.ok::before {
+      background: var(--green);
+    }
+
+    .health-dot.down::before {
+      background: var(--red);
+    }
+
+    .health-dot.degraded::before {
+      background: var(--yellow);
+    }
 
     .health-uptime {
       font-size: 11px;
@@ -1125,10 +1133,17 @@
       border-bottom: none;
     }
 
-    .health-proc-table td:first-child { color: var(--text-muted); }
+    .health-proc-table td:first-child {
+      color: var(--text-muted);
+    }
 
-    .cpu-hi { color: var(--red); }
-    .cpu-med { color: var(--yellow); }
+    .cpu-hi {
+      color: var(--red);
+    }
+
+    .cpu-med {
+      color: var(--yellow);
+    }
 
     .health-footer {
       font-size: 10px;
@@ -1233,23 +1248,23 @@
         </button>
         <button class="nav-item" data-view="deployments">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-            <polyline points="16 7 22 7 22 13"/>
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+            <polyline points="16 7 22 7 22 13" />
           </svg>
           Deployments
         </button>
         <button class="nav-item" data-view="services">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="7" width="20" height="14" rx="2"/>
-            <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
-            <line x1="12" y1="12" x2="12" y2="16"/>
-            <line x1="10" y1="14" x2="14" y2="14"/>
+            <rect x="2" y="7" width="20" height="14" rx="2" />
+            <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2" />
+            <line x1="12" y1="12" x2="12" y2="16" />
+            <line x1="10" y1="14" x2="14" y2="14" />
           </svg>
           Services
         </button>
         <button class="nav-item" data-view="metrics">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
           </svg>
           Metrics
         </button>
@@ -1411,8 +1426,8 @@
               <div class="panel-body">
                 <div class="form-group">
                   <label class="form-label">Instance Tag or ID</label>
-                  <input type="text" class="form-input" id="remove-id" placeholder="e.g. node-us-east-01 or 01F8MECHZX3XBKS6GC0JNTYAYD"
-                    required />
+                  <input type="text" class="form-input" id="remove-id"
+                    placeholder="e.g. node-us-east-01 or 01F8MECHZX3XBKS6GC0JNTYAYD" required />
                   <div class="form-hint">Enter the instance tag (e.g. node-us-east-01) or ULID for quick removal.</div>
                 </div>
                 <button class="btn btn-danger btn-full mt-12" id="remove-btn">Remove Instance</button>
@@ -1511,8 +1526,8 @@
               </div>
               <div id="deployments-empty" class="empty-state hidden">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-                  <polyline points="16 7 22 7 22 13"/>
+                  <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                  <polyline points="16 7 22 7 22 13" />
                 </svg>
                 <span>No deployments found</span>
               </div>
@@ -1562,8 +1577,8 @@
               </div>
               <div id="services-empty" class="empty-state hidden">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <rect x="2" y="7" width="20" height="14" rx="2"/>
-                  <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
+                  <rect x="2" y="7" width="20" height="14" rx="2" />
+                  <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2" />
                 </svg>
                 <span>No services found</span>
               </div>
@@ -1625,84 +1640,129 @@
             </div>
             <button class="btn btn-ghost btn-sm" id="refresh-metrics">Refresh</button>
           </div>
-          <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">CLUSTERS &amp; SERVICES</div>
+          <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">CLUSTERS &amp;
+            SERVICES</div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-cl-total">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Total clusters</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-cl-paid">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Paid clusters</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--text-dim);font-family:var(--mono)" id="m-cl-free">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Free clusters</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--accent);font-family:var(--mono)" id="m-svc-total">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Total services</div>
-            </div></div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-cl-total">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Total clusters</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-cl-paid">—
+                </div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Paid clusters</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--text-dim);font-family:var(--mono)"
+                  id="m-cl-free">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Free clusters</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--accent);font-family:var(--mono)"
+                  id="m-svc-total">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Total services</div>
+              </div>
+            </div>
           </div>
 
           <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">INSTANCES</div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-inst-total">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Total instances</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-inst-healthy">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Healthy</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--yellow);font-family:var(--mono)" id="m-inst-degraded">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Degraded</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-inst-offline">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Offline / Unreachable</div>
-            </div></div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-inst-total">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Total instances</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)"
+                  id="m-inst-healthy">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Healthy</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--yellow);font-family:var(--mono)"
+                  id="m-inst-degraded">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Degraded</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)"
+                  id="m-inst-offline">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Offline / Unreachable</div>
+              </div>
+            </div>
           </div>
 
           <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">WEBSOCKET</div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--accent);font-family:var(--mono)" id="m-ws-total">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Active connections</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-ws-nodes">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Connected nodes</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-ws-clients">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Client connections</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--yellow);font-family:var(--mono)" id="m-ws-pending-req">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Pending WS requests</div>
-            </div></div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--accent);font-family:var(--mono)" id="m-ws-total">
+                  —</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Active connections</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-ws-nodes">—
+                </div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Connected nodes</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-ws-clients">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Client connections</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--yellow);font-family:var(--mono)"
+                  id="m-ws-pending-req">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Pending WS requests</div>
+              </div>
+            </div>
           </div>
 
           <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">DEPLOYMENTS</div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-dep-pending">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Pending</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-dep-stale">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Stale (&gt;5 min)</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-dep-success">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Succeeded (recent)</div>
-            </div></div>
-            <div class="panel"><div class="panel-body" style="text-align:center;padding:16px 12px;">
-              <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-dep-failed">—</div>
-              <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Failed (recent)</div>
-            </div></div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;font-family:var(--mono)" id="m-dep-pending">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Pending</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-dep-stale">—
+                </div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Stale (&gt;5 min)</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)"
+                  id="m-dep-success">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Succeeded (recent)</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-dep-failed">—
+                </div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Failed (recent)</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2009,7 +2069,7 @@
 
         const lastSeen = data.lastUpdated ? relTime(data.lastUpdated) : '—';
         const versionStr = data.version
-          ? `daemon v${escHtml(data.version)}${data.go_version ? ` (${escHtml(data.go_version)})` : ''}`
+          ? `dployrd v${escHtml(data.version)}${data.go_version ? ` (${escHtml(data.go_version)})` : ''}`
           : '';
 
         detailTr.innerHTML = `<td colspan="9"><div class="health-panel">
@@ -2178,36 +2238,36 @@
 
       const EVENT_META = {
         // pool events
-        'pool.instance_healthy':       { label: 'Healthy',       cls: 'drained' },
-        'pool.instance_degraded':      { label: 'Degraded',      cls: 'maintenance' },
-        'pool.instance_offline':       { label: 'Offline',       cls: 'error' },
-        'pool.instance_unreachable':   { label: 'Unreachable',   cls: 'error' },
-        'pool.instance_maintenance':   { label: 'Maintenance',   cls: 'maintenance' },
-        'pool.instance_drained':       { label: 'Drained',       cls: 'drained' },
-        'pool.instance_data_cleared':  { label: 'Data Cleared',  cls: 'other' },
-        'pool.instance_provisioned':   { label: 'Provisioned',   cls: 'provisioned' },
-        'pool.instance_allocated':     { label: 'Allocated',     cls: 'provisioned' },
+        'pool.instance_healthy': { label: 'Healthy', cls: 'drained' },
+        'pool.instance_degraded': { label: 'Degraded', cls: 'maintenance' },
+        'pool.instance_offline': { label: 'Offline', cls: 'error' },
+        'pool.instance_unreachable': { label: 'Unreachable', cls: 'error' },
+        'pool.instance_maintenance': { label: 'Maintenance', cls: 'maintenance' },
+        'pool.instance_drained': { label: 'Drained', cls: 'drained' },
+        'pool.instance_data_cleared': { label: 'Data Cleared', cls: 'other' },
+        'pool.instance_provisioned': { label: 'Provisioned', cls: 'provisioned' },
+        'pool.instance_allocated': { label: 'Allocated', cls: 'provisioned' },
         // auth events
-        'auth.session_created':        { label: 'Sign-in',       cls: 'provisioned' },
+        'auth.session_created': { label: 'Sign-in', cls: 'provisioned' },
         // cluster events
-        'cluster.modified':            { label: 'Modified',      cls: 'provisioned' },
-        'cluster.user_invited':        { label: 'User Invited',  cls: 'provisioned' },
-        'cluster.invite_revoked':      { label: 'Invite Revoked', cls: 'maintenance' },
-        'cluster.invite_accepted':     { label: 'Joined',        cls: 'drained' },
-        'cluster.invite_declined':     { label: 'Declined',      cls: 'maintenance' },
-        'cluster.removed_user':        { label: 'User Removed',  cls: 'error' },
-        'cluster.user_role_changed':   { label: 'Role Changed',  cls: 'provisioned' },
-        'cluster.ownership_transferred': { label: 'Ownership',   cls: 'maintenance' },
+        'cluster.modified': { label: 'Modified', cls: 'provisioned' },
+        'cluster.user_invited': { label: 'User Invited', cls: 'provisioned' },
+        'cluster.invite_revoked': { label: 'Invite Revoked', cls: 'maintenance' },
+        'cluster.invite_accepted': { label: 'Joined', cls: 'drained' },
+        'cluster.invite_declined': { label: 'Declined', cls: 'maintenance' },
+        'cluster.removed_user': { label: 'User Removed', cls: 'error' },
+        'cluster.user_role_changed': { label: 'Role Changed', cls: 'provisioned' },
+        'cluster.ownership_transferred': { label: 'Ownership', cls: 'maintenance' },
         // resource events
-        'resource.resource_created':   { label: 'Created',       cls: 'provisioned' },
-        'resource.resource_updated':   { label: 'Updated',       cls: 'provisioned' },
-        'resource.resource_deleted':   { label: 'Deleted',       cls: 'error' },
+        'resource.resource_created': { label: 'Created', cls: 'provisioned' },
+        'resource.resource_updated': { label: 'Updated', cls: 'provisioned' },
+        'resource.resource_deleted': { label: 'Deleted', cls: 'error' },
         // domain events
-        'domain.domain_added':         { label: 'Domain Added',  cls: 'provisioned' },
-        'domain.domain_removed':       { label: 'Domain Removed', cls: 'maintenance' },
+        'domain.domain_added': { label: 'Domain Added', cls: 'provisioned' },
+        'domain.domain_removed': { label: 'Domain Removed', cls: 'maintenance' },
         // instance events
-        'instance.instance_created':   { label: 'Created',       cls: 'provisioned' },
-        'instance.instance_deleted':   { label: 'Deleted',       cls: 'error' },
+        'instance.instance_created': { label: 'Created', cls: 'provisioned' },
+        'instance.instance_deleted': { label: 'Deleted', cls: 'error' },
       };
 
       async function loadInstances() {
