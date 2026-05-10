@@ -261,11 +261,12 @@ export class InstanceStore extends BaseStore {
    */
   async getRoutingKey(clusterId: string): Promise<string> {
     const poolInstanceId = await this.getClusterPoolInstance(clusterId);
-    if (!poolInstanceId) {
-      return clusterId;
+    if (poolInstanceId) {
+      const poolInstance = await this.find({ id: poolInstanceId });
+      return poolInstance?.tag ?? clusterId;
     }
-    const poolInstance = await this.find({ id: poolInstanceId });
-    return poolInstance?.tag ?? clusterId;
+    const dedicatedInstance = await this.find({ clusterId, kind: "dedicated" });
+    return dedicatedInstance?.tag ?? clusterId;
   }
 
 

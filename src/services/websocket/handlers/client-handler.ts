@@ -832,29 +832,42 @@ export class ClientMessageHandler {
   /**
    * Handle terminal open request - sends task to node to initiate outbound WebSocket
    */
+  private sendTerminalError(conn: ClusterConnection, requestId: string, error: string): void {
+    try {
+      conn.ws.send(JSON.stringify({ kind: "terminal_open_response", requestId, success: false, error }));
+    } catch (err) {
+      this.log.error("Failed to send terminal error to client", { error: String(err) });
+    }
+  }
+
   private async handleTerminalOpen(conn: ClusterConnection, message: TerminalOpenMessage): Promise<void> {
     const { instanceId, requestId, cols, rows } = message;
 
     if (!conn.session) {
-      this.sendError(conn, requestId, WSErrorCode.UNAUTHORIZED, "Session required");
+      this.sendTerminalError(conn, requestId, "Session required");
       return;
     }
 
     const instance = await this.db.instances.find({ tag: instanceId });
     if (!instance) {
-      this.sendError(conn, requestId, WSErrorCode.NOT_FOUND, "Instance not found");
+      this.sendTerminalError(conn, requestId, "Instance not found");
       return;
     }
 
     const clusterId = instance.kind === "pool" ? conn.connectionKey : instance.clusterId;
     if (!clusterId) {
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+      this.sendTerminalError(conn, requestId, "Permission denied");
       return;
     }
 
     const userClusters = conn.session.clusters.map((c) => c.id);
     if (!userClusters.includes(clusterId)) {
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "Permission denied");
+      this.sendTerminalError(conn, requestId, "Permission denied");
+      return;
+    }
+
+    if (!this.isTaskAllowedOnInstance(instance, message)) {
+      this.sendTerminalError(conn, requestId, "Terminal is not available on the free instance");
       return;
     }
 
@@ -866,16 +879,11 @@ export class ClientMessageHandler {
     const taskId = ulid();
     const task = this.dployrdService.createTerminalOpen(taskId, sessionId, cols, rows, token);
 
-    if (!this.isTaskAllowedOnInstance(instance, message)) {
-      this.terminalManager.removeExpectedSession(sessionId);
-      this.sendError(conn, requestId, WSErrorCode.PERMISSION_DENIED, "This action is not available on the free instance");
-      return;
-    }
-
-    const sent = this.connectionManager.sendTask(await this.db.instances.getRoutingKey(conn.connectionKey), task);
+    const routingKey = await this.db.instances.getRoutingKey(conn.connectionKey);
+    const sent = this.connectionManager.sendTask(routingKey, task);
     if (!sent) {
       this.terminalManager.removeExpectedSession(sessionId);
-      this.sendError(conn, requestId, WSErrorCode.NODE_DISCONNECTED, "No node available");
+      this.sendTerminalError(conn, requestId, "No node available");
       return;
     }
   }
