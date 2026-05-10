@@ -188,7 +188,9 @@ export function getBillingService(c: AppContext): BillingService | null {
   const existing = c.get("_billingService");
   if (existing) return existing;
 
-  const service = new BillingService(provider, c.env);
+  const emailProvider = c.get("emailProvider") ?? null;
+  const emailService = emailProvider ? new EmailService(emailProvider, c.env) : null;
+  const service = new BillingService(provider, emailService);
   c.set("_billingService", service);
   return service;
 }
@@ -238,12 +240,12 @@ export function getVMService(c: AppContext): VmProvider {
   return provider;
 }
 
-export function getEmailService(c: AppContext): EmailProvider {
+export function getEmailService(c: AppContext): EmailService {
   const provider = c.get("emailProvider");
   if (!provider) {
     throw new Error("Email provider not configured");
   }
-  return provider;
+  return new EmailService(provider, c.env);
 }
 
 export function getTraefikRouterService(c: AppContext): TraefikService | null {

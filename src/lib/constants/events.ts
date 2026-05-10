@@ -18,8 +18,8 @@ export const EVENTS = {
   BILLING: {
     PAYMENT_SUCCESSFUL: { code: "billing.payment_successful", message: "Payment successful" },
     PAYMENT_FAILED: { code: "billing.payment_failed", message: "Payment failed" },
-    SUBSCRIPTION_RESUMED: { code: "billing.subscription_canceled", message: "Your subscription has been resumed" },
-    SUBSCRIPTION_CANCELLED: { code: "billing.subscription_canceled", message: "Your subscription has been cancelled" },
+    SUBSCRIPTION_RESUMED: { code: "billing.subscription_resumed", message: "Your subscription has been resumed" },
+    SUBSCRIPTION_CANCELLED: { code: "billing.subscription_cancelled", message: "Your subscription has been cancelled" },
     SUBSCRIPTION_EXPIRED: { code: "billing.subscription_expired", message: "Your subscription has expired" },
   },
   INSTANCE: {
@@ -187,6 +187,12 @@ export const EVENT_METADATA: EventMetadataMap = {
     title: "❌ Subscription Expired",
     description: (data: any) => `Your subscription has expired. You've been moved to the free **hobby** plan.`,
     color: 0xff0000,
+    category: "billing",
+  },
+  [EVENTS.BILLING.SUBSCRIPTION_RESUMED.code]: {
+    title: "✅ Subscription Resumed",
+    description: (data: any) => `Your **${data.plan}** subscription has been resumed and is now active again.`,
+    color: 0x00ff00,
     category: "billing",
   },
 };

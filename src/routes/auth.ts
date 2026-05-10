@@ -142,7 +142,7 @@ auth.post("/login/email", async (c) => {
   const isTestEnv = process.env.NODE_ENV === "test";
   if (!isTestEnv) {
     try {
-      await authService.sendOTP({ email, emailProvider: getEmailService(c) });
+      await authService.sendOTP({ email, emailService: getEmailService(c) });
     } catch (error) {
       log.error("Send OTP error:", error);
       return c.json(

@@ -6,9 +6,9 @@ import type { KVStore } from "@/lib/db/store/kv/index.js";
 import type { Bindings, OAuthProvider, User } from "@/types/index.js";
 import type { VmProvider } from "@/services/vm/index.js";
 import type { JWTService } from "./jwt.js";
-import type { EmailProvider } from "@/services/notifications/email/index.js";
+import type { EmailService } from "@/services/notifications/email/index.js";
+import { otpEmail } from "@/lib/templates/emails/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
-import { loginCodeTemplate } from "@/lib/templates/emails/verificationCode.js";
 import { InstancePool } from "@/services/pool.js";
 import { Logger } from "@/lib/logger.js";
 
@@ -55,16 +55,10 @@ export class AuthService {
   /**
    * Generates a one-time code and sends it to the given email address.
    */
-  async sendOTP({ email, emailProvider }: { email: string; emailProvider: EmailProvider }): Promise<void> {
+  async sendOTP({ email, emailService }: { email: string; emailService: EmailService }): Promise<void> {
     const code = await this.kv.createOTP(email);
-    if (process.env.NODE_ENV === "test") return;
     const name = email.split("@")[0] ?? email;
-    await emailProvider.sendEmail({
-      to: email,
-      name,
-      subject: "Verify your account",
-      body: loginCodeTemplate(name, code),
-    });
+    await emailService.send(email, otpEmail, { name, code });
   }
 
   /**

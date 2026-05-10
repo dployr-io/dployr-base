@@ -105,8 +105,10 @@ clusters.get("/:id/users/invites/accept", async (c) => {
       await kv.refreshSession({ sessionId, updates: { clusters } });
     }
 
+    const cluster = await db.clusters.get(clusterId);
+
     // Trigger notifications
-    worker.dispatch(notify(EVENTS.CLUSTER.INVITE_ACCEPTED.code, { clusterId, userEmail: session.email }));
+    worker.dispatch(notify(EVENTS.CLUSTER.INVITE_ACCEPTED.code, { clusterId, clusterName: cluster?.name, userEmail: session.email }));
 
     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
   } catch (error) {
@@ -227,6 +229,8 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
       );
     }
 
+    const cluster = await db.clusters.get(id);
+
     await db.clusters.addUsers(id, users);
 
     await kv.logEvent({
@@ -242,6 +246,10 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
       type: EVENTS.CLUSTER.USER_INVITED.code,
       request: c.req.raw,
     });
+
+    for (const userEmail of users) {
+      worker.dispatch(notify(EVENTS.CLUSTER.USER_INVITED.code, { clusterId: id, clusterName: cluster?.name, userEmail, to: userEmail }));
+    }
 
     return c.json(createSuccessResponse({ users }, "Invites sent successfully"));
   } catch (error) {

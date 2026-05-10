@@ -1,15 +1,21 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import type { Bindings, SubscriptionPlan, SubscriptionStatus } from "@/types/index.js";
+import type { SubscriptionPlan, SubscriptionStatus } from "@/types/index.js";
 import type { DatabaseStore } from "@/lib/db/store/db/index.js";
 import type { KVStore } from "@/lib/db/store/kv/index.js";
 import type { BillingProvider } from "./provider.js";
-import { ZeptoProvider } from "@/services/notifications/email/zepto.js";
-import { notificationTemplate } from "@/lib/templates/emails/notification.js";
+import type { EmailService } from "@/services/notifications/email/index.js";
 import { EVENTS } from "@/lib/constants/index.js";
 import { PLANS } from "@/lib/constants/billing.js";
 import { Logger } from "@/lib/logger.js";
+import {
+  paymentSuccessEmail,
+  paymentFailedEmail,
+  subscriptionCancelledEmail,
+  subscriptionExpiredEmail,
+  subscriptionResumedEmail,
+} from "@/lib/templates/emails/index.js";
 
 const log = new Logger("BillingService");
 
@@ -27,7 +33,7 @@ export interface CheckoutParams {
 export class BillingService {
   constructor(
     private provider: BillingProvider,
-    private env: Bindings,
+    private emailService: EmailService | null,
   ) {}
 
   private toEpochMs(value: unknown): number | null {
@@ -118,7 +124,18 @@ export class BillingService {
     }
   }
 
-  private async sendBillingNotification(event: string, clusterId: string, db: DatabaseStore, kv: KVStore, extraData?: Record<string, unknown>): Promise<void> {
+  private async sendBillingNotification(
+    event:
+      | typeof EVENTS.BILLING.PAYMENT_SUCCESSFUL.code
+      | typeof EVENTS.BILLING.PAYMENT_FAILED.code
+      | typeof EVENTS.BILLING.SUBSCRIPTION_CANCELLED.code
+      | typeof EVENTS.BILLING.SUBSCRIPTION_EXPIRED.code
+      | typeof EVENTS.BILLING.SUBSCRIPTION_RESUMED.code,
+    clusterId: string,
+    db: DatabaseStore,
+    kv: KVStore,
+    extraData?: { periodEnd?: number | null },
+  ): Promise<void> {
     const recentReminder = await kv.getbillingNotification({ clusterId });
     if (recentReminder) {
       log.info(`Skipping notification for ${clusterId} (reminder sent within 24h)`);
@@ -135,26 +152,30 @@ export class BillingService {
     if (!ownerEmail) return;
 
     const user = await db.users.find({ email: ownerEmail });
-    if (!user) return;
+    if (!user || !this.emailService) return;
 
-    const emailData = {
-      clusterId,
-      clusterName: cluster.name,
-      userEmail: user.email,
-      plan: sub.plan,
-      periodEnd: sub.periodEnd,
-      actionUrl: `https://app.dployr.io/clusters/${clusterId}/settings/billing`,
-      ...extraData,
-    };
+    const base = { plan: sub.plan, clusterName: cluster.name, clusterId };
 
-    const emailProvider = new ZeptoProvider(this.env);
-    const html = notificationTemplate(event, emailData);
-    const subject = event.includes("failed") ? "Payment Failed - Action Required" : event.includes("canceled") ? "Subscription Canceled" : "Subscription Update";
+    switch (event) {
+      case EVENTS.BILLING.PAYMENT_SUCCESSFUL.code:
+        await this.emailService.send(user.email, paymentSuccessEmail, base);
+        break;
+      case EVENTS.BILLING.PAYMENT_FAILED.code:
+        await this.emailService.send(user.email, paymentFailedEmail, base);
+        break;
+      case EVENTS.BILLING.SUBSCRIPTION_CANCELLED.code:
+        await this.emailService.send(user.email, subscriptionCancelledEmail, { ...base, periodEnd: extraData?.periodEnd ?? null });
+        break;
+      case EVENTS.BILLING.SUBSCRIPTION_EXPIRED.code:
+        await this.emailService.send(user.email, subscriptionExpiredEmail, { clusterName: cluster.name, clusterId });
+        break;
+      case EVENTS.BILLING.SUBSCRIPTION_RESUMED.code:
+        await this.emailService.send(user.email, subscriptionResumedEmail, base);
+        break;
+    }
 
-    await emailProvider.sendEmail({ to: user.email, subject, body: html });
     await kv.setReminderNotification({ clusterId });
-
-    log.info(`Sent ${event} notification to ${user.email} for cluster ${clusterId}`);
+    log.debug(`Sent ${event} notification to ${user.email} for cluster ${clusterId}`);
   }
 
   private getPolarReferencedClusterId(data: Record<string, unknown>): string | null {

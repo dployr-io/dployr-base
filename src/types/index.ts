@@ -313,10 +313,14 @@ export interface ProxyServerConfig {
 export interface NotificationData {
   /** Cluster whose integrations (Discord, Slack, webhooks, email) will be notified. */
   clusterId: string;
+  /** Human-readable cluster name used in email subjects and bodies. Falls back to clusterId if absent. */
+  clusterName?: string;
   /** Instance related to the event, if applicable. */
   instanceId?: string;
-  /** Email of the user who triggered the event, used in notification templates. */
+  /** Email of the user relevant to the event, shown in notification templates. */
   userEmail?: string;
+  /** Explicit email recipient. If omitted, falls back to the cluster owner. */
+  to?: string;
   [key: string]: any;
 }
 
