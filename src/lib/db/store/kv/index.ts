@@ -87,6 +87,8 @@ export class KVStore {
   registerClusterNode = (...args: Parameters<InstanceCacheStore["registerClusterNode"]>) => this.instanceCache.registerClusterNode(...args);
   getClusterNodes = (...args: Parameters<InstanceCacheStore["getClusterNodes"]>) => this.instanceCache.getClusterNodes(...args);
   deregisterClusterNode = (...args: Parameters<InstanceCacheStore["deregisterClusterNode"]>) => this.instanceCache.deregisterClusterNode(...args);
+  saveJobRun = (...args: Parameters<InstanceCacheStore["saveJobRun"]>) => this.instanceCache.saveJobRun(...args);
+  getRecentJobRuns = (...args: Parameters<InstanceCacheStore["getRecentJobRuns"]>) => this.instanceCache.getRecentJobRuns(...args);
 
   // IntegrationsStore delegation
   setPendingGitHubInstall = (...args: Parameters<IntegrationsStore["setPendingGitHubInstall"]>) => this.integrations.setPendingGitHubInstall(...args);

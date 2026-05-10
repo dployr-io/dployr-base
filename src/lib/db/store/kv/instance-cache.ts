@@ -199,4 +199,43 @@ export class InstanceCacheStore {
     if (raw === null) return false; // never flagged
     return true;
   }
+
+  async saveJobRun(run: {
+    id: string;
+    job: string;
+    status: "running" | "completed" | "failed";
+    startedAt: number;
+    completedAt?: number;
+    durationMs?: number;
+    error?: string;
+    output?: Record<string, unknown>;
+    ttl?: number;
+  }): Promise<void> {
+    if (run.status === "running") return;
+    const { ttl, ...data } = run;
+
+    // Write the run data — expires automatically via TTL
+    await this.kv.put(KV_KEYS.JOB.RUN(run.id), JSON.stringify(data), ttl ? { ttl } : undefined);
+
+    // Maintain a compact index of IDs (newest first, capped at 200)
+    const raw = await this.kv.get(KV_KEYS.JOB.INDEX);
+    const index: string[] = raw ? JSON.parse(raw) : [];
+    index.unshift(run.id);
+    await this.kv.put(KV_KEYS.JOB.INDEX, JSON.stringify(index.slice(0, 200)));
+  }
+
+  async getRecentJobRuns(limit = 50): Promise<Array<Record<string, unknown>>> {
+    const raw = await this.kv.get(KV_KEYS.JOB.INDEX);
+    if (!raw) return [];
+    const ids: string[] = JSON.parse(raw);
+    // Fetch more than limit to account for expired entries
+    const runs = await Promise.all(
+      ids.slice(0, Math.min(ids.length, limit * 2)).map(async (id) => {
+        const data = await this.kv.get(KV_KEYS.JOB.RUN(id));
+        if (!data) return null;
+        try { return JSON.parse(data); } catch { return null; }
+      }),
+    );
+    return runs.filter((r): r is Record<string, unknown> => r !== null).slice(0, limit);
+  }
 }

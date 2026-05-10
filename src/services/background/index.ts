@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { EventEmitter } from "events";
+import { ulid } from "ulid";
 import { initializeAdapters, type Adapters } from "@/lib/config/bootstrap.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
@@ -15,6 +16,8 @@ export interface JobContext {
   adapters: Adapters;
   /** Immediately fire a registered event-driven job by name. */
   trigger: (event: string) => void;
+  /** Attach structured output to this job run (merged into the KV record). */
+  setOutput: (output: Record<string, unknown>) => void;
 }
 
 export type JobFn = (ctx: JobContext) => Promise<void>;
@@ -76,9 +79,9 @@ export class BackgroundWorker {
 
     for (const entry of this.scheduled) {
       if (entry.runImmediately) {
-        this.run(entry.fn, entry.name);
+        this.run(entry.fn, entry.name, entry.intervalMs);
       }
-      entry.timer = setInterval(() => this.run(entry.fn, entry.name), entry.intervalMs);
+      entry.timer = setInterval(() => this.run(entry.fn, entry.name, entry.intervalMs), entry.intervalMs);
       entry.timer.unref();
     }
 
@@ -102,18 +105,31 @@ export class BackgroundWorker {
     log.info("Stopped");
   }
 
-  private async run(fn: JobFn, name: string): Promise<void> {
+  private async run(fn: JobFn, name: string, intervalMs?: number): Promise<void> {
     if (!this.adapters) return;
+    const id = ulid();
+    const startedAt = Date.now();
+    const kv = new KVStore(this.adapters.kv);
+    let output: Record<string, unknown> = {};
+    // TTL = 3× the interval (in seconds); falls back to 24h for triggered jobs
+    const ttl = intervalMs ? Math.ceil((intervalMs / 1000) * 3) : 60 * 60 * 24;
+
     const ctx: JobContext = {
       db: new DatabaseStore(this.adapters.db),
-      kv: new KVStore(this.adapters.kv),
+      kv,
       adapters: this.adapters,
       trigger: (event) => this.emitter.emit(event),
+      setOutput: (o) => { output = { ...output, ...o }; },
     };
+
     try {
       await fn(ctx);
+      const completedAt = Date.now();
+      await kv.saveJobRun({ id, job: name, status: "completed", startedAt, completedAt, durationMs: completedAt - startedAt, output, ttl });
     } catch (err) {
+      const completedAt = Date.now();
       log.error(`"${name}" failed:`, err);
+      await kv.saveJobRun({ id, job: name, status: "failed", startedAt, completedAt, durationMs: completedAt - startedAt, error: String(err), output, ttl });
     }
   }
 }

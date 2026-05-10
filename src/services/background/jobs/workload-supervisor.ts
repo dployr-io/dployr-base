@@ -11,7 +11,7 @@ import { NODES_SYNC_JOB } from "@/lib/constants/index.js";
 // survives across job ticks so the cooldown map is never reset
 const reprovisionCooldowns = new Map<string, number>();
 
-export const workloadSupervisor: JobFn = async ({ db, kv, adapters, trigger }) => {
+export const workloadSupervisor: JobFn = async ({ db, kv, adapters, trigger, setOutput }) => {
   const jwtService = new JWTService(kv);
   const dployrdService = new DployrdService();
   const { connectionManager, clientNotifier } = adapters.ws;
@@ -28,4 +28,5 @@ export const workloadSupervisor: JobFn = async ({ db, kv, adapters, trigger }) =
   });
 
   await supervisor.run();
+  setOutput(supervisor.getRunSummary());
 };

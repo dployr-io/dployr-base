@@ -58,6 +58,7 @@ export const KV_KEYS = {
     NODES_PREFIX: (clusterId: string) => `cluster:${clusterId}:nodes:`,
     STATUS: (clusterId: string) => `cluster:${clusterId}:status`,
     RENAME_HISTORY: (clusterId: string) => `cluster:${clusterId}:renames`,
+    WORKLOADS: (clusterId: string, nodeId: string) => `cluster:${clusterId}:node:${nodeId}:workloads`,
   },
   GITHUB: {
     PENDING_INSTALL: (userId: string) => `pending_github_install:${userId}`,
@@ -72,6 +73,10 @@ export const KV_KEYS = {
   },
   POOL: {
     PROVISION_LOCK: "pool:provision:lock",
+  },
+  JOB: {
+    RUN: (id: string) => `job:run:${id}`,
+    INDEX: "job:runs:index",
   },
   TRAEFIK: {
     ROUTER_RULE: (routeKey: string) => `traefik/http/routers/${routeKey}/rule`,

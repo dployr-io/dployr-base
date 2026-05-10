@@ -1268,6 +1268,12 @@
           </svg>
           Metrics
         </button>
+        <button class="nav-item" data-view="monitor">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+          </svg>
+          Monitor
+        </button>
         <div class="nav-divider"></div>
         <div class="nav-section-label">System</div>
         <button class="nav-item" data-view="token">
@@ -1765,6 +1771,27 @@
             </div>
           </div>
         </div>
+
+        <!-- monitor view -->
+        <div id="view-monitor" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Monitor</div>
+              <div class="page-subtitle" id="monitor-timestamp"></div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="refresh-monitor">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+
+          <div id="monitor-loading" class="hidden" style="text-align:center;padding:40px;color:var(--text-dim);">Loading…</div>
+          <div id="monitor-empty" class="hidden" style="text-align:center;padding:40px;color:var(--text-dim);">No topology data available.</div>
+          <div id="monitor-body"></div>
+        </div>
       </div>
     </main>
   </div>
@@ -1812,7 +1839,9 @@
         if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
         if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
         if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-        return new Date(ms).toLocaleDateString();
+        if (diff < 2592000000) return `${Math.floor(diff / 86400000)}d ago`;
+        if (diff < 31536000000) return `${Math.floor(diff / 2592000000)}mo ago`;
+        return `${Math.floor(diff / 31536000000)}y ago`;
       };
 
       const loadBarHtml = (count, capacity) => {
@@ -1928,6 +1957,7 @@
         if (name === 'services') loadServices();
         if (name === 'metrics') loadMetrics();
         if (name === 'token') populateTokenView();
+        if (name === 'monitor') loadMonitor();
         startAutoRefresh(name);
       }
 
@@ -2413,7 +2443,7 @@
             <td>${statusBadge}</td>
             <td class="cell-tag">${escHtml(dep.name || '—')}</td>
             <td class="dim">${escHtml(dep.type || '—')}</td>
-            <td class="cell-id">${escHtml((dep.clusterId || '—').slice(0, 12))}${dep.clusterId && dep.clusterId.length > 12 ? '…' : ''}</td>
+            <td class="cell-tag">${escHtml(dep.clusterName || (dep.clusterId || '—').slice(0, 12))}</td>
             <td class="dim" style="white-space:nowrap;">${createdMs ? relTime(createdMs) : '—'}</td>
             <td class="dim" style="white-space:nowrap;">${finishedMs ? relTime(finishedMs) : '<span class="text-muted">—</span>'}</td>
           `;
@@ -2467,8 +2497,8 @@
           tr.innerHTML = `
             <td class="cell-tag">${escHtml(svc.name || '—')}</td>
             <td class="dim">${escHtml(svc.type || '—')}</td>
-            <td class="cell-id">${escHtml((svc.clusterId || '—').slice(0, 12))}${svc.clusterId && svc.clusterId.length > 12 ? '…' : ''}</td>
-            <td class="cell-id">${svc.deploymentId ? escHtml(svc.deploymentId.slice(0, 8)) + '…' : '<span class="text-muted">—</span>'}</td>
+            <td class="cell-tag">${escHtml(svc.clusterName || (svc.clusterId || '—').slice(0, 12))}</td>
+            <td class="cell-tag">${escHtml(svc.deploymentName || (svc.deploymentId ? svc.deploymentId.slice(0, 8) + '…' : '—'))}</td>
             <td class="dim" style="white-space:nowrap;">${createdMs ? relTime(createdMs) : '—'}</td>
             <td class="dim" style="white-space:nowrap;">${updatedMs ? relTime(updatedMs) : '—'}</td>
           `;
@@ -2544,12 +2574,225 @@
 
       // auto-refresh: every 10s re-load whatever view is currently active
       let _autoRefreshTimer = null;
+      // ── Monitor ────────────────────────────────────────────────────────────
+
+      let _monitorTab = 'jobs';
+      let _monitorData = { nodes: [], jobs: [] };
+
+      async function fetchTopology() {
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const body = await apiRequest(`${API_BASE}/v1/admin/topology${sessionParam}`, { headers: apiHeaders() });
+        return body.data?.nodes || [];
+      }
+
+      async function fetchJobs() {
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const body = await apiRequest(`${API_BASE}/v1/admin/jobs${sessionParam}`, { headers: apiHeaders() });
+        return body.data?.runs || [];
+      }
+
+      function renderMonitorTabs(body) {
+        const tabs = [
+          { id: 'services', label: 'Services' },
+          { id: 'jobs',     label: 'Jobs' },
+        ];
+        const tabBar = tabs.map(t => {
+          const active = _monitorTab === t.id;
+          return `<button class="monitor-tab" data-tab="${t.id}"
+            style="padding:6px 16px;font-size:13px;border:none;cursor:pointer;border-bottom:2px solid ${active ? 'var(--accent,#60a5fa)' : 'transparent'};background:transparent;color:${active ? 'var(--text)' : 'var(--text-dim)'};font-weight:${active ? '600' : '400'};">${t.label}</button>`;
+        }).join('');
+
+        body.innerHTML = `<div style="border-bottom:1px solid var(--border);margin-bottom:14px;">${tabBar}</div><div id="monitor-tab-content"></div>`;
+
+        body.querySelectorAll('.monitor-tab').forEach(btn => {
+          btn.addEventListener('click', () => {
+            _monitorTab = btn.dataset.tab;
+            renderMonitorTabs(body);
+            renderMonitorTabContent();
+          });
+        });
+      }
+
+      function renderMonitorTabContent() {
+        const content = $('#monitor-tab-content');
+        if (!content) return;
+        if (_monitorTab === 'jobs') renderJobLog(_monitorData.jobs, content);
+        else renderNodeServices(_monitorData.nodes, content);
+      }
+
+      // ── Tab: Jobs ───────────────────────────────────────────────────────────
+
+      function fmtTime(ts) {
+        if (!ts) return '—';
+        return relTime(typeof ts === 'string' ? new Date(ts).getTime() : ts);
+      }
+
+      function fmtDur(ms) {
+        if (ms == null) return '—';
+        return ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's';
+      }
+
+      function renderJobLog(runs, container) {
+        if (!runs.length) {
+          container.innerHTML = '<div style="color:#aaa;font-size:13px;padding:16px 0;">No job runs recorded yet — deploy and wait one interval.</div>';
+          return;
+        }
+
+        const rows = runs.map(run => {
+          const failed  = run.status === 'failed';
+          const rowBg   = failed ? 'background:#2a0f0f;' : '';
+          const statusCell = failed
+            ? `<span style="color:#f87171;font-weight:600;">FAILED</span>`
+            : `<span style="color:#4ade80;">OK</span>`;
+
+          // Cluster breakdown for workload-supervisor
+          let detail = '';
+          const clusters = run.output?.clusters;
+          if (Array.isArray(clusters) && clusters.length) {
+            const clRows = clusters.map(cl => {
+              const isOk      = cl.outcome === 'ok';
+              const isChanged = cl.outcome === 'changed';
+              const isNoNode  = cl.outcome === 'no_node';
+              const isNoData  = cl.outcome === 'no_data';
+              const isErr     = cl.outcome === 'error';
+              const dotColor  = isErr ? '#f87171' : isNoNode ? '#6b7280' : isChanged ? '#fbbf24' : '#4ade80';
+              const parts = [];
+              if (cl.created?.length)       parts.push(`${cl.created.length} new service${cl.created.length > 1 ? 's' : ''} added: ${cl.created.join(', ')}`);
+              if (cl.reprovisioned?.length)  parts.push(`${cl.reprovisioned.length} service${cl.reprovisioned.length > 1 ? 's' : ''} restarted: ${cl.reprovisioned.join(', ')}`);
+              if (isNoNode)  parts.push('no node connected');
+              if (isNoData)  parts.push('node has not sent data yet');
+              if (isErr)     parts.push(cl.error ? cl.error.slice(0, 120) : 'unknown error');
+              return `<div style="display:flex;align-items:baseline;gap:6px;padding:1px 0;">
+                <span style="color:${dotColor};font-size:10px;">●</span>
+                <span style="color:#e5e7eb;font-size:12px;font-weight:500;">${escHtml(cl.clusterName || cl.clusterId)}</span>
+                ${parts.length ? `<span style="color:#9ca3af;font-size:11px;">${escHtml(parts.join(' · '))}</span>` : ''}
+              </div>`;
+            }).join('');
+            detail = `<div style="padding:2px 0;">${clRows}</div>`;
+          } else if (run.error) {
+            detail = `<div style="color:#f87171;font-size:12px;">${escHtml(run.error.slice(0, 200))}</div>`;
+          }
+
+          return `<tr style="${rowBg}">
+            <td style="font-size:12px;font-family:var(--mono);color:#e5e7eb;white-space:nowrap;vertical-align:top;padding-top:10px;">${escHtml(run.job || '—')}</td>
+            <td style="font-size:12px;white-space:nowrap;vertical-align:top;padding-top:10px;">${statusCell}</td>
+            <td style="font-size:12px;color:#d1d5db;white-space:nowrap;vertical-align:top;padding-top:10px;" title="${run.startedAt ? new Date(run.startedAt).toISOString() : ''}">${fmtTime(run.startedAt)}</td>
+            <td style="font-size:12px;color:#d1d5db;white-space:nowrap;vertical-align:top;padding-top:10px;">${fmtDur(run.durationMs)}</td>
+            <td style="vertical-align:top;">${detail}</td>
+          </tr>`;
+        }).join('');
+
+        container.innerHTML = `<table class="table" style="background:#111;color:#e5e7eb;">
+          <thead style="background:#1c1c1c;">
+            <tr><th style="color:#9ca3af;">Job</th><th style="color:#9ca3af;">Result</th><th style="color:#9ca3af;">When</th><th style="color:#9ca3af;">Duration</th><th style="color:#9ca3af;">Details</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      }
+
+      // ── Tab: Services ───────────────────────────────────────────────────────
+
+      function renderNodeServices(nodes, container) {
+        if (!nodes.length) {
+          container.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">No nodes found.</div>';
+          return;
+        }
+
+        container.innerHTML = nodes.map(node => {
+          const isPool = node.kind === 'pool';
+          const connDot = node.connected
+            ? `<span style="color:var(--green);">● connected</span>`
+            : `<span style="color:var(--red);">○ offline</span>`;
+
+          // Pool nodes: warn about services that can't be matched to any cluster
+          const leaked = (node.rawNodeServices || []).filter(s => !s.ownerClusterId);
+          const leakBanner = leaked.length
+            ? `<div style="background:#2d0d0d;border-bottom:1px solid var(--border);padding:9px 14px;font-size:13px;color:var(--red);">
+                ⚠ ${leaked.length} service${leaked.length > 1 ? 's' : ''} on this node cannot be matched to any cluster: ${leaked.map(s => `<strong>${escHtml(s.name)}</strong>`).join(', ')}
+               </div>`
+            : '';
+
+          const clusterRows = (node.clusters || []).map(cl => {
+            const onNode = new Set((cl.broadcastServices || []).map(s => s.name));
+            const inDb   = new Set((cl.dbServices || []).map(s => s.name));
+            const all    = [...new Set([...onNode, ...inDb])];
+
+            if (!all.length) {
+              return `<tr>
+                <td style="font-size:12px;font-weight:500;white-space:nowrap;">${escHtml(cl.name || cl.id)}</td>
+                <td style="font-size:12px;color:${cl.clientCount > 0 ? 'var(--green)' : 'var(--text-muted)'};">${cl.clientCount ?? 0}</td>
+                <td colspan="4" style="font-size:12px;color:var(--text-muted);">no services</td>
+              </tr>`;
+            }
+
+            return all.map((name, i) => {
+              const nodeYes = onNode.has(name);
+              const dbYes   = inDb.has(name);
+              const mismatch = nodeYes !== dbYes;
+              const note = mismatch
+                ? (nodeYes ? `<span style="color:var(--yellow);">running but not saved to DB yet</span>` : `<span style="color:var(--red);">in DB but node is no longer reporting it</span>`)
+                : '';
+
+              const clusterCell = i === 0
+                ? `<td rowspan="${all.length}" style="vertical-align:top;padding-top:10px;font-size:12px;font-weight:500;white-space:nowrap;">${escHtml(cl.name || cl.id)}</td>
+                   <td rowspan="${all.length}" style="vertical-align:top;padding-top:10px;font-size:12px;color:${cl.clientCount > 0 ? 'var(--green)' : 'var(--text-muted)'};">${cl.clientCount ?? 0}</td>`
+                : '';
+
+              return `<tr${mismatch ? ' style="background:#1a1005;"' : ''}>
+                ${clusterCell}
+                <td style="font-size:12px;font-family:var(--mono);">${escHtml(name)}</td>
+                <td style="font-size:12px;">${nodeYes ? `<span style="color:var(--green);">yes</span>` : `<span style="color:var(--text-muted);">—</span>`}</td>
+                <td style="font-size:12px;">${dbYes ? `<span style="color:var(--green);">yes</span>` : `<span style="color:var(--text-muted);">—</span>`}</td>
+                <td style="font-size:12px;">${note}</td>
+              </tr>`;
+            }).join('');
+          }).join('');
+
+          return `<div class="panel" style="margin-bottom:12px;">
+            <div class="panel-header" style="display:flex;align-items:center;gap:8px;">
+              <span style="font-family:var(--mono);font-weight:600;">${escHtml(node.tag)}</span>
+              <span class="badge" style="${isPool ? 'background:#1e3a5f44;color:#60a5fa;' : 'background:#06403844;color:#6ee7b7;'}">${isPool ? 'pool' : 'dedicated'}</span>
+              <span style="margin-left:auto;font-size:13px;">${connDot}</span>
+            </div>
+            ${leakBanner}
+            <div class="panel-body" style="padding:0;">
+              <table class="table" style="margin:0;">
+                <thead><tr><th>Cluster</th><th style="width:64px;">Clients</th><th>Service</th><th style="width:80px;">On node</th><th style="width:70px;">In DB</th><th>Note</th></tr></thead>
+                <tbody>${clusterRows || '<tr><td colspan="6" style="color:var(--text-muted);">no clusters</td></tr>'}</tbody>
+              </table>
+            </div>
+          </div>`;
+        }).join('');
+      }
+
+      async function loadMonitor() {
+        const loading = $('#monitor-loading');
+        const empty = $('#monitor-empty');
+        const body = $('#monitor-body');
+        loading.classList.remove('hidden');
+        empty.classList.add('hidden');
+        try {
+          const [nodes, jobs] = await Promise.all([fetchTopology(), fetchJobs()]);
+          _monitorData = { nodes, jobs };
+          renderMonitorTabs(body);
+          renderMonitorTabContent();
+          $('#monitor-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
+        } catch (err) {
+          empty.classList.remove('hidden');
+          empty.textContent = `Failed to load: ${err.message}`;
+          toast(`Monitor: ${err.message}`, 'error');
+        } finally {
+          loading.classList.add('hidden');
+        }
+      }
+
       const VIEW_LOADERS = {
         instances: loadInstances,
         events: loadEvents,
         deployments: loadDeployments,
         services: loadServices,
         metrics: loadMetrics,
+        monitor: loadMonitor,
       };
 
       function startAutoRefresh(viewName) {
@@ -2677,6 +2920,7 @@
         $('#refresh-deployments').addEventListener('click', loadDeployments);
         $('#refresh-services').addEventListener('click', loadServices);
         $('#refresh-metrics').addEventListener('click', loadMetrics);
+        $('#refresh-monitor').addEventListener('click', loadMonitor);
 
         // add instance
         $('#add-btn').addEventListener('click', addInstance);

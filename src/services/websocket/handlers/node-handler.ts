@@ -12,6 +12,7 @@ import { NodeUpdate } from "@/types/node.js";
 import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
 import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 import { Logger } from "@/lib/logger.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 
 /**
  * Handles messages from dployrd connections.
@@ -54,9 +55,27 @@ export class NodeMessageHandler {
       const presentSections = NODE_STATE_ENTITIES.filter(s => (update as any)[s] !== undefined);
 
       if (!conn.clusterId) {
+        // Pool node: write cluster-scoped workloads to KV for each cluster, then broadcast.
+        // This ensures each cluster's clients only receive services that belong to them.
         const { clusters } = await this.db.clusters.list({ instanceTag: conn.instanceTag });
+        const rawWorkloads = (update as any).workloads;
+
         await Promise.all(
           clusters.map(async (cluster) => {
+            if (rawWorkloads) {
+              const { deployments } = await this.db.deployments.list({ clusterId: cluster.id, limit: 500 });
+              const names = new Set(deployments.map((d) => d.name));
+              const filteredServices = Array.isArray(rawWorkloads.services)
+                ? rawWorkloads.services.filter((s: any) => s.name && names.has(s.name))
+                : [];
+              const filteredDeployments = Array.isArray(rawWorkloads.deployments)
+                ? rawWorkloads.deployments.filter((d: any) => d.name && names.has(d.name))
+                : [];
+              await this.kv.entities.setEntity(
+                KV_KEYS.CLUSTER.WORKLOADS(cluster.id, update.instance_id),
+                { ...rawWorkloads, services: filteredServices, deployments: filteredDeployments },
+              );
+            }
             await this.clientNotifier.broadcast(cluster.id, update.instance_id, presentSections);
             if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(cluster.id, "deployments");
             if (update?.instance_id) {
@@ -65,6 +84,14 @@ export class NodeMessageHandler {
           }),
         );
       } else if (conn.clusterId) {
+        // Dedicated node: write full workloads under the cluster key (no filtering needed).
+        const rawWorkloads = (update as any).workloads;
+        if (rawWorkloads) {
+          await this.kv.entities.setEntity(
+            KV_KEYS.CLUSTER.WORKLOADS(conn.clusterId, update.instance_id),
+            rawWorkloads,
+          );
+        }
         await this.clientNotifier.broadcast(conn.clusterId, update.instance_id, presentSections);
         if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "deployments");
         if (update?.instance_id) {
@@ -294,4 +321,5 @@ export class NodeMessageHandler {
       this.log.error(`Error deregistering node ${nodeInstanceId}`, { error: String(err) });
     }
   }
+
 }

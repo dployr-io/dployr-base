@@ -10,6 +10,7 @@ import instances from "./instances/index.js";
 import { ADMIN_JWT_TTL, ERROR } from "@/lib/constants/index.js";
 import { getVMService } from "@/lib/config/context.js";
 import { Logger } from "@/lib/logger.js";
+import { AdminService } from "@/services/admin.js";
 
 const log = new Logger("admin");
 const admin = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -97,13 +98,69 @@ admin.get("/events", async (c) => {
 admin.get("/deployments", async (c) => {
   const db = getDbStore(c);
   const { deployments, total } = await db.deployments.list({});
-  return c.json(createSuccessResponse({ deployments, total }));
+
+  // Resolve cluster names in one batch so the UI doesn't show raw IDs.
+  const clusterIds = [...new Set(deployments.map((d) => d.clusterId).filter(Boolean))];
+  const clusters = await Promise.all(clusterIds.map((id) => db.clusters.get(id)));
+  const clusterNameById = new Map(clusters.filter(Boolean).map((cl) => [cl!.id, cl!.name]));
+
+  const enriched = deployments.map((d) => ({
+    ...d,
+    clusterName: clusterNameById.get(d.clusterId) ?? null,
+  }));
+
+  return c.json(createSuccessResponse({ deployments: enriched, total }));
 });
 
 admin.get("/services", async (c) => {
   const db = getDbStore(c);
   const { services, total } = await db.services.list();
-  return c.json(createSuccessResponse({ services, total }));
+
+  // Resolve cluster and deployment names in one batch.
+  const clusterIds = [...new Set(services.map((s) => s.clusterId).filter(Boolean))];
+  const deploymentIds = [...new Set(services.map((s) => s.deploymentId).filter(Boolean))];
+
+  const [clusters, deployments] = await Promise.all([
+    Promise.all(clusterIds.map((id) => db.clusters.get(id))),
+    Promise.all(deploymentIds.map((id) => db.deployments.get(id as string))),
+  ]);
+
+  const clusterNameById = new Map(clusters.filter(Boolean).map((cl) => [cl!.id, cl!.name]));
+  const deploymentNameById = new Map(deployments.filter(Boolean).map((d) => [d!.id, d!.name]));
+
+  const enriched = services.map((s) => ({
+    ...s,
+    clusterName: clusterNameById.get(s.clusterId) ?? null,
+    deploymentName: s.deploymentId ? (deploymentNameById.get(s.deploymentId) ?? null) : null,
+  }));
+
+  return c.json(createSuccessResponse({ services: enriched, total }));
+});
+
+admin.get("/topology", async (c) => {
+  const db = getDbStore(c);
+  const kv = getKVStore(c);
+  const ws = getWS(c);
+
+  const adminService = new AdminService(db, kv, ws.connectionManager);
+  const nodes = await adminService.getTopology();
+
+  return c.json(createSuccessResponse({ nodes }));
+});
+
+admin.get("/jobs", async (c) => {
+  const kv = getKVStore(c);
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10), 200);
+  const runs = await kv.getRecentJobRuns(limit);
+  return c.json(createSuccessResponse({ runs }));
+});
+
+admin.get("/instances/:tag/processes", async (c) => {
+  const tag = c.req.param("tag");
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "60", 10), 300);
+  const kv = getKVStore(c);
+  const snapshots = await kv.instanceCache.getLatestProcessSnapshots({ tag, limit });
+  return c.json(createSuccessResponse({ tag, snapshots }));
 });
 
 admin.get("/metrics", async (c) => {

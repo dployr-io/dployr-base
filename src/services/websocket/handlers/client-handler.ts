@@ -227,7 +227,7 @@ export class ClientMessageHandler {
 
     // Even if no live node is connected, we can always serve cold DB state
     // for workloads so the client never shows a blank screen.
-    const syntheticWorkloads = await this.buildWorkloadsFromDB(clusterId);
+    const savedWorkloads = await this.buildWorkloadsFromDB(clusterId);
 
     // Collect changed sections per instance
     for (const instanceId of instanceIds) {
@@ -245,10 +245,9 @@ export class ClientMessageHandler {
         }
       }
 
-      // Workloads: content-aware fallback to DB when the live node reports empty.
-      // We fetch the entity directly so we can inspect its content regardless of whether the
-      // version changed — this avoids the oscillation caused by checking changed["workloads"].
-      const workloadsEntity = await this.kv.entities.getEntity(KV_KEYS.INSTANCE.ENTITY(instanceId, "workloads"));
+      // Workloads: read from the cluster-scoped key so pool nodes only send services
+      // belonging to this cluster. Falls back to synthetic DB data when the key is absent.
+      const workloadsEntity = await this.kv.entities.getEntity(KV_KEYS.CLUSTER.WORKLOADS(clusterId, instanceId));
       const clientWorkloadsVersion = knownVersions["workloads"] ?? 0;
       const liveHasServices = Array.isArray((workloadsEntity?.data as any)?.services) &&
         (workloadsEntity!.data as any).services.length > 0;
@@ -261,9 +260,9 @@ export class ClientMessageHandler {
         // Node is empty — serve DB data using a version derived from DB content (not the KV
         // entity version). This prevents re-sends every time the node increments the entity
         // with another empty update.
-        if (syntheticWorkloads) {
-          if (syntheticWorkloads.version !== clientWorkloadsVersion) {
-            changed["workloads"] = { data: syntheticWorkloads.data, version: syntheticWorkloads.version };
+        if (savedWorkloads) {
+          if (savedWorkloads.version !== clientWorkloadsVersion) {
+            changed["workloads"] = { data: savedWorkloads.data, version: savedWorkloads.version };
           }
         }
 
@@ -288,14 +287,14 @@ export class ClientMessageHandler {
     }
 
     // No live instance at all — serve DB cold storage. Re-sends when DB content changes.
-    if (instanceIds.length === 0 && syntheticWorkloads) {
+    if (instanceIds.length === 0 && savedWorkloads) {
       const fakeInstanceId = `${clusterId}:db`;
       const clientVersion = msg.versions?.[fakeInstanceId]?.["workloads"] ?? 0;
-      if (syntheticWorkloads.version !== clientVersion) {
+      if (savedWorkloads.version !== clientVersion) {
         conn.ws.send(JSON.stringify({
           kind: MESSAGE_KIND.DELTA_UPDATE,
           instanceId: fakeInstanceId,
-          sections: { workloads: { data: syntheticWorkloads.data, version: syntheticWorkloads.version } },
+          sections: { workloads: { data: savedWorkloads.data, version: savedWorkloads.version } },
         }));
       }
     }

@@ -43,9 +43,17 @@ export class ClientNotifier {
 
   /**
    * Broadcast delta updates to all client connections in a cluster.
-   * Only sends sections that have changed since client last saw them.
+   * Only sends sections that have changed since the client last saw them.
+   *
+   * Workloads are read from the cluster-scoped KV key written by node-handler,
+   * which already contains only the services belonging to this cluster.
+   * All other sections are read from the raw instance key as normal.
    */
-  async broadcast(clusterId: string, instanceId: string, sections: NodeStateEntity[]): Promise<void> {
+  async broadcast(
+    clusterId: string,
+    instanceId: string,
+    sections: NodeStateEntity[],
+  ): Promise<void> {
     const clients = this.conn.getClientConnections(clusterId);
     if (!clients.length) return;
 
@@ -53,13 +61,14 @@ export class ClientNotifier {
       const changed: Record<string, { data: unknown; version: number }> = {};
 
       for (const section of sections) {
-        const entity = await this.kv.entities.getEntity(KV_KEYS.INSTANCE.ENTITY(instanceId, section));
+        const key = section === "workloads"
+          ? KV_KEYS.CLUSTER.WORKLOADS(clusterId, instanceId)
+          : KV_KEYS.INSTANCE.ENTITY(instanceId, section);
+
+        const entity = await this.kv.entities.getEntity(key);
         if (!entity) continue;
 
-        if (section === "workloads") {
-          const services = (entity.data as any)?.services;
-          if (!Array.isArray(services) || services.length === 0) continue;
-        }
+        if (section === "workloads" && !Array.isArray((entity.data as any)?.services)) continue;
 
         const clientVersion = this.conn.getClientVersion(client.connectionId, instanceId, section);
         if (entity.version > clientVersion) {
