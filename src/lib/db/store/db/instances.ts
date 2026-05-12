@@ -1,14 +1,14 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { Instance, InstanceKind, InstanceStatus, SubscriptionPlan } from "@/types/index.js";
+import { Instance, InstanceKind, InstanceStatus, NodeRole, SubscriptionPlan } from "@/types/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { type AllowedTable } from "@/lib/constants/index.js";
 import { BaseStore, type Pagination } from "./base.js";
 
 type InstanceUpdateData = Partial<Omit<Instance, "id" | "clusterId" | "managed" | "capacity" | "kind" | "region" | "createdAt" | "updatedAt">>;
 export type InstancePayload = Omit<Instance, "id" | "kind" | "clusterId" | "createdAt" | "updatedAt">;
-export type InstanceFilter = Partial<Omit<Instance, "metadata" | "createdAt" | "updatedAt">>;
+export type InstanceFilter = Partial<Omit<Instance, "metadata" | "createdAt" | "updatedAt">> & { role?: NodeRole };
 
 export class InstanceStore extends BaseStore {
   protected readonly storeTable: AllowedTable = "instances";
@@ -20,10 +20,10 @@ export class InstanceStore extends BaseStore {
       let result;
       try {
         result = await client.query(
-          `INSERT INTO instances (id, kind, cluster_id, address, tag, region, managed, metadata, created_at, updated_at)
-           VALUES ($1, 'dedicated', $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
-           RETURNING id, kind, cluster_id, address, tag, status, capacity, region, managed, metadata, created_at, updated_at`,
-          [id, clusterId, data.address ?? null, data.tag, data.region ?? "us-east", data.managed ?? true, data.metadata ?? {}, now, now],
+          `INSERT INTO instances (id, kind, cluster_id, address, tag, region, managed, role, metadata, created_at, updated_at)
+           VALUES ($1, 'dedicated', $2, $3, $4, $5, $6, $7::role, $8::jsonb, $9, $10)
+           RETURNING id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at`,
+          [id, clusterId, data.address ?? null, data.tag, data.region ?? "us-east", data.managed ?? true, data.role ?? "instance", data.metadata ?? {}, now, now],
         );
       } catch (error) {
         this.parsePostgresError(error);
@@ -78,12 +78,16 @@ export class InstanceStore extends BaseStore {
       bindings.push(filter.managed);
       parts.push(`managed = $${bindings.length}`);
     }
+    if (filter.role !== undefined) {
+      bindings.push(filter.role);
+      parts.push(`role = $${bindings.length}`);
+    }
 
     if (!bindings.length) return null;
 
     const where = `WHERE ${parts.join(" AND ")}`;
     const result = await this.db
-      .prepare(`SELECT id, kind, cluster_id, address, tag, status, capacity, region, managed, metadata, created_at, updated_at FROM instances ${where} LIMIT 1`)
+      .prepare(`SELECT id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at FROM instances ${where} LIMIT 1`)
       .bind(...bindings)
       .first();
 
@@ -129,7 +133,7 @@ export class InstanceStore extends BaseStore {
 
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT id, kind, cluster_id, address, tag, status, capacity, region, metadata, created_at, updated_at FROM instances ${where} ORDER BY created_at DESC`;
+    let sql = `SELECT id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at FROM instances ${where} ORDER BY created_at DESC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -168,6 +172,10 @@ export class InstanceStore extends BaseStore {
       parts.push(`metadata = $${p++}::jsonb`);
       values.push(data.metadata);
     }
+    if (data.role !== undefined) {
+      parts.push(`role = $${p++}::role`);
+      values.push(data.role);
+    }
     if (!parts.length) return;
 
     parts.push(`updated_at = $${p++}`);
@@ -183,7 +191,7 @@ export class InstanceStore extends BaseStore {
     await this.db.prepare(`DELETE FROM instances WHERE id = $1`).bind(id).run();
   }
 
-  async addPool(entry: { address?: string | null; tag: string; capacity?: number; region?: string; status?: InstanceStatus; metadata?: Record<string, any> }): Promise<Instance> {
+  async addPool(entry: { address?: string | null; tag: string; capacity?: number; region?: string; status?: InstanceStatus; role?: NodeRole; metadata?: Record<string, any> }): Promise<Instance> {
     return this.db.withTransaction(async (client) => {
       const id = this.generateId();
       const now = this.now();
@@ -191,10 +199,10 @@ export class InstanceStore extends BaseStore {
       let result;
       try {
         result = await client.query(
-          `INSERT INTO instances (id, kind, address, tag, capacity, region, status, metadata, created_at, updated_at)
-           VALUES ($1, 'pool', $2, $3, $4, $5, $6::instance_status, $7::jsonb, $8, $9)
-           RETURNING id, kind, cluster_id, address, tag, status, capacity, region, metadata, created_at, updated_at`,
-          [id, entry.address ?? null, entry.tag, entry.capacity ?? 10, entry.region ?? null, entry.status ?? "healthy", JSON.stringify(entry.metadata ?? {}), now, now],
+          `INSERT INTO instances (id, kind, address, tag, capacity, region, status, role, metadata, created_at, updated_at)
+           VALUES ($1, 'pool', $2, $3, $4, $5, $6::instance_status, $7::role, $8::jsonb, $9, $10)
+           RETURNING id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at`,
+          [id, entry.address ?? null, entry.tag, entry.capacity ?? 10, entry.region ?? null, entry.status ?? "healthy", entry.role ?? "instance", JSON.stringify(entry.metadata ?? {}), now, now],
         );
       } catch (error) {
         this.parsePostgresError(error);
@@ -309,9 +317,11 @@ export class InstanceStore extends BaseStore {
       address: (row.address as string) ?? null,
       tag: row.tag as string,
       status: (row.status ?? "healthy") as InstanceStatus,
+      role: (row.role ?? "instance") as NodeRole,
       capacity: row.capacity != null ? (row.capacity as number) : undefined,
       region: row.region != null ? (row.region as string) : undefined,
       clusterId: row.cluster_id != null ? (row.cluster_id as string) : null,
+      managed: row.managed ?? true,
       metadata: row.metadata ?? {},
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,

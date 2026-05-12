@@ -7,6 +7,7 @@ DO $$ BEGIN
   CREATE TYPE instance_region AS ENUM ('us-east', 'us-west', 'us-central', 'eu-west', 'eu-central', 'eu-north', 'ap-south', 'ap-southeast', 'ap-northeast', 'af-south', 'me-central', 'sa-east');
   CREATE TYPE user_role AS ENUM ('owner', 'admin', 'developer', 'viewer', 'invited');
   CREATE TYPE service_type AS ENUM ('static', 'web', 'worker', 'job');
+  CREATE TYPE node_role AS ENUM ('instance', 'build');
 EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS instances (
   capacity INTEGER,
   region instance_region NOT NULL DEFAULT 'us-east',
   managed BOOLEAN NOT NULL DEFAULT true,
+  role node_role NOT NULL DEFAULT 'instance',
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
   updated_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,

@@ -1,7 +1,7 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { SignJWT, jwtVerify } from 'jose';
+import { SignJWT, jwtVerify } from "jose";
 import { KVStore } from "@/lib/db/store/kv/index.js";
 import { Session } from "@/types/index.js";
 
@@ -21,8 +21,8 @@ export class JWTService {
    * @returns A promise that resolves to the created token.
    */
   async createBootstrapToken(instanceName: string): Promise<string> {
-    const nonce = crypto.randomUUID()
-    return this.createBootstrapTokenWithNonce(instanceName, nonce)
+    const nonce = crypto.randomUUID();
+    return this.createBootstrapTokenWithNonce(instanceName, nonce);
   }
 
   /**
@@ -39,28 +39,24 @@ export class JWTService {
       .setProtectedHeader({ alg: "RS256", kid: (publicKeyJwk as any).kid })
       .setIssuedAt()
       .setExpirationTime("15m")
-      .sign(privateKey)
+      .sign(privateKey);
   }
 
   /**
    * Re-issues a bootstrap token for an existing nonce, typically used for
    * short-lived rotation while preserving the original nonce record.
    */
-  async rotateBootstrapToken(
-    instanceId: string,
-    nonce: string,
-    expiresIn: string = '5m',
-  ): Promise<string> {
+  async rotateBootstrapToken(instanceId: string, nonce: string, expiresIn: string = "5m"): Promise<string> {
     const privateKey = await this.keyStore.getPrivateKey();
     const publicKeyJwk = await this.keyStore.getPublicKey();
 
     return await new SignJWT({
       instance_id: instanceId,
-      token_type: 'bootstrap',
+      token_type: "bootstrap",
       nonce,
     })
       .setProtectedHeader({
-        alg: 'RS256',
+        alg: "RS256",
         kid: (publicKeyJwk as any).kid as string,
       })
       .setIssuedAt()
@@ -71,30 +67,25 @@ export class JWTService {
   /**
    * Creates a new instance access token for the given session and instance ID.
    */
-  async createInstanceAccessToken(
-    session: Session,
-    instanceName: string,
-    clusterId: string,
-    options?: { issuer?: string; audience?: string },
-  ): Promise<string> {
+  async createInstanceAccessToken(session: Session, instanceName: string, clusterId: string, options?: { issuer?: string; audience?: string }): Promise<string> {
     const privateKey = await this.keyStore.getPrivateKey();
     const publicKeyJwk = await this.keyStore.getPublicKey();
 
-    const cluster = session.clusters.find(c => c.id === clusterId);
-    const role = cluster?.role || 'user';
+    const cluster = session.clusters.find((c) => c.id === clusterId);
+    const role = cluster?.role || "user";
 
     let jwt = new SignJWT({
       sub: session.userId,
       instance_id: instanceName,
       perm: role,
-      scopes: ['system.status'],
+      scopes: ["system.status"],
     })
       .setProtectedHeader({
-        alg: 'RS256',
+        alg: "RS256",
         kid: (publicKeyJwk as any).kid as string,
       })
       .setIssuedAt()
-      .setExpirationTime('5m');
+      .setExpirationTime("5m");
 
     if (options?.issuer) {
       jwt = jwt.setIssuer(options.issuer);
@@ -132,25 +123,23 @@ export class JWTService {
    * Creates a short-lived access token for an instance node to call
    * /v1/node endpoints. This does not depend on a user session.
    */
-  async createNodeAccessToken(
-    instanceName: string,
-    options?: { issuer?: string; audience?: string },
-  ): Promise<string> {
+  async createNodeAccessToken(instanceName: string, options?: { issuer?: string; audience?: string }): Promise<string> {
     const privateKey = await this.keyStore.getPrivateKey();
     const publicKeyJwk = await this.keyStore.getPublicKey();
 
     let jwt = new SignJWT({
       instance_id: instanceName,
-      token_type: 'node',
-      perm: 'node',
-      scopes: ['node.status', 'node.tasks'],
+      token_type: "node",
+      perm: "node",
+      scopes: ["node.status", "node.tasks"],
     })
       .setProtectedHeader({
-        alg: 'RS256',
+        alg: "RS256",
         kid: (publicKeyJwk as any).kid as string,
       })
+      .setSubject(instanceName)
       .setIssuedAt()
-      .setExpirationTime('5m');
+      .setExpirationTime("5m");
 
     if (options?.issuer) {
       jwt = jwt.setIssuer(options.issuer);
@@ -169,13 +158,7 @@ export class JWTService {
    */
   async verifyToken(token: string) {
     const publicKeyJwk = await this.keyStore.getPublicKey();
-    const publicKey = await crypto.subtle.importKey(
-      'jwk',
-      publicKeyJwk,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-      false,
-      ['verify']
-    );
+    const publicKey = await crypto.subtle.importKey("jwk", publicKeyJwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
 
     const { payload } = await jwtVerify(token, publicKey);
     return payload;
@@ -189,13 +172,7 @@ export class JWTService {
    */
   async verifyTokenIgnoringExpiry(token: string) {
     const publicKeyJwk = await this.keyStore.getPublicKey();
-    const publicKey = await crypto.subtle.importKey(
-      'jwk',
-      publicKeyJwk,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-      false,
-      ['verify']
-    );
+    const publicKey = await crypto.subtle.importKey("jwk", publicKeyJwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
 
     const { payload } = await jwtVerify(token, publicKey, {
       clockTolerance: Infinity, // Ignore expiry entirely

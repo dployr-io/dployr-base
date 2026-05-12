@@ -124,6 +124,7 @@ export class NodeDoctor extends EventEmittable {
           capacity: POOL_CAPACITY_BY_TIER[metadata.tier as keyof typeof POOL_CAPACITY_BY_TIER] ?? DEFAULT_CAPACITY,
           region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
           status,
+          role: "instance",
           metadata,
         });
         // update in‑memory map
@@ -132,6 +133,7 @@ export class NodeDoctor extends EventEmittable {
           tag: droplet.name,
           address: droplet.ipv4 ?? null,
           status,
+          role: "instance",
           metadata,
           capacity: DEFAULT_CAPACITY,
         });

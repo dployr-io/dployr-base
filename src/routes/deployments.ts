@@ -71,9 +71,11 @@ deployments.post("/finish", async (c) => {
       );
     }
 
-    // Use the userId from the verified JWT claims, not the request body.
+    const isNodeToken = (decoded as any).token_type === 'node';
+    const instanceId = (decoded as any).instance_id as string | undefined;
     const userId = decoded.sub as string;
-    if (!userId) {
+
+    if (!isNodeToken && !userId) {
       return c.json(
         createErrorResponse({
           message: "Invalid token: missing subject",
@@ -83,10 +85,22 @@ deployments.post("/finish", async (c) => {
       );
     }
 
+    if (isNodeToken && !instanceId) {
+      return c.json(
+        createErrorResponse({
+          message: "Invalid token: missing instance_id",
+          code: ERROR.AUTH.BAD_TOKEN.code,
+        }),
+        ERROR.AUTH.BAD_TOKEN.status,
+      );
+    }
+
     const db = getDbStore(c);
     const deployment = await db.deployments.get(id);
     if (!deployment) {
-      const cluster = await db.clusters.find({ userId });
+      const cluster = isNodeToken
+        ? await db.clusters.find({ instanceId })
+        : await db.clusters.find({ userId });
       if (!cluster) {
         return c.json(
           createErrorResponse({

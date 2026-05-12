@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { z } from "zod";
-import { LATEST_COMPATIBILITY_DATE as _LATEST_COMPATIBILITY_DATE } from "@/lib/constants/index.js";
-
-export const LATEST_COMPATIBILITY_DATE = _LATEST_COMPATIBILITY_DATE;
+export { LATEST_COMPATIBILITY_DATE } from "@/lib/constants/index.js";
 
 export const CompletedTaskSchema = z.object({
   id: z.string(),

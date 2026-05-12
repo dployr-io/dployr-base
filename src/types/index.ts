@@ -186,6 +186,8 @@ export type InstanceRegion = (typeof INSTANCE_REGIONS)[number];
 /** dedicated = user-managed, belongs to one cluster; pool = platform-managed, shared across many clusters */
 export type InstanceKind = "dedicated" | "pool";
 
+export type NodeRole = "instance" | "build";
+
 export interface Instance {
   id: string;
   kind: InstanceKind;
@@ -193,6 +195,7 @@ export interface Instance {
   address: string | null;
   tag: string;
   status: InstanceStatus;
+  role: NodeRole;
   /** present only for pool instances */
   capacity?: number;
   /** present only for pool instances */

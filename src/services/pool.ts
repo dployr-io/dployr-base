@@ -83,6 +83,7 @@ export class InstancePool extends EventEmittable {
       tag,
       region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
       status: "provisioning",
+      role: "instance",
       metadata: { managed: true, tier },
     });
 
@@ -119,6 +120,7 @@ export class InstancePool extends EventEmittable {
         region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
         managed: true,
         status: "provisioning",
+        role: "instance",
         metadata: { managed: true, tier: "pro" },
       },
     });
