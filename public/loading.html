@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Starting up…</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500&family=instrument-mono:400" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    /* Logo mark */
+    .logo-mark {
+      position: fixed;
+      top: 1.25rem;
+      left: 1.25rem;
+      width: 32px;
+      height: 32px;
+      background: #fff;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+    }
+
+    .logo-mark svg {
+      width: 100%;
+      height: 100%;
+      color: #000;
+    }
+
+    /* Status line */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      margin-bottom: 2rem;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #fff;
+      flex-shrink: 0;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    .status-text {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #fff;
+    }
+
+    /* Log */
+    .log {
+      border: 1px solid #1c1c1c;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .log-body {
+      padding: 1rem;
+      font-family: "Instrument Mono", "SF Mono", monospace;
+      font-size: 0.75rem;
+      line-height: 1.9;
+      min-height: 120px;
+    }
+
+    .log-line {
+      display: flex;
+      gap: 1rem;
+      opacity: 0;
+      animation: appear 0.2s ease forwards;
+    }
+
+    @keyframes appear { to { opacity: 1; } }
+
+    .log-time { color: #444; flex-shrink: 0; }
+    .log-msg  { color: #999; }
+    .log-msg.bright { color: #fff; }
+
+    .cursor {
+      display: inline-block;
+      width: 6px;
+      height: 0.8em;
+      background: #555;
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Slow warning */
+    .slow {
+      display: none;
+      margin-top: 1.25rem;
+      font-size: 0.8125rem;
+      color: #666;
+      line-height: 1.5;
+    }
+
+    .slow a {
+      color: #999;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo-mark">
+    <svg viewBox="0 0 1307.56 1886.52" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+      <path d="M430.07 941.85H429l435.75-435.74a50.63 50.63 0 0 0 14.81-35.77V287.8a50.63 50.63 0 0 0-14.81-35.8L627.63 14.92c-31.87-31.87-86.35-9.3-86.35 35.76v306.74a50.58 50.58 0 0 1-14.82 35.77L14.82 904.83a50.59 50.59 0 0 0 0 71.55l264.48 264.34a50.59 50.59 0 0 0 71.53 0l153.27-153.3a50.59 50.59 0 0 0 0-71.54Zm447.42 2.82h1.07l-435.74 435.75a50.55 50.55 0 0 0-14.82 35.76v182.54a50.58 50.58 0 0 0 14.82 35.77l237.11 237.12c31.87 31.86 86.35 9.29 86.35-35.77V1529.1a50.59 50.59 0 0 1 14.82-35.77l511.65-511.64a50.6 50.6 0 0 0 0-71.55l-264.49-264.33a50.57 50.57 0 0 0-71.52 0l-153.28 153.3a50.58 50.58 0 0 0 0 71.53Z" />
+    </svg>
+  </div>
+
+  <div class="wrap">
+    <div class="status">
+      <div class="dot"></div>
+      <span class="status-text" id="status-text">Starting up&hellip;</span>
+    </div>
+
+    <div class="log">
+      <div class="log-body" id="log"></div>
+    </div>
+
+    <p class="slow" id="slow-msg">
+      This is taking longer than usual.
+      <a href="javascript:location.reload()">Try refreshing</a> if the page doesn&rsquo;t load.
+    </p>
+  </div>
+
+  <script>
+    const POLL_MS  = 3000;
+    const SLOW_MS  = 45000;
+    const domain   = location.hostname;
+    const start    = Date.now();
+    let   pollTimer;
+
+    const STEPS = [
+      "Waking your app up",
+      "Getting things ready",
+      "Loading your application",
+      "Almost there",
+      "Finishing up",
+    ];
+
+    const logEl        = document.getElementById("log");
+    const statusTextEl = document.getElementById("status-text");
+
+    function ts() {
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      const s = String(elapsed % 60).padStart(2, "0");
+      return `${m}:${s}`;
+    }
+
+    function appendLog(msg, bright = false) {
+      const line = document.createElement("div");
+      line.className = "log-line";
+      line.innerHTML =
+        `<span class="log-time">${ts()}</span>` +
+        `<span class="log-msg${bright ? " bright" : ""}">${msg}</span>`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function appendCursor() {
+      const line = document.createElement("div");
+      line.className = "log-line";
+      line.id = "cursor-line";
+      line.innerHTML =
+        `<span class="log-time">${ts()}</span>` +
+        `<span class="log-msg"><span class="cursor"></span></span>`;
+      logEl.appendChild(line);
+    }
+
+    function removeCursor() {
+      document.getElementById("cursor-line")?.remove();
+    }
+
+    let idx = 0;
+    function nextStep() {
+      if (idx < STEPS.length) {
+        removeCursor();
+        appendLog(STEPS[idx++]);
+        appendCursor();
+        if (idx < STEPS.length) setTimeout(nextStep, 2200 + Math.random() * 600);
+      }
+    }
+    nextStep();
+
+    function poll() {
+      fetch("/v1/status?domain=" + encodeURIComponent(domain))
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === "ready") {
+            clearTimeout(pollTimer);
+            removeCursor();
+            appendLog("Ready — loading your page", true);
+            statusTextEl.textContent = "Ready";
+            setTimeout(() => location.reload(), 400);
+            return;
+          }
+          if (Date.now() - start > SLOW_MS) {
+            document.getElementById("slow-msg").style.display = "block";
+          }
+          pollTimer = setTimeout(poll, POLL_MS);
+        })
+        .catch(() => { pollTimer = setTimeout(poll, POLL_MS); });
+    }
+
+    poll();
+  </script>
+</body>
+</html>
