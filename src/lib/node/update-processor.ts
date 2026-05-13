@@ -137,6 +137,10 @@ export class UpdateProcessor {
               this.deploymentsChanged = true;
             }
 
+            if (normalizedStatus === "success" && synced?.name) {
+              await this.kv.kv.put(KV_KEYS.SERVICE.LAST_ACTIVE(synced.name), String(Date.now())).catch(() => {});
+            }
+
             if (synced && payload) {
               if (payload.env_vars && typeof payload.env_vars === "object") {
                 await this.db.serviceEnvs.set({ deploymentId: synced.id, envs: payload.env_vars }).catch((error) => {

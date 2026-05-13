@@ -45,6 +45,11 @@ export const KV_KEYS = {
   SERVICES: {
     BY_INSTANCE: (instanceId: string) => `services:${instanceId}`,
   },
+  SERVICE: {
+    SLEEPING: (name: string) => `svc:sleeping:${name}`,
+    WAKING: (name: string) => `svc:waking:${name}`,
+    LAST_ACTIVE: (name: string) => `svc:last_active:${name}`,
+  },
   PROCESS: {
     SNAPSHOT: (instanceId: string, timestamp?: number) =>
       timestamp !== undefined ? `process:${instanceId}:snapshot:${timestamp}` : `process:${instanceId}:snapshot:`,
@@ -89,6 +94,10 @@ export const KV_KEYS = {
     ROUTER_RULE: (routeKey: string) => `traefik/http/routers/${routeKey}/rule`,
     ROUTER_ENTRYPOINTS: (routeKey: string) => `traefik/http/routers/${routeKey}/entrypoints/0`,
     ROUTER_SERVICE: (routeKey: string) => `traefik/http/routers/${routeKey}/service`,
+    ROUTER_MIDDLEWARE: (routeKey: string, idx: number) => `traefik/http/routers/${routeKey}/middlewares/${idx}`,
     SERVICE_URL: (routeKey: string) => `traefik/http/services/${routeKey}/loadbalancer/servers/0/url`,
+    MIDDLEWARE_ERRORS_STATUS: (name: string) => `traefik/http/middlewares/${name}/errors/status`,
+    MIDDLEWARE_ERRORS_SERVICE: (name: string) => `traefik/http/middlewares/${name}/errors/service`,
+    MIDDLEWARE_ERRORS_QUERY: (name: string) => `traefik/http/middlewares/${name}/errors/query`,
   },
 } as const;

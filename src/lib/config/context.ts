@@ -263,7 +263,7 @@ export function getTraefikRouterService(c: AppContext): TraefikService | null {
   }
 
   const baseDomain = c.env.TRAEFIK_TLD ?? "dployr.run";
-  const service = new TraefikService(baseDomain, redisClient);
+  const service = new TraefikService(baseDomain, redisClient, c.env.BASE_URL);
   c.set("_traefikRouter", service);
   return service;
 }

@@ -206,6 +206,24 @@ export class DployrdService {
     };
   }
 
+  createServiceSleepTask(taskId: string, name: string, token?: string): NodeTask {
+    return {
+      ID: taskId,
+      Type: "services/sleep:post",
+      Payload: { name, token },
+      Status: "pending",
+    };
+  }
+
+  createServiceWakeTask(taskId: string, name: string, token?: string): NodeTask {
+    return {
+      ID: taskId,
+      Type: "services/wake:post",
+      Payload: { name, token },
+      Status: "pending",
+    };
+  }
+
   // Create a proxy remove task
   createProxyRemoveTask(taskId: string, serviceName: string, token?: string): NodeTask {
     return {

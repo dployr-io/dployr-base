@@ -18,7 +18,7 @@ export const workloadSupervisor: JobFn = async ({ db, kv, adapters, trigger, set
 
   let traefik: TraefikService | null = null;
   if (adapters.traefikRedis && adapters.config.traefik?.enabled) {
-    traefik = new TraefikService(adapters.config.traefik.tld ?? "dployr.run", adapters.traefikRedis);
+    traefik = new TraefikService(adapters.config.traefik.tld ?? "dployr.run", adapters.traefikRedis, adapters.config.server.base_url);
   }
 
   const supervisor = new WorkloadSupervisor(db, kv, connectionManager, jwtService, dployrdService, clientNotifier, traefik, reprovisionCooldowns);
