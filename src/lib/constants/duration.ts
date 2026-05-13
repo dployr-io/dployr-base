@@ -20,6 +20,7 @@ const MS_MINUTE = 60 * MS_SECOND;
 const MS_HOUR = 60 * MS_MINUTE;
 
 // --- TTL primitives (seconds, for KV/Redis) ---
+export const TTL_90_SECONDS = 90 * SECOND;
 export const TTL_1_MINUTE = MINUTE;
 export const TTL_5_MINUTES = 5 * MINUTE;
 export const TTL_10_MINUTES = 10 * MINUTE;
@@ -111,6 +112,9 @@ export const ENTITY_TOMBSTONE_TTL = TTL_7_DAYS;
 
 /** Domain mapping TTL: 7 days */
 export const DOMAIN_MAPPING_TTL = TTL_7_DAYS;
+
+/** Hobby service waking state TTL: 90 seconds (covers docker start time) */
+export const SERVICE_WAKING_TTL = TTL_90_SECONDS;
 
 /** Reprovision cooldown for workload processor: 8 minutes */
 export const REPROVISION_COOLDOWN_MS = MS_8_MINUTES;

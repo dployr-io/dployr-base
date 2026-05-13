@@ -6,6 +6,7 @@ import { ulid } from "ulid";
 import type { Bindings, Variables } from "@/types/index.js";
 import { getDbStore, getKVStore, getWS } from "@/lib/config/context.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import { SERVICE_WAKING_TTL } from "@/lib/constants/duration.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { JWTService } from "@/services/auth/jwt.js";
 import { Logger } from "@/lib/logger.js";
@@ -88,7 +89,7 @@ status.get("/", async (c) => {
 
       // Clear sleeping, set waking with 90s TTL (covers docker start time)
       await kv.kv.delete(KV_KEYS.SERVICE.SLEEPING(serviceName));
-      await kv.kv.put(KV_KEYS.SERVICE.WAKING(serviceName), "1", { ttl: 90 });
+      await kv.kv.put(KV_KEYS.SERVICE.WAKING(serviceName), "1", { ttl: SERVICE_WAKING_TTL });
       await kv.kv.put(KV_KEYS.SERVICE.LAST_ACTIVE(serviceName), String(Date.now()));
     }
   } catch (err) {
