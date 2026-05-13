@@ -5,6 +5,27 @@ import type { DeploymentPayload } from "@/lib/tasks/types.js";
 import type { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { PAYLOAD_TTL } from "@/lib/constants/index.js";
+import type { SubscriptionPlan } from "@/types/index.js";
+
+export interface BuildCallback {
+  callbackInstanceTag: string;
+  buildNodeTag: string;
+  clusterId: string;
+  payload: DeploymentPayload;
+}
+
+/** A build task waiting in the durable queue. */
+export interface BuildQueueEntry {
+  taskId: string;
+  clusterId: string;
+  callbackInstanceTag: string;
+  payload: DeploymentPayload;
+  fingerprint: string;
+  /** Tier of the cluster — determines dispatch priority. */
+  tier: SubscriptionPlan;
+  /** Unix ms when enqueued — used as tiebreaker within the same priority. */
+  enqueuedAt: number;
+}
 
 export interface PendingDeploymentPayload {
   clusterId: string;
@@ -101,6 +122,89 @@ export class PayloadStore {
    */
   private async deleteDeploymentPayload({ clusterId, name }: { clusterId: string; name: string }): Promise<void> {
     await this.kv.delete(KV_KEYS.PAYLOAD.DEPLOYMENT(clusterId, name));
+  }
+
+  async saveBuildCallback(taskId: string, callback: BuildCallback): Promise<void> {
+    await this.kv.put(KV_KEYS.BUILD.CALLBACK(taskId), JSON.stringify(callback), { ttl: PAYLOAD_TTL });
+  }
+
+  async consumeBuildCallback(taskId: string): Promise<BuildCallback | null> {
+    const data = await this.kv.get(KV_KEYS.BUILD.CALLBACK(taskId));
+    await this.kv.delete(KV_KEYS.BUILD.CALLBACK(taskId));
+    if (!data) return null;
+    try {
+      return JSON.parse(data) as BuildCallback;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Enqueues a build task. The entry is persisted individually under
+   * `KV_KEYS.BUILD.QUEUE_ITEM(taskId)` and its taskId is appended to the
+   * queue index at `KV_KEYS.BUILD.QUEUE`.
+   */
+  async enqueueBuild(entry: BuildQueueEntry): Promise<void> {
+    await this.kv.put(KV_KEYS.BUILD.QUEUE_ITEM(entry.taskId), JSON.stringify(entry), { ttl: PAYLOAD_TTL });
+
+    const raw = await this.kv.get(KV_KEYS.BUILD.QUEUE);
+    const index: string[] = raw ? JSON.parse(raw) : [];
+    if (!index.includes(entry.taskId)) {
+      index.push(entry.taskId);
+    }
+    await this.kv.put(KV_KEYS.BUILD.QUEUE, JSON.stringify(index), { ttl: PAYLOAD_TTL });
+  }
+
+  /**
+   * Returns all queued build entries sorted by dispatch priority:
+   * tier weight descending, then enqueuedAt ascending (FIFO within tier).
+   */
+  async listBuildQueue(): Promise<BuildQueueEntry[]> {
+    const raw = await this.kv.get(KV_KEYS.BUILD.QUEUE);
+    if (!raw) return [];
+
+    const index: string[] = JSON.parse(raw);
+    const entries = await Promise.all(
+      index.map(async (taskId) => {
+        const data = await this.kv.get(KV_KEYS.BUILD.QUEUE_ITEM(taskId));
+        if (!data) return null;
+        try {
+          return JSON.parse(data) as BuildQueueEntry;
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    return entries
+      .filter((e): e is BuildQueueEntry => e !== null)
+      .sort((a, b) => {
+        if (b.tier !== a.tier) {
+          // Higher tier priority first — weights defined in BUILD_QUEUE_PRIORITY
+          const PRIORITY: Record<SubscriptionPlan, number> = { pro: 30, indie: 20, hobby: 10 };
+          return PRIORITY[b.tier] - PRIORITY[a.tier];
+        }
+        return a.enqueuedAt - b.enqueuedAt;
+      });
+  }
+
+  /**
+   * Removes a build task from the queue after it has been dispatched or
+   * cancelled. Safe to call multiple times (idempotent).
+   */
+  async dequeueBuild(taskId: string): Promise<void> {
+    await this.kv.delete(KV_KEYS.BUILD.QUEUE_ITEM(taskId));
+
+    const raw = await this.kv.get(KV_KEYS.BUILD.QUEUE);
+    if (!raw) return;
+
+    const index: string[] = JSON.parse(raw);
+    const updated = index.filter((id) => id !== taskId);
+    if (updated.length === 0) {
+      await this.kv.delete(KV_KEYS.BUILD.QUEUE);
+    } else {
+      await this.kv.put(KV_KEYS.BUILD.QUEUE, JSON.stringify(updated), { ttl: PAYLOAD_TTL });
+    }
   }
 
   /**

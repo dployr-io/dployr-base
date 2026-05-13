@@ -74,6 +74,12 @@ export const KV_KEYS = {
   POOL: {
     PROVISION_LOCK: "pool:provision:lock",
   },
+  BUILD: {
+    CALLBACK: (taskId: string) => `build:callback:${taskId}`,
+    SLOTS: (nodeTag: string) => `build:slots:${nodeTag}`,
+    QUEUE: "build:queue",
+    QUEUE_ITEM: (taskId: string) => `build:queue:${taskId}`,
+  },
   JOB: {
     RUN: (id: string) => `job:run:${id}`,
     INDEX: "job:runs:index",

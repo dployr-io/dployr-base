@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS deployments (
   remote_branch      TEXT,
   remote_commit_hash TEXT,
   logs               TEXT,
+  build_fingerprint  TEXT,
   created_at         BIGINT NOT NULL,
   finished_at        BIGINT,
   updated_at         BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,

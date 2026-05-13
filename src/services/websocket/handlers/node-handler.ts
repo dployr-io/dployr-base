@@ -13,6 +13,10 @@ import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
 import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 import { Logger } from "@/lib/logger.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import { DployrdService } from "@/services/dployrd.js";
+import { BuildCallback, BuildQueueEntry } from "@/lib/db/store/kv/payload.js";
+import { buildSlotsFromMemory } from "@/lib/constants/instances.js";
+import { ulid } from "ulid";
 
 /**
  * Handles messages from dployrd connections.
@@ -182,10 +186,87 @@ export class NodeMessageHandler {
       }
     }
 
+    if (success && !this.connectionManager.getPendingRequest(taskId)) {
+      const callback = await this.kv.payloads.consumeBuildCallback(taskId);
+      if (callback) {
+        await this.dispatchBuildComplete(taskId, data, callback);
+        return;
+      }
+    }
+
     const responseKind = this.getResponseKind(message);
 
     // Route response directly to the requesting client
     const routed = this.connectionManager.routeResponseToClient(taskId, { kind: responseKind, success, data, error });
+  }
+
+  private async dispatchBuildComplete(taskId: string, data: any, callback: BuildCallback): Promise<void> {
+    const image = data?.image as string | undefined;
+    if (!image) {
+      this.log.warn(`Build task ${taskId} completed but no image ref in result`);
+      await this.releaseSlotAndDrainQueue(taskId, callback);
+      return;
+    }
+
+    const dployrdService = new DployrdService();
+    const publishTaskId = ulid();
+    const task = dployrdService.createPublishTask(publishTaskId, image, callback.payload);
+
+    const dispatched = this.connectionManager.sendTask(callback.callbackInstanceTag, task);
+    if (!dispatched) {
+      this.log.warn(`Build complete for ${taskId} but instance ${callback.callbackInstanceTag} not connected`);
+    } else {
+      this.log.info(`Dispatched builds/publish task ${publishTaskId} to ${callback.callbackInstanceTag} with image ${image}`);
+    }
+
+    await this.releaseSlotAndDrainQueue(taskId, callback);
+  }
+
+  /**
+   * Decrements the build slot counter for the node that completed the build,
+   * then checks the queue for a waiting entry to dispatch into the freed slot.
+   */
+  private async releaseSlotAndDrainQueue(_completedTaskId: string, callback: BuildCallback): Promise<void> {
+    const buildNodeTag = callback.buildNodeTag;
+    await this.kv.instanceCache.decrementBuildSlots(buildNodeTag);
+    this.log.info(`Released build slot on ${buildNodeTag}`);
+
+    const queue = await this.kv.payloads.listBuildQueue();
+    if (queue.length > 0) {
+      await this.dispatchQueuedBuild(queue[0], buildNodeTag);
+    }
+  }
+
+  private async dispatchQueuedBuild(entry: BuildQueueEntry, buildNodeTag: string): Promise<void> {
+    // Check capacity hasn't been taken by a concurrent dispatch
+    const activeSlots = await this.kv.instanceCache.getBuildSlots(buildNodeTag);
+    // Default to baseline capacity — build nodes are provisioned at 2 vCPU / 4 GB minimum
+    const maxSlots = buildSlotsFromMemory(4096);
+
+    if (activeSlots >= maxSlots) {
+      this.log.info(`Build node ${buildNodeTag} slots full after drain check — entry ${entry.taskId} stays queued`);
+      return;
+    }
+
+    const dployrdService = new DployrdService();
+    const task = dployrdService.createBuildTask(entry.taskId, entry.payload, entry.callbackInstanceTag);
+
+    const dispatched = this.connectionManager.sendTask(buildNodeTag, task);
+    if (!dispatched) {
+      this.log.warn(`Build node ${buildNodeTag} disconnected during drain — entry ${entry.taskId} stays queued`);
+      return;
+    }
+
+    await this.kv.instanceCache.incrementBuildSlots(buildNodeTag);
+    await this.kv.payloads.dequeueBuild(entry.taskId);
+    await this.kv.payloads.saveBuildCallback(entry.taskId, {
+      callbackInstanceTag: entry.callbackInstanceTag,
+      buildNodeTag,
+      clusterId: entry.clusterId,
+      payload: entry.payload,
+    });
+
+    this.log.info(`Drained queued build task ${entry.taskId} to ${buildNodeTag} (slot ${activeSlots + 1}/${maxSlots})`);
   }
 
   /**

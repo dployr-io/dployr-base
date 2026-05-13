@@ -36,6 +36,7 @@ export class DeploymentStore extends BaseStore {
     remoteBranch,
     remoteCommitHash,
     logs,
+    buildFingerprint,
     createdAt,
     finishedAt,
     serviceId,
@@ -61,6 +62,7 @@ export class DeploymentStore extends BaseStore {
     remoteCommitHash?: string | null;
     id?: string | null;
     logs?: string | null;
+    buildFingerprint?: string | null;
     createdAt?: number | null;
     finishedAt?: number | null;
     serviceId?: string | null;
@@ -81,8 +83,8 @@ export class DeploymentStore extends BaseStore {
 
         const insertResult = await this.db
           .prepare(
-            `INSERT INTO deployments (id, cluster_id, user_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, created_at, logs, finished_at, service_id, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+            `INSERT INTO deployments (id, cluster_id, user_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, created_at, logs, build_fingerprint, finished_at, service_id, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
            ON CONFLICT (name) DO UPDATE SET
              status = $7,
              description = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.description ELSE $8 END,
@@ -99,10 +101,11 @@ export class DeploymentStore extends BaseStore {
              remote_branch = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.remote_branch ELSE $19 END,
              remote_commit_hash = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.remote_commit_hash ELSE $20 END,
              logs = CASE WHEN $22 IS NOT NULL THEN $22 ELSE deployments.logs END,
-             finished_at = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.finished_at ELSE $23 END,
-             service_id = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.service_id ELSE $24 END,
-             updated_at = $25
-           RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, created_at, finished_at`,
+             build_fingerprint = CASE WHEN $23 IS NOT NULL THEN $23 ELSE deployments.build_fingerprint END,
+             finished_at = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.finished_at ELSE $24 END,
+             service_id = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.service_id ELSE $25 END,
+             updated_at = $26
+           RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at`,
           )
           .bind(
             id,
@@ -127,6 +130,7 @@ export class DeploymentStore extends BaseStore {
             remoteCommitHash ?? null,
             createdAt,
             logs,
+            buildFingerprint ?? null,
             finishedAt ?? null,
             serviceId ?? null,
             now,
@@ -150,7 +154,7 @@ export class DeploymentStore extends BaseStore {
   async get(filter: string | { id?: string; name?: string }): Promise<Deployment | null> {
     const id = typeof filter === "string" ? filter : filter.id;
     const name = typeof filter === "object" ? filter.name : undefined;
-    const sel = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, created_at, finished_at FROM deployments WHERE`;
+    const sel = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at FROM deployments WHERE`;
     if (id) {
       const row = await this.db.prepare(`${sel} id = $1`).bind(id).first()
         ?? await this.db.prepare(`${sel} name = $1`).bind(id).first();
@@ -185,7 +189,7 @@ export class DeploymentStore extends BaseStore {
 
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, created_at, finished_at FROM deployments ${clause} ORDER BY created_at DESC`;
+    let sql = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at FROM deployments ${clause} ORDER BY created_at DESC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -218,11 +222,22 @@ export class DeploymentStore extends BaseStore {
 
   async updateLogs(id: string, logs: string): Promise<Deployment | null> {
     const result = await this.db
-      .prepare(`UPDATE deployments SET logs = $1, updated_at = $2 WHERE id = $3 RETURNING id, cluster_id, service_id, name, type, source, status, logs, created_at, finished_at`)
+      .prepare(`UPDATE deployments SET logs = $1, updated_at = $2 WHERE id = $3 RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at`)
       .bind(logs, this.now(), id)
       .first();
 
     return result ? this.toDeployment(result) : null;
+  }
+
+  /**
+   * Stores the build fingerprint and resolved image reference on a deployment
+   * after a successful build completes.
+   */
+  async updateBuildResult(id: string, { buildFingerprint, image }: { buildFingerprint: string; image: string }): Promise<void> {
+    await this.db
+      .prepare(`UPDATE deployments SET build_fingerprint = $1, image = $2, updated_at = $3 WHERE id = $4`)
+      .bind(buildFingerprint, image, this.now(), id)
+      .run();
   }
 
   async delete({ id }: { id: string }): Promise<void> {
@@ -253,6 +268,7 @@ export class DeploymentStore extends BaseStore {
       remoteBranch: row.remote_branch as string | null,
       remoteCommitHash: row.remote_commit_hash as string | null,
       logs: row.logs as string | null,
+      buildFingerprint: row.build_fingerprint as string | null,
       createdAt: row.created_at as number,
       finishedAt: row.finished_at as number | null,
     };

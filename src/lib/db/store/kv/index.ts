@@ -89,6 +89,9 @@ export class KVStore {
   deregisterClusterNode = (...args: Parameters<InstanceCacheStore["deregisterClusterNode"]>) => this.instanceCache.deregisterClusterNode(...args);
   saveJobRun = (...args: Parameters<InstanceCacheStore["saveJobRun"]>) => this.instanceCache.saveJobRun(...args);
   getRecentJobRuns = (...args: Parameters<InstanceCacheStore["getRecentJobRuns"]>) => this.instanceCache.getRecentJobRuns(...args);
+  incrementBuildSlots = (...args: Parameters<InstanceCacheStore["incrementBuildSlots"]>) => this.instanceCache.incrementBuildSlots(...args);
+  decrementBuildSlots = (...args: Parameters<InstanceCacheStore["decrementBuildSlots"]>) => this.instanceCache.decrementBuildSlots(...args);
+  getBuildSlots = (...args: Parameters<InstanceCacheStore["getBuildSlots"]>) => this.instanceCache.getBuildSlots(...args);
 
   // IntegrationsStore delegation
   setPendingGitHubInstall = (...args: Parameters<IntegrationsStore["setPendingGitHubInstall"]>) => this.integrations.setPendingGitHubInstall(...args);
@@ -111,6 +114,11 @@ export class KVStore {
   saveDeploymentPayload = (...args: Parameters<PayloadStore["saveDeploymentPayload"]>) => this.payloads.saveDeploymentPayload(...args);
   consumeDeploymentPayload = (...args: Parameters<PayloadStore["consumeDeploymentPayload"]>) => this.payloads.consumeDeploymentPayload(...args);
   listDeploymentPayloads = (...args: Parameters<PayloadStore["listDeploymentPayloads"]>) => this.payloads.listDeploymentPayloads(...args);
+  enqueueBuild = (...args: Parameters<PayloadStore["enqueueBuild"]>) => this.payloads.enqueueBuild(...args);
+  listBuildQueue = (...args: Parameters<PayloadStore["listBuildQueue"]>) => this.payloads.listBuildQueue(...args);
+  dequeueBuild = (...args: Parameters<PayloadStore["dequeueBuild"]>) => this.payloads.dequeueBuild(...args);
+  saveBuildCallback = (...args: Parameters<PayloadStore["saveBuildCallback"]>) => this.payloads.saveBuildCallback(...args);
+  consumeBuildCallback = (...args: Parameters<PayloadStore["consumeBuildCallback"]>) => this.payloads.consumeBuildCallback(...args);
 
   // ClusterStore delegation
   getRenameQuota = (...args: Parameters<ClusterStore["getRenameQuota"]>) => this.clusters.getRenameQuota(...args);

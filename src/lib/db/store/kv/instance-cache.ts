@@ -238,4 +238,45 @@ export class InstanceCacheStore {
     );
     return runs.filter((r): r is Record<string, unknown> => r !== null).slice(0, limit);
   }
+
+  /**
+   * Atomically increments the active build slot counter for a node.
+   * The counter TTL is tied to NODE_CONNECTED_TTL — if the node goes
+   * offline its counter expires automatically.
+   *
+   * @returns The new slot count after increment.
+   */
+  async incrementBuildSlots(nodeTag: string): Promise<number> {
+    const key = KV_KEYS.BUILD.SLOTS(nodeTag);
+    const raw = await this.kv.get(key);
+    const next = (raw ? parseInt(raw, 10) : 0) + 1;
+    await this.kv.put(key, String(next), { ttl: NODE_CONNECTED_TTL });
+    return next;
+  }
+
+  /**
+   * Decrements the active build slot counter for a node.
+   * Never goes below zero.
+   *
+   * @returns The new slot count after decrement.
+   */
+  async decrementBuildSlots(nodeTag: string): Promise<number> {
+    const key = KV_KEYS.BUILD.SLOTS(nodeTag);
+    const raw = await this.kv.get(key);
+    const next = Math.max(0, (raw ? parseInt(raw, 10) : 0) - 1);
+    if (next === 0) {
+      await this.kv.delete(key);
+    } else {
+      await this.kv.put(key, String(next), { ttl: NODE_CONNECTED_TTL });
+    }
+    return next;
+  }
+
+  /**
+   * Returns the current number of active build slots in use on a node.
+   */
+  async getBuildSlots(nodeTag: string): Promise<number> {
+    const raw = await this.kv.get(KV_KEYS.BUILD.SLOTS(nodeTag));
+    return raw ? parseInt(raw, 10) : 0;
+  }
 }

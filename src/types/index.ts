@@ -80,6 +80,7 @@ export interface Deployment {
   remoteBranch: string | null;
   remoteCommitHash: string | null;
   logs: string | null;
+  buildFingerprint: string | null;
   createdAt: number;
   finishedAt: number | null;
 }

@@ -60,6 +60,24 @@ export class DployrdService {
     };
   }
 
+  createBuildTask(taskId: string, payload: DeploymentPayload, callbackInstanceTag: string, token?: string): NodeTask {
+    return {
+      ID: taskId,
+      Type: "builds:post",
+      Payload: { ...payload, callback_instance: callbackInstanceTag, token },
+      Status: "pending",
+    };
+  }
+
+  createPublishTask(taskId: string, image: string, deploymentPayload: DeploymentPayload, token?: string): NodeTask {
+    return {
+      ID: taskId,
+      Type: "builds/publish:post",
+      Payload: { image, payload: deploymentPayload, token },
+      Status: "pending",
+    };
+  }
+
   createDeploymentListTask(taskId: string, token?: string): NodeTask {
     return {
       ID: taskId,

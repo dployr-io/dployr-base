@@ -49,6 +49,7 @@ export const DeploymentSchema = z.object({
   secrets: z.record(z.string(), z.string()).optional(),
   remote: z.record(z.string(), z.any()).optional(),
   domain: z.string().optional(),
+  force_rebuild: z.boolean().optional().default(false),
 });
 
 // WebSocket message types for node communication

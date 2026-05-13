@@ -21,6 +21,13 @@ export const INSTANCE_REGIONS = ["us-east", "us-west", "us-central", "eu-west", 
 // Allowed tasks on pooled instances
 export const ALLOWED_TASKS_ON_POOLED_INSTANCES = ["deploy", "services", "log_subscribe", "log_unsubscribe"];
 
+/** Priority weight for build queue dispatch — higher is dispatched first. */
+export const BUILD_QUEUE_PRIORITY = {
+  pro: 30,
+  indie: 20,
+  hobby: 10,
+} as const;
+
 // Random instance tag names to be seeded from
 export const INSTANCE_NAMES = [
   "axton",
@@ -48,3 +55,10 @@ export const INSTANCE_NAMES = [
   "zenith",
   "zodiac",
 ];
+
+/** Derive concurrent build slots from a build node's memory (GB).
+ *  Formula: floor(memoryMb / 2048), capped at 8.
+ *  Baseline: 2 vCPU / 4 GB → 2 slots. */
+export function buildSlotsFromMemory(memoryMb: number): number {
+  return Math.min(Math.max(1, Math.floor(memoryMb / 2048)), 8);
+}
