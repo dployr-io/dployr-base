@@ -218,7 +218,7 @@ export class DeploymentService {
     }
 
     await kv.instanceCache.incrementBuildSlots(buildNode.tag);
-    await kv.payloads.saveBuildCallback(taskId, { callbackInstanceTag: instanceName, buildNodeTag: buildNode.tag, clusterId, payload: deployPayload });
+    await kv.payloads.saveBuildCallback(taskId, { callbackInstanceTag: instanceName, buildNodeTag: buildNode.tag, clusterId, payload: deployPayload, fingerprint });
     await kv.payloads.saveDeploymentPayload({ clusterId, instanceName, taskId, payload: deployPayload });
 
     log.info(`Dispatched build task ${taskId} to ${buildNode.tag} (${activeSlots + 1}/${maxSlots} slots), callback → ${instanceName}`);

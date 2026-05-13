@@ -58,7 +58,7 @@ export class WebSocketHandler {
     const jwtService = new JWTService(this.kvStore);
     const dployrdService = new DployrdService();
 
-    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore);
+    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore, jwtService);
 
     this.terminalManager = new TerminalManager(300000);
     this.clientHandler = new ClientMessageHandler({

@@ -120,4 +120,14 @@ provider = "digitalocean"
 # DigitalOcean personal access token
 do_api_token = ""
 # ssh key id on DigitalOcean
-ssh_key = 12345678 
+ssh_key = 12345678
+
+[registry]
+# OCI-compatible container registry for build artifacts.
+# Build nodes push images here; instance nodes pull from it.
+# DigitalOcean Container Registry format: registry.digitalocean.com/<registry-name>
+url = "registry.digitalocean.com/dployr"
+# Docker credentials for the registry.
+# For DigitalOcean: use a personal access token (same value for username and password).
+# Generate at: https://cloud.digitalocean.com/account/api/tokens
+auth = ""

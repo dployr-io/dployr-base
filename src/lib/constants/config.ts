@@ -160,6 +160,12 @@ export const CONFIG_SCHEMA = z.object({
       ssh_key: z.number().int().positive().optional(),
     })
     .optional(),
+  registry: z
+    .object({
+      url: z.string().optional(),
+      auth: z.string().optional(),
+    })
+    .optional(),
   logging: z.object({
     level: z.enum(["debug", "info", "warn", "error"]).default("info"),
   }).optional(),

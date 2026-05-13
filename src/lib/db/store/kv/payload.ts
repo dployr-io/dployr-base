@@ -12,6 +12,7 @@ export interface BuildCallback {
   buildNodeTag: string;
   clusterId: string;
   payload: DeploymentPayload;
+  fingerprint: string;
 }
 
 /** A build task waiting in the durable queue. */

@@ -424,6 +424,7 @@ export class WorkloadSupervisor {
               commit_hash: deployment.remoteCommitHash,
             }
           : undefined,
+        force_rebuild: false,
       };
 
       const secretKeys = Object.keys(blueprint.secrets ?? {});

@@ -14,8 +14,11 @@ import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 import { Logger } from "@/lib/logger.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { DployrdService } from "@/services/dployrd.js";
+import { JWTService } from "@/services/auth/jwt.js";
 import { BuildCallback, BuildQueueEntry } from "@/lib/db/store/kv/payload.js";
 import { buildSlotsFromMemory } from "@/lib/constants/instances.js";
+import { VM_SIZES } from "@/lib/constants/vm.js";
+import type { VMSize } from "@/types/vm.js";
 import { ulid } from "ulid";
 
 /**
@@ -29,6 +32,7 @@ export class NodeMessageHandler {
     private clientNotifier: ClientNotifier,
     private db: DatabaseStore,
     private kv: KVStore,
+    private jwtService: JWTService,
   ) {}
 
   /**
@@ -208,9 +212,22 @@ export class NodeMessageHandler {
       return;
     }
 
+    // Persist fingerprint + image on the deployment record so future drift checks hit the cache
+    const deployment = await this.db.deployments.get({ name: callback.payload.name });
+    if (deployment) {
+      await this.db.deployments.updateBuildResult(deployment.id, { buildFingerprint: callback.fingerprint, image }).catch((err) => {
+        this.log.error(`Failed to persist build result for deployment ${deployment.id}`, err);
+      });
+    }
+
+    const token = await this.jwtService.createNodeAccessToken(callback.callbackInstanceTag).catch((err) => {
+      this.log.error(`Failed to create publish token for ${callback.callbackInstanceTag}`, err);
+      return undefined;
+    });
+
     const dployrdService = new DployrdService();
     const publishTaskId = ulid();
-    const task = dployrdService.createPublishTask(publishTaskId, image, callback.payload);
+    const task = dployrdService.createPublishTask(publishTaskId, image, callback.payload, token);
 
     const dispatched = this.connectionManager.sendTask(callback.callbackInstanceTag, task);
     if (!dispatched) {
@@ -238,10 +255,12 @@ export class NodeMessageHandler {
   }
 
   private async dispatchQueuedBuild(entry: BuildQueueEntry, buildNodeTag: string): Promise<void> {
-    // Check capacity hasn't been taken by a concurrent dispatch
     const activeSlots = await this.kv.instanceCache.getBuildSlots(buildNodeTag);
-    // Default to baseline capacity — build nodes are provisioned at 2 vCPU / 4 GB minimum
-    const maxSlots = buildSlotsFromMemory(4096);
+
+    const buildNodeInstance = await this.db.instances.find({ tag: buildNodeTag });
+    const nodeSize = (buildNodeInstance?.metadata as any)?.size as VMSize | undefined;
+    const nodeSizeSpec = nodeSize ? VM_SIZES[nodeSize] : undefined;
+    const maxSlots = nodeSizeSpec ? buildSlotsFromMemory(nodeSizeSpec.memoryMb) : buildSlotsFromMemory(4096);
 
     if (activeSlots >= maxSlots) {
       this.log.info(`Build node ${buildNodeTag} slots full after drain check — entry ${entry.taskId} stays queued`);
@@ -264,6 +283,7 @@ export class NodeMessageHandler {
       buildNodeTag,
       clusterId: entry.clusterId,
       payload: entry.payload,
+      fingerprint: entry.fingerprint,
     });
 
     this.log.info(`Drained queued build task ${entry.taskId} to ${buildNodeTag} (slot ${activeSlots + 1}/${maxSlots})`);

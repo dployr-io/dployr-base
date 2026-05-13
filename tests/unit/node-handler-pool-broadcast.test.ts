@@ -75,6 +75,10 @@ const noopNotifier = {
   notifyRefresh: () => {},
 } as any;
 
+const noopJwtService = {
+  createNodeAccessToken: async () => "mock-token",
+} as any;
+
 // Pool node connection (no clusterId)
 function poolConn(instanceTag: string) {
   return { clusterId: undefined, instanceTag, ws: { readyState: 1 } } as any;
@@ -120,7 +124,7 @@ describe("NodeMessageHandler — pool workloads written to cluster-scoped KV key
     const { writes, kv } = makeKv({ [instanceId]: poolWorkloads });
     const db = makeDb({ clusters: [clusterA, clusterB], deployments: [depA, depB] });
 
-    const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv);
+    const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv, noopJwtService);
     await handler.handleMessage({ conn: poolConn(instanceId), message: broadcastMsg(instanceId, poolWorkloads) });
 
     const keyA = KV_KEYS.CLUSTER.WORKLOADS("cluster-a", instanceId);
@@ -151,7 +155,7 @@ describe("NodeMessageHandler — pool workloads written to cluster-scoped KV key
     const { writes, kv } = makeKv({ [instanceId]: poolWorkloads });
     const db = makeDb({ clusters: [clusterA, clusterB], deployments: [depA] });
 
-    const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv);
+    const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv, noopJwtService);
     await handler.handleMessage({ conn: poolConn(instanceId), message: broadcastMsg(instanceId, poolWorkloads) });
 
     const keyB = KV_KEYS.CLUSTER.WORKLOADS("cluster-b", instanceId);
@@ -171,7 +175,7 @@ describe("NodeMessageHandler — pool workloads written to cluster-scoped KV key
     const { writes, kv } = makeKv({ [instanceId]: poolWorkloads });
     const db = makeDb({ clusters: [clusterA], deployments: [newDep] });
 
-    const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv);
+    const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv, noopJwtService);
     await handler.handleMessage({ conn: poolConn(instanceId), message: broadcastMsg(instanceId, poolWorkloads) });
 
     const keyA = KV_KEYS.CLUSTER.WORKLOADS("cluster-a", instanceId);
@@ -195,7 +199,7 @@ describe("NodeMessageHandler — pool workloads written to cluster-scoped KV key
     const { writes, kv } = makeKv({ [instanceId]: poolWorkloads });
     const db = makeDb({ clusters: [clusterA], deployments: [depA] });
 
-    const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv);
+    const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv, noopJwtService);
     await handler.handleMessage({ conn: poolConn(instanceId), message: broadcastMsg(instanceId, poolWorkloads) });
 
     const keyA = KV_KEYS.CLUSTER.WORKLOADS("cluster-a", instanceId);
