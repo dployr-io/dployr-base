@@ -1268,6 +1268,12 @@
           </svg>
           Metrics
         </button>
+        <button class="nav-item" data-view="build-nodes">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+          </svg>
+          Build Nodes
+        </button>
         <button class="nav-item" data-view="monitor">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
@@ -1341,6 +1347,7 @@
                   <thead>
                     <tr>
                       <th>Kind</th>
+                      <th>Role</th>
                       <th>Tag</th>
                       <th>ID</th>
                       <th>Address</th>
@@ -1740,6 +1747,34 @@
             </div>
           </div>
 
+          <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">BUILD NODES &amp; QUEUE</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--green);font-family:var(--mono)" id="m-bn-healthy">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Build nodes healthy</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-bn-bad">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Degraded / Offline</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:28px;font-weight:600;color:var(--yellow);font-family:var(--mono)" id="m-bq-total">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Queued builds</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-body" style="text-align:center;padding:16px 12px;">
+                <div style="font-size:14px;font-weight:500;font-family:var(--mono);margin-top:4px;" id="m-bq-tiers">—</div>
+                <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Queue by tier</div>
+              </div>
+            </div>
+          </div>
+
           <div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;">DEPLOYMENTS</div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
             <div class="panel">
@@ -1767,6 +1802,96 @@
                 <div style="font-size:28px;font-weight:600;color:var(--red);font-family:var(--mono)" id="m-dep-failed">—
                 </div>
                 <div style="color:var(--text-dim);margin-top:4px;font-size:11px;">Failed (recent)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- build nodes view -->
+        <div id="view-build-nodes" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Build Nodes</div>
+              <div class="page-subtitle">Remote build servers and build queue</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="refresh-build-nodes">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <div class="stats-row" style="grid-template-columns:repeat(4,1fr);">
+            <div class="stat-card">
+              <div class="stat-label">Build Nodes</div>
+              <div class="stat-value" id="bn-total">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Healthy</div>
+              <div class="stat-value green" id="bn-healthy">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Queue Depth</div>
+              <div class="stat-value yellow" id="bn-queue">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Degraded / Offline</div>
+              <div class="stat-value red" id="bn-bad">—</div>
+            </div>
+          </div>
+          <div class="two-col" style="grid-template-columns:1fr 340px;">
+            <div class="panel">
+              <div class="panel-header">
+                <span class="panel-title">Node Registry</span>
+                <span class="text-muted" style="font-size:11px;" id="bn-timestamp">—</span>
+              </div>
+              <div class="panel-body" style="padding:0;">
+                <div id="bn-loading" class="empty-state hidden">
+                  <div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);"></div>
+                  <span>Loading…</span>
+                </div>
+                <div id="bn-empty" class="empty-state hidden">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+                  </svg>
+                  <span>No build nodes registered</span>
+                </div>
+                <div class="table-wrap">
+                  <table id="bn-table">
+                    <thead>
+                      <tr>
+                        <th>Tag</th>
+                        <th>Address</th>
+                        <th>Status</th>
+                        <th>Slots In Use</th>
+                        <th>Connected</th>
+                        <th>Registered</th>
+                      </tr>
+                    </thead>
+                    <tbody id="bn-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><span class="panel-title">Build Queue</span></div>
+              <div class="panel-body" style="padding:0;">
+                <div id="bq-empty" class="empty-state hidden">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                  </svg>
+                  <span>Queue is empty</span>
+                </div>
+                <div class="table-wrap">
+                  <table id="bq-table">
+                    <thead>
+                      <tr><th>Task</th><th>Tier</th><th>Service</th><th>Queued</th></tr>
+                    </thead>
+                    <tbody id="bq-tbody"></tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -1956,6 +2081,7 @@
         if (name === 'deployments') loadDeployments();
         if (name === 'services') loadServices();
         if (name === 'metrics') loadMetrics();
+        if (name === 'build-nodes') loadBuildNodes();
         if (name === 'token') populateTokenView();
         if (name === 'monitor') loadMonitor();
         startAutoRefresh(name);
@@ -2049,7 +2175,7 @@
 
       function renderHealthDetail(detailTr, data) {
         if (!data) {
-          detailTr.innerHTML = `<td colspan="9"><div class="health-panel"><span style="color:var(--text-muted);font-size:11px;">No telemetry data available — node has not reported recently.</span></div></td>`;
+          detailTr.innerHTML = `<td colspan="10"><div class="health-panel"><span style="color:var(--text-muted);font-size:11px;">No telemetry data available — node has not reported recently.</span></div></td>`;
           return;
         }
 
@@ -2102,7 +2228,7 @@
           ? `dployrd v${escHtml(data.version)}${data.go_version ? ` (${escHtml(data.go_version)})` : ''}`
           : '';
 
-        detailTr.innerHTML = `<td colspan="9"><div class="health-panel">
+        detailTr.innerHTML = `<td colspan="10"><div class="health-panel">
           <div class="health-row">${dotsHtml}${uptimeHtml}</div>
           <div class="health-gauges">${cpuHtml}${memHtml}${diskHtml}</div>
           ${procsHtml}
@@ -2143,6 +2269,11 @@
             ? `<span class="badge" style="background:var(--accent-dim);color:var(--accent);">pool</span>`
             : `<span class="badge" style="background:var(--bg-3);color:var(--text-dim);">dedicated</span>`;
 
+          const isBuildNode = inst.role === 'build';
+          const roleBadge = isBuildNode
+            ? `<span class="badge" style="background:rgba(245,158,11,0.12);color:var(--yellow);">build</span>`
+            : `<span class="badge" style="background:var(--bg-3);color:var(--text-muted);">instance</span>`;
+
           const statusBadge = `<span class="badge ${STATUS_BADGE[inst.status] || 'stopped'}">${escHtml(inst.status || '—')}</span>`;
 
           const clusterCol = isPool
@@ -2155,6 +2286,7 @@
           tr.dataset.tag = inst.tag || '';
           tr.innerHTML = `
             <td style="width:76px;">${kindBadge}</td>
+            <td style="width:76px;">${roleBadge}</td>
             <td class="cell-tag"><button class="cell-tag-btn" title="Toggle health dashboard">${escHtml(inst.tag || '—')}</button> <button class="copy-btn" title="Copy tag">⎘</button></td>
             <td class="cell-id">${escHtml((inst.id || '—').slice(0, 8))}… <button class="copy-btn" title="Copy ID">⎘</button></td>
             <td class="dim">${inst.address ? `${escHtml(inst.address)} <button class="copy-btn" title="Copy address">⎘</button>` : '—'}</td>
@@ -2185,13 +2317,13 @@
             tagBtn.classList.add('expanded');
             const detailTr = document.createElement('tr');
             detailTr.className = 'instance-detail';
-            detailTr.innerHTML = `<td colspan="9"><div class="health-panel"><div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);display:inline-block;"></div></div></td>`;
+            detailTr.innerHTML = `<td colspan="10"><div class="health-panel"><div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);display:inline-block;"></div></div></td>`;
             tr.after(detailTr);
             try {
               const health = await fetchInstanceHealth(inst.tag);
               renderHealthDetail(detailTr, health);
             } catch (err) {
-              detailTr.innerHTML = `<td colspan="9"><div class="health-panel"><span style="color:var(--red);font-size:11px;">Failed to load health data: ${escHtml(err.message)}</span></div></td>`;
+              detailTr.innerHTML = `<td colspan="10"><div class="health-panel"><span style="color:var(--red);font-size:11px;">Failed to load health data: ${escHtml(err.message)}</span></div></td>`;
             }
           });
 
@@ -2567,8 +2699,96 @@
 
           // services
           setMetric('m-svc-total', d.services?.total ?? '—');
+
+          // build nodes
+          const bn = d.buildNodes ?? {};
+          setMetric('m-bn-healthy', bn.healthy ?? '—', bn.healthy > 0 ? 'var(--green)' : 'var(--text-dim)');
+          setMetric('m-bn-bad', (bn.degraded ?? 0) + (bn.offline ?? 0), ((bn.degraded ?? 0) + (bn.offline ?? 0)) > 0 ? 'var(--red)' : 'var(--text-dim)');
+          const bq = d.buildQueue ?? {};
+          setMetric('m-bq-total', bq.total ?? '—', (bq.total ?? 0) > 0 ? 'var(--yellow)' : 'var(--text-dim)');
+          const tiers = bq.byTier ?? {};
+          const tierStr = Object.entries(tiers).filter(([,v]) => v > 0).map(([k,v]) => `${k}:${v}`).join('  ') || '—';
+          setMetric('m-bq-tiers', tierStr);
         } catch (e) {
           console.error('metrics load error', e);
+        }
+      }
+
+      // ── Build Nodes ─────────────────────────────────────────────────────────
+
+      const TIER_COLORS = { pro: 'var(--accent)', indie: 'var(--green)', hobby: 'var(--text-dim)' };
+
+      async function fetchBuildQueue() {
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const body = await apiRequest(`${API_BASE}/v1/admin/build-queue${sessionParam}`, { headers: apiHeaders() });
+        return body.data || { queue: [], nodes: [] };
+      }
+
+      function renderBuildNodes({ queue, nodes }) {
+        // stats
+        $('#bn-total').textContent = nodes.length;
+        $('#bn-healthy').textContent = nodes.filter(n => n.status === 'healthy').length;
+        $('#bn-bad').textContent = nodes.filter(n => ['degraded','offline','unreachable','maintenance'].includes(n.status)).length;
+        $('#bn-queue').textContent = queue.length;
+
+        // nodes table
+        const tbody = $('#bn-tbody');
+        tbody.innerHTML = '';
+        if (!nodes.length) {
+          $('#bn-empty').classList.remove('hidden');
+          $('#bn-table').style.display = 'none';
+        } else {
+          $('#bn-empty').classList.add('hidden');
+          $('#bn-table').style.display = '';
+          nodes.forEach(n => {
+            const statusCls = n.status === 'healthy' ? 'running' : ['degraded','maintenance'].includes(n.status) ? 'pending' : 'stopped';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="cell-tag">${escHtml(n.tag)}</td>
+              <td class="dim">${n.address ? escHtml(n.address) : '—'}</td>
+              <td><span class="badge ${statusCls}">${escHtml(n.status || '—')}</span></td>
+              <td style="font-family:var(--mono);font-size:12px;">${n.slots ?? 0}</td>
+              <td style="font-size:12px;color:${n.connected ? 'var(--green)' : 'var(--text-muted)'};">${n.connected ? '● yes' : '○ no'}</td>
+              <td class="dim" style="white-space:nowrap;">${n.createdAt ? relTime(parseInt(n.createdAt, 10)) : '—'}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+
+        // queue table
+        const qTbody = $('#bq-tbody');
+        qTbody.innerHTML = '';
+        if (!queue.length) {
+          $('#bq-empty').classList.remove('hidden');
+          $('#bq-table').style.display = 'none';
+        } else {
+          $('#bq-empty').classList.add('hidden');
+          $('#bq-table').style.display = '';
+          queue.forEach(entry => {
+            const tierColor = TIER_COLORS[entry.tier] || 'var(--text-dim)';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="cell-id" style="font-size:11px;">${escHtml((entry.taskId || '—').slice(0, 14))}…</td>
+              <td><span style="font-size:11px;font-weight:500;color:${tierColor};">${escHtml(entry.tier || '—')}</span></td>
+              <td class="cell-tag" style="font-size:12px;">${escHtml(entry.payload?.name || '—')}</td>
+              <td class="dim" style="white-space:nowrap;">${entry.enqueuedAt ? relTime(entry.enqueuedAt) : '—'}</td>
+            `;
+            qTbody.appendChild(tr);
+          });
+        }
+
+        $('#bn-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
+      }
+
+      async function loadBuildNodes() {
+        $('#bn-loading').classList.remove('hidden');
+        try {
+          const data = await fetchBuildQueue();
+          renderBuildNodes(data);
+        } catch (err) {
+          toast(`Build nodes: ${err.message}`, 'error');
+        } finally {
+          $('#bn-loading').classList.add('hidden');
         }
       }
 
@@ -2792,6 +3012,7 @@
         deployments: loadDeployments,
         services: loadServices,
         metrics: loadMetrics,
+        'build-nodes': loadBuildNodes,
         monitor: loadMonitor,
       };
 
@@ -2920,6 +3141,7 @@
         $('#refresh-deployments').addEventListener('click', loadDeployments);
         $('#refresh-services').addEventListener('click', loadServices);
         $('#refresh-metrics').addEventListener('click', loadMetrics);
+        $('#refresh-build-nodes').addEventListener('click', loadBuildNodes);
         $('#refresh-monitor').addEventListener('click', loadMonitor);
 
         // add instance

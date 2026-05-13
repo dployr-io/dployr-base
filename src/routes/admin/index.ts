@@ -166,22 +166,27 @@ admin.get("/instances/:tag/processes", async (c) => {
 admin.get("/metrics", async (c) => {
   const db = getDbStore(c);
 
+  const kv = getKVStore(c);
   const [
     { deployments: pending },
     { deployments: allDeployments },
     { total: totalServices },
     { instances: allInstances },
+    { instances: buildNodes },
     totalClusters,
     paidIndieCount,
     paidProCount,
+    buildQueue,
   ] = await Promise.all([
     db.deployments.list({ status: "pending" }),
     db.deployments.list({ limit: 200 }),
     db.services.list(),
     db.instances.list(),
+    db.instances.list({ role: "build" as any }),
     db.clusters.count(),
     db.billing.count({ plan: "indie", status: "active" }),
     db.billing.count({ plan: "pro", status: "active" }),
+    kv.payloads.listBuildQueue(),
   ]);
 
   const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
@@ -236,6 +241,20 @@ admin.get("/metrics", async (c) => {
         recentSuccess,
       },
       services: { total: totalServices },
+      buildNodes: {
+        total: buildNodes.length,
+        healthy: buildNodes.filter((n) => n.status === "healthy").length,
+        degraded: buildNodes.filter((n) => ["degraded", "maintenance"].includes(n.status ?? "")).length,
+        offline: buildNodes.filter((n) => ["offline", "unreachable"].includes(n.status ?? "")).length,
+      },
+      buildQueue: {
+        total: buildQueue.length,
+        byTier: {
+          pro: buildQueue.filter((e) => e.tier === "pro").length,
+          indie: buildQueue.filter((e) => e.tier === "indie").length,
+          hobby: buildQueue.filter((e) => e.tier === "hobby").length,
+        },
+      },
     }),
   );
 });
@@ -285,6 +304,26 @@ admin.delete("/remove-instance/:id", async (c) => {
       ERROR.REQUEST.INTERNAL_SERVER_ERROR.status,
     );
   }
+});
+
+admin.get("/build-queue", requireDployrAdministrator, async (c) => {
+  const kv = getKVStore(c);
+  const db = getDbStore(c);
+  const [queue, { instances: buildNodes }] = await Promise.all([
+    kv.payloads.listBuildQueue(),
+    db.instances.list({ role: "build" as any }),
+  ]);
+
+  const nodeSlots = await Promise.all(
+    buildNodes.map(async (n) => ({
+      tag: n.tag,
+      status: n.status,
+      address: n.address,
+      slots: await kv.instanceCache.getBuildSlots(n.tag),
+    })),
+  );
+
+  return c.json(createSuccessResponse({ queue, nodes: nodeSlots }));
 });
 
 admin.route("/instances", instances);
