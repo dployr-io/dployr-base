@@ -10,7 +10,15 @@ import { KV_KEYS } from "@/lib/constants/kv.js";
 import { EVENTS } from "@/lib/constants/events.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { JWTService } from "./auth/jwt.js";
-import { DEFAULT_INSTANCE_IMAGE, DEFAULT_INSTANCE_REGION, DEFAULT_INSTANCE_SIZE, BUILD_NODE_SIZE, buildInstanceTags, buildInstallScript, PROVIDER_TO_INSTANCE_REGION } from "@/lib/constants/vm.js";
+import {
+  DEFAULT_INSTANCE_IMAGE,
+  DEFAULT_INSTANCE_REGION,
+  DEFAULT_INSTANCE_SIZE,
+  DEFAULT_BUILD_NODE_SIZE,
+  buildInstanceTags,
+  buildInstallScript,
+  PROVIDER_TO_INSTANCE_REGION,
+} from "@/lib/constants/vm.js";
 import type { SubscriptionPlan } from "@/types/index.js";
 import { EventEmittable } from "./notifications/emittable.js";
 import { randomBytes } from "node:crypto";
@@ -146,7 +154,7 @@ export class InstancePool extends EventEmittable {
       image: DEFAULT_INSTANCE_IMAGE,
       name: tag,
       region: DEFAULT_INSTANCE_REGION,
-      size: BUILD_NODE_SIZE,
+      size: DEFAULT_BUILD_NODE_SIZE,
       tags: ["managed", ...(process.env.NODE_ENV === "production" ? ["production", "prod"] : ["development", "dev"]), "build"],
       sshKey: this.sshKey,
       userData: buildInstallScript(token, tag),
@@ -159,7 +167,7 @@ export class InstancePool extends EventEmittable {
       region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
       status: "provisioning",
       role: "build",
-      metadata: { managed: true, size: BUILD_NODE_SIZE },
+      metadata: { managed: true, size: DEFAULT_BUILD_NODE_SIZE },
     });
 
     await this.db.bootstrapTokens.create(instance.id, decoded.nonce as string);
