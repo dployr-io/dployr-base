@@ -21,7 +21,7 @@ export class InstanceStore extends BaseStore {
       try {
         result = await client.query(
           `INSERT INTO instances (id, kind, cluster_id, address, tag, region, managed, role, metadata, created_at, updated_at)
-           VALUES ($1, 'dedicated', $2, $3, $4, $5, $6, $7::role, $8::jsonb, $9, $10)
+           VALUES ($1, 'dedicated', $2, $3, $4, $5, $6, $7::node_role, $8::jsonb, $9, $10)
            RETURNING id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at`,
           [id, clusterId, data.address ?? null, data.tag, data.region ?? "us-east", data.managed ?? true, data.role ?? "instance", data.metadata ?? {}, now, now],
         );
@@ -173,7 +173,7 @@ export class InstanceStore extends BaseStore {
       values.push(data.metadata);
     }
     if (data.role !== undefined) {
-      parts.push(`role = $${p++}::role`);
+      parts.push(`role = $${p++}::node_role`);
       values.push(data.role);
     }
     if (!parts.length) return;
@@ -200,7 +200,7 @@ export class InstanceStore extends BaseStore {
       try {
         result = await client.query(
           `INSERT INTO instances (id, kind, address, tag, capacity, region, status, role, metadata, created_at, updated_at)
-           VALUES ($1, 'pool', $2, $3, $4, $5, $6::instance_status, $7::role, $8::jsonb, $9, $10)
+           VALUES ($1, 'pool', $2, $3, $4, $5, $6::instance_status, $7::node_role, $8::jsonb, $9, $10)
            RETURNING id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at`,
           [id, entry.address ?? null, entry.tag, entry.capacity ?? 10, entry.region ?? null, entry.status ?? "healthy", entry.role ?? "instance", JSON.stringify(entry.metadata ?? {}), now, now],
         );
