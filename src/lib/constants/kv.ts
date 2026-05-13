@@ -79,6 +79,7 @@ export const KV_KEYS = {
     SLOTS: (nodeTag: string) => `build:slots:${nodeTag}`,
     QUEUE: "build:queue",
     QUEUE_ITEM: (taskId: string) => `build:queue:${taskId}`,
+    IN_FLIGHT: (nodeTag: string) => `build:inflight:${nodeTag}`,
   },
   JOB: {
     RUN: (id: string) => `job:run:${id}`,

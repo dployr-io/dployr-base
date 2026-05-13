@@ -158,6 +158,7 @@ export const CONFIG_SCHEMA = z.object({
       provider: z.enum(["digitalocean"]).default("digitalocean"),
       do_api_token: z.string().optional(),
       ssh_key: z.number().int().positive().optional(),
+      build_nodes: z.number().int().min(0).default(1),
     })
     .optional(),
   registry: z

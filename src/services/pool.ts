@@ -10,7 +10,7 @@ import { KV_KEYS } from "@/lib/constants/kv.js";
 import { EVENTS } from "@/lib/constants/events.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
 import { JWTService } from "./auth/jwt.js";
-import { DEFAULT_INSTANCE_IMAGE, DEFAULT_INSTANCE_REGION, DEFAULT_INSTANCE_SIZE, buildInstanceTags, buildInstallScript, PROVIDER_TO_INSTANCE_REGION } from "@/lib/constants/vm.js";
+import { DEFAULT_INSTANCE_IMAGE, DEFAULT_INSTANCE_REGION, DEFAULT_INSTANCE_SIZE, BUILD_NODE_SIZE, buildInstanceTags, buildInstallScript, PROVIDER_TO_INSTANCE_REGION } from "@/lib/constants/vm.js";
 import type { SubscriptionPlan } from "@/types/index.js";
 import { EventEmittable } from "./notifications/emittable.js";
 import { randomBytes } from "node:crypto";
@@ -128,6 +128,42 @@ export class InstancePool extends EventEmittable {
     await this.db.bootstrapTokens.create(instance.id, decoded.nonce as string);
     await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId);
     this.log.info(`Provisioned dedicated instance for pro cluster ${clusterName ?? clusterId}`);
+  }
+
+  /** Provision a dedicated build node (role: "build"). Not tied to any cluster. */
+  public async spawnBuildNode(): Promise<void> {
+    if (!this.vm || !this.jwt) return;
+
+    const name = INSTANCE_NAMES[Math.floor(Math.random() * INSTANCE_NAMES.length)];
+    const num = String(Math.floor(Math.random() * 100)).padStart(2, "0");
+    const suffix = randomBytes(4).toString("base64url").slice(0, 5);
+    const tag = `build-${name}${num}-${suffix}`;
+
+    const token = await this.jwt.createBootstrapToken(tag);
+    const decoded = await this.jwt.verifyToken(token);
+
+    const droplet = await this.vm.create({
+      image: DEFAULT_INSTANCE_IMAGE,
+      name: tag,
+      region: DEFAULT_INSTANCE_REGION,
+      size: BUILD_NODE_SIZE,
+      tags: ["managed", ...(process.env.NODE_ENV === "production" ? ["production", "prod"] : ["development", "dev"]), "build"],
+      sshKey: this.sshKey,
+      userData: buildInstallScript(token, tag),
+    });
+
+    const instance = await this.db.instances.addPool({
+      address: droplet.ipv4 ?? null,
+      capacity: 0,
+      tag,
+      region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
+      status: "provisioning",
+      role: "build",
+      metadata: { managed: true, size: BUILD_NODE_SIZE },
+    });
+
+    await this.db.bootstrapTokens.create(instance.id, decoded.nonce as string);
+    this.log.info(`Provisioned build node ${tag}`);
   }
 
   public async allocateSharedPool(clusterId: string, tier: SubscriptionPlan): Promise<void> {

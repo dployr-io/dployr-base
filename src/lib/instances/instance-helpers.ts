@@ -92,11 +92,12 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
 export function attachListInstances(app: Hono<{ Bindings: Bindings; Variables: Variables }>) {
   app.get("/", async (c) => {
     const clusterId = c.req.query("clusterId");
+    const role = c.req.query("role");
     const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
     const instanceService = getInstanceService(c);
     const instancePoolService = getInstancePoolService(c);
     const [{ instances, total }, instance] = await Promise.all([
-      instanceService.listInstances({ c, clusterId, limit: pageSize, offset }),
+      instanceService.listInstances({ c, clusterId, role, limit: pageSize, offset }),
       instancePoolService.resolveInstancePool({ db: getDbStore(c), clusterId }),
     ]);
 

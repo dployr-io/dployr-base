@@ -23,14 +23,16 @@ export class NodeDoctor extends EventEmittable {
   protected readonly conn: ConnectionManager;
   protected readonly pool: InstancePool;
   private readonly log: Logger;
+  private readonly desiredBuildNodeCapacity: number;
   private decommissionHook?: () => void;
 
-  constructor({ vm, kv, db, conn, pool }: { vm: VmProvider | null; kv: KVStore; db: DatabaseStore; conn: ConnectionManager; pool: InstancePool }) {
+  constructor({ vm, kv, db, conn, pool, desiredBuildNodeCapacity }: { vm: VmProvider | null; kv: KVStore; db: DatabaseStore; conn: ConnectionManager; pool: InstancePool; desiredBuildNodeCapacity?: number }) {
     super(kv);
     this.vm = vm;
     this.db = db;
     this.conn = conn;
     this.pool = pool;
+    this.desiredBuildNodeCapacity = desiredBuildNodeCapacity ?? 1;
     this.log = new Logger("node-doctor");
   }
 
@@ -426,6 +428,37 @@ export class NodeDoctor extends EventEmittable {
       if (tags.includes(tier)) return tier;
     }
     return "hobby";
+  }
+
+  /** Reconcile build node capacity and re-queue in-flight builds from degraded nodes. */
+  public async buildNodeReconcile(): Promise<void> {
+    const { instances: buildNodes } = await this.db.instances.list({ role: "build" as any });
+
+    const degraded = buildNodes.filter((n) => ["degraded", "offline", "unreachable", "maintenance"].includes(n.status ?? ""));
+    for (const node of degraded) {
+      const inFlight = await this.kv.instanceCache.getInFlightBuilds(node.tag);
+      if (inFlight.length > 0) {
+        this.log.info(`Re-queuing ${inFlight.length} in-flight build(s) from degraded build node ${node.tag}`);
+        for (const entry of inFlight) {
+          await this.kv.payloads.enqueueBuild({ ...entry, enqueuedAt: Date.now() });
+        }
+        await this.kv.instanceCache.clearInFlightBuilds(node.tag);
+        await this.kv.kv.delete(KV_KEYS.BUILD.SLOTS(node.tag));
+      }
+    }
+
+    const healthy = buildNodes.filter((n) => n.status === "healthy").length;
+    const deficit = this.desiredBuildNodeCapacity - healthy;
+    if (deficit <= 0) return;
+
+    this.log.info(`Build node deficit: ${deficit} (healthy: ${healthy}, desired: ${this.desiredBuildNodeCapacity})`);
+    for (let i = 0; i < deficit; i++) {
+      try {
+        await this.pool.spawnBuildNode();
+      } catch (err) {
+        this.log.error("Failed to provision build node", { error: String(err) });
+      }
+    }
   }
 
   private async allocateForPlan(clusterId: string, clusterName: string, plan: SubscriptionPlan): Promise<void> {

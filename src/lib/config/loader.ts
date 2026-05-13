@@ -156,6 +156,7 @@ function loadConfigFromEnv(): Config {
       provider: (process.env.VM_PROVIDER as "digitalocean") || "digitalocean",
       do_api_token: process.env.DO_API_TOKEN,
       ssh_key: process.env.SSH_KEY,
+      build_nodes: process.env.BUILD_NODES ? parseInt(process.env.BUILD_NODES) : 1,
     },
     logging: {
       level: (process.env.LOG_LEVEL as "debug" | "info" | "warn" | "error") || "info",

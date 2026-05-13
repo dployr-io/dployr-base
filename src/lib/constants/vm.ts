@@ -9,6 +9,7 @@ export const DEFAULT_CAPACITY = 10;
 export const DEFAULT_INSTANCE_SIZE: VMSize = "s-1vcpu-512mb-10gb";
 export const DEFAULT_INSTANCE_IMAGE: VMImage = "debian-12-x64";
 export const DEFAULT_INSTANCE_REGION: VMRegion = "nyc1";
+export const DEFAULT_BUILD_NODE_SIZE: VMSize = "s-2vcpu-4gb";
 
 const isProd = process.env.NODE_ENV === "production";
 
