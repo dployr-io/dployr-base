@@ -1,7 +1,8 @@
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
-import { INSTANCE_STATUS_TTL, NODE_UPDATE_TTL, NODE_CONNECTED_TTL, INSTANCE_DECOMMISSION_RECOVERY_WINDOW_MS } from "@/lib/constants/index.js";
+import { INSTANCE_STATUS_TTL, NODE_CONNECTED_TTL, INSTANCE_DECOMMISSION_RECOVERY_WINDOW_MS } from "@/lib/constants/index.js";
 import type { Instance } from "@/types/index.js";
+import type { BuildQueueEntry } from "@/lib/db/store/kv/payload.js";
 
 type CachedInstance = Instance & { clusterId: string };
 
@@ -278,5 +279,37 @@ export class InstanceCacheStore {
   async getBuildSlots(nodeTag: string): Promise<number> {
     const raw = await this.kv.get(KV_KEYS.BUILD.SLOTS(nodeTag));
     return raw ? parseInt(raw, 10) : 0;
+  }
+
+  async trackInFlightBuild(nodeTag: string, entry: BuildQueueEntry): Promise<void> {
+    const key = KV_KEYS.BUILD.IN_FLIGHT(nodeTag);
+    const raw = await this.kv.get(key);
+    const entries: BuildQueueEntry[] = raw ? JSON.parse(raw) : [];
+    if (!entries.find((e) => e.taskId === entry.taskId)) {
+      entries.push(entry);
+    }
+    await this.kv.put(key, JSON.stringify(entries), { ttl: NODE_CONNECTED_TTL });
+  }
+
+  async untrackInFlightBuild(nodeTag: string, taskId: string): Promise<void> {
+    const key = KV_KEYS.BUILD.IN_FLIGHT(nodeTag);
+    const raw = await this.kv.get(key);
+    if (!raw) return;
+    const entries: BuildQueueEntry[] = JSON.parse(raw);
+    const updated = entries.filter((e) => e.taskId !== taskId);
+    if (updated.length === 0) {
+      await this.kv.delete(key);
+    } else {
+      await this.kv.put(key, JSON.stringify(updated), { ttl: NODE_CONNECTED_TTL });
+    }
+  }
+
+  async getInFlightBuilds(nodeTag: string): Promise<BuildQueueEntry[]> {
+    const raw = await this.kv.get(KV_KEYS.BUILD.IN_FLIGHT(nodeTag));
+    return raw ? (JSON.parse(raw) as BuildQueueEntry[]) : [];
+  }
+
+  async clearInFlightBuilds(nodeTag: string): Promise<void> {
+    await this.kv.delete(KV_KEYS.BUILD.IN_FLIGHT(nodeTag));
   }
 }

@@ -121,6 +121,10 @@ export class InstanceStore extends BaseStore {
       bindings.push(filter.kind);
       parts.push(`kind = $${bindings.length}`);
     }
+    if (filter?.role !== undefined) {
+      bindings.push(filter.role);
+      parts.push(`role = $${bindings.length}::node_role`);
+    }
 
     const where = parts.length ? `WHERE ${parts.join(" AND ")}` : "";
 

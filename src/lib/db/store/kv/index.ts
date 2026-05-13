@@ -92,6 +92,10 @@ export class KVStore {
   incrementBuildSlots = (...args: Parameters<InstanceCacheStore["incrementBuildSlots"]>) => this.instanceCache.incrementBuildSlots(...args);
   decrementBuildSlots = (...args: Parameters<InstanceCacheStore["decrementBuildSlots"]>) => this.instanceCache.decrementBuildSlots(...args);
   getBuildSlots = (...args: Parameters<InstanceCacheStore["getBuildSlots"]>) => this.instanceCache.getBuildSlots(...args);
+  trackInFlightBuild = (...args: Parameters<InstanceCacheStore["trackInFlightBuild"]>) => this.instanceCache.trackInFlightBuild(...args);
+  untrackInFlightBuild = (...args: Parameters<InstanceCacheStore["untrackInFlightBuild"]>) => this.instanceCache.untrackInFlightBuild(...args);
+  getInFlightBuilds = (...args: Parameters<InstanceCacheStore["getInFlightBuilds"]>) => this.instanceCache.getInFlightBuilds(...args);
+  clearInFlightBuilds = (...args: Parameters<InstanceCacheStore["clearInFlightBuilds"]>) => this.instanceCache.clearInFlightBuilds(...args);
 
   // IntegrationsStore delegation
   setPendingGitHubInstall = (...args: Parameters<IntegrationsStore["setPendingGitHubInstall"]>) => this.integrations.setPendingGitHubInstall(...args);

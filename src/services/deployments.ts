@@ -218,6 +218,7 @@ export class DeploymentService {
     }
 
     await kv.instanceCache.incrementBuildSlots(buildNode.tag);
+    await kv.instanceCache.trackInFlightBuild(buildNode.tag, { taskId, clusterId, callbackInstanceTag: instanceName, payload: deployPayload, fingerprint, tier: plan, enqueuedAt: Date.now() });
     await kv.payloads.saveBuildCallback(taskId, { callbackInstanceTag: instanceName, buildNodeTag: buildNode.tag, clusterId, payload: deployPayload, fingerprint });
     await kv.payloads.saveDeploymentPayload({ clusterId, instanceName, taskId, payload: deployPayload });
 

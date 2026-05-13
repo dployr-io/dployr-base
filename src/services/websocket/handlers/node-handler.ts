@@ -246,6 +246,7 @@ export class NodeMessageHandler {
   private async releaseSlotAndDrainQueue(_completedTaskId: string, callback: BuildCallback): Promise<void> {
     const buildNodeTag = callback.buildNodeTag;
     await this.kv.instanceCache.decrementBuildSlots(buildNodeTag);
+    await this.kv.instanceCache.untrackInFlightBuild(buildNodeTag, _completedTaskId);
     this.log.info(`Released build slot on ${buildNodeTag}`);
 
     const queue = await this.kv.payloads.listBuildQueue();
@@ -277,6 +278,7 @@ export class NodeMessageHandler {
     }
 
     await this.kv.instanceCache.incrementBuildSlots(buildNodeTag);
+    await this.kv.instanceCache.trackInFlightBuild(buildNodeTag, entry);
     await this.kv.payloads.dequeueBuild(entry.taskId);
     await this.kv.payloads.saveBuildCallback(entry.taskId, {
       callbackInstanceTag: entry.callbackInstanceTag,
