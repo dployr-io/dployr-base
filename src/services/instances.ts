@@ -308,9 +308,9 @@ export class InstanceService {
    * @param params.offset - Number of instances to skip
    * @returns Array of instances and total count
    */
-  async listInstances({ c, clusterId, limit, offset }: { c: Context; clusterId?: string; limit?: number; offset?: number }): Promise<{ instances: any[]; total: number }> {
+  async listInstances({ c, clusterId, role, limit, offset }: { c: Context; clusterId?: string; role?: string; limit?: number; offset?: number }): Promise<{ instances: any[]; total: number }> {
     const db = getDbStore(c);
-    return db.instances.list({ clusterId, limit, offset });
+    return db.instances.list({ clusterId, role: role as any, limit, offset });
   }
 
   /**
