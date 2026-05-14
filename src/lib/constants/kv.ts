@@ -52,6 +52,9 @@ export const KV_KEYS = {
     HEALTH: (name: string) => `svc:health:${name}`,
     ICE_WARNING_SENT: (name: string) => `svc:ice_warning:${name}`,
   },
+  METRICS: {
+    TRAEFIK_COUNTERS: "metrics:traefik:counters",
+  },
   PROCESS: {
     SNAPSHOT: (instanceId: string, timestamp?: number) =>
       timestamp !== undefined ? `process:${instanceId}:snapshot:${timestamp}` : `process:${instanceId}:snapshot:`,

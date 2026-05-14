@@ -264,4 +264,26 @@ services.delete("/:id/secrets/:key", resolveCluster("service", { path: "id" }), 
   return c.json(createSuccessResponse({}));
 });
 
+services.get("/:id/metrics", resolveCluster("service", { path: "id" }), requireClusterViewer, async (c) => {
+  const db = getDbStore(c);
+  const serviceId = c.get("resolvedServiceId")!;
+
+  const service = await db.services.find({ id: serviceId });
+  if (!service) {
+    return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
+  }
+
+  // Default: last 24 hours; callers may pass ?from=&to= as ms timestamps
+  const now = Date.now();
+  const from = parseInt(c.req.query("from") ?? String(now - 24 * 60 * 60 * 1000), 10);
+  const to = parseInt(c.req.query("to") ?? String(now), 10);
+
+  const [buckets, totals] = await Promise.all([
+    db.serviceMetrics.list(service.name, from, to),
+    db.serviceMetrics.totals(service.name, from, to),
+  ]);
+
+  return c.json(createSuccessResponse({ buckets, totals }));
+});
+
 export default services;

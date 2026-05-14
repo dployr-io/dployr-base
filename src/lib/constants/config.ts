@@ -151,6 +151,7 @@ export const CONFIG_SCHEMA = z.object({
       redis_port: z.number().int().positive().optional(),
       redis_username: z.string().optional(),
       redis_password: z.string().optional(),
+      metrics_url: z.string().optional(),
     })
     .optional(),
   virtual_machines: z

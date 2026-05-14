@@ -12,6 +12,7 @@ import { BillingStore } from "./billing.js";
 import { DeploymentStore } from "./deployments.js";
 import { ServiceEnvStore } from "./service-envs.js";
 import { ServiceSecretStore } from "./service-secrets.js";
+import { ServiceMetricsStore } from "./service-metrics.js";
 import { EncryptionService } from "@/lib/crypto/encryption.js";
 
 export class DatabaseStore {
@@ -25,6 +26,7 @@ export class DatabaseStore {
   public billing: BillingStore;
   public serviceEnvs: ServiceEnvStore;
   public serviceSecrets: ServiceSecretStore | null;
+  public serviceMetrics: ServiceMetricsStore;
 
   constructor(db: PostgresAdapter, encryptionKey: string | undefined = process.env.ENCRYPTION_KEY) {
     this.users = new UserStore(db);
@@ -37,11 +39,12 @@ export class DatabaseStore {
     this.billing = new BillingStore(db);
     this.serviceEnvs = new ServiceEnvStore(db);
     this.serviceSecrets = encryptionKey ? new ServiceSecretStore(db, new EncryptionService(encryptionKey)) : null;
+    this.serviceMetrics = new ServiceMetricsStore(db);
   }
 }
 
 export const PostgresStore = DatabaseStore;
-export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore, DomainStore, ServiceStore, BillingStore };
+export { UserStore, ClusterStore, InstanceStore, BootstrapTokenStore, DomainStore, ServiceStore, BillingStore, ServiceMetricsStore };
 export type { ClusterFilter } from "./clusters.js";
 export type { InstanceFilter } from "./instances.js";
 export type { ServiceFilter } from "./services.js";

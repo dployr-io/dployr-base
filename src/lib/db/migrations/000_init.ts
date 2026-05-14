@@ -195,6 +195,15 @@ CREATE TABLE IF NOT EXISTS billing (
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS service_metrics (
+  service_name TEXT    NOT NULL,
+  bucket       BIGINT  NOT NULL,
+  requests     BIGINT  NOT NULL DEFAULT 0,
+  bytes_in     BIGINT  NOT NULL DEFAULT 0,
+  bytes_out    BIGINT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (service_name, bucket)
+);
+
 CREATE INDEX IF NOT EXISTS idx_user_clusters_user ON user_clusters(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_clusters_org ON user_clusters(cluster_id);
 CREATE INDEX IF NOT EXISTS idx_instances_cluster ON instances(cluster_id) WHERE cluster_id IS NOT NULL;
@@ -217,6 +226,8 @@ CREATE INDEX IF NOT EXISTS idx_deployments_cluster_status ON deployments(cluster
 CREATE INDEX IF NOT EXISTS idx_deployments_service ON deployments(service_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_created_at ON deployments(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status);
+
+CREATE INDEX IF NOT EXISTS idx_service_metrics_name_bucket ON service_metrics(service_name, bucket DESC);
 CREATE INDEX IF NOT EXISTS idx_services_created_at ON services(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_service_envs_service ON service_envs(service_id);
 CREATE INDEX IF NOT EXISTS idx_service_secrets_service ON service_secrets(service_id);

@@ -10,6 +10,7 @@ export const ALLOWED_TABLES = [
   "billing",
   "service_envs",
   "service_secrets",
+  "service_metrics",
 ] as const
 
 export type AllowedTable = typeof ALLOWED_TABLES[number]
@@ -26,6 +27,7 @@ export const TABLE_ID_COLUMNS: Record<AllowedTable, string> = {
   billing: "cluster_id",
   service_envs: "id",
   service_secrets: "id",
+  service_metrics: "service_name",
 }
 
 export const ALLOWED_JSON_FIELDS = [

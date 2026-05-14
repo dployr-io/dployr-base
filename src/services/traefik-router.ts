@@ -6,6 +6,13 @@ import { KV_KEYS } from "@/lib/constants/kv.js";
 
 const WAKEUP_MIDDLEWARE = "hobby-wakeup";
 
+export interface TraefikMetricsSample {
+  serviceName: string;
+  requests: number;
+  bytesIn: number;
+  bytesOut: number;
+}
+
 /**
  * Service for managing Traefik routing rules in a separate Redis instance.
  * Writes routing configuration that Traefik instances poll and apply.
@@ -17,8 +24,71 @@ export class TraefikService {
     private baseDomain: string,
     redisClient: any,
     private baseUrl?: string,
+    private metricsUrl?: string,
   ) {
     this.redis = new RedisKV(redisClient);
+  }
+
+  /**
+   * Fetches Traefik's Prometheus metrics endpoint and returns per-router
+   * request/byte totals. Returns null if metrics_url is not configured or
+   * the request fails.
+   */
+  async scrapeMetrics(): Promise<TraefikMetricsSample[] | null> {
+    if (!this.metricsUrl) return null;
+
+    const url = this.metricsUrl.replace(/\/$/, "") + "/metrics";
+    let body: string;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) return null;
+      body = await res.text();
+    } catch {
+      return null;
+    }
+
+    return TraefikService.parseMetrics(body);
+  }
+
+  static parseMetrics(text: string): TraefikMetricsSample[] {
+    const requests = new Map<string, number>();
+    const bytesIn = new Map<string, number>();
+    const bytesOut = new Map<string, number>();
+
+    for (const line of text.split("\n")) {
+      if (line.startsWith("#") || line.trim() === "") continue;
+
+      const spaceIdx = line.lastIndexOf(" ");
+      if (spaceIdx === -1) continue;
+      const labelPart = line.slice(0, spaceIdx);
+      const value = parseFloat(line.slice(spaceIdx + 1));
+      if (isNaN(value)) continue;
+
+      const braceOpen = labelPart.indexOf("{");
+      if (braceOpen === -1) continue;
+      const metricName = labelPart.slice(0, braceOpen);
+      const labels = labelPart.slice(braceOpen + 1, -1);
+
+      const routerMatch = labels.match(/router="([^"]+)"/);
+      if (!routerMatch) continue;
+      // Strip provider suffix: "my-service@redis" → "my-service"
+      const name = routerMatch[1].replace(/@[^@]+$/, "");
+
+      if (metricName === "traefik_router_requests_total") {
+        requests.set(name, (requests.get(name) ?? 0) + value);
+      } else if (metricName === "traefik_router_request_bytes_total") {
+        bytesIn.set(name, (bytesIn.get(name) ?? 0) + value);
+      } else if (metricName === "traefik_router_response_bytes_total") {
+        bytesOut.set(name, (bytesOut.get(name) ?? 0) + value);
+      }
+    }
+
+    return Array.from(requests.entries()).map(([serviceName, req]) => ({
+      serviceName,
+      requests: req,
+      bytesIn: bytesIn.get(serviceName) ?? 0,
+      bytesOut: bytesOut.get(serviceName) ?? 0,
+    }));
   }
 
   /**

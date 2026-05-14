@@ -20,7 +20,7 @@ export const workloadSupervisor: JobFn = async ({ db, kv, adapters, trigger, set
 
   let traefik: TraefikService | null = null;
   if (adapters.traefikRedis && adapters.config.traefik?.enabled) {
-    traefik = new TraefikService(adapters.config.traefik.tld ?? "dployr.run", adapters.traefikRedis, adapters.config.server.base_url);
+    traefik = new TraefikService(adapters.config.traefik.tld ?? "dployr.run", adapters.traefikRedis, adapters.config.server.base_url, adapters.config.traefik.metrics_url);
   }
 
   const emailService = adapters.email ? new EmailService(adapters.email, adapters.config as any) : null;
