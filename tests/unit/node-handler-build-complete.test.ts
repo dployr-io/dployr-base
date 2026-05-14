@@ -76,6 +76,12 @@ function makeKv(opts: {
         return 1;
       },
       getBuildSlots: async () => 0,
+      trackInFlightBuild: async (tag: string, entry: any) => {
+        slotOps.push(`track:${tag}:${entry?.taskId}`);
+      },
+      untrackInFlightBuild: async (tag: string, taskId: string) => {
+        slotOps.push(`untrack:${tag}:${taskId}`);
+      },
     },
   } as any;
 }
