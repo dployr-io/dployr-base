@@ -450,11 +450,13 @@ export class NodeDoctor extends EventEmittable {
       }
     }
 
-    const healthy = buildNodes.filter((n) => n.status === "healthy").length;
-    const deficit = this.desiredBuildNodeCapacity - healthy;
-    if (deficit <= 0) return;
+    const UNHEALTHY = new Set(["degraded", "offline", "unreachable", "maintenance"]);
+    const active = buildNodes.filter((n) => !UNHEALTHY.has(n.status ?? "")).length;
+    if (active >= this.desiredBuildNodeCapacity) return;
 
-    this.log.info(`Build node deficit: ${deficit} (healthy: ${healthy}, desired: ${this.desiredBuildNodeCapacity})`);
+    const healthy = buildNodes.filter((n) => n.status === "healthy").length;
+    const deficit = this.desiredBuildNodeCapacity - active;
+    this.log.info(`Build node deficit: ${deficit} (active: ${active}, healthy: ${healthy}, desired: ${this.desiredBuildNodeCapacity})`);
     for (let i = 0; i < deficit; i++) {
       try {
         await this.pool.spawnBuildNode();

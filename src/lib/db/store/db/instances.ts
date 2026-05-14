@@ -3,6 +3,7 @@
 
 import { Instance, InstanceKind, InstanceStatus, NodeRole, SubscriptionPlan } from "@/types/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
+import { DEFAULT_CAPACITY } from "@/lib/constants/vm.js";
 import { type AllowedTable } from "@/lib/constants/index.js";
 import { BaseStore, type Pagination } from "./base.js";
 
@@ -206,7 +207,7 @@ export class InstanceStore extends BaseStore {
           `INSERT INTO instances (id, kind, address, tag, capacity, region, status, role, metadata, created_at, updated_at)
            VALUES ($1, 'pool', $2, $3, $4, $5, $6::instance_status, $7::node_role, $8::jsonb, $9, $10)
            RETURNING id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at`,
-          [id, entry.address ?? null, entry.tag, entry.capacity ?? 10, entry.region ?? null, entry.status ?? "healthy", entry.role ?? "instance", JSON.stringify(entry.metadata ?? {}), now, now],
+          [id, entry.address ?? null, entry.tag, entry.capacity ?? DEFAULT_CAPACITY, entry.region ?? null, entry.status ?? "healthy", entry.role ?? "instance", JSON.stringify(entry.metadata ?? {}), now, now],
         );
       } catch (error) {
         this.parsePostgresError(error);
@@ -240,7 +241,7 @@ export class InstanceStore extends BaseStore {
          WHERE i.kind = 'pool'
            AND i.status = 'healthy'
            AND i.metadata->>'tier' = $1
-           AND (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = i.id) < COALESCE(i.capacity, 10)
+           AND (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = i.id) < COALESCE(i.capacity, ${DEFAULT_CAPACITY})
          ORDER BY (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = i.id) ASC
          LIMIT 1
          FOR UPDATE OF i`,
