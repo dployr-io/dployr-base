@@ -9,10 +9,12 @@ import type { JWTService } from "@/services/auth/jwt.js";
 import type { DployrdService } from "@/services/dployrd.js";
 import type { ClientNotifier } from "@/services/websocket/handlers/client-notifier.js";
 import type { TraefikService } from "@/services/traefik-router.js";
+import type { NotificationService } from "@/services/notifications/index.js";
 import type { Service, Cluster, ServiceType } from "@/types/index.js";
 import type { DeploymentPayload } from "@/lib/tasks/types.js";
 import { DatabaseConflictError } from "../errors/errors.js";
 import { KV_KEYS } from "../constants/kv.js";
+import { EVENTS } from "../constants/events.js";
 import { Logger } from "@/lib/logger.js";
 import { REPROVISION_COOLDOWN_MS } from "../constants/index.js";
 
@@ -45,6 +47,7 @@ export class WorkloadSupervisor {
     private clientNotifier: ClientNotifier,
     private traefik: TraefikService | null = null,
     cooldownMap?: Map<string, number>,
+    private notificationService?: NotificationService,
   ) {
     this.reprovisionSentAt = cooldownMap ?? new Map();
   }
@@ -131,6 +134,7 @@ export class WorkloadSupervisor {
       this.clusterResults.push(result);
 
       await this.reconcileTraefikRoutes({ activeNodeIds, aggregatedServices });
+      await this.checkServiceHealth({ cluster, activeNodeIds });
 
       if (changed) {
         this.clientNotifier.notifyRefresh(cluster.id, "services");
@@ -201,6 +205,31 @@ export class WorkloadSupervisor {
     const workloads = await this.kv.entities.getEntity<{ services?: WorkloadService[] }>(KV_KEYS.INSTANCE.ENTITY(nodeId, "workloads"));
     if (!workloads) return null;
     return Array.isArray(workloads.data?.services) ? workloads.data.services : [];
+  }
+
+  private async checkServiceHealth({ cluster, activeNodeIds }: { cluster: Cluster; activeNodeIds: string[] }): Promise<void> {
+    if (!this.notificationService) return;
+
+    for (const nodeId of activeNodeIds) {
+      const workloads = await this.getWorkloads(nodeId);
+      if (!workloads) continue;
+
+      for (const svc of workloads) {
+        if (!svc.name || !svc.health_status) continue;
+
+        const prevHealth = await this.kv.kv.get(KV_KEYS.SERVICE.HEALTH(svc.name));
+        const currHealth: string = svc.health_status;
+
+        await this.kv.kv.put(KV_KEYS.SERVICE.HEALTH(svc.name), currHealth);
+
+        if (currHealth === "unhealthy" && prevHealth !== "unhealthy") {
+          this.log.warn(`Service ${svc.name} transitioned to unhealthy`, { cluster: cluster.name });
+          this.notificationService
+            .triggerEvent(EVENTS.SERVICE.UNHEALTHY.code, { clusterId: cluster.id, clusterName: cluster.name, serviceName: svc.name }, this.db)
+            .catch((err) => this.log.error(`Failed to send unhealthy notification for ${svc.name}`, { error: String(err) }));
+        }
+      }
+    }
   }
 
   private async findDeployment(clusterId: string, service: ReportedService) {

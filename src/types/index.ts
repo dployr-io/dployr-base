@@ -321,6 +321,8 @@ export interface NotificationData {
   clusterName?: string;
   /** Instance related to the event, if applicable. */
   instanceId?: string;
+  /** Service name related to the event, if applicable. */
+  serviceName?: string;
   /** Email of the user relevant to the event, shown in notification templates. */
   userEmail?: string;
   /** Explicit email recipient. If omitted, falls back to the cluster owner. */

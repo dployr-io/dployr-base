@@ -10,8 +10,9 @@ type AuthEvent = (typeof EVENTS)["AUTH"][keyof (typeof EVENTS)["AUTH"]]["code"];
 type ClusterEvent = (typeof EVENTS)["CLUSTER"][keyof (typeof EVENTS)["CLUSTER"]]["code"];
 type InstanceEvent = (typeof EVENTS)["INSTANCE"][keyof (typeof EVENTS)["INSTANCE"]]["code"];
 type BillingEvent = (typeof EVENTS)["BILLING"][keyof (typeof EVENTS)["BILLING"]]["code"];
+type ServiceEvent = (typeof EVENTS)["SERVICE"][keyof (typeof EVENTS)["SERVICE"]]["code"];
 
-export type NotificationEvent = AuthEvent | ClusterEvent | InstanceEvent | BillingEvent;
+export type NotificationEvent = AuthEvent | ClusterEvent | InstanceEvent | BillingEvent | ServiceEvent;
 
 export type EventSubscriptions = Record<NotificationEvent, boolean>;
 

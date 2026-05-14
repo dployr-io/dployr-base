@@ -6,6 +6,8 @@ import { WorkloadSupervisor } from "@/lib/node/workload-supervisor.js";
 import { JWTService } from "@/services/auth/jwt.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { TraefikService } from "@/services/traefik-router.js";
+import { NotificationService } from "@/services/notifications/index.js";
+import { EmailService } from "@/services/notifications/email/index.js";
 import { NODES_SYNC_JOB } from "@/lib/constants/index.js";
 
 // survives across job ticks so the cooldown map is never reset
@@ -21,7 +23,10 @@ export const workloadSupervisor: JobFn = async ({ db, kv, adapters, trigger, set
     traefik = new TraefikService(adapters.config.traefik.tld ?? "dployr.run", adapters.traefikRedis, adapters.config.server.base_url);
   }
 
-  const supervisor = new WorkloadSupervisor(db, kv, connectionManager, jwtService, dployrdService, clientNotifier, traefik, reprovisionCooldowns);
+  const emailService = adapters.email ? new EmailService(adapters.email, adapters.config as any) : null;
+  const notificationService = new NotificationService(emailService);
+
+  const supervisor = new WorkloadSupervisor(db, kv, connectionManager, jwtService, dployrdService, clientNotifier, traefik, reprovisionCooldowns, notificationService);
 
   supervisor.onClusterNeedsReallocation(async () => {
     trigger(NODES_SYNC_JOB);

@@ -180,6 +180,21 @@ export const roleChangedEmail: EmailTemplate<{ memberEmail: string; oldRole: str
   ),
 });
 
+export const serviceUnhealthyEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({
+  serviceName,
+  clusterName,
+  clusterId,
+}) => ({
+  subject: `Service down — ${serviceName}`,
+  html: layout(
+    "Service Unhealthy",
+    `<p>Your service <strong>${serviceName}</strong> in <strong>${clusterName}</strong> is failing its health check.</p>
+    <p>The container is running but not responding as expected. This usually means the application crashed or is stuck.</p>
+    ${btn("View Service", `https://app.dployr.io/clusters/${clusterId}/services/${serviceName}`, "danger")}
+    <p style="color:#6b7280;font-size:13px;margin-top:16px;">If the service recovers on its own, you won't receive another email until it goes down again.</p>`,
+  ),
+});
+
 export const paymentSuccessEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string }> = ({
   plan,
   clusterName,

@@ -49,6 +49,7 @@ export const KV_KEYS = {
     SLEEPING: (name: string) => `svc:sleeping:${name}`,
     WAKING: (name: string) => `svc:waking:${name}`,
     LAST_ACTIVE: (name: string) => `svc:last_active:${name}`,
+    HEALTH: (name: string) => `svc:health:${name}`,
   },
   PROCESS: {
     SNAPSHOT: (instanceId: string, timestamp?: number) =>

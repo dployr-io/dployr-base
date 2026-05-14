@@ -19,6 +19,7 @@ import {
   instanceDeletedEmail,
   userRemovedEmail,
   roleChangedEmail,
+  serviceUnhealthyEmail,
 } from "@/lib/templates/emails/index.js";
 
 const log = new Logger("NotificationService");
@@ -63,6 +64,10 @@ function buildEmail(event: NotificationEvent, data: NotificationData): { subject
     case EVENTS.CLUSTER.USER_ROLE_CHANGED.code:
       if (!data.userEmail || !data.oldRole || !data.newRole) return null;
       return roleChangedEmail({ memberEmail: data.userEmail, oldRole: data.oldRole, newRole: data.newRole, clusterName, clusterId: data.clusterId });
+
+    case EVENTS.SERVICE.UNHEALTHY.code:
+      if (!data.serviceName) return null;
+      return serviceUnhealthyEmail({ serviceName: data.serviceName, clusterName, clusterId: data.clusterId });
 
     default:
       return null;

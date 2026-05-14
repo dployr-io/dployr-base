@@ -27,6 +27,9 @@ export const EVENTS = {
     UPDATED: { code: "instance.updated", message: "Instance updated successfully" },
     DELETED: { code: "instance.deleted", message: "Instance deleted successfully" },
   },
+  SERVICE: {
+    UNHEALTHY: { code: "service.unhealthy", message: "Service is unhealthy" },
+  },
   PERMISSION: {
     OWNER_ACCESS_GRANTED: { code: "permission.owner_access_granted", message: "Owner access granted" },
     ADMIN_ACCESS_GRANTED: { code: "permission.admin_access_granted", message: "Admin access granted" },
@@ -194,5 +197,11 @@ export const EVENT_METADATA: EventMetadataMap = {
     description: (data: any) => `Your **${data.plan}** subscription has been resumed and is now active again.`,
     color: 0x00ff00,
     category: "billing",
+  },
+  [EVENTS.SERVICE.UNHEALTHY.code]: {
+    title: "Service Unhealthy",
+    description: (data: any) => `Service **${data.serviceName}** is failing its health check.`,
+    color: 0xff0000,
+    category: "instance",
   },
 };
