@@ -32,11 +32,21 @@ export class GitHubService {
 
     const auth = await this.appAuth({
       type: "installation",
-
       installationId,
     });
 
     return new Octokit({ auth: auth.token });
+  }
+
+  /** Returns a short-lived installation access token (valid ~1 hour) for git clone auth. */
+  async getInstallationToken(installationId: number): Promise<string | null> {
+    if (!this.appAuth || !installationId) return null;
+    try {
+      const auth = await this.appAuth({ type: "installation", installationId });
+      return auth.token;
+    } catch {
+      return null;
+    }
   }
 
   async createFile({

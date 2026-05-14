@@ -12,6 +12,8 @@ import { SERVICE_LIMIT_BY_TIER, buildSlotsFromMemory } from "@/lib/constants/ins
 import { VM_SIZES } from "@/lib/constants/vm.js";
 import { Logger } from "@/lib/logger.js";
 import type { Bindings, Session } from "@/types/index.js";
+import { GitHubService } from "@/services/integrations/github.js";
+import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import type { VMSize } from "@/types/vm.js";
 
 const log = new Logger("DeploymentService");
@@ -37,6 +39,55 @@ const dployrdService = new DployrdService();
 
 export class DeploymentService {
   constructor(private env: Bindings) {}
+
+  /**
+   * Resolves a short-lived credential token for the given remote URL by looking
+   * up the cluster's installed git integration. Returns null for public repos or
+   * when no matching integration is configured.
+   */
+  private async resolveRepoToken(remoteUrl: string, clusterId: string, db: DatabaseStore): Promise<string | null> {
+    try {
+      const cluster = await db.clusters.get(clusterId);
+      const meta = cluster?.metadata as any;
+
+      if (remoteUrl.includes("github.com") && meta?.gitHub?.installationId) {
+        const github = new GitHubService(this.env);
+        return await github.getInstallationToken(meta.gitHub.installationId);
+      }
+
+      if (remoteUrl.includes("gitlab.com") && meta?.gitLab?.accessToken) {
+        return meta.gitLab.accessToken as string;
+      }
+
+      if (remoteUrl.includes("bitbucket.org") && meta?.bitBucket?.accessToken) {
+        return meta.bitBucket.accessToken as string;
+      }
+    } catch (err) {
+      log.warn(`Failed to resolve repo token for cluster ${clusterId}:`, { error: String(err) });
+    }
+    return null;
+  }
+
+  /**
+   * Injects git credentials into a remote URL so the build node can clone
+   * private repos without interactive prompts.
+   */
+  private injectToken(url: string, username: string, token: string): string {
+    if (url.includes("@")) return url; // already has credentials
+    if (url.startsWith("http://")) url = "https://" + url.slice(7);
+    if (!url.startsWith("https://")) return url;
+    return url.replace("https://", `https://${username}:${token}@`);
+  }
+
+  private async resolveAuthUrl(remoteUrl: string, clusterId: string, db: DatabaseStore): Promise<string> {
+    const token = await this.resolveRepoToken(remoteUrl, clusterId, db);
+    if (!token) return remoteUrl;
+
+    if (remoteUrl.includes("github.com")) return this.injectToken(remoteUrl, "x-access-token", token);
+    if (remoteUrl.includes("gitlab.com")) return this.injectToken(remoteUrl, "oauth2", token);
+    if (remoteUrl.includes("bitbucket.org")) return this.injectToken(remoteUrl, "x-token-auth", token);
+    return this.injectToken(remoteUrl, "oauth2", token);
+  }
 
   async finish(
     c: Context,
@@ -126,6 +177,11 @@ export class DeploymentService {
     const db = getDbStore(c);
     const kv = getKVStore(c);
     const jwtService = getJWTService(c);
+
+    if (deployPayload.source !== "image" && deployPayload.remote?.url) {
+      const authUrl = await this.resolveAuthUrl(deployPayload.remote.url, clusterId, db);
+      deployPayload = { ...deployPayload, remote: { ...deployPayload.remote, url: authUrl } };
+    }
 
     const nameValidation = validateString(deployPayload.name, "name");
     if (!nameValidation.valid) {
