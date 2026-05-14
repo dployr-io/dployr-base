@@ -43,6 +43,8 @@ export const MS_8_MINUTES = 8 * MS_MINUTE;
 export const MS_30_MINUTES = 30 * MS_MINUTE;
 export const MS_12_HOURS = 12 * MS_HOUR;
 export const MS_24_HOURS = 24 * MS_HOUR;
+export const MS_25_DAYS = 25 * 24 * MS_HOUR;
+export const MS_30_DAYS = 30 * 24 * MS_HOUR;
 
 /** Session lifetime: 7 days */
 export const SESSION_TTL = TTL_7_DAYS;

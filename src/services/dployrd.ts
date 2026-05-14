@@ -224,6 +224,15 @@ export class DployrdService {
     };
   }
 
+  createServiceIceTask(taskId: string, name: string, token?: string): NodeTask {
+    return {
+      ID: taskId,
+      Type: "services/ice:post",
+      Payload: { name, token },
+      Status: "pending",
+    };
+  }
+
   // Create a proxy remove task
   createProxyRemoveTask(taskId: string, serviceName: string, token?: string): NodeTask {
     return {

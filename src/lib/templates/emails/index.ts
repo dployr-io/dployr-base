@@ -195,6 +195,36 @@ export const serviceUnhealthyEmail: EmailTemplate<{ serviceName: string; cluster
   ),
 });
 
+export const serviceIcingWarningEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({
+  serviceName,
+  clusterName,
+  clusterId,
+}) => ({
+  subject: `Your app will be frozen in 5 days — ${serviceName}`,
+  html: layout(
+    "App Freezing Soon",
+    `<p>Your app <strong>${serviceName}</strong> in <strong>${clusterName}</strong> hasn't received any real visitors in 25 days.</p>
+    <p>If it stays inactive, it will be <strong>frozen in 5 days</strong>. A frozen app stops running and its image is removed to free up resources. You can reactivate it at any time by redeploying.</p>
+    <p style="color:#6b7280;font-size:13px;">This only applies to the hobby plan. Upgrade to keep your app running 24/7.</p>
+    ${btn("View App", `https://app.dployr.io/clusters/${clusterId}/services/${serviceName}`)}`,
+  ),
+});
+
+export const serviceIcedEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({
+  serviceName,
+  clusterName,
+  clusterId,
+}) => ({
+  subject: `Your app has been frozen — ${serviceName}`,
+  html: layout(
+    "App Frozen",
+    `<p>Your app <strong>${serviceName}</strong> in <strong>${clusterName}</strong> has been frozen after 30 days with no real visitors.</p>
+    <p>The app is no longer running. To bring it back, redeploy it from your dashboard — it will be up within a minute.</p>
+    ${btn("Reactivate App", `https://app.dployr.io/clusters/${clusterId}/services/${serviceName}`)}
+    <p style="color:#6b7280;font-size:13px;">Your configuration and environment variables are saved. Upgrade to a paid plan to prevent this from happening again.</p>`,
+  ),
+});
+
 export const paymentSuccessEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string }> = ({
   plan,
   clusterName,

@@ -20,6 +20,8 @@ import {
   userRemovedEmail,
   roleChangedEmail,
   serviceUnhealthyEmail,
+  serviceIcingWarningEmail,
+  serviceIcedEmail,
 } from "@/lib/templates/emails/index.js";
 
 const log = new Logger("NotificationService");
@@ -68,6 +70,14 @@ function buildEmail(event: NotificationEvent, data: NotificationData): { subject
     case EVENTS.SERVICE.UNHEALTHY.code:
       if (!data.serviceName) return null;
       return serviceUnhealthyEmail({ serviceName: data.serviceName, clusterName, clusterId: data.clusterId });
+
+    case EVENTS.SERVICE.ICING_WARNING.code:
+      if (!data.serviceName) return null;
+      return serviceIcingWarningEmail({ serviceName: data.serviceName, clusterName, clusterId: data.clusterId });
+
+    case EVENTS.SERVICE.ICED.code:
+      if (!data.serviceName) return null;
+      return serviceIcedEmail({ serviceName: data.serviceName, clusterName, clusterId: data.clusterId });
 
     default:
       return null;

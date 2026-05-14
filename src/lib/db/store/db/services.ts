@@ -49,7 +49,7 @@ export class ServiceStore extends BaseStore {
           `INSERT INTO services (id, cluster_id, name, label, type, deployment_id, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            ON CONFLICT (name) DO UPDATE SET label = COALESCE(EXCLUDED.label, services.label), deployment_id = COALESCE(EXCLUDED.deployment_id, services.deployment_id), updated_at = EXCLUDED.updated_at
-           RETURNING id, cluster_id, name, label, type, deployment_id, created_at, updated_at`,
+           RETURNING id, cluster_id, name, label, type, deployment_id, iced_at, created_at, updated_at`,
         )
         .bind(id, clusterId, name, label || null, type, deploymentId || null, now, now)
         .first();
@@ -80,7 +80,7 @@ export class ServiceStore extends BaseStore {
     if (!bindings.length) return null;
 
     const result = await this.db
-      .prepare(`SELECT id, cluster_id, name, label, type, deployment_id, created_at, updated_at FROM services ${clause} LIMIT 1`)
+      .prepare(`SELECT id, cluster_id, name, label, type, deployment_id, iced_at, created_at, updated_at FROM services ${clause} LIMIT 1`)
       .bind(...bindings)
       .first();
 
@@ -108,7 +108,7 @@ export class ServiceStore extends BaseStore {
 
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT id, cluster_id, name, label, type, deployment_id, created_at, updated_at FROM services ${clause} ORDER BY name ASC`;
+    let sql = `SELECT id, cluster_id, name, label, type, deployment_id, iced_at, created_at, updated_at FROM services ${clause} ORDER BY name ASC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -134,6 +134,14 @@ export class ServiceStore extends BaseStore {
     await this.db.prepare(`DELETE FROM services WHERE ${col} = $1`).bind(val).run();
   }
 
+  async markIced(name: string, at: number): Promise<void> {
+    await this.db.prepare(`UPDATE services SET iced_at = $1 WHERE name = $2`).bind(at, name).run();
+  }
+
+  async clearIced(name: string): Promise<void> {
+    await this.db.prepare(`UPDATE services SET iced_at = NULL WHERE name = $1`).bind(name).run();
+  }
+
   private toService(row: any): Service {
     return {
       id: row.id as string,
@@ -142,6 +150,7 @@ export class ServiceStore extends BaseStore {
       label: (row.label as string) ?? null,
       type: row.type as ServiceType,
       deploymentId: (row.deployment_id as string) ?? null,
+      icedAt: (row.iced_at as number) ?? null,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
     };

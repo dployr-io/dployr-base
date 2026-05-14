@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS services (
   label         TEXT,
   type          service_type NOT NULL,
   deployment_id TEXT,
+  iced_at       BIGINT,
   created_at    BIGINT NOT NULL,
   updated_at    BIGINT NOT NULL,
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE,

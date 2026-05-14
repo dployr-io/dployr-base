@@ -51,6 +51,7 @@ export interface Service {
   label: string | null;
   type: ServiceType;
   deploymentId: string | null;
+  icedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }

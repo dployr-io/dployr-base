@@ -29,6 +29,8 @@ export const EVENTS = {
   },
   SERVICE: {
     UNHEALTHY: { code: "service.unhealthy", message: "Service is unhealthy" },
+    ICING_WARNING: { code: "service.icing_warning", message: "Service will be iced in 5 days" },
+    ICED: { code: "service.iced", message: "Service has been iced due to inactivity" },
   },
   PERMISSION: {
     OWNER_ACCESS_GRANTED: { code: "permission.owner_access_granted", message: "Owner access granted" },
@@ -202,6 +204,18 @@ export const EVENT_METADATA: EventMetadataMap = {
     title: "Service Unhealthy",
     description: (data: any) => `Service **${data.serviceName}** is failing its health check.`,
     color: 0xff0000,
+    category: "instance",
+  },
+  [EVENTS.SERVICE.ICING_WARNING.code]: {
+    title: "Service Icing Soon",
+    description: (data: any) => `Service **${data.serviceName}** has been inactive for 25 days and will be frozen in 5 days.`,
+    color: 0xff9900,
+    category: "instance",
+  },
+  [EVENTS.SERVICE.ICED.code]: {
+    title: "Service Frozen",
+    description: (data: any) => `Service **${data.serviceName}** has been frozen due to 30 days of inactivity.`,
+    color: 0x6b7280,
     category: "instance",
   },
 };

@@ -8,3 +8,4 @@ export const SECRETS_CLEANUP_JOB = "secrets-cleanup";
 export const WORKLOAD_SUPERVISOR_JOB = "workload-supervisor";
 export const BUILD_NODE_SUPERVISOR_JOB = "build-node-supervisor";
 export const HOBBY_SLEEP_SUPERVISOR_JOB = "hobby-sleep-supervisor";
+export const HOBBY_ICE_SUPERVISOR_JOB = "hobby-ice-supervisor";
