@@ -62,6 +62,26 @@ export class PolarService implements BillingProvider {
     return created.json() as Promise<{ id: string; email: string }>;
   }
 
+  async updateCustomerEmail(params: { externalId: string; email: string; name?: string }): Promise<{ id: string; email: string } | null> {
+    const res = await fetch(`${this.baseUrl}/customers/external/${encodeURIComponent(params.externalId)}`, {
+      method: "PATCH",
+      headers: this.headers,
+      body: JSON.stringify({
+        email: params.email,
+        ...(params.name ? { name: params.name } : {}),
+      }),
+    });
+
+    if (res.status === 404) return null;
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`[PolarService] Failed to update customer email — ${err}`);
+    }
+
+    return res.json() as Promise<{ id: string; email: string }>;
+  }
+
   async buildCheckoutUrl(params: CheckoutParams): Promise<string> {
     const { plan, clusterId, userId, email, successUrl } = params;
 

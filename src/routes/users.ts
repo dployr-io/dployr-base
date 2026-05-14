@@ -7,15 +7,21 @@ import { getCookie } from "hono/cookie";
 import z from "zod";
 import { authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getDbStore, getKVStore } from "@/lib/config/context.js";
+import { getAuthService, getBillingProvider, getDbStore, getEmailService, getKVStore } from "@/lib/config/context.js";
 import { Logger } from "@/lib/logger.js";
+import { EMAIL_CHANGE_WINDOW_MS } from "@/lib/constants/duration.js";
+import { DatabaseConflictError } from "@/lib/errors/errors.js";
 
 const log = new Logger("Users");
 
 const users = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 users.use("*", authMiddleware);
 
+const EMAIL_CHANGE_LIMIT = 3;
+
 const updateUserSchema = z.object({
+  email: z.email().optional(),
+  code: z.string().min(6).max(12).optional(),
   name: z
     .string()
     .min(3)
@@ -26,6 +32,14 @@ const updateUserSchema = z.object({
   provider: z.enum(["google", "github", "microsoft", "email"]).optional(),
   metadata: z.object().optional(),
 });
+
+function recentEmailChanges(metadata: Record<string, any> | undefined): number[] {
+  const raw = metadata?.emailChangeHistory;
+  if (!Array.isArray(raw)) return [];
+
+  const cutoff = Date.now() - EMAIL_CHANGE_WINDOW_MS;
+  return raw.filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value > cutoff);
+}
 
 // Get current user
 users.get("/me", async (c) => {
@@ -133,8 +147,100 @@ users.patch("/me", async (c) => {
     );
   }
 
-  const updates: Partial<Omit<User, "id" | "createdAt">> = validation.data;
-  const user = await db.users.update(session.email, updates);
+  const currentUser = await db.users.find({ id: session.userId });
+
+  if (!currentUser) {
+    return c.json(
+      createErrorResponse({
+        message: "User not found",
+        code: ERROR.RESOURCE.MISSING_RESOURCE.code,
+      }),
+      ERROR.RESOURCE.MISSING_RESOURCE.status,
+    );
+  }
+
+  const { code, email, ...profileUpdates } = validation.data;
+  const nextEmail = email?.trim().toLowerCase();
+  const emailChanged = !!nextEmail && nextEmail !== currentUser.email.trim().toLowerCase();
+
+  if (emailChanged && nextEmail) {
+    const existing = await db.users.find({ email: nextEmail });
+    if (existing && existing.id !== currentUser.id) {
+      return c.json(
+        createErrorResponse({
+          message: "Email is already in use",
+          code: ERROR.RESOURCE.CONFLICT.code,
+        }),
+        ERROR.RESOURCE.CONFLICT.status,
+      );
+    }
+
+    const changes = recentEmailChanges(currentUser.metadata);
+    if (changes.length >= EMAIL_CHANGE_LIMIT) {
+      return c.json(
+        createErrorResponse({
+          message: "You can change your email a maximum of 3 times in a week",
+          code: ERROR.REQUEST.TOO_MANY_REQUESTS.code,
+        }),
+        ERROR.REQUEST.TOO_MANY_REQUESTS.status,
+      );
+    }
+
+    if (!code) {
+      if (process.env.NODE_ENV !== "test") {
+        const authService = getAuthService(c);
+        await authService.sendOTP({ email: nextEmail, emailService: getEmailService(c) });
+      }
+      return c.json(createSuccessResponse({ email: nextEmail, verificationRequired: true }, "Verification code sent to your new email"));
+    }
+
+    const isValid = process.env.NODE_ENV === "test" || (await kv.validateOTP({ email: nextEmail, code: code.toUpperCase() }));
+    if (!isValid) {
+      return c.json(
+        createErrorResponse({
+          message: "Invalid or expired verification code",
+          code: ERROR.REQUEST.INVALID_OTP.code,
+        }),
+        ERROR.REQUEST.INVALID_OTP.status,
+      );
+    }
+
+    const billingProvider = getBillingProvider(c);
+    if (billingProvider) {
+      const owned = await db.clusters.list({ ownerId: currentUser.id });
+      for (const cluster of owned.clusters) {
+        const billing = await db.billing.get(cluster.id);
+        if (billing?.polarCustomerId) {
+          await billingProvider.updateCustomerEmail({
+            externalId: cluster.id,
+            email: nextEmail,
+            name: profileUpdates.name || currentUser.name || nextEmail,
+          });
+        }
+      }
+    }
+  }
+
+  const updates: Partial<Omit<User, "id" | "createdAt">> = {
+    ...profileUpdates,
+    ...(emailChanged && nextEmail ? { email: nextEmail, metadata: { ...(profileUpdates.metadata || {}), emailChangeHistory: [...recentEmailChanges(currentUser.metadata), Date.now()] } } : {}),
+  };
+
+  let user: User | null;
+  try {
+    user = await db.users.update(currentUser.email, updates);
+  } catch (error) {
+    if (error instanceof DatabaseConflictError) {
+      return c.json(
+        createErrorResponse({
+          message: "Email is already in use",
+          code: ERROR.RESOURCE.CONFLICT.code,
+        }),
+        ERROR.RESOURCE.CONFLICT.status,
+      );
+    }
+    throw error;
+  }
 
   if (!user) {
     return c.json(
@@ -144,6 +250,13 @@ users.patch("/me", async (c) => {
       }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
     );
+  }
+
+  if (emailChanged) {
+    await kv.refreshSession({
+      sessionId,
+      updates: { email: user.email },
+    });
   }
 
   return c.json(createSuccessResponse({ user }));

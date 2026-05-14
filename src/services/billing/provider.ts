@@ -4,25 +4,26 @@
 import type { SubscriptionPlan } from "@/types/index.js";
 
 export interface CustomerParams {
-  clusterId: string
-  userId: string
-  email: string
-  name?: string
+  clusterId: string;
+  userId: string;
+  email: string;
+  name?: string;
 }
 
 export interface CheckoutParams extends CustomerParams {
-  plan: SubscriptionPlan
-  successUrl?: string
+  plan: SubscriptionPlan;
+  successUrl?: string;
 }
 
 export interface RawWebhookEvent {
-  type: string
-  data: Record<string, unknown>
+  type: string;
+  data: Record<string, unknown>;
 }
 
 export interface BillingProvider {
-  getOrCreateCustomer(params: CustomerParams): Promise<{ id: string; email: string }>
-  buildCheckoutUrl(params: CheckoutParams): Promise<string>
-  verifyWebhookSignature(params: { rawBody: string; signatureHeader: string; webhookId: string; webhookTimestamp: string }): Promise<boolean>
-  parseWebhookEvent(rawBody: string): Promise<RawWebhookEvent>
+  getOrCreateCustomer(params: CustomerParams): Promise<{ id: string; email: string }>;
+  updateCustomerEmail(params: { externalId: string; email: string; name?: string }): Promise<{ id: string; email: string } | null>;
+  buildCheckoutUrl(params: CheckoutParams): Promise<string>;
+  verifyWebhookSignature(params: { rawBody: string; signatureHeader: string; webhookId: string; webhookTimestamp: string }): Promise<boolean>;
+  parseWebhookEvent(rawBody: string): Promise<RawWebhookEvent>;
 }

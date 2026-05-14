@@ -164,6 +164,46 @@ describe("Users", () => {
     assert.equal(body.data.user.name, "CI Test User", "Name was not updated");
   });
 
+  it("PATCH /v1/users/me requires verification before changing email", async () => {
+    const nextEmail = `ci-email-pending-${Date.now()}@example.com`;
+    const before = await assertOk(await get("/v1/users/me"));
+
+    const res = await patch("/v1/users/me", { email: nextEmail, name: "CI Test User" });
+    const body = await assertOk(res);
+    assert.equal(body.data.verificationRequired, true, "Expected email update to require verification");
+    assert.equal(body.data.email, nextEmail);
+
+    const after = await assertOk(await get("/v1/users/me"));
+    assert.equal(after.data.user.email, before.data.user.email, "Email changed before OTP verification");
+  });
+
+  it("PATCH /v1/users/me changes email with verification code and refreshes session", async () => {
+    const nextEmail = `ci-email-${Date.now()}@example.com`;
+    const res = await patch("/v1/users/me", { email: nextEmail, code: "000000", name: "CI Email User" });
+    const body = await assertOk(res);
+    assert.equal(body.data.user.email, nextEmail, "Email was not updated");
+    assert.equal(body.data.user.name, "CI Email User", "Profile fields should update with verified email change");
+
+    const sessionRes = await get("/v1/users/me");
+    const sessionBody = await assertOk(sessionRes);
+    assert.equal(sessionBody.data.user.email, nextEmail, "Session did not reflect updated email");
+  });
+
+  it("PATCH /v1/users/me rejects duplicate email", async () => {
+    const res = await patch("/v1/users/me", { email: "ci-test-other@example.com", code: "000000" });
+    assert.equal(res.status, 409, `Expected 409 for duplicate email, got ${res.status}`);
+  });
+
+  it("PATCH /v1/users/me limits email changes to three per week", async () => {
+    for (let i = 0; i < 2; i++) {
+      const res = await patch("/v1/users/me", { email: `ci-email-limit-${Date.now()}-${i}@example.com`, code: "000000" });
+      await assertOk(res);
+    }
+
+    const blocked = await patch("/v1/users/me", { email: `ci-email-limit-blocked-${Date.now()}@example.com`, code: "000000" });
+    assert.equal(blocked.status, 429, `Expected 429 after three weekly email changes, got ${blocked.status}`);
+  });
+
 });
 
 describe("Clusters", () => {

@@ -43,6 +43,7 @@ export const MS_8_MINUTES = 8 * MS_MINUTE;
 export const MS_30_MINUTES = 30 * MS_MINUTE;
 export const MS_12_HOURS = 12 * MS_HOUR;
 export const MS_24_HOURS = 24 * MS_HOUR;
+export const MS_7_DAYS = 7 * 24 * MS_HOUR;
 export const MS_25_DAYS = 25 * 24 * MS_HOUR;
 export const MS_30_DAYS = 30 * 24 * MS_HOUR;
 
@@ -120,3 +121,6 @@ export const SERVICE_WAKING_TTL = TTL_90_SECONDS;
 
 /** Reprovision cooldown for workload processor: 8 minutes */
 export const REPROVISION_COOLDOWN_MS = MS_8_MINUTES;
+
+/** User email change quota window: 7 days */
+export const EMAIL_CHANGE_WINDOW_MS = MS_7_DAYS;

@@ -234,21 +234,6 @@ CREATE INDEX IF NOT EXISTS idx_billing_polar_customer ON billing(polar_customer_
 CREATE INDEX IF NOT EXISTS idx_billing_polar_subscription ON billing(polar_subscription_id);
 CREATE INDEX IF NOT EXISTS idx_billing_period_end ON billing(period_end) WHERE period_end IS NOT NULL;
 
-CREATE OR REPLACE FUNCTION prevent_email_update()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.email IS DISTINCT FROM OLD.email THEN
-    RAISE EXCEPTION 'email is immutable';
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE TRIGGER prevent_email_update
-BEFORE UPDATE ON users
-FOR EACH ROW
-EXECUTE FUNCTION prevent_email_update();
-
 CREATE OR REPLACE FUNCTION prevent_token_update()
 RETURNS TRIGGER AS $$
 BEGIN

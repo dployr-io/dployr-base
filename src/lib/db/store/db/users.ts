@@ -79,11 +79,10 @@ export class UserStore extends BaseStore {
   }
 
   /**
-   * Updates mutable fields on a user identified by email.
-   * Email cannot be changed — create a new account and transfer roles instead.
+   * Updates user fields on a user identified by their current email.
    */
-  async update(email: string, updates: Partial<Omit<User, "id" | "email" | "createdAt">>): Promise<User | null> {
-    if (!updates.name && !updates.picture && !updates.provider && !updates.metadata) {
+  async update(email: string, updates: Partial<Omit<User, "id" | "createdAt">>): Promise<User | null> {
+    if (!updates.email && !updates.name && !updates.picture && !updates.provider && !updates.metadata) {
       return this.find({ email });
     }
 
@@ -92,6 +91,10 @@ export class UserStore extends BaseStore {
     const values: any[] = [];
     let p = 1;
 
+    if (updates.email !== undefined) {
+      parts.push(`email = $${p++}`);
+      values.push(updates.email);
+    }
     if (updates.name !== undefined) {
       parts.push(`name = $${p++}`);
       values.push(updates.name);

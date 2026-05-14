@@ -81,13 +81,13 @@ export class SessionStore {
    * @param sessionId - The session to update.
    * @param updates.clusters - The new cluster list to write into the session.
    */
-  async refreshSession({ sessionId, updates }: { sessionId: string; updates: { clusters: Session["clusters"] } }): Promise<void> {
+  async refreshSession({ sessionId, updates }: { sessionId: string; updates: Partial<Pick<Session, "email" | "provider" | "clusters">> }): Promise<void> {
     const existing = await this.getSession(sessionId);
     if (!existing) return;
 
     const refreshed: Session = {
       ...existing,
-      clusters: updates.clusters,
+      ...updates,
     };
 
     const remainingMs = existing.expiresAt - Date.now();
