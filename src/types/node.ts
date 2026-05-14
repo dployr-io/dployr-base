@@ -272,6 +272,20 @@ export const NodeUpdateV1_1Schema = z.object({
         .optional(),
     })
     .optional(),
+
+  traffic: z
+    .array(
+      z.object({
+        domain: z.string(),
+        window_hours: z.number(),
+        request_count: z.number(),
+        unique_subnets: z.number(),
+        cadence_cv: z.number(),
+        unique_paths: z.number(),
+        last_request_at: z.number(),
+      }),
+    )
+    .optional(),
 });
 
 export type NodeUpdateV1_1 = z.infer<typeof NodeUpdateV1_1Schema>;
