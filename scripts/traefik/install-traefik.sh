@@ -376,6 +376,137 @@ EOF
   systemctl daemon-reload
   systemctl enable traefik >/dev/null 2>&1 || true
   systemctl restart traefik 2>/dev/null || systemctl start traefik
+
+  setup_fw_registration
+}
+
+setup_fw_registration() {
+  local reg_token; reg_token="$(tget 'metrics.registration_token')"
+  if [ -z "$reg_token" ]; then
+    reg_token="$(openssl rand -hex 32)"
+    tset "metrics.registration_token" "$reg_token"
+    info "Generated metrics registration token"
+  fi
+
+  if ! command -v socat >/dev/null 2>&1; then
+    info "Installing socat..."
+    apt-get install -y socat >/dev/null 2>&1
+  fi
+
+  # Script that ufw-updates based on IP sent by base server
+  cat > /usr/local/bin/dployr-register-base <<SCRIPT
+#!/bin/bash
+EXPECTED_TOKEN="${reg_token}"
+CACHE_FILE="/var/lib/traefik/.metrics-fw-ip"
+FAIL_FILE="/var/lib/traefik/.metrics-fw-fails"
+MAX_BACKOFF=86400  # 24 hours
+
+# Read HTTP request line by line until blank line (end of headers), then read body
+REQUEST=""
+CONTENT_LENGTH=0
+while IFS= read -r line; do
+  line="\$(echo "\$line" | tr -d '\r')"
+  REQUEST="\$REQUEST\$line
+"
+  [ -z "\$line" ] && break
+  echo "\$line" | grep -qi "^content-length:" && CONTENT_LENGTH="\$(echo "\$line" | sed 's/.*: *//' | tr -d '[:space:]')"
+done
+[ "\$CONTENT_LENGTH" -gt 0 ] && BODY="\$(head -c "\$CONTENT_LENGTH")" || BODY=""
+REQUEST="\$REQUEST\$BODY"
+
+# Exponential backoff on failed auth attempts
+NOW=\$(date +%s)
+FAILS=0; LAST_FAIL=0
+if [ -f "\$FAIL_FILE" ]; then
+  read -r FAILS LAST_FAIL < "\$FAIL_FILE"
+fi
+if [ "\$FAILS" -gt 0 ]; then
+  BACKOFF=\$(( 2 ** (FAILS - 1) ))
+  [ "\$BACKOFF" -gt "\$MAX_BACKOFF" ] && BACKOFF=\$MAX_BACKOFF
+  NEXT_ALLOWED=\$(( LAST_FAIL + BACKOFF ))
+  if [ "\$NOW" -lt "\$NEXT_ALLOWED" ]; then
+    RETRY_AFTER=\$(( NEXT_ALLOWED - NOW ))
+    printf "HTTP/1.1 429 Too Many Requests\r\nRetry-After: %s\r\nContent-Length: 0\r\n\r\n" "\$RETRY_AFTER"
+    exit 0
+  fi
+fi
+
+# Validate token
+TOKEN=\$(echo "\$REQUEST" | grep -i "^Authorization:" | sed 's/[Aa]uthorization: [Bb]earer //' | tr -d '[:space:]')
+if [ "\$TOKEN" != "\$EXPECTED_TOKEN" ]; then
+  FAILS=\$(( FAILS + 1 ))
+  echo "\$FAILS \$NOW" > "\$FAIL_FILE"
+  printf "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"
+  exit 0
+fi
+
+# Auth succeeded — reset fail counter
+rm -f "\$FAIL_FILE"
+
+# Body is the IP
+IP="\$(echo "\$BODY" | tr -d '[:space:]')"
+
+# Validate IP format
+if ! echo "\$IP" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+  printf "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
+  exit 0
+fi
+
+# Only update ufw if IP changed
+PREV=\$(cat "\$CACHE_FILE" 2>/dev/null || echo "")
+if [ "\$IP" != "\$PREV" ]; then
+  ufw delete allow 8080/tcp >/dev/null 2>&1 || true
+  ufw allow from "\$IP" to any port 8080 proto tcp >/dev/null 2>&1
+  ufw deny 8080/tcp >/dev/null 2>&1
+  echo "\$IP" > "\$CACHE_FILE"
+fi
+
+printf "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+SCRIPT
+  chmod +x /usr/local/bin/dployr-register-base
+
+  # socat listens on 9876, forks a handler process per connection
+  cat > /etc/systemd/system/dployr-fw-registry.service <<EOF
+[Unit]
+Description=Dployr Metrics Firewall Registry
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/socat TCP-LISTEN:9876,reuseaddr,fork EXEC:/usr/local/bin/dployr-register-base
+Restart=always
+RestartSec=1
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload
+  systemctl enable dployr-fw-registry >/dev/null 2>&1
+  systemctl restart dployr-fw-registry
+
+  # Traefik routes /register-fw to the nc service over HTTPS
+  local instance; instance="$(tget 'instance.name')"
+  local tld; tld="$(tget 'domains.tld')"
+  cat > "$CONFIG_DIR/dynamic/fw-registry.yml" <<EOF
+http:
+  routers:
+    fw-registry:
+      rule: "Host(\`traefik-${instance}.${tld}\`) && Path(\`/register-fw\`)"
+      service: fw-registry
+      entryPoints:
+        - websecure
+      tls: {}
+
+  services:
+    fw-registry:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:9876"
+EOF
+
+  info "Firewall registry listening — base server should POST to https://traefik-${instance}.${tld}/register-fw"
+  info "Registration token stored in $CONFIG_PATH under metrics.registration_token"
 }
 
 main() {
