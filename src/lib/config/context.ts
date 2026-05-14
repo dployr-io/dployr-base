@@ -139,7 +139,12 @@ export function getGitHubService(c: AppContext): GitHubService {
   const existing = c.get("_githubService");
   if (existing) return existing;
 
-  const service = new GitHubService(c.env);
+  const service = new GitHubService({
+    appId: c.env.GITHUB_APP_ID,
+    clientId: c.env.GITHUB_CLIENT_ID,
+    clientSecret: c.env.GITHUB_CLIENT_SECRET,
+    privateKey: c.env.GITHUB_APP_PRIVATE_KEY,
+  });
   c.set("_githubService", service);
   return service;
 }

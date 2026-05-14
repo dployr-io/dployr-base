@@ -15,10 +15,17 @@ import type { Bindings, Session } from "@/types/index.js";
 import { GitHubService } from "@/services/integrations/github.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import type { VMSize } from "@/types/vm.js";
+import type { KVStore } from "@/lib/db/store/kv/index.js";
+import type { JWTService } from "./auth/jwt.js";
+import type { WebSocketHandler } from "./websocket/instance-handler.js";
 
 const log = new Logger("DeploymentService");
 
-async function computeBuildFingerprint(payload: DeploymentPayload): Promise<string> {
+const dployrdService = new DployrdService();
+
+export type TaskSender = Pick<WebSocketHandler, "sendTask">;
+
+export async function computeBuildFingerprint(payload: DeploymentPayload): Promise<string> {
   const parts = [
     payload.remote?.url ?? "",
     payload.remote?.branch ?? "",
@@ -34,8 +41,6 @@ async function computeBuildFingerprint(payload: DeploymentPayload): Promise<stri
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
-
-const dployrdService = new DployrdService();
 
 /** Injects git credentials into a remote HTTPS URL. Pure — no side effects. */
 export function injectToken(url: string, username: string, token: string): string {
@@ -59,7 +64,12 @@ export class DeploymentService {
       const meta = cluster?.metadata as any;
 
       if (remoteUrl.includes("github.com") && meta?.gitHub?.installationId) {
-        const github = new GitHubService(this.env);
+        const github = new GitHubService({
+          appId: this.env.GITHUB_APP_ID,
+          privateKey: this.env.GITHUB_APP_PRIVATE_KEY,
+          clientId: this.env.GITHUB_CLIENT_ID,
+          clientSecret: this.env.GITHUB_CLIENT_SECRET,
+        });
         return await github.getInstallationToken(meta.gitHub.installationId);
       }
 
@@ -112,9 +122,7 @@ export class DeploymentService {
     const deployment = await db.deployments.get(id);
 
     if (!deployment) {
-      const cluster = isNodeToken
-        ? await db.clusters.find({ instanceId })
-        : await db.clusters.find({ userId });
+      const cluster = isNodeToken ? await db.clusters.find({ instanceId }) : await db.clusters.find({ userId });
       if (!cluster) return null;
 
       const kv = getKVStore(c);
@@ -177,6 +185,7 @@ export class DeploymentService {
   ) {
     const db = getDbStore(c);
     const kv = getKVStore(c);
+    const ws = getWS(c);
     const jwtService = getJWTService(c);
 
     if (deployPayload.source !== "image" && deployPayload.remote?.url) {
@@ -241,52 +250,10 @@ export class DeploymentService {
       }
     }
 
-    const buildNode = await db.instances.find({ role: "build", status: "healthy" });
-    if (!buildNode) {
-      throw new InstanceNotConnectedError("build-node");
-    }
-
-    const nodeSize = (buildNode.metadata as any)?.size as VMSize | undefined;
-    const nodeSizeSpec = nodeSize ? VM_SIZES[nodeSize] : undefined;
-    const maxSlots = nodeSizeSpec ? buildSlotsFromMemory(nodeSizeSpec.memoryMb) : 2;
-    const activeSlots = await kv.instanceCache.getBuildSlots(buildNode.tag);
-
-    const plan = await db.billing.getEffectivePlan(clusterId);
-    const taskId = ulid();
-
-    const enqueue = async () => {
-      await kv.payloads.enqueueBuild({ taskId, clusterId, callbackInstanceTag: instanceName, payload: deployPayload, fingerprint, tier: plan, enqueuedAt: Date.now() });
-    };
-
-    if (activeSlots >= maxSlots) {
-      await enqueue();
-      log.info(`Build node ${buildNode.tag} at capacity (${activeSlots}/${maxSlots}) — queued task ${taskId} for cluster ${clusterId}`);
-      return { taskId, queued: true };
-    }
-
-    const buildToken = await jwtService.createNodeAccessToken(buildNode.tag, { issuer: this.env.BASE_URL, audience: "dployr-instance" });
-    const buildTask = dployrdService.createBuildTask(taskId, deployPayload, instanceName, buildToken);
-    const dispatched = getWS(c).sendTask(buildNode.tag, buildTask);
-
-    if (!dispatched) {
-      await enqueue();
-      log.warn(`Build node ${buildNode.tag} not connected — queued task ${taskId}`);
-      return { taskId, queued: true };
-    }
-
-    await kv.instanceCache.incrementBuildSlots(buildNode.tag);
-    await kv.instanceCache.trackInFlightBuild(buildNode.tag, { taskId, clusterId, callbackInstanceTag: instanceName, payload: deployPayload, fingerprint, tier: plan, enqueuedAt: Date.now() });
-    await kv.payloads.saveBuildCallback(taskId, { callbackInstanceTag: instanceName, buildNodeTag: buildNode.tag, clusterId, payload: deployPayload, fingerprint });
-    await kv.payloads.saveDeploymentPayload({ clusterId, instanceName, taskId, payload: deployPayload });
-
-    log.info(`Dispatched build task ${taskId} to ${buildNode.tag} (${activeSlots + 1}/${maxSlots} slots), callback → ${instanceName}`);
-    return { taskId };
+    return await enqueueBuild({ db, kv, clusterId, deployPayload, fingerprint, instanceName, jwtService, ws, issuer: this.env.BASE_URL });
   }
 
-  async list(
-    c: Context,
-    { clusterId, serviceId, status, pageSize, offset }: { clusterId: string; serviceId?: string; status?: string; pageSize: number; offset: number },
-  ) {
+  async list(c: Context, { clusterId, serviceId, status, pageSize, offset }: { clusterId: string; serviceId?: string; status?: string; pageSize: number; offset: number }) {
     const db = getDbStore(c);
     return db.deployments.list({ clusterId, serviceId, status: status as any, limit: pageSize, offset });
   }
@@ -310,3 +277,67 @@ export class DeploymentService {
     await db.deployments.delete({ id });
   }
 }
+
+export async function enqueueBuild({
+  db,
+  kv,
+  clusterId,
+  instanceName,
+  deployPayload,
+  fingerprint,
+  jwtService,
+  ws,
+  issuer,
+}: {
+  db: DatabaseStore;
+  kv: KVStore;
+  clusterId: string;
+  instanceName: string;
+  deployPayload: any;
+  fingerprint: string;
+  jwtService: JWTService;
+  ws: TaskSender;
+  issuer: string;
+}) {
+  const buildNode = await db.instances.find({ role: "build", status: "healthy" });
+  if (!buildNode) {
+    throw new InstanceNotConnectedError("build-node");
+  }
+
+  const nodeSize = (buildNode.metadata as any)?.size as VMSize | undefined;
+  const nodeSizeSpec = nodeSize ? VM_SIZES[nodeSize] : undefined;
+  const maxSlots = nodeSizeSpec ? buildSlotsFromMemory(nodeSizeSpec.memoryMb) : 2;
+  const activeSlots = await kv.instanceCache.getBuildSlots(buildNode.tag);
+
+  const plan = await db.billing.getEffectivePlan(clusterId);
+  const taskId = ulid();
+
+  const enqueue = async () => {
+    await kv.payloads.enqueueBuild({ taskId, clusterId, callbackInstanceTag: instanceName, payload: deployPayload, fingerprint, tier: plan, enqueuedAt: Date.now() });
+  };
+
+  if (activeSlots >= maxSlots) {
+    await enqueue();
+    log.info(`Build node ${buildNode.tag} at capacity (${activeSlots}/${maxSlots}) — queued task ${taskId} for cluster ${clusterId}`);
+    return { taskId, queued: true };
+  }
+
+  const buildToken = await jwtService.createNodeAccessToken(buildNode.tag, { issuer, audience: "dployr-instance" });
+  const buildTask = dployrdService.createBuildTask(taskId, deployPayload, instanceName, buildToken);
+  const dispatched = ws.sendTask(buildNode.tag, buildTask);
+
+  if (!dispatched) {
+    await enqueue();
+    log.warn(`Build node ${buildNode.tag} not connected — queued task ${taskId}`);
+    return { taskId, queued: true };
+  }
+
+  await kv.instanceCache.incrementBuildSlots(buildNode.tag);
+  await kv.instanceCache.trackInFlightBuild(buildNode.tag, { taskId, clusterId, callbackInstanceTag: instanceName, payload: deployPayload, fingerprint, tier: plan, enqueuedAt: Date.now() });
+  await kv.payloads.saveBuildCallback(taskId, { callbackInstanceTag: instanceName, buildNodeTag: buildNode.tag, clusterId, payload: deployPayload, fingerprint });
+  await kv.payloads.saveDeploymentPayload({ clusterId, instanceName, taskId, payload: deployPayload });
+
+  log.info(`Dispatched build task ${taskId} to ${buildNode.tag} (${activeSlots + 1}/${maxSlots} slots), callback → ${instanceName}`);
+  return { taskId };
+}
+

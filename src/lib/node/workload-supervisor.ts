@@ -1,12 +1,10 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { ulid } from "ulid";
 import type { DatabaseStore } from "@/lib/db/store/db/index.js";
 import type { KVStore } from "@/lib/db/store/kv/index.js";
 import type { ConnectionManager } from "@/services/websocket/connection-manager.js";
 import type { JWTService } from "@/services/auth/jwt.js";
-import type { DployrdService } from "@/services/dployrd.js";
 import type { ClientNotifier } from "@/services/websocket/handlers/client-notifier.js";
 import type { TraefikService } from "@/services/traefik-router.js";
 import type { NotificationService } from "@/services/notifications/index.js";
@@ -17,6 +15,7 @@ import { KV_KEYS } from "../constants/kv.js";
 import { EVENTS } from "../constants/events.js";
 import { Logger } from "@/lib/logger.js";
 import { REPROVISION_COOLDOWN_MS } from "../constants/index.js";
+import { computeBuildFingerprint, enqueueBuild } from "@/services/deployments.js";
 
 type ReportedService = { name: string; type: ServiceType; deploymentId?: string };
 type WorkloadService = Record<string, any>;
@@ -43,9 +42,9 @@ export class WorkloadSupervisor {
     private kv: KVStore,
     private connectionManager: ConnectionManager,
     private jwtService: JWTService,
-    private dployrdService: DployrdService,
     private clientNotifier: ClientNotifier,
     private traefik: TraefikService | null = null,
+    private tokenIssuer: string = "dployr-base",
     cooldownMap?: Map<string, number>,
     private notificationService?: NotificationService,
   ) {
@@ -58,8 +57,8 @@ export class WorkloadSupervisor {
   }
 
   async run(): Promise<void> {
-    this.clusterResults = [];
     const { clusters } = await this.db.clusters.list({});
+    this.clusterResults = [];
     await Promise.all(clusters.map((cluster) => this.superviseCluster(cluster)));
   }
 
@@ -115,10 +114,13 @@ export class WorkloadSupervisor {
       const toCreate = [...aggregatedServices.values()].filter((s) => !dbServiceNames.has(s.name));
       const toReprovision = dbServices.filter((s) => !aggregatedNames.has(s.name));
 
-      this.log.debug(`[supervise] cluster="${cluster.name}" nodes=${activeNodeIds.join(",")} node_services=${aggregatedNames.size} db_services=${dbServices.length} to_create=${toCreate.length} to_reprovision=${toReprovision.length}`, {
-        toCreate: toCreate.map((s) => s.name),
-        toReprovision: toReprovision.map((s) => s.name),
-      });
+      this.log.debug(
+        `[supervise] cluster="${cluster.name}" nodes=${activeNodeIds.join(",")} node_services=${aggregatedNames.size} db_services=${dbServices.length} to_create=${toCreate.length} to_reprovision=${toReprovision.length}`,
+        {
+          toCreate: toCreate.map((s) => s.name),
+          toReprovision: toReprovision.map((s) => s.name),
+        },
+      );
 
       changed = (await this.createMissingServices({ cluster, activeNodeIds, services: toCreate })) || changed;
       changed = (await this.backfillDeploymentLinks({ cluster, dbServices, aggregatedServices })) || changed;
@@ -294,13 +296,7 @@ export class WorkloadSupervisor {
     }
   }
 
-  private async reconcileTraefikRoutes({
-    activeNodeIds,
-    aggregatedServices,
-  }: {
-    activeNodeIds: string[];
-    aggregatedServices: Map<string, ReportedService>;
-  }): Promise<void> {
+  private async reconcileTraefikRoutes({ activeNodeIds, aggregatedServices }: { activeNodeIds: string[]; aggregatedServices: Map<string, ReportedService> }): Promise<void> {
     if (!this.traefik || aggregatedServices.size === 0) return;
 
     for (const [serviceName] of aggregatedServices) {
@@ -343,15 +339,7 @@ export class WorkloadSupervisor {
     }
   }
 
-  private async backfillDeploymentLinks({
-    cluster,
-    dbServices,
-    aggregatedServices,
-  }: {
-    cluster: Cluster;
-    dbServices: Service[];
-    aggregatedServices: Map<string, ReportedService>;
-  }): Promise<boolean> {
+  private async backfillDeploymentLinks({ cluster, dbServices, aggregatedServices }: { cluster: Cluster; dbServices: Service[]; aggregatedServices: Map<string, ReportedService> }): Promise<boolean> {
     let changed = false;
 
     for (const service of dbServices) {
@@ -394,17 +382,11 @@ export class WorkloadSupervisor {
       let nodeDataAvailable = false;
 
       for (const nodeId of activeNodeIds) {
-        const workloadsEntity = await this.kv.entities.getEntity<{ services?: any[]; deployments?: any[] }>(
-          KV_KEYS.INSTANCE.ENTITY(nodeId, "workloads")
-        );
+        const workloadsEntity = await this.kv.entities.getEntity<{ services?: any[]; deployments?: any[] }>(KV_KEYS.INSTANCE.ENTITY(nodeId, "workloads"));
         if (!workloadsEntity) continue;
         nodeDataAvailable = true;
 
-        const inFlight = (workloadsEntity.data?.deployments ?? []).find(
-          (d: any) =>
-            d.name === service.name &&
-            (d.status === "pending" || d.status === "in_progress"),
-        );
+        const inFlight = (workloadsEntity.data?.deployments ?? []).find((d: any) => d.name === service.name && (d.status === "pending" || d.status === "in_progress"));
         if (inFlight) {
           this.log.info(`Service ${service.name} has an in-flight deployment on ${nodeId} (${inFlight.status}) — skipping reprovision`);
           return;
@@ -467,22 +449,29 @@ export class WorkloadSupervisor {
         blueprint.secrets = values;
       }
 
+      const fingerprint = await computeBuildFingerprint(blueprint);
       const routingKey = await this.getRoutingKey(cluster);
 
       if (!routingKey) {
-        this.log.warn(`No instance found for cluster ${cluster.name} — triggering reallocation`);
-        await this.reallocateCluster?.(cluster.id);
+        this.log.error(`Failed to re-provision service ${service.name} for cluster ${cluster.name}. Could not determine routing key`);
         return;
       }
 
-      const taskId = ulid();
-      const token = await this.jwtService.createReprovisionToken(routingKey, cluster.id, deployment.userId);
-      const task = this.dployrdService.createDeployTask(taskId, blueprint, token);
+      const result = await enqueueBuild({
+        clusterId: cluster.id,
+        db: this.db,
+        kv: this.kv,
+        deployPayload: blueprint,
+        fingerprint,
+        instanceName: routingKey,
+        jwtService: this.jwtService,
+        ws: this.connectionManager,
+        issuer: this.tokenIssuer,
+      });
 
-      const sent = this.connectionManager.sendTask(routingKey, task);
-      if (sent) {
+      if (result?.taskId) {
         this.reprovisionSentAt.set(cooldownKey, Date.now());
-        this.log.info(`Reprovisioning service ${service.name} via task ${taskId}`);
+        this.log.info(`Reprovisioning service ${service.name} via task ${result.taskId}`);
       } else {
         this.log.warn(`No connected node to reprovision ${service.name}`);
       }

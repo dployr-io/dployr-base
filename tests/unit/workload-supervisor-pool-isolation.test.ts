@@ -76,7 +76,6 @@ function makeConnectionManager(connectedTags: string[]) {
 }
 
 const noopJwt = { createReprovisionToken: async () => "tok" } as any;
-const noopDployrd = { createDeployTask: () => ({}) } as any;
 const noopNotifier = {
   notifyRefresh: () => {},
   broadcast: async () => {},
@@ -114,7 +113,7 @@ describe("WorkloadSupervisor — pool node isolation", () => {
     const kv = makeKv({ [poolTag]: poolWorkloads });
     const connManager = makeConnectionManager([poolTag]);
 
-    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopDployrd, noopNotifier);
+    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopNotifier);
     await supervisor.run();
 
     const createdNames = upsertedServices.map((s) => s.name);
@@ -144,7 +143,7 @@ describe("WorkloadSupervisor — pool node isolation", () => {
     const kv = makeKv({ [poolTag]: poolWorkloads });
     const connManager = makeConnectionManager([poolTag]);
 
-    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopDployrd, noopNotifier);
+    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopNotifier);
     await supervisor.run();
 
     assert.equal(upsertedServices.length, 0, "should not create services without a deployment link on a pool node");
@@ -172,7 +171,7 @@ describe("WorkloadSupervisor — pool node isolation", () => {
     const kv = makeKv({ [dedicatedTag]: nodeWorkloads });
     const connManager = makeConnectionManager([dedicatedTag]);
 
-    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopDployrd, noopNotifier);
+    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopNotifier);
     await supervisor.run();
 
     const createdNames = upsertedServices.map((s) => s.name);
@@ -205,7 +204,7 @@ describe("WorkloadSupervisor — pool node isolation", () => {
     const kv = makeKv({ [poolTag]: poolWorkloads });
     const connManager = makeConnectionManager([poolTag]);
 
-    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopDployrd, noopNotifier);
+    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopNotifier);
     await supervisor.run();
 
     const createdNames = upsertedServices.map((s) => s.name);
@@ -242,7 +241,7 @@ describe("WorkloadSupervisor — pool node isolation", () => {
     const kv = makeKv({ [poolTag]: poolWorkloads });
     const connManager = makeConnectionManager([poolTag]);
 
-    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopDployrd, noopNotifier);
+    const supervisor = new WorkloadSupervisor(db, kv, connManager, noopJwt, noopNotifier);
     await supervisor.run();
 
     const createdNames = upsertedServices.map((s) => s.name);

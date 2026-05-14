@@ -4,19 +4,22 @@
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import { Buffer } from "buffer";
-import type { Bindings } from "@/types/index.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("GitHubService");
 
 export class GitHubService {
-
   private appAuth?: ReturnType<typeof createAppAuth>;
+  private appId: string;
+  private privateKey: string;
+  private clientId: string;
+  private clientSecret: string;
 
-  constructor(private env: Bindings) {
-    const appId = env.GITHUB_APP_ID;
-    const privateKey = env.GITHUB_APP_PRIVATE_KEY;
-    
+  constructor({ appId, privateKey, clientId, clientSecret }: { appId: string; privateKey: string; clientId: string; clientSecret: string }) {
+    this.appId = appId;
+    this.privateKey = privateKey;
+    this.clientId = clientId;
+    this.clientSecret = clientSecret;
     if (appId && privateKey) {
       this.appAuth = createAppAuth({
         appId,
@@ -49,21 +52,7 @@ export class GitHubService {
     }
   }
 
-  async createFile({
-    installationId,
-    owner,
-    repo,
-    path,
-    content,
-    message,
-  }: {
-    installationId: number;
-    owner: string;
-    repo: string;
-    path: string;
-    content: string;
-    message: string;
-  }) {
+  async createFile({ installationId, owner, repo, path, content, message }: { installationId: number; owner: string; repo: string; path: string; content: string; message: string }) {
     const octokit = await this.getOctokit(installationId);
     const encoded = Buffer.from(content).toString("base64");
 
@@ -111,7 +100,7 @@ export class GitHubService {
   }
 
   async listRemotes({ installationId }: { installationId?: number }) {
-    // If GitHub App or installation is missing, return an empty list 
+    // If GitHub App or installation is missing, return an empty list
     if (!this.appAuth || !installationId) {
       return [];
     }
@@ -137,10 +126,7 @@ export class GitHubService {
 
     const octokit = await this.getOctokit(installationId);
 
-    const repos = await octokit.paginate(
-      octokit.rest.apps.listReposAccessibleToInstallation,
-      { per_page: 100 }
-    );
+    const repos = await octokit.paginate(octokit.rest.apps.listReposAccessibleToInstallation, { per_page: 100 });
 
     return repos.length;
   }
@@ -177,10 +163,7 @@ export class GitHubService {
     accessToken: string;
     tokenType: string;
   } | null> {
-    const clientId = this.env.GITHUB_CLIENT_ID;
-    const clientSecret = this.env.GITHUB_CLIENT_SECRET;
-
-    if (!clientId || !clientSecret) {
+    if (!this.clientId || !this.clientSecret) {
       throw new Error("GITHUB_OAUTH_NOT_CONFIGURED");
     }
 
@@ -188,17 +171,17 @@ export class GitHubService {
       const response = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",
         headers: {
-          "Accept": "application/json",
+          Accept: "application/json",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          client_id: clientId,
-          client_secret: clientSecret,
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
           code,
         }),
       });
 
-      const data = await response.json() as any;
+      const data = (await response.json()) as any;
 
       if (data.error) {
         log.error("GitHub OAuth error:", { error: data.error, description: data.error_description });
@@ -215,11 +198,13 @@ export class GitHubService {
     }
   }
 
-  async getUserInstallations(accessToken: string): Promise<Array<{
-    id: number;
-    account: { login: string; type: string };
-    htmlUrl: string;
-  }>> {
+  async getUserInstallations(accessToken: string): Promise<
+    Array<{
+      id: number;
+      account: { login: string; type: string };
+      htmlUrl: string;
+    }>
+  > {
     const octokit = new Octokit({ auth: accessToken });
 
     try {

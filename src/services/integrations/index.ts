@@ -33,7 +33,12 @@ export class IntegrationsService {
     private db?: DatabaseStore,
     private kv?: KVStore,
   ) {
-    this.githubService = new GitHubService(env);
+    this.githubService = new GitHubService({
+      appId: env.GITHUB_APP_ID,
+      privateKey: env.GITHUB_APP_PRIVATE_KEY,
+      clientId: env.GITHUB_CLIENT_ID,
+      clientSecret: env.GITHUB_CLIENT_SECRET,
+    });
     this.gitlabService = new GitLabService(env);
     this.bitbucketService = new BitBucketService(env);
   }

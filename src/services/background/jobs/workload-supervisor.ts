@@ -4,7 +4,6 @@
 import type { JobFn } from "../index.js";
 import { WorkloadSupervisor } from "@/lib/node/workload-supervisor.js";
 import { JWTService } from "@/services/auth/jwt.js";
-import { DployrdService } from "@/services/dployrd.js";
 import { TraefikService } from "@/services/traefik-router.js";
 import { NotificationService } from "@/services/notifications/index.js";
 import { EmailService } from "@/services/notifications/email/index.js";
@@ -15,7 +14,6 @@ const reprovisionCooldowns = new Map<string, number>();
 
 export const workloadSupervisor: JobFn = async ({ db, kv, adapters, trigger, setOutput }) => {
   const jwtService = new JWTService(kv);
-  const dployrdService = new DployrdService();
   const { connectionManager, clientNotifier } = adapters.ws;
 
   let traefik: TraefikService | null = null;
@@ -26,7 +24,7 @@ export const workloadSupervisor: JobFn = async ({ db, kv, adapters, trigger, set
   const emailService = adapters.email ? new EmailService(adapters.email, adapters.config as any) : null;
   const notificationService = new NotificationService(emailService);
 
-  const supervisor = new WorkloadSupervisor(db, kv, connectionManager, jwtService, dployrdService, clientNotifier, traefik, reprovisionCooldowns, notificationService);
+  const supervisor = new WorkloadSupervisor(db, kv, connectionManager, jwtService, clientNotifier, traefik, adapters.config.server.base_url, reprovisionCooldowns, notificationService);
 
   supervisor.onClusterNeedsReallocation(async () => {
     trigger(NODES_SYNC_JOB);
