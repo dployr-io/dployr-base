@@ -272,6 +272,25 @@ export class DigitalOceanVMService implements VmProvider {
    * @param id        The Droplet's numeric ID.
    * @param timeoutMs Maximum wait time in milliseconds (default: 5 minutes).
    */
+  /** Create a block storage volume in `region` and return its ID. */
+  async createVolume(dropletId: number, region: string, sizeGb: number, name: string): Promise<string> {
+    const data = await this.request<{ volume: { id: string } }>("/volumes", "POST", {
+      size_gigabytes: sizeGb,
+      name,
+      region,
+      filesystem_type: "ext4",
+    });
+    return data.volume.id;
+  }
+
+  /** Attach an existing volume to a droplet (fire-and-forget — caller should wait for action if needed). */
+  async attachVolume(volumeId: string, dropletId: number): Promise<void> {
+    await this.request(`/volumes/${volumeId}/actions`, "POST", {
+      type: "attach",
+      droplet_id: dropletId,
+    });
+  }
+
   async waitForActive(id: number, timeoutMs = 300_000): Promise<VirtualMachine> {
     const deadline = Date.now() + timeoutMs;
 

@@ -16,6 +16,9 @@ import { POOL_CAPACITY_BY_TIER } from "../constants/instances.js";
 import { InstancePool } from "@/services/pool.js";
 import { InstancePayload } from "../db/store/db/instances.js";
 import { Logger } from "@/lib/logger.js";
+import { DployrdService } from "@/services/dployrd.js";
+import { JWTService } from "@/services/auth/jwt.js";
+import { ulid } from "ulid";
 
 export class NodeDoctor extends EventEmittable {
   protected readonly vm: VmProvider | null;
@@ -457,6 +460,87 @@ export class NodeDoctor extends EventEmittable {
         await this.pool.spawnBuildNode();
       } catch (err) {
         this.log.error("Failed to provision build node", { error: String(err) });
+      }
+    }
+  }
+
+  /**
+   * Checks disk usage on every healthy managed instance from the latest
+   * cached node update. Warns (once per 24h) at >70% and provisions a
+   * 25 GB DO block volume + sends a mount task at >85%.
+   */
+  public async checkDiskPressure(): Promise<void> {
+    if (!this.vm) return;
+
+    const { instances } = await this.db.instances.list({ managed: true });
+    const dployrd = new DployrdService();
+    const jwt = new JWTService(this.kv);
+
+    for (const instance of instances) {
+      if (instance.status !== "healthy") continue;
+      if (!instance.address) continue;
+
+      const resourcesEntity = await this.kv.entities.getEntity<NodeUpdateV1_1["resources"]>(
+        KV_KEYS.INSTANCE.ENTITY(instance.tag, "resources"),
+      );
+      const disks = resourcesEntity?.data?.disks;
+      if (!disks || disks.length === 0) continue;
+
+      type Disk = { mount_point: string; total_bytes: number; used_bytes: number; available_bytes: number; filesystem: string };
+
+      // Pick /var/lib/docker first, then /, then the largest disk
+      const rootDisk: Disk =
+        (disks as Disk[]).find((d) => d.mount_point === "/var/lib/docker") ??
+        (disks as Disk[]).find((d) => d.mount_point === "/") ??
+        (disks as Disk[]).reduce((a, b) => (b.total_bytes > a.total_bytes ? b : a));
+
+      const usedPct = rootDisk.used_bytes / rootDisk.total_bytes;
+
+      if (usedPct >= 0.85) {
+        // Guard: don't provision if one is already in flight
+        const alreadyProvisioning = await this.kv.kv.get(KV_KEYS.INSTANCE.VOLUME_PROVISIONING(instance.tag));
+        if (alreadyProvisioning) continue;
+
+        this.log.warn(`Disk pressure critical on ${instance.tag} (${Math.round(usedPct * 100)}%) — provisioning volume`);
+
+        try {
+          await this.kv.kv.put(KV_KEYS.INSTANCE.VOLUME_PROVISIONING(instance.tag), "1", { ttl: 60 * 60 * 2 }); // 2h lock
+
+          // DO Volumes need the region slug; fall back to nyc1
+          const region = (instance.metadata as any)?.region ?? "nyc1";
+          const volName = `dployr-${instance.tag}-storage-${ulid().slice(-6).toLowerCase()}`;
+          const dropletId = (instance.metadata as any)?.dropletId as number | undefined;
+
+          if (!dropletId) {
+            this.log.warn(`No dropletId in metadata for ${instance.tag} — cannot attach volume`);
+            continue;
+          }
+
+          const volumeId = await this.vm.createVolume(dropletId, region, 25, volName);
+          await this.vm.attachVolume(volumeId, dropletId);
+
+          // Send mount task to the node daemon
+          const taskId = ulid();
+          const token = await jwt.createNodeAccessToken(instance.tag, { issuer: "dployr-base", audience: "dployr-instance" });
+          const task = dployrd.createStorageMountTask(taskId, `/dev/disk/by-id/scsi-0DO_Volume_${volName}`, "/var/lib/docker", token);
+          this.conn.sendTask(instance.tag, task);
+
+          await this.emit(EVENTS.NODE.HEALTHY.code, instance.tag);
+          this.log.info(`Provisioned and attached 25 GB volume ${volName} to ${instance.tag}`);
+        } catch (err) {
+          this.log.error(`Failed to provision volume for ${instance.tag}`, { error: String(err) });
+          await this.kv.kv.delete(KV_KEYS.INSTANCE.VOLUME_PROVISIONING(instance.tag));
+        }
+      } else if (usedPct >= 0.70) {
+        const alreadyWarned = await this.kv.kv.get(KV_KEYS.INSTANCE.DISK_WARN_SENT(instance.tag));
+        if (alreadyWarned) continue;
+
+        this.log.warn(`Disk pressure warning on ${instance.tag} (${Math.round(usedPct * 100)}%)`);
+        await this.kv.kv.put(KV_KEYS.INSTANCE.DISK_WARN_SENT(instance.tag), "1", { ttl: 60 * 60 * 24 });
+        await this.emit(EVENTS.NODE.HEALTHY.code, instance.tag);
+      } else {
+        // Clear warn flag once pressure drops below threshold
+        await this.kv.kv.delete(KV_KEYS.INSTANCE.DISK_WARN_SENT(instance.tag));
       }
     }
   }

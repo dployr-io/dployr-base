@@ -17,4 +17,6 @@ export interface VmProvider {
   getMetrics(id: number): Promise<VMMetrics>;
   waitForAction(dropletId: number, actionId: number): Promise<VMActionResult>;
   waitForActive(id: number, timeoutMs?: number): Promise<VirtualMachine>;
+  createVolume(dropletId: number, region: string, sizeGb: number, name: string): Promise<string>;
+  attachVolume(volumeId: string, dropletId: number): Promise<void>;
 }

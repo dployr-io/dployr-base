@@ -233,6 +233,24 @@ export class DployrdService {
     };
   }
 
+  createStorageMountTask(taskId: string, device: string, mountPoint: string, token?: string): NodeTask {
+    return {
+      ID: taskId,
+      Type: "storage/mount:post",
+      Payload: { device, mount_point: mountPoint, token },
+      Status: "pending",
+    };
+  }
+
+  createDockerPruneTask(taskId: string, token?: string): NodeTask {
+    return {
+      ID: taskId,
+      Type: "system/docker-prune:post",
+      Payload: { token },
+      Status: "pending",
+    };
+  }
+
   // Create a proxy remove task
   createProxyRemoveTask(taskId: string, serviceName: string, token?: string): NodeTask {
     return {

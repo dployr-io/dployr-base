@@ -41,6 +41,8 @@ export const KV_KEYS = {
     BY_TAG: (tag: string) => `instance:tag:${tag}`,
     DECOMMISSION_RECOVERY_WINDOW: (instanceId: string) => `recovery_window:${instanceId}`,
     ENTITY: (instanceId: string, entity: NodeStateEntity) => `instance:${instanceId}:${entity}`,
+    DISK_WARN_SENT: (tag: string) => `instance:disk_warn:${tag}`,
+    VOLUME_PROVISIONING: (tag: string) => `instance:volume_provisioning:${tag}`,
   },
   SERVICES: {
     BY_INSTANCE: (instanceId: string) => `services:${instanceId}`,

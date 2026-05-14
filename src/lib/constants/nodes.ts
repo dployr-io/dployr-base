@@ -10,3 +10,4 @@ export const BUILD_NODE_SUPERVISOR_JOB = "build-node-supervisor";
 export const HOBBY_SLEEP_SUPERVISOR_JOB = "hobby-sleep-supervisor";
 export const HOBBY_ICE_SUPERVISOR_JOB = "hobby-ice-supervisor";
 export const TRAEFIK_METRICS_SCRAPER_JOB = "traefik-metrics-scraper";
+export const DOCKER_PRUNE_JOB = "docker-prune";

@@ -11,4 +11,5 @@ export const nodesHealth: JobFn = async ({ db, kv, adapters, trigger }) => {
   const service = new NodeDoctor({ db, kv, vm: adapters.vmProvider, conn: adapters.ws.connectionManager, pool });
   service.onDecommission(() => trigger(NODES_SYNC_JOB));
   await service.nodeHeartbeat();
+  await service.checkDiskPressure();
 };
