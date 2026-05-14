@@ -17,7 +17,7 @@ const BOT_MAX_PATHS   = 2;   // fewer than this unique paths → single-endpoint
 
 const log = new Logger("hobby-sleep-supervisor");
 
-type TrafficSignal = {
+export type TrafficSignal = {
   domain: string;
   request_count: number;
   unique_subnets: number;
@@ -32,7 +32,7 @@ type TrafficSignal = {
  *
  * Any single human-like signal keeps the service awake.
  */
-function isGenuinelyIdle(sig: TrafficSignal): boolean {
+export function isGenuinelyIdle(sig: TrafficSignal): boolean {
   // No traffic at all in the last hour — could be idle, but we defer to
   // last_active timestamp check; don't override it here.
   if (sig.request_count === 0) return true;

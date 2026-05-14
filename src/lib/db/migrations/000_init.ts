@@ -226,7 +226,6 @@ CREATE INDEX IF NOT EXISTS idx_deployments_cluster_status ON deployments(cluster
 CREATE INDEX IF NOT EXISTS idx_deployments_service ON deployments(service_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_created_at ON deployments(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status);
-
 CREATE INDEX IF NOT EXISTS idx_service_metrics_name_bucket ON service_metrics(service_name, bucket DESC);
 CREATE INDEX IF NOT EXISTS idx_services_created_at ON services(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_service_envs_service ON service_envs(service_id);

@@ -37,6 +37,14 @@ async function computeBuildFingerprint(payload: DeploymentPayload): Promise<stri
 
 const dployrdService = new DployrdService();
 
+/** Injects git credentials into a remote HTTPS URL. Pure — no side effects. */
+export function injectToken(url: string, username: string, token: string): string {
+  if (url.includes("@")) return url; // already has credentials
+  if (url.startsWith("http://")) url = "https://" + url.slice(7);
+  if (!url.startsWith("https://")) return url;
+  return url.replace("https://", `https://${username}:${token}@`);
+}
+
 export class DeploymentService {
   constructor(private env: Bindings) {}
 
@@ -72,21 +80,14 @@ export class DeploymentService {
    * Injects git credentials into a remote URL so the build node can clone
    * private repos without interactive prompts.
    */
-  private injectToken(url: string, username: string, token: string): string {
-    if (url.includes("@")) return url; // already has credentials
-    if (url.startsWith("http://")) url = "https://" + url.slice(7);
-    if (!url.startsWith("https://")) return url;
-    return url.replace("https://", `https://${username}:${token}@`);
-  }
-
   private async resolveAuthUrl(remoteUrl: string, clusterId: string, db: DatabaseStore): Promise<string> {
     const token = await this.resolveRepoToken(remoteUrl, clusterId, db);
     if (!token) return remoteUrl;
 
-    if (remoteUrl.includes("github.com")) return this.injectToken(remoteUrl, "x-access-token", token);
-    if (remoteUrl.includes("gitlab.com")) return this.injectToken(remoteUrl, "oauth2", token);
-    if (remoteUrl.includes("bitbucket.org")) return this.injectToken(remoteUrl, "x-token-auth", token);
-    return this.injectToken(remoteUrl, "oauth2", token);
+    if (remoteUrl.includes("github.com")) return injectToken(remoteUrl, "x-access-token", token);
+    if (remoteUrl.includes("gitlab.com")) return injectToken(remoteUrl, "oauth2", token);
+    if (remoteUrl.includes("bitbucket.org")) return injectToken(remoteUrl, "x-token-auth", token);
+    return injectToken(remoteUrl, "oauth2", token);
   }
 
   async finish(
