@@ -11,6 +11,8 @@ app_url = "https://app.dployr.io"
 # Traefik routing configuration
 enabled = true
 tld = "dployr.run"
+# Traefik Prometheus metrics endpoint (base URL — /metrics is appended automatically)
+metrics_url = "http://localhost:8080"
 # Separate Redis instance for Traefik routes
 redis_url = "redis://redis-13196.c...:13196"
 redis_host = "redis-13196.c.."

@@ -190,6 +190,9 @@ api:
 
 ping: {}
 
+metrics:
+  prometheus: {}
+
 log:
   level: INFO
   filePath: "${LOG_DIR}/traefik.log"
