@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { hobbyIceSupervisor } from "@/services/background/jobs/hobby-ice-supervisor.js";
 import { MemoryKV } from "@/lib/storage/kv.interface.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
+import { JWTService } from "@/services/auth/jwt.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { MS_25_DAYS, MS_30_DAYS } from "@/lib/constants/duration.js";
 
@@ -93,7 +94,7 @@ describe("hobbyIceSupervisor", () => {
     const kv = await makeRealKv();
     const sentTasks = makeSentTasks();
 
-    await hobbyIceSupervisor({ db, kv, adapters: makeAdapters(sentTasks), ...noopCtx });
+    await hobbyIceSupervisor({ db, kv, jwt: new JWTService(kv), adapters: makeAdapters(sentTasks), ...noopCtx });
 
     assert.equal(icedServices.length, 0);
     assert.equal(sentTasks.tasks.length, 0);
@@ -106,7 +107,7 @@ describe("hobbyIceSupervisor", () => {
     const kv = await makeRealKv();
     const sentTasks = makeSentTasks();
 
-    await hobbyIceSupervisor({ db, kv, adapters: makeAdapters(sentTasks), ...noopCtx });
+    await hobbyIceSupervisor({ db, kv, jwt: new JWTService(kv), adapters: makeAdapters(sentTasks), ...noopCtx });
 
     assert.equal(icedServices.length, 0);
     assert.equal(sentTasks.tasks.length, 0);
@@ -119,7 +120,7 @@ describe("hobbyIceSupervisor", () => {
     const kv = await makeRealKv();
     const sentTasks = makeSentTasks();
 
-    await hobbyIceSupervisor({ db, kv, adapters: makeAdapters(sentTasks), ...noopCtx });
+    await hobbyIceSupervisor({ db, kv, jwt: new JWTService(kv), adapters: makeAdapters(sentTasks), ...noopCtx });
 
     assert.equal(icedServices.length, 0);
     assert.equal(sentTasks.tasks.length, 0);
@@ -132,7 +133,7 @@ describe("hobbyIceSupervisor", () => {
     const kv = await makeRealKv();
     const sentTasks = makeSentTasks();
 
-    await hobbyIceSupervisor({ db, kv, adapters: makeAdapters(sentTasks), ...noopCtx });
+    await hobbyIceSupervisor({ db, kv, jwt: new JWTService(kv), adapters: makeAdapters(sentTasks), ...noopCtx });
 
     assert.equal(icedServices.length, 0, "should not ice at day 25");
     assert.equal(sentTasks.tasks.length, 0);
@@ -147,7 +148,7 @@ describe("hobbyIceSupervisor", () => {
     const db = makeDb([svc], icedServices);
     const sentTasks = makeSentTasks();
 
-    await hobbyIceSupervisor({ db, kv, adapters: makeAdapters(sentTasks), ...noopCtx });
+    await hobbyIceSupervisor({ db, kv, jwt: new JWTService(kv), adapters: makeAdapters(sentTasks), ...noopCtx });
 
     assert.equal(icedServices.length, 0);
     assert.equal(sentTasks.tasks.length, 0);
@@ -160,7 +161,7 @@ describe("hobbyIceSupervisor", () => {
     const kv = await makeRealKv();
     const sentTasks = makeSentTasks();
 
-    await hobbyIceSupervisor({ db, kv, adapters: makeAdapters(sentTasks), ...noopCtx });
+    await hobbyIceSupervisor({ db, kv, jwt: new JWTService(kv), adapters: makeAdapters(sentTasks), ...noopCtx });
 
     assert.equal(icedServices.length, 1, "service should be marked iced");
     assert.equal(icedServices[0], svc.name);
@@ -175,7 +176,7 @@ describe("hobbyIceSupervisor", () => {
     const kv = await makeRealKv();
     const sentTasks = makeSentTasks();
 
-    await hobbyIceSupervisor({ db, kv, adapters: makeAdapters(sentTasks), ...noopCtx });
+    await hobbyIceSupervisor({ db, kv, jwt: new JWTService(kv), adapters: makeAdapters(sentTasks), ...noopCtx });
 
     assert.equal(icedServices.length, 0);
     assert.equal(sentTasks.tasks.length, 0);
@@ -190,7 +191,7 @@ describe("hobbyIceSupervisor", () => {
     const db = makeDb([svc], icedServices, "instance-tag-1");
     const sentTasks = makeSentTasks();
 
-    await hobbyIceSupervisor({ db, kv, adapters: makeAdapters(sentTasks), ...noopCtx });
+    await hobbyIceSupervisor({ db, kv, jwt: new JWTService(kv), adapters: makeAdapters(sentTasks), ...noopCtx });
 
     assert.equal(icedServices.length, 0, "recently-active service should not be iced");
     assert.equal(sentTasks.tasks.length, 0);
@@ -201,7 +202,7 @@ describe("hobbyIceSupervisor", () => {
     const kv = await makeRealKv();
     const sentTasks = makeSentTasks();
 
-    await hobbyIceSupervisor({ db, kv, adapters: makeAdapters(sentTasks), ...noopCtx });
+    await hobbyIceSupervisor({ db, kv, jwt: new JWTService(kv), adapters: makeAdapters(sentTasks), ...noopCtx });
 
     assert.equal(sentTasks.tasks.length, 0);
   });
