@@ -23,7 +23,7 @@ export const INSTANCE_MANAGED_TAG = "managed";
 export const INSTANCE_DO_NOT_REMOVE_TAG = "DO_NOT_REMOVE";
 
 /** Build the full tag set for a new instance. */
-export function buildInstanceTags(tier: SubscriptionPlan): string[] {
+export function buildInstanceTags(tier: SubscriptionPlan | "build"): string[] {
   const envTags = isProd ? ["production", "prod"] : ["development", "dev"];
   return [INSTANCE_MANAGED_TAG, ...envTags, tier];
 }
@@ -59,13 +59,27 @@ export const PROVIDER_TO_INSTANCE_REGION: Record<string, (typeof INSTANCE_REGION
   syd1: "ap-southeast",
 };
 
+export interface InstallScriptOptions {
+  role?: "instance" | "build";
+  registryUrl?: string;
+  registryAuth?: string;
+}
+
 /** Bootstrap install script injected as user_data at droplet creation */
-export function buildInstallScript(token: string, instanceTag: string): string {
+export function buildInstallScript(token: string, instanceTag: string, opts: InstallScriptOptions = {}): string {
   const env = process.env.NODE_ENV === "production" ? "prod" : "dev";
+  const { role = "instance", registryUrl = "", registryAuth = "" } = opts;
+
+  // Env vars are exported so that install.sh picks them up regardless of which
+  // published version is on master — avoiding a flag-not-found failure when the
+  // droplet provisions before the updated script is released.
   return `#!/bin/bash
 set -euo pipefail
+export NODE_ROLE="${role}"
+export REGISTRY_URL="${registryUrl}"
+export REGISTRY_AUTH="${registryAuth}"
 curl -sSL https://raw.githubusercontent.com/dployr-io/dployr/master/install.sh -o /tmp/dployr-install.sh
-sudo bash /tmp/dployr-install.sh --token ${token} --instance ${instanceTag} --env ${env}
+bash /tmp/dployr-install.sh --token ${token} --instance ${instanceTag} --env ${env}
 `;
 }
 
