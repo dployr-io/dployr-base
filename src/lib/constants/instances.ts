@@ -28,32 +28,28 @@ export const BUILD_QUEUE_PRIORITY = {
   hobby: 10,
 } as const;
 
-// Random instance tag names to be seeded from
-export const INSTANCE_NAMES = [
-  "axton",
-  "capricon",
-  "deuteron",
-  "galacticon",
-  "hyperion",
-  "ionix",
-  "jovian",
-  "kelvin",
-  "lyrax",
-  "meridian",
-  "neutron",
-  "orion",
-  "protonix",
-  "quasar",
-  "rigel",
-  "sirius",
-  "tachyon",
-  "umbra",
-  "vega",
-  "warpix",
-  "xenon",
-  "yottabyte",
-  "zenith",
-  "zodiac",
+export const ADJECTIVES = [
+  "amber", "ancient", "arctic", "axton", "bare", "bold", "bright", "calm",
+  "clear", "cold", "cool", "crisp", "crystal", "dark", "dawn", "deep",
+  "distant", "dry", "dusk", "ember", "empty", "eternal", "fast", "fierce",
+  "free", "frozen", "golden", "grand", "hollow", "keen", "kind", "late",
+  "light", "long", "lost", "mild", "misty", "mute", "pale", "plain",
+  "pure", "quiet", "rapid", "rare", "rough", "safe", "sharp", "silent",
+  "slim", "slow", "soft", "solar", "still", "stone", "swift", "vast",
+  "warm", "wild", "wise", "young",
+];
+
+export const NOUNS = [
+  "apex", "arc", "aurora", "axis", "beacon", "blaze", "bloom", "bolt",
+  "breach", "cinder", "circuit", "cliff", "cloud", "comet", "core", "cosmos",
+  "crater", "creek", "crest", "delta", "drift", "dusk", "echo", "ember",
+  "field", "flare", "flux", "fog", "forge", "frost", "gate", "glade",
+  "helix", "hollow", "horizon", "ion", "kelvin", "lyra", "mesa", "moon",
+  "nebula", "neutron", "node", "nova", "orbit", "orion", "peak", "photon",
+  "plain", "prism", "pulsar", "quasar", "reef", "ridge", "rigel", "rift",
+  "signal", "sirius", "shard", "shore", "sky", "slate", "spark", "spire",
+  "storm", "stream", "surge", "tide", "titan", "trace", "trail", "umbra",
+  "vale", "vega", "void", "wave", "xenon", "zenith",
 ];
 
 /** Derive concurrent build slots from a build node's memory (GB).

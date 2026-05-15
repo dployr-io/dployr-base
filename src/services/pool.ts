@@ -22,8 +22,7 @@ import {
 } from "@/lib/constants/vm.js";
 import type { SubscriptionPlan } from "@/types/index.js";
 import { EventEmittable } from "./notifications/emittable.js";
-import { randomBytes } from "node:crypto";
-import { INSTANCE_NAMES, POOL_CAPACITY_BY_TIER } from "@/lib/constants/instances.js";
+import { ADJECTIVES, NOUNS, POOL_CAPACITY_BY_TIER } from "@/lib/constants/instances.js";
 import { Logger } from "@/lib/logger.js";
 
 export class InstancePool extends EventEmittable {
@@ -66,13 +65,23 @@ export class InstancePool extends EventEmittable {
     return await db.instances.find({ id: instanceId, kind: "pool" });
   }
 
+  private pick<T>(arr: T[]): T {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  private async generateTag(prefix?: string): Promise<string> {
+    for (let i = 0; i < 5; i++) {
+      const candidate = [prefix, this.pick(ADJECTIVES), this.pick(NOUNS)].filter(Boolean).join("-");
+      const existing = await this.vm!.list({ name: candidate });
+      if (existing.length === 0) return candidate;
+    }
+    throw new Error("Failed to generate a unique instance tag after 5 attempts");
+  }
+
   private async createPoolInstance(tier: SubscriptionPlan): Promise<void> {
     if (!this.vm || !this.jwt) return;
 
-    const name = INSTANCE_NAMES[Math.floor(Math.random() * INSTANCE_NAMES.length)];
-    const num = String(Math.floor(Math.random() * 100)).padStart(2, "0");
-    const suffix = randomBytes(4).toString("base64url").slice(0, 5);
-    const tag = `${name}${num}-${suffix}`;
+    const tag = await this.generateTag();
 
     const token = await this.jwt.createBootstrapToken(tag);
     const decoded = await this.jwt.verifyToken(token);
@@ -105,10 +114,7 @@ export class InstancePool extends EventEmittable {
   public async spawnDedicatedInstance({ clusterId, clusterName }: { clusterId: string; clusterName?: string | undefined }): Promise<void> {
     if (!this.vm || !this.jwt) return;
 
-    const name = INSTANCE_NAMES[Math.floor(Math.random() * INSTANCE_NAMES.length)];
-    const num = String(Math.floor(Math.random() * 100)).padStart(2, "0");
-    const suffix = randomBytes(4).toString("base64url").slice(0, 5);
-    const tag = `${name}${num}-${suffix}`;
+    const tag = await this.generateTag();
 
     const token = await this.jwt.createBootstrapToken(tag);
     const decoded = await this.jwt.verifyToken(token);
@@ -145,10 +151,7 @@ export class InstancePool extends EventEmittable {
   public async spawnBuildNode(): Promise<void> {
     if (!this.vm || !this.jwt) return;
 
-    const name = INSTANCE_NAMES[Math.floor(Math.random() * INSTANCE_NAMES.length)];
-    const num = String(Math.floor(Math.random() * 100)).padStart(2, "0");
-    const suffix = randomBytes(4).toString("base64url").slice(0, 5);
-    const tag = `build-${name}${num}-${suffix}`;
+    const tag = await this.generateTag("build");
 
     const token = await this.jwt.createBootstrapToken(tag);
     const decoded = await this.jwt.verifyToken(token);
