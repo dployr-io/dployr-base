@@ -7,7 +7,7 @@ import { setCookie, getCookie } from "hono/cookie";
 import z from "zod";
 import { sanitizeReturnTo } from "@/lib/utils.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
-import { getKVStore, getOAuthService, getDbStore, getJWTService, getEmailService, getAuthService } from "@/lib/config/context.js";
+import { getKVStore, getOAuthService, getDbStore, getJWTService, getEmailService, getAuthService, getInstancePoolService } from "@/lib/config/context.js";
 import { worker } from "@/services/background/index.js";
 import { notify } from "@/services/background/jobs/notify.js";
 import { Logger } from "@/lib/logger.js";
@@ -99,7 +99,7 @@ auth.get("/callback/:provider", async (c) => {
     });
 
     const vmService = c.get("vmProvider") ?? undefined;
-    await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c) });
+    await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c), pool: getInstancePoolService(c) });
     const { sessionId, clusters } = await authService.createSession({ user });
 
     await kv.logEvent({
@@ -190,7 +190,7 @@ auth.post("/login/email/verify", async (c) => {
   }
 
   const vmService = c.get("vmProvider") ?? undefined;
-  await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c) });
+  await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c), pool: getInstancePoolService(c) });
 
   const { sessionId, clusters } = await authService.createSession({ user });
 

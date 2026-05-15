@@ -4,7 +4,6 @@
 import type { JobFn } from "../index.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { DployrdService } from "@/services/dployrd.js";
-import { JWTService } from "@/services/auth/jwt.js";
 import { MS_30_MINUTES } from "@/lib/constants/duration.js";
 import { ulid } from "ulid";
 import { Logger } from "@/lib/logger.js";
@@ -47,9 +46,8 @@ export function isGenuinelyIdle(sig: TrafficSignal): boolean {
   return true;
 }
 
-export const hobbySleepSupervisor: JobFn = async ({ db, kv, adapters }) => {
+export const hobbySleepSupervisor: JobFn = async ({ db, kv, jwt: jwtService, adapters }) => {
   const { connectionManager } = adapters.ws;
-  const jwtService = new JWTService(kv);
   const dployrdService = new DployrdService();
 
   const { services } = await db.services.list();

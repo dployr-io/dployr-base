@@ -7,9 +7,9 @@ import type { Bindings, OAuthProvider, User } from "@/types/index.js";
 import type { VmProvider } from "@/services/vm/index.js";
 import type { JWTService } from "./jwt.js";
 import type { EmailService } from "@/services/notifications/email/index.js";
+import type { InstancePool } from "@/services/pool.js";
 import { otpEmail } from "@/lib/templates/emails/index.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
-import { InstancePool } from "@/services/pool.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("AuthService");
@@ -75,7 +75,7 @@ export class AuthService {
    * If the pool is at capacity and VM/JWT services are provided, a new
    * instance is provisioned automatically.
    */
-  async provisionCluster({ userId, vmService, jwt }: { userId: string; vmService?: VmProvider; jwt?: JWTService }): Promise<{ id: string } | null> {
+  async provisionCluster({ userId, vmService, jwt, pool }: { userId: string; vmService?: VmProvider; jwt?: JWTService; pool?: InstancePool }): Promise<{ id: string } | null> {
     let cluster: { id: string; poolInstanceId?: string | null } | null = null;
 
     try {
@@ -90,9 +90,8 @@ export class AuthService {
     try {
       await this.db.instances.assignPool(cluster.id, "hobby");
     } catch (error) {
-      if (error instanceof PoolCapacityExceededError && vmService && jwt) {
-        const service = new InstancePool({ db: this.db, kv: this.kv, vm: vmService, jwt, sshKey: this.env.SSH_KEY });
-        await service.spawnPoolInstance({ clusterId: cluster.id, tier: "hobby" });
+      if (error instanceof PoolCapacityExceededError && pool) {
+        await pool.spawnPoolInstance({ clusterId: cluster.id, tier: "hobby" });
       } else {
         log.error(`Failed to assign pool instance for cluster ${cluster.id}:`, { error: error instanceof Error ? error.message : String(error) });
       }

@@ -6,6 +6,8 @@ import { ulid } from "ulid";
 import { initializeAdapters, type Adapters } from "@/lib/config/bootstrap.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
+import { JWTService } from "@/services/auth/jwt.js";
+import { InstancePool } from "@/services/pool.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("Worker");
@@ -13,6 +15,8 @@ const log = new Logger("Worker");
 export interface JobContext {
   db: DatabaseStore;
   kv: KVStore;
+  jwt: JWTService;
+  pool: InstancePool;
   adapters: Adapters;
   /** Immediately fire a registered event-driven job by name. */
   trigger: (event: string) => void;
@@ -110,13 +114,25 @@ export class BackgroundWorker {
     const id = ulid();
     const startedAt = Date.now();
     const kv = new KVStore(this.adapters.kv);
+    const db = new DatabaseStore(this.adapters.db);
+    const jwt = new JWTService(kv);
+    const pool = new InstancePool({
+      db,
+      kv,
+      vm: this.adapters.vmProvider ?? undefined,
+      jwt,
+      sshKey: this.adapters.config.virtual_machines?.ssh_key,
+      registry: this.adapters.config.registry,
+    });
     let output: Record<string, unknown> = {};
     // TTL = 3× the interval (in seconds); falls back to 24h for triggered jobs
     const ttl = intervalMs ? Math.ceil((intervalMs / 1000) * 3) : 60 * 60 * 24;
 
     const ctx: JobContext = {
-      db: new DatabaseStore(this.adapters.db),
+      db,
       kv,
+      jwt,
+      pool,
       adapters: this.adapters,
       trigger: (event) => this.emitter.emit(event),
       setOutput: (o) => { output = { ...output, ...o }; },

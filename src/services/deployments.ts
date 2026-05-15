@@ -122,7 +122,7 @@ export class DeploymentService {
     const deployment = await db.deployments.get(id);
 
     if (!deployment) {
-      const cluster = isNodeToken ? await db.clusters.find({ instanceId }) : await db.clusters.find({ userId });
+      const cluster = isNodeToken ? await db.clusters.find({ instanceTag: instanceId }) : await db.clusters.find({ userId });
       if (!cluster) return null;
 
       const kv = getKVStore(c);
@@ -187,6 +187,10 @@ export class DeploymentService {
     const kv = getKVStore(c);
     const ws = getWS(c);
     const jwtService = getJWTService(c);
+
+    // Always use the authenticated session user as the authoritative user_id.
+    // Client-supplied user_id cannot be trusted — it may be stale or spoofed.
+    deployPayload = { ...deployPayload, user_id: session.userId };
 
     if (deployPayload.source !== "image" && deployPayload.remote?.url) {
       const authUrl = await this.resolveAuthUrl(deployPayload.remote.url, clusterId, db);

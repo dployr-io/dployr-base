@@ -18,6 +18,7 @@ import {
   buildInstanceTags,
   buildInstallScript,
   PROVIDER_TO_INSTANCE_REGION,
+  type InstallScriptOptions,
 } from "@/lib/constants/vm.js";
 import type { SubscriptionPlan } from "@/types/index.js";
 import { EventEmittable } from "./notifications/emittable.js";
@@ -30,14 +31,16 @@ export class InstancePool extends EventEmittable {
   private readonly vm?: VmProvider;
   private readonly jwt?: JWTService;
   private readonly sshKey?: number;
+  private readonly registry: InstallScriptOptions;
   private readonly log: Logger;
 
-  constructor({ db, kv, vm, jwt, sshKey }: { db: DatabaseStore; kv: KVStore; vm?: VmProvider; jwt?: JWTService; sshKey?: number }) {
+  constructor({ db, kv, vm, jwt, sshKey, registry }: { db: DatabaseStore; kv: KVStore; vm?: VmProvider; jwt?: JWTService; sshKey?: number; registry?: { url?: string; auth?: string } }) {
     super(kv);
     this.db = db;
     this.vm = vm;
     this.jwt = jwt;
     this.sshKey = sshKey;
+    this.registry = { registryUrl: registry?.url, registryAuth: registry?.auth };
     this.log = new Logger("pool");
   }
 
@@ -81,7 +84,7 @@ export class InstancePool extends EventEmittable {
       size: DEFAULT_INSTANCE_SIZE,
       tags: buildInstanceTags(tier),
       sshKey: this.sshKey,
-      userData: buildInstallScript(token, tag),
+      userData: buildInstallScript(token, tag, this.registry),
     });
 
     // Create instance row before bootstrap token so the FK is satisfied.
@@ -117,7 +120,7 @@ export class InstancePool extends EventEmittable {
       size: DEFAULT_INSTANCE_SIZE,
       tags: buildInstanceTags("pro"),
       sshKey: this.sshKey,
-      userData: buildInstallScript(token, tag),
+      userData: buildInstallScript(token, tag, this.registry),
     });
 
     const instance = await this.db.instances.create({
@@ -155,9 +158,9 @@ export class InstancePool extends EventEmittable {
       name: tag,
       region: DEFAULT_INSTANCE_REGION,
       size: DEFAULT_BUILD_NODE_SIZE,
-      tags: ["managed", ...(process.env.NODE_ENV === "production" ? ["production", "prod"] : ["development", "dev"]), "build"],
+      tags: buildInstanceTags("build"),
       sshKey: this.sshKey,
-      userData: buildInstallScript(token, tag),
+      userData: buildInstallScript(token, tag, { role: "build", ...this.registry }),
     });
 
     const instance = await this.db.instances.addPool({

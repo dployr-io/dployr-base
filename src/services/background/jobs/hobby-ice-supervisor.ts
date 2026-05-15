@@ -5,7 +5,6 @@ import type { JobFn } from "../index.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { EVENTS } from "@/lib/constants/index.js";
 import { DployrdService } from "@/services/dployrd.js";
-import { JWTService } from "@/services/auth/jwt.js";
 import { NotificationService } from "@/services/notifications/index.js";
 import { EmailService } from "@/services/notifications/email/index.js";
 import { MS_25_DAYS, MS_30_DAYS, TTL_7_DAYS } from "@/lib/constants/duration.js";
@@ -14,9 +13,8 @@ import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("hobby-ice-supervisor");
 
-export const hobbyIceSupervisor: JobFn = async ({ db, kv, adapters }) => {
+export const hobbyIceSupervisor: JobFn = async ({ db, kv, jwt: jwtService, adapters }) => {
   const { connectionManager } = adapters.ws;
-  const jwtService = new JWTService(kv);
   const dployrdService = new DployrdService();
 
   const emailService = adapters.email ? new EmailService(adapters.email, adapters.config as any) : null;

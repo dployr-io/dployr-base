@@ -3,18 +3,16 @@
 
 import type { JobFn } from "../index.js";
 import { DployrdService } from "@/services/dployrd.js";
-import { JWTService } from "@/services/auth/jwt.js";
 import { Logger } from "@/lib/logger.js";
 import { ulid } from "ulid";
 
 const log = new Logger("DockerPrune");
 
-export const dockerPrune: JobFn = async ({ db, kv, adapters }) => {
+export const dockerPrune: JobFn = async ({ db, jwt, adapters }) => {
   const { instances: all } = await db.instances.list({ managed: true });
   const instances = all.filter((i) => i.status === "healthy");
 
   const dployrd = new DployrdService();
-  const jwt = new JWTService(kv);
   const { connectionManager } = adapters.ws;
 
   let dispatched = 0;
