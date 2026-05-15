@@ -83,10 +83,17 @@ export class UpdateProcessor {
       await Promise.all(
         deployments.map(async (deployment) => {
           const d = deployment as any;
-          const cluster = await this.db.clusters.find({ ownerId: d.user_id });
+          let cluster = d.user_id ? await this.db.clusters.find({ ownerId: d.user_id }) : null;
+          if (!cluster && d.name) {
+            const existing = await this.db.deployments.get({ name: d.name });
+            if (existing?.clusterId) {
+              cluster = await this.db.clusters.get(existing.clusterId);
+            }
+          }
 
           if (!d.name || !cluster) {
-            this.log.warn(`Skipping incomplete deployment ${d.id}: missing required fields`);
+            const missing = [...(!d.name ? ["name"] : []), ...(!cluster ? [`cluster(user_id=${d.user_id})`] : [])];
+            this.log.warn(`Skipping incomplete deployment ${d.id}: missing ${missing.join(", ")}`);
             return;
           }
 
@@ -97,7 +104,8 @@ export class UpdateProcessor {
             const source = d.source ?? payload?.source;
 
             if (!type || !source) {
-              this.log.warn(`Skipping incomplete deployment ${d.id}: missing required fields`);
+              const missing = [...(!type ? ["type"] : []), ...(!source ? ["source"] : [])];
+              this.log.warn(`Skipping incomplete deployment ${d.id}: missing ${missing.join(", ")}`, { from_node: !!d.type, from_payload: !!payload });
               return;
             }
 
