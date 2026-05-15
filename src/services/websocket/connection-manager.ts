@@ -287,7 +287,7 @@ export class ConnectionManager {
   routeResponseToClient(taskId: string, message: unknown): boolean {
     const request = this.removePendingRequest(taskId);
     if (!request) {
-      this.log.warn(`No pending request found for taskId: ${taskId}`);
+      this.log.debug(`No pending request found for taskId: ${taskId} (internally dispatched task)`);
       return false;
     }
 

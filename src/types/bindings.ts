@@ -45,6 +45,8 @@ export type Bindings = {
 
   DO_API_TOKEN?: string;
   SSH_KEY?: number;
+  REGISTRY_URL?: string;
+  REGISTRY_AUTH?: string;
 
   TRAEFIK_ENABLED?: boolean;
   TRAEFIK_TLD?: string;

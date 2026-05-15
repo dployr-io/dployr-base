@@ -104,6 +104,8 @@ export function buildBindings(a: Adapters): Bindings {
     BILLING_CHECKOUT_URLS: billingConfig?.checkout_urls,
     DO_API_TOKEN: vmConfig?.do_api_token,
     SSH_KEY: vmConfig?.ssh_key,
+    REGISTRY_URL: a.config?.registry?.url,
+    REGISTRY_AUTH: a.config?.registry?.auth,
     TRAEFIK_ENABLED: traefikConfig?.enabled,
     TRAEFIK_TLD: traefikConfig?.tld,
   };

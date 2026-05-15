@@ -172,6 +172,7 @@ export function getInstancePoolService(c: AppContext): InstancePool {
     vm: c.get("vmProvider") ?? undefined,
     jwt: getJWTService(c),
     sshKey: c.env.SSH_KEY,
+    registry: { url: c.env.REGISTRY_URL, auth: c.env.REGISTRY_AUTH },
   });
   c.set("_instancePoolService", service);
   return service;
