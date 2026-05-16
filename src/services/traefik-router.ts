@@ -69,16 +69,16 @@ export class TraefikService {
       const metricName = labelPart.slice(0, braceOpen);
       const labels = labelPart.slice(braceOpen + 1, -1);
 
-      const routerMatch = labels.match(/router="([^"]+)"/);
-      if (!routerMatch) continue;
-      // Strip provider suffix: "my-service@redis" → "my-service"
-      const name = routerMatch[1].replace(/@[^@]+$/, "");
+      // Only collect metrics for Redis-managed services; ignore @file, @internal, etc.
+      const serviceMatch = labels.match(/service="([^"]+@redis)"/);
+      if (!serviceMatch) continue;
+      const name = serviceMatch[1].replace(/@redis$/, "");
 
-      if (metricName === "traefik_router_requests_total") {
+      if (metricName === "traefik_service_requests_total") {
         requests.set(name, (requests.get(name) ?? 0) + value);
-      } else if (metricName === "traefik_router_request_bytes_total") {
+      } else if (metricName === "traefik_service_requests_bytes_total") {
         bytesIn.set(name, (bytesIn.get(name) ?? 0) + value);
-      } else if (metricName === "traefik_router_response_bytes_total") {
+      } else if (metricName === "traefik_service_responses_bytes_total") {
         bytesOut.set(name, (bytesOut.get(name) ?? 0) + value);
       }
     }

@@ -32,6 +32,7 @@ export const traefikMetricsScraper: JobFn = async ({ db, kv, adapters, setOutput
   );
 
   const samples = await traefik.scrapeMetrics();
+
   if (!samples || samples.length === 0) {
     setOutput({ scraped: 0 });
     return;
@@ -64,6 +65,11 @@ export const traefikMetricsScraper: JobFn = async ({ db, kv, adapters, setOutput
 
   if (rows.length > 0) {
     await db.serviceMetrics.addMetrics(rows);
+    await Promise.all(
+      rows
+        .filter((r) => r.requests > 0)
+        .map((r) => kv.kv.put(KV_KEYS.SERVICE.LAST_ACTIVE(r.serviceName), String(now))),
+    );
   }
 
   await db.serviceMetrics.prune(now - PRUNE_AFTER_MS);

@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { setupFixtures, type TestFixtures } from "./fixtures/index.test.js";
 import { registerNodeAuthTests } from "./node-auth.test.js";
 import { registerDeploymentLifecycleTests } from "./deployment-lifecycle.test.js";
+import { registerServiceEnvTests, registerServiceSecretTests } from "./service-envs.test.js";
 import "./hobby-ice-supervisor.test.js";
 import { registerRateLimitTests } from "./rate-limit.test.js";
 import { registerClusterIsolationTests } from "./cluster-isolation.test.js";
@@ -701,3 +702,5 @@ registerDeploymentLifecycleTests(getFx);
 
 registerClusterIsolationTests(getFx);
 registerRateLimitTests(getFx);
+registerServiceEnvTests(getFx);
+registerServiceSecretTests(getFx);

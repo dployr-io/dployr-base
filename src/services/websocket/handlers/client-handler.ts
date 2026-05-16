@@ -254,7 +254,19 @@ export class ClientMessageHandler {
 
       if (liveHasServices) {
         if (workloadsEntity!.version > clientWorkloadsVersion) {
-          changed["workloads"] = { data: workloadsEntity!.data, version: workloadsEntity!.version };
+          // The node doesn't know DB IDs — enrich live services with DB IDs by name
+          const liveData = workloadsEntity!.data as any;
+          const dbIdByName = new Map(
+            ((savedWorkloads?.data.services ?? []) as any[]).map((s: any) => [s.name, s.id])
+          );
+          const enrichedServices = ((liveData.services ?? []) as any[]).map((s: any) => ({
+            ...s,
+            id: dbIdByName.get(s.name) ?? s.id,
+          }));
+          changed["workloads"] = {
+            data: { ...liveData, services: enrichedServices },
+            version: workloadsEntity!.version,
+          };
         }
       } else {
         // Node is empty — serve DB data using a version derived from DB content (not the KV
