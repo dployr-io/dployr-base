@@ -152,8 +152,6 @@ export const CONFIG_SCHEMA = z.object({
       redis_username: z.string().optional(),
       redis_password: z.string().optional(),
       metrics_url: z.string().optional(),
-      registration_url: z.string().optional(),
-      registration_token: z.string().optional(),
     })
     .optional(),
   virtual_machines: z

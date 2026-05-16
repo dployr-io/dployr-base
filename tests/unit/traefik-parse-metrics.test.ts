@@ -25,7 +25,6 @@ traefik_service_responses_bytes_total{code="200",method="GET",protocol="http",se
 traefik_service_responses_bytes_total{code="304",method="GET",protocol="http",service="ronaldo@redis"} 0
 traefik_service_responses_bytes_total{code="200",method="GET",protocol="http",service="payper@redis"} 4285
 # Non-redis service — must be ignored
-traefik_service_requests_total{code="200",method="POST",protocol="http",service="fw-registry@file"} 6
 traefik_service_requests_total{code="200",method="GET",protocol="http",service="api@internal"} 99
 `;
 
@@ -64,9 +63,8 @@ describe("TraefikService.parseMetrics", () => {
     assert.equal(payper.bytesOut, 4285);
   });
 
-  it("ignores @file and @internal services", () => {
+  it("ignores @internal services", () => {
     const samples = TraefikService.parseMetrics(FIXTURE);
-    assert.ok(!samples.some((s) => s.serviceName === "fw-registry"));
     assert.ok(!samples.some((s) => s.serviceName === "api"));
   });
 

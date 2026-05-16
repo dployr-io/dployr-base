@@ -6,7 +6,7 @@ import { TraefikService } from "@/services/traefik-router.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { Logger } from "@/lib/logger.js";
 
-const log = new Logger("TraefikMetricsScraper");
+const log = new Logger("traefik-metrics-scraper");
 
 const MS_HOUR = 60 * 60 * 1000;
 const PRUNE_AFTER_MS = 90 * 24 * MS_HOUR;
