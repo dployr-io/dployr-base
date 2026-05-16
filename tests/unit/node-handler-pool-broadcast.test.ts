@@ -39,9 +39,11 @@ function makeKv(workloadsByInstanceId: Record<string, { services: any[]; deploym
 function makeDb({
   clusters,
   deployments,
+  services = [],
 }: {
   clusters: Array<{ id: string; name: string }>;
   deployments: Array<{ id: string; clusterId: string; name: string; userId: string }>;
+  services?: Array<{ id: string; clusterId: string; name: string }>;
 }) {
   return {
     clusters: {
@@ -55,6 +57,13 @@ function makeDb({
           : deployments,
       }),
       upsert: async () => null,
+    },
+    services: {
+      list: async (filter: any) => ({
+        services: filter?.clusterId
+          ? services.filter((s) => s.clusterId === filter.clusterId)
+          : services,
+      }),
     },
   } as any;
 }
