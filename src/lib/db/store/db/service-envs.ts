@@ -52,11 +52,22 @@ export class ServiceEnvStore extends BaseStore {
    * @param serviceId - Service ID to list environment variables for
    * @returns Array of environment variables
    */
-  async list({ serviceId }: { serviceId: string }): Promise<ServiceEnv[]> {
-    const results = await this.db
-      .prepare(`SELECT id, service_id, key, value, created_at, updated_at FROM service_envs WHERE service_id = $1 ORDER BY key ASC`)
-      .bind(serviceId)
-      .all();
+  async list({ serviceId, serviceName }: { serviceId: string; serviceName?: string | null }): Promise<ServiceEnv[]> {
+    const results = serviceName
+      ? await this.db
+          .prepare(
+            `SELECT se.id, se.service_id, se.key, se.value, se.created_at, se.updated_at
+             FROM service_envs se
+             LEFT JOIN deployments d ON se.deployment_id = d.id
+             WHERE se.service_id = $1 OR d.name = $2
+             ORDER BY se.key ASC`,
+          )
+          .bind(serviceId, serviceName)
+          .all()
+      : await this.db
+          .prepare(`SELECT id, service_id, key, value, created_at, updated_at FROM service_envs WHERE service_id = $1 ORDER BY key ASC`)
+          .bind(serviceId)
+          .all();
     return results.results.map((r) => this.toEnv(r));
   }
 

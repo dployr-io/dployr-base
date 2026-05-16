@@ -150,14 +150,17 @@ export class UpdateProcessor {
             }
 
             if (synced && payload) {
+              const service = await this.db.services.find({ name: synced.name, clusterId: cluster.id });
+              const envTarget = service ? { serviceId: service.id } : { deploymentId: synced.id };
+
               if (payload.env_vars && typeof payload.env_vars === "object") {
-                await this.db.serviceEnvs.set({ deploymentId: synced.id, envs: payload.env_vars }).catch((error) => {
+                await this.db.serviceEnvs.set({ ...envTarget, envs: payload.env_vars }).catch((error) => {
                   this.log.error(`Failed to set envs for deployment ${synced.id}`, { error: String(error) });
                 });
               }
 
               if (payload.secrets && typeof payload.secrets === "object" && this.db.serviceSecrets) {
-                await this.db.serviceSecrets.set({ deploymentId: synced.id, secrets: payload.secrets }).catch((error) => {
+                await this.db.serviceSecrets.set({ ...envTarget, secrets: payload.secrets }).catch((error) => {
                   this.log.error(`Failed to set secrets for deployment ${synced.id}`, { error: String(error) });
                 });
               }

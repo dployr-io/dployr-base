@@ -90,11 +90,22 @@ export class ServiceSecretStore extends BaseStore {
    * @param serviceId - Service ID to list secrets for
    * @returns Array of secrets with metadata
    */
-  async list({ serviceId }: { serviceId: string }): Promise<ServiceSecret[]> {
-    const results = await this.db
-      .prepare(`SELECT id, service_id, key, created_at, updated_at FROM service_secrets WHERE service_id = $1 ORDER BY key ASC`)
-      .bind(serviceId)
-      .all();
+  async list({ serviceId, serviceName }: { serviceId: string; serviceName?: string | null }): Promise<ServiceSecret[]> {
+    const results = serviceName
+      ? await this.db
+          .prepare(
+            `SELECT ss.id, ss.service_id, ss.key, ss.created_at, ss.updated_at
+             FROM service_secrets ss
+             LEFT JOIN deployments d ON ss.deployment_id = d.id
+             WHERE ss.service_id = $1 OR d.name = $2
+             ORDER BY ss.key ASC`,
+          )
+          .bind(serviceId, serviceName)
+          .all()
+      : await this.db
+          .prepare(`SELECT id, service_id, key, created_at, updated_at FROM service_secrets WHERE service_id = $1 ORDER BY key ASC`)
+          .bind(serviceId)
+          .all();
     return results.results.map((r) => this.toSecret(r));
   }
 

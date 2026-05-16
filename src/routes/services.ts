@@ -198,7 +198,9 @@ services.get("/:id/envs", resolveCluster("service", { path: "id" }), requireClus
   const db = getDbStore(c);
   const serviceId = c.get("resolvedServiceId")!;
 
-  const envs = await db.serviceEnvs.list({ serviceId });
+  const service = await db.services.find({ id: serviceId });
+  const envList = await db.serviceEnvs.list({ serviceId, serviceName: service?.name ?? null });
+  const envs = Object.fromEntries(envList.map((e) => [e.key, e.value]));
   return c.json(createSuccessResponse({ envs }));
 });
 
@@ -231,7 +233,8 @@ services.get("/:id/secrets", resolveCluster("service", { path: "id" }), requireC
     return c.json(createErrorResponse({ message: "Secrets not configured on this server", code: ERROR.REQUEST.BAD_REQUEST.code }), 503);
   }
 
-  const secrets = await db.serviceSecrets.list({ serviceId });
+  const service = await db.services.find({ id: serviceId });
+  const secrets = await db.serviceSecrets.list({ serviceId, serviceName: service?.name ?? null });
   return c.json(createSuccessResponse({ secrets }));
 });
 
@@ -264,23 +267,17 @@ services.delete("/:id/secrets/:key", resolveCluster("service", { path: "id" }), 
   return c.json(createSuccessResponse({}));
 });
 
-services.get("/:id/metrics", resolveCluster("service", { path: "id" }), requireClusterViewer, async (c) => {
+services.get("/metrics/:name", authMiddleware, requireClusterViewer, async (c) => {
   const db = getDbStore(c);
-  const serviceId = c.get("resolvedServiceId")!;
+  const name = c.req.param("name");
 
-  const service = await db.services.find({ id: serviceId });
-  if (!service) {
-    return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
-  }
-
-  // Default: last 24 hours; callers may pass ?from=&to= as ms timestamps
   const now = Date.now();
   const from = parseInt(c.req.query("from") ?? String(now - 24 * 60 * 60 * 1000), 10);
   const to = parseInt(c.req.query("to") ?? String(now), 10);
 
   const [buckets, totals] = await Promise.all([
-    db.serviceMetrics.list(service.name, from, to),
-    db.serviceMetrics.totals(service.name, from, to),
+    db.serviceMetrics.list(name, from, to),
+    db.serviceMetrics.totals(name, from, to),
   ]);
 
   return c.json(createSuccessResponse({ buckets, totals }));

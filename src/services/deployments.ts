@@ -153,13 +153,16 @@ export class DeploymentService {
       });
 
       if (synced && payload) {
+        const service = await db.services.find({ name: synced.name, clusterId: cluster.id });
+        const envTarget = service ? { serviceId: service.id } : { deploymentId: synced.id };
+
         if (payload.env_vars && typeof payload.env_vars === "object") {
-          await db.serviceEnvs.set({ deploymentId: synced.id, envs: payload.env_vars }).catch((err) => {
+          await db.serviceEnvs.set({ ...envTarget, envs: payload.env_vars }).catch((err) => {
             log.error(`Failed to set envs for deployment ${synced.id}:`, err);
           });
         }
         if (payload.secrets && typeof payload.secrets === "object" && db.serviceSecrets) {
-          await db.serviceSecrets.set({ deploymentId: synced.id, secrets: payload.secrets }).catch((err) => {
+          await db.serviceSecrets.set({ ...envTarget, secrets: payload.secrets }).catch((err) => {
             log.error(`Failed to set secrets for deployment ${synced.id}:`, err);
           });
         }
