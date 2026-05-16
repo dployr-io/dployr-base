@@ -152,19 +152,32 @@ export class DeploymentService {
         logs,
       });
 
-      if (synced && payload) {
-        const service = await db.services.find({ name: synced.name, clusterId: cluster.id });
-        const envTarget = service ? { serviceId: service.id } : { deploymentId: synced.id };
+      if (synced) {
+        // Upsert the service so it's immediately visible — workload sync does this
+        // too, but that's async; /finish is the authoritative completion signal.
+        const service = await db.services.upsert({
+          clusterId: cluster.id,
+          name: synced.name,
+          type: synced.type,
+          deploymentId: synced.id,
+        }).catch((err) => {
+          log.error(`Failed to upsert service for deployment ${synced.id}:`, err);
+          return null;
+        });
 
-        if (payload.env_vars && typeof payload.env_vars === "object") {
-          await db.serviceEnvs.set({ ...envTarget, envs: payload.env_vars }).catch((err) => {
-            log.error(`Failed to set envs for deployment ${synced.id}:`, err);
-          });
-        }
-        if (payload.secrets && typeof payload.secrets === "object" && db.serviceSecrets) {
-          await db.serviceSecrets.set({ ...envTarget, secrets: payload.secrets }).catch((err) => {
-            log.error(`Failed to set secrets for deployment ${synced.id}:`, err);
-          });
+        if (payload) {
+          const envTarget = service ? { serviceId: service.id } : { deploymentId: synced.id };
+
+          if (payload.env_vars && typeof payload.env_vars === "object") {
+            await db.serviceEnvs.set({ ...envTarget, envs: payload.env_vars }).catch((err) => {
+              log.error(`Failed to set envs for deployment ${synced.id}:`, err);
+            });
+          }
+          if (payload.secrets && typeof payload.secrets === "object" && db.serviceSecrets) {
+            await db.serviceSecrets.set({ ...envTarget, secrets: payload.secrets }).catch((err) => {
+              log.error(`Failed to set secrets for deployment ${synced.id}:`, err);
+            });
+          }
         }
       }
     }
