@@ -79,6 +79,31 @@ export class ServiceEnvStore extends BaseStore {
     await this.db.prepare(`DELETE FROM service_envs WHERE service_id = $1`).bind(serviceId).run();
   }
 
+  /**
+   * Atomically replaces ALL env vars for a service. Executes DELETE + INSERT in a single D1 batch
+   * so a crash between the two can never leave the row-set in a partial state.
+   */
+  async replace({ serviceId, envs }: { serviceId: string; envs: Record<string, string> }): Promise<void> {
+    const clearStmt = this.db.prepare(`DELETE FROM service_envs WHERE service_id = $1`).bind(serviceId);
+    const entries = Object.entries(envs);
+    if (!entries.length) {
+      await clearStmt.run();
+      return;
+    }
+    const now = this.now();
+    const insertStmts = entries.map(([key, value]) => {
+      const id = this.generateId();
+      return this.db
+        .prepare(
+          `INSERT INTO service_envs (id, service_id, deployment_id, key, value, created_at, updated_at)
+           VALUES ($1, $2, NULL, $3, $4, $5, $6)
+           ON CONFLICT (service_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+        )
+        .bind(id, serviceId, key, value, now, now);
+    });
+    await this.db.batch([clearStmt, ...insertStmts]);
+  }
+
   private toEnv(row: any): ServiceEnv {
     return {
       id: row.id as string,

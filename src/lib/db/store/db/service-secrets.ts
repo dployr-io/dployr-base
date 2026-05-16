@@ -117,6 +117,60 @@ export class ServiceSecretStore extends BaseStore {
     await this.db.prepare(`DELETE FROM service_secrets WHERE service_id = $1`).bind(serviceId).run();
   }
 
+  /**
+   * Atomically applies a selective replace: removes any key not in `keepKeys` or `newSecrets`,
+   * then upserts `newSecrets`. All operations run in a single D1 batch for crash safety.
+   *
+   * @param keepKeys - Existing keys to preserve unchanged (their values are already in the DB).
+   * @param newSecrets - Keys to upsert with new plaintext values.
+   */
+  async replaceSelective({
+    serviceId,
+    newSecrets,
+    keepKeys,
+  }: {
+    serviceId: string;
+    newSecrets: Record<string, string>;
+    keepKeys: string[];
+  }): Promise<void> {
+    const preserve = new Set([...Object.keys(newSecrets), ...keepKeys]);
+    const newEntries = Object.entries(newSecrets);
+    const now = this.now();
+
+    // Build DELETE statement: remove keys not in the preserve set
+    // Use a NOT IN clause so the delete + inserts are one atomic batch
+    const preserveList = [...preserve];
+    const deleteStmt = preserveList.length > 0
+      ? this.db
+          .prepare(
+            `DELETE FROM service_secrets WHERE service_id = $1 AND key NOT IN (${preserveList.map((_, i) => `$${i + 2}`).join(", ")})`,
+          )
+          .bind(serviceId, ...preserveList)
+      : this.db.prepare(`DELETE FROM service_secrets WHERE service_id = $1`).bind(serviceId);
+
+    if (!newEntries.length) {
+      await deleteStmt.run();
+      return;
+    }
+
+    const upsertStmts = newEntries.map(([key, value]) => {
+      const id = this.generateId();
+      const { valueCipher, dekCipher } = this.encryption.encrypt(value);
+      return this.db
+        .prepare(
+          `INSERT INTO service_secrets (id, service_id, deployment_id, key, value_encrypted, dek_encrypted, created_at, updated_at)
+           VALUES ($1, $2, NULL, $3, $4, $5, $6, $7)
+           ON CONFLICT (service_id, key) DO UPDATE
+             SET value_encrypted = EXCLUDED.value_encrypted,
+                 dek_encrypted   = EXCLUDED.dek_encrypted,
+                 updated_at      = EXCLUDED.updated_at`,
+        )
+        .bind(id, serviceId, key, valueCipher, dekCipher, now, now);
+    });
+
+    await this.db.batch([deleteStmt, ...upsertStmts]);
+  }
+
   /** Deletes orphaned secrets (service no longer exists) older than 6 months. Returns the number of deleted rows. */
   async cleanup(): Promise<number> {
     const result = await this.db
