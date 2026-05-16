@@ -96,6 +96,8 @@ export const KV_KEYS = {
   JOB: {
     RUN: (id: string) => `job:run:${id}`,
     INDEX: "job:runs:index",
+    LATEST: (job: string) => `job:latest:${job}`,
+    NAMES: "job:names",
   },
   TRAEFIK: {
     ROUTER_RULE: (routeKey: string) => `traefik/http/routers/${routeKey}/rule`,
