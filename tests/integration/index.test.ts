@@ -10,6 +10,7 @@ import { registerServiceEnvTests, registerServiceSecretTests } from "./service-e
 import "./hobby-ice-supervisor.test.js";
 import { registerRateLimitTests } from "./rate-limit.test.js";
 import { registerClusterIsolationTests } from "./cluster-isolation.test.js";
+import { registerServiceLimitTests } from "./service-limits.test.js";
 
 const TIMEOUT_FIXTURE_SETUP = 180_000;
 const TIMEOUT_CLEANUP = 60_000;
@@ -704,3 +705,4 @@ registerClusterIsolationTests(getFx);
 registerRateLimitTests(getFx);
 registerServiceEnvTests(getFx);
 registerServiceSecretTests(getFx);
+registerServiceLimitTests(getFx);

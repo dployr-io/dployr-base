@@ -13,6 +13,7 @@ import { runMigrations } from "@/lib/db/migrate.js";
 
 const TEST_EMAIL = process.env.TEST_EMAIL ?? "ci-test@example.com";
 const OTHER_EMAIL = "ci-test-other@example.com";
+const LIMIT_EMAIL = "ci-limit-test@example.com";
 
 // Timeouts for fixture setup operations (in milliseconds)
 const TIMEOUT_POSTGRES_STARTUP = 60_000;
@@ -37,9 +38,13 @@ function getFreePort(): Promise<number> {
 export interface TestFixtures {
   session: string;
   otherSession: string;
+  limitSession: string;
   clusterId: string;
   otherClusterId: string;
+  limitClusterId: string;
   baseUrl: string;
+  setClusterPlan: (clusterId: string, plan: "hobby" | "indie" | "pro") => Promise<void>;
+  insertFakeServices: (clusterId: string, count: number) => Promise<void>;
   cleanup: () => Promise<void>;
 }
 
@@ -218,12 +223,62 @@ export async function setupFixtures(): Promise<TestFixtures> {
   );
   console.log(`[fixtures] Other cluster: ${otherClusterId}`);
 
+  const limitSessionCookie = await withTimeout(getSession(baseUrl, LIMIT_EMAIL), TIMEOUT_SESSION, "Limit session creation");
+  const limitClusterId = await withTimeout(
+    resolveCluster(baseUrl, limitSessionCookie),
+    TIMEOUT_CLUSTER,
+    "Limit cluster resolution"
+  );
+  console.log(`[fixtures] Limit cluster: ${limitClusterId}`);
+
+  // Upgrade the primary and secondary clusters to pro so service-limit checks don't interfere
+  // between test suites that each deploy their own services within the same run.
+  // The limit cluster intentionally stays on hobby — it's used by service-limits tests.
+  const adminDb = new PostgresAdapter(connectionString);
+  const now = Date.now();
+  for (const cid of [clusterId, otherClusterId]) {
+    await adminDb.prepare(
+      `INSERT INTO billing (cluster_id, plan, status, created_at, updated_at)
+       VALUES ($1, 'pro', 'active', $2, $2)
+       ON CONFLICT (cluster_id) DO UPDATE SET plan = 'pro', status = 'active', updated_at = $2`
+    ).bind(cid, now).run();
+  }
+  await adminDb.close();
+
+  const setClusterPlan = async (cid: string, plan: "hobby" | "indie" | "pro") => {
+    const db = new PostgresAdapter(connectionString);
+    const ts = Date.now();
+    await db.prepare(
+      `INSERT INTO billing (cluster_id, plan, status, created_at, updated_at)
+       VALUES ($1, $2, 'active', $3, $3)
+       ON CONFLICT (cluster_id) DO UPDATE SET plan = $2, status = 'active', updated_at = $3`
+    ).bind(cid, plan, ts).run();
+    await db.close();
+  };
+
+  const insertFakeServices = async (cid: string, count: number) => {
+    const db = new PostgresAdapter(connectionString);
+    const ts = Date.now();
+    for (let i = 0; i < count; i++) {
+      const id = `cifake${ts.toString(36)}${i}`;
+      const name = `ci-fake-${ts.toString(36)}-${i}`;
+      await db.prepare(
+        `INSERT INTO services (id, cluster_id, name, type, created_at, updated_at) VALUES ($1, $2, $3, 'web', $4, $4)`
+      ).bind(id, cid, name, ts).run();
+    }
+    await db.close();
+  };
+
   return {
     session: sessionCookie,
     otherSession: otherSessionCookie,
+    limitSession: limitSessionCookie,
     clusterId,
     otherClusterId,
+    limitClusterId,
     baseUrl,
+    setClusterPlan,
+    insertFakeServices,
     cleanup: async () => {
       console.log("[fixtures] Killing server...");
       proc.kill("SIGTERM");
