@@ -68,7 +68,13 @@ export class ClientNotifier {
         const entity = await this.kv.entities.getEntity(key);
         if (!entity) continue;
 
-        if (section === "workloads" && !Array.isArray((entity.data as any)?.services)) continue;
+        // Don't broadcast empty workloads — the heartbeat path covers that via DB fallback.
+        if (section === "workloads") {
+          const d = entity.data as any;
+          const hasServices = Array.isArray(d?.services) && d.services.length > 0;
+          const hasDeployments = Array.isArray(d?.deployments) && d.deployments.length > 0;
+          if (!hasServices && !hasDeployments) continue;
+        }
 
         const clientVersion = this.conn.getClientVersion(client.connectionId, instanceId, section);
         if (entity.version > clientVersion) {

@@ -60,7 +60,7 @@ export class NodeMessageHandler {
         }).processUpdate();
       }
 
-      const presentSections = NODE_STATE_ENTITIES.filter(s => (update as any)[s] !== undefined);
+      const presentSections = NODE_STATE_ENTITIES.filter((s) => (update as any)[s] !== undefined);
 
       if (!conn.clusterId) {
         // Pool node: write cluster-scoped workloads to KV for each cluster, then broadcast.
@@ -71,18 +71,19 @@ export class NodeMessageHandler {
         await Promise.all(
           clusters.map(async (cluster) => {
             if (rawWorkloads) {
-              const { deployments } = await this.db.deployments.list({ clusterId: cluster.id, limit: 500 });
+              const [{ deployments }, { services: dbServices }] = await Promise.all([
+                this.db.deployments.list({ clusterId: cluster.id, limit: 500 }),
+                this.db.services.list({ clusterId: cluster.id }),
+              ]);
               const names = new Set(deployments.map((d) => d.name));
+              // Enrich with correct IDs.
+              // PS: ULIDs of entities from Nodes may drift after re-provision
+              const dbIdByName = new Map(dbServices.map((s) => [s.name, s.id]));
               const filteredServices = Array.isArray(rawWorkloads.services)
-                ? rawWorkloads.services.filter((s: any) => s.name && names.has(s.name))
+                ? rawWorkloads.services.filter((s: any) => s.name && names.has(s.name)).map((s: any) => ({ ...s, id: dbIdByName.get(s.name) ?? s.id }))
                 : [];
-              const filteredDeployments = Array.isArray(rawWorkloads.deployments)
-                ? rawWorkloads.deployments.filter((d: any) => d.name && names.has(d.name))
-                : [];
-              await this.kv.entities.setEntity(
-                KV_KEYS.CLUSTER.WORKLOADS(cluster.id, update.instance_id),
-                { ...rawWorkloads, services: filteredServices, deployments: filteredDeployments },
-              );
+              const filteredDeployments = Array.isArray(rawWorkloads.deployments) ? rawWorkloads.deployments.filter((d: any) => d.name && names.has(d.name)) : [];
+              await this.kv.entities.setEntity(KV_KEYS.CLUSTER.WORKLOADS(cluster.id, update.instance_id), { ...rawWorkloads, services: filteredServices, deployments: filteredDeployments });
             }
             await this.clientNotifier.broadcast(cluster.id, update.instance_id, presentSections);
             if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(cluster.id, "deployments");
@@ -95,10 +96,18 @@ export class NodeMessageHandler {
         // Dedicated node: write full workloads under the cluster key (no filtering needed).
         const rawWorkloads = (update as any).workloads;
         if (rawWorkloads) {
-          await this.kv.entities.setEntity(
-            KV_KEYS.CLUSTER.WORKLOADS(conn.clusterId, update.instance_id),
-            rawWorkloads,
-          );
+          let workloadsToStore = rawWorkloads;
+          if (Array.isArray(rawWorkloads.services) && rawWorkloads.services.length > 0) {
+            // Enrich with correct IDs.
+            // PS: ULIDs of entities from Nodes may drift after re-provision
+            const { services: dbServices } = await this.db.services.list({ clusterId: conn.clusterId });
+            const dbIdByName = new Map(dbServices.map((s) => [s.name, s.id]));
+            workloadsToStore = {
+              ...rawWorkloads,
+              services: rawWorkloads.services.map((s: any) => ({ ...s, id: dbIdByName.get(s.name) ?? s.id })),
+            };
+          }
+          await this.kv.entities.setEntity(KV_KEYS.CLUSTER.WORKLOADS(conn.clusterId, update.instance_id), workloadsToStore);
         }
         await this.clientNotifier.broadcast(conn.clusterId, update.instance_id, presentSections);
         if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "deployments");
@@ -424,5 +433,4 @@ export class NodeMessageHandler {
       this.log.error(`Error deregistering node ${nodeInstanceId}`, { error: String(err) });
     }
   }
-
 }
