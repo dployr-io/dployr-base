@@ -218,7 +218,18 @@ export class InstanceCacheStore {
     // Write the run data — expires automatically via TTL
     await this.kv.put(KV_KEYS.JOB.RUN(run.id), JSON.stringify(data), ttl ? { ttl } : undefined);
 
-    // Maintain a compact index of IDs (newest first, capped at 200)
+    // Per-job latest pointer — always findable regardless of flat index eviction
+    await this.kv.put(KV_KEYS.JOB.LATEST(run.job), run.id);
+
+    // Track all known job names
+    const namesRaw = await this.kv.get(KV_KEYS.JOB.NAMES);
+    const names: string[] = namesRaw ? JSON.parse(namesRaw) : [];
+    if (!names.includes(run.job)) {
+      names.push(run.job);
+      await this.kv.put(KV_KEYS.JOB.NAMES, JSON.stringify(names));
+    }
+
+    // Maintain a compact flat index of IDs (newest first, capped at 200)
     const raw = await this.kv.get(KV_KEYS.JOB.INDEX);
     const index: string[] = raw ? JSON.parse(raw) : [];
     index.unshift(run.id);
@@ -226,18 +237,33 @@ export class InstanceCacheStore {
   }
 
   async getRecentJobRuns(limit = 50): Promise<Array<Record<string, unknown>>> {
+    // Always include the latest run for every known job, even if evicted from the flat index
+    const namesRaw = await this.kv.get(KV_KEYS.JOB.NAMES);
+    const names: string[] = namesRaw ? JSON.parse(namesRaw) : [];
+    const latestIds = (await Promise.all(names.map((n) => this.kv.get(KV_KEYS.JOB.LATEST(n))))).filter(Boolean) as string[];
+    const latestRuns = (await Promise.all(latestIds.map(async (id) => {
+      const data = await this.kv.get(KV_KEYS.JOB.RUN(id));
+      if (!data) return null;
+      try { return JSON.parse(data); } catch { return null; }
+    }))).filter((r): r is Record<string, unknown> => r !== null);
+
+    const seenIds = new Set(latestIds);
+
+    // Fill remaining slots from the flat chronological index
     const raw = await this.kv.get(KV_KEYS.JOB.INDEX);
-    if (!raw) return [];
-    const ids: string[] = JSON.parse(raw);
-    // Fetch more than limit to account for expired entries
-    const runs = await Promise.all(
-      ids.slice(0, Math.min(ids.length, limit * 2)).map(async (id) => {
-        const data = await this.kv.get(KV_KEYS.JOB.RUN(id));
-        if (!data) return null;
-        try { return JSON.parse(data); } catch { return null; }
-      }),
-    );
-    return runs.filter((r): r is Record<string, unknown> => r !== null).slice(0, limit);
+    const ids: string[] = raw ? JSON.parse(raw) : [];
+    const remaining = limit - latestRuns.length;
+    const recentRuns = remaining > 0
+      ? (await Promise.all(
+          ids.filter((id) => !seenIds.has(id)).slice(0, remaining * 2).map(async (id) => {
+            const data = await this.kv.get(KV_KEYS.JOB.RUN(id));
+            if (!data) return null;
+            try { return JSON.parse(data); } catch { return null; }
+          }),
+        )).filter((r): r is Record<string, unknown> => r !== null).slice(0, remaining)
+      : [];
+
+    return [...latestRuns, ...recentRuns];
   }
 
   /**
