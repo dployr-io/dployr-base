@@ -382,6 +382,38 @@ EOF
   systemctl enable traefik >/dev/null 2>&1 || true
   systemctl restart traefik 2>/dev/null || systemctl start traefik
 
+  setup_loading_stub
+}
+
+setup_loading_stub() {
+  apt-get install -y nginx >/dev/null 2>&1
+
+  local html_dir="/etc/traefik/static"
+  mkdir -p "$html_dir"
+
+  info "Downloading loading page..."
+  local gh_args=(-fsSL)
+  [ -n "${GITHUB_TOKEN:-}" ] && gh_args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  curl "${gh_args[@]}" -H "Accept: application/vnd.github.raw" \
+    "https://api.github.com/repos/${REPO}/contents/public/loading.html?ref=${BRANCH}" \
+    -o "$html_dir/loading.html" || error "Failed to download loading.html"
+
+  cat > /etc/nginx/sites-available/dployr-loading <<EOF
+server {
+    listen 127.0.0.1:19503;
+    root ${html_dir};
+
+    location / {
+        add_header X-Dployr-Loading 1 always;
+        try_files /loading.html =503;
+    }
+}
+EOF
+
+  ln -sf /etc/nginx/sites-available/dployr-loading /etc/nginx/sites-enabled/dployr-loading
+  rm -f /etc/nginx/sites-enabled/default
+  if nginx -t; then systemctl reload nginx; else systemctl restart nginx; fi
+  info "Loading stub running on 127.0.0.1:19503"
 }
 
 main() {

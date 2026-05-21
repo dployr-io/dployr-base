@@ -493,6 +493,7 @@ export class WorkloadSupervisor {
 
       this.reprovisionSentAt.set(cooldownKey, Date.now());
       this.log.info(`Reprovisioning service ${service.name} via task ${taskId}`);
+      await this.traefik?.setLoadingMode(service.name);
     } catch (err) {
       this.log.error(`Failed to reprovision service ${service.name}`, { error: String(err) });
     }

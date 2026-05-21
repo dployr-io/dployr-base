@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { WorkloadSupervisor } from "@/lib/node/workload-supervisor.js";
 import { AdminService } from "@/services/admin.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import { TraefikService } from "@/services/traefik-router.js";
 
 type FakeInstance = { id: string; tag: string; kind: "pool" | "dedicated"; clusterId?: string };
 type FakeCluster = { id: string; name: string; poolInstanceId?: string };
@@ -85,6 +86,75 @@ const noopNotifier = {
   notifyRefresh: () => {},
   broadcast: async () => {},
 } as any;
+
+describe("Traefik loading mode on reprovision", () => {
+  it("sets backend to loading stub when a service is missing from the node", async () => {
+    const nodeTag = "node-1";
+    const cluster = { id: "cluster-a", name: "Cluster A", poolInstanceId: "inst-1" };
+    const instance = { id: "inst-1", tag: nodeTag, kind: "pool" as const, address: "10.0.0.1" };
+    const deployment = { id: "dep-1", clusterId: "cluster-a", name: "api", userId: "u1", type: "web", source: "image", image: "myapp:latest", port: 3000 };
+    const service = { id: "svc-1", name: "api", type: "web", clusterId: "cluster-a", deploymentId: "dep-1" };
+
+    const db = {
+      instances: {
+        find: async (f: any) => {
+          if (f.id === "inst-1" || f.tag === nodeTag) return instance;
+          return null;
+        },
+        list: async () => ({ instances: [instance] }),
+      },
+      clusters: { list: async () => ({ clusters: [cluster] }) },
+      deployments: {
+        get: async () => deployment,
+        list: async (f: any) => ({
+          deployments: f.status === "pending" ? [] : [deployment],
+        }),
+      },
+      services: {
+        list: async () => ({ services: [service] }),
+        upsert: async () => {},
+      },
+      serviceSecrets: { getDecrypted: async () => ({ values: {}, missing: [] }) },
+    } as any;
+
+    // Node is connected but reports NO services running
+    const kv = {
+      entities: {
+        getEntity: async (key: string) => {
+          if (key === KV_KEYS.INSTANCE.ENTITY(nodeTag, "workloads")) {
+            return { data: { services: [], deployments: [] }, version: 1 };
+          }
+          return null;
+        },
+      },
+      instanceCache: { registerClusterNode: async () => {}, deregisterClusterNode: async () => {} },
+    } as any;
+
+    const connectionManager = {
+      hasNodeConnection: (tag: string) => tag === nodeTag,
+      sendTask: () => true,
+      getClientConnections: () => [],
+    } as any;
+
+    const jwt = {
+      createReprovisionToken: async () => "tok",
+      createNodeAccessToken: async () => "tok",
+    } as any;
+
+    const loadingModeCalls: string[] = [];
+    const traefik = {
+      ensureWakeupMiddleware: async () => {},
+      setLoadingMode: async (name: string) => { loadingModeCalls.push(name); },
+      getRouteBackendUrl: async () => null,
+      registerRoute: async () => {},
+    } as unknown as TraefikService;
+
+    const supervisor = new WorkloadSupervisor(db, kv, connectionManager, jwt, noopNotifier, traefik, "dployr-base", new Map());
+    await supervisor.run();
+
+    assert.deepEqual(loadingModeCalls, ["api"], "setLoadingMode called for the missing service");
+  });
+});
 
 describe("Reprovisioning flow — deployment gets new ID", () => {
   it("Monitor still shows service even with stale deployment ID in node data", async () => {

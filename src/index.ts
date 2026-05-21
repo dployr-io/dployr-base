@@ -34,11 +34,6 @@ app.get("/favicon.ico", async (c) => {
   });
 });
 
-app.get("/loading.html", (c) => {
-  const html = readFileSync(join(process.cwd(), "public/loading.html"), "utf-8");
-  return c.html(html, 200, { "Cache-Control": "no-store", "X-Dployr-Loading": "1" });
-});
-
 app.use("*", bootstrapMiddleware);
 
 // Restricted admin API - for management

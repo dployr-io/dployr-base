@@ -3,6 +3,7 @@
 
 import { RedisKV } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import { SERVICE_STUB_ADDRESS } from "@/lib/constants/index.js";
 
 const WAKEUP_MIDDLEWARE = "hobby-wakeup";
 
@@ -151,6 +152,18 @@ export class TraefikService {
     }
 
     await Promise.all(writes);
+  }
+
+  /**
+   * Points the service backend at a guaranteed-closed local port so Traefik
+   * gets an immediate connection refused (502) instead of a dial timeout (504).
+   * The errors middleware intercepts 502 and serves loading.html.
+   * Call this when reprovisioning starts; registerRoute restores the real URL
+   * once the new backend is live.
+   */
+  async setLoadingMode(serviceName: string): Promise<void> {
+    await this.ensureWakeupMiddleware();
+    await this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName), SERVICE_STUB_ADDRESS);
   }
 
   /**
