@@ -21,6 +21,7 @@ import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
 import { Logger } from "@/lib/logger.js";
 import { worker } from "@/services/background/index.js";
 import { NODES_HEALTH_JOB, NODES_SYNC_JOB } from "@/lib/constants/index.js";
+import { TraefikService } from "@/services/traefik-router.js";
 
 export interface WebSocketHandlerConfig {
   connectionManager?: Partial<ConnectionManagerConfig>;
@@ -41,13 +42,16 @@ export class WebSocketHandler {
   private dbStore: DatabaseStore;
 
   private kvStore: KVStore;
+  private traefik?: TraefikService;
   private log = new Logger("WebSocket");
 
   constructor(
     private kv: IKVAdapter,
     private db: PostgresAdapter,
+    traefik?: TraefikService,
     config?: WebSocketHandlerConfig,
   ) {
+    this.traefik = traefik;
     this.connectionManager = new ConnectionManager(config?.connectionManager);
 
     this.kvStore = new KVStore(this.kv);
@@ -137,6 +141,20 @@ export class WebSocketHandler {
     }
   }
 
+  private async setServicesLoadingMode(clusterIds: string[]): Promise<void> {
+    for (const clusterId of clusterIds) {
+      try {
+        const { services } = await this.dbStore.services.list({ clusterId });
+        await Promise.all(services.map((svc) => this.traefik!.setLoadingMode(svc.name)));
+        if (services.length > 0) {
+          this.log.info(`Set loading mode for ${services.length} service(s) in cluster ${clusterId}`);
+        }
+      } catch (err) {
+        this.log.error(`Failed to set loading mode for cluster ${clusterId}`, { error: String(err) });
+      }
+    }
+  }
+
   /**
    * Handle connection disconnect
    */
@@ -147,8 +165,12 @@ export class WebSocketHandler {
       if (conn.instanceTag) {
         this.kvStore.deleteNodeConnected(conn.instanceTag).catch(() => {});
       }
-      this.dployrdHandler.handleNodeDisconnect(conn).catch((err) => {
-        this.log.error(`Error deregistering node on disconnect:`, err);
+      this.dployrdHandler.handleNodeDisconnect(conn).then((clusterIds) => {
+        if (this.traefik && clusterIds.length > 0) {
+          return this.setServicesLoadingMode(clusterIds);
+        }
+      }).catch((err) => {
+        this.log.error(`Error handling node disconnect:`, err);
       });
     }
   }

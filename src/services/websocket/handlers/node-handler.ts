@@ -352,27 +352,30 @@ export class NodeMessageHandler {
   /**
    * Handle node disconnection - cleanup cluster registrations
    */
-  async handleNodeDisconnect(conn: ClusterConnection): Promise<void> {
+  async handleNodeDisconnect(conn: ClusterConnection): Promise<string[]> {
     this.log.info(`Node disconnected from base: ${conn.connectionKey}`);
 
     const nodeInstanceId = (conn as any).nodeInstanceId || conn.instanceTag;
     if (!nodeInstanceId) {
-      return;
+      return [];
     }
 
+    const clusterIds: string[] = [];
     try {
-      // Deregister node from cluster(s)
       if (!conn.clusterId) {
         const { clusters } = await this.db.clusters.list({ instanceTag: conn.instanceTag });
         for (const cluster of clusters) {
           await this.kv.instanceCache.deregisterClusterNode(cluster.id, nodeInstanceId);
+          clusterIds.push(cluster.id);
         }
-      } else if (conn.clusterId) {
+      } else {
         await this.kv.instanceCache.deregisterClusterNode(conn.clusterId, nodeInstanceId);
+        clusterIds.push(conn.clusterId);
       }
     } catch (err) {
       this.log.error(`Error deregistering node ${nodeInstanceId}`, { error: String(err) });
     }
+    return clusterIds;
   }
 
   private async handleNodeBroadcast({ conn, message }: { conn: ClusterConnection; message: BaseMessage }): Promise<void> {

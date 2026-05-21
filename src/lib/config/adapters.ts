@@ -5,6 +5,7 @@ import { Config } from "./loader.js";
 import { IKVAdapter, RedisKV, MemoryKV } from "@/lib/storage/kv.interface.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
 import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
+import { TraefikService } from "@/services/traefik-router.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import type { Bindings } from "@/types/index.js";
 import { PolarService } from "@/services/billing/polar.js";
@@ -324,7 +325,10 @@ export async function initializeFromConfig(config: Config) {
   const billingProvider = createBillingProvider(config);
   const vmProvider = createVmProvider(config);
   const traefikRedis = await createTraefikRedisFromConfig(config);
-  const wsHandler = new WebSocketHandler(kv, db);
+  const traefik = traefikRedis && config.traefik?.enabled
+    ? new TraefikService(config.traefik.tld ?? "dployr.run", traefikRedis)
+    : undefined;
+  const wsHandler = new WebSocketHandler(kv, db, traefik);
 
-  return { kv, db, storage, ws: wsHandler, email, config, billingProvider, vmProvider, traefikRedis };
+  return { kv, db, storage, ws: wsHandler, email, config, billingProvider, vmProvider, traefikRedis, traefik: traefik ?? null };
 }

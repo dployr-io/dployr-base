@@ -14,6 +14,7 @@ import { IStorageAdapter } from "./context.js";
 import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
 import { VmProvider } from "@/services/vm/index.js";
 import { EmailProvider } from "@/services/notifications/email/index.js";
+import { TraefikService } from "@/services/traefik-router.js";
 
 export interface Adapters {
   kv: IKVAdapter;
@@ -25,6 +26,7 @@ export interface Adapters {
   billingProvider: BillingProvider | null;
   vmProvider: VmProvider | null;
   traefikRedis: any | null;
+  traefik: TraefikService | null;
 }
 
 let adapters: Adapters | null = null;
@@ -55,14 +57,15 @@ export async function initializeAdapters(): Promise<Adapters> {
   const config = loadConfig();
   setLogLevel(config.logging?.level ?? "info");
 
-  adapters = await initializeFromConfig(config);
+  const initialized = await initializeFromConfig(config);
+  adapters = initialized;
 
   if (config.database.auto_migrate) {
-    await initializeDatabase(adapters.db);
+    await initializeDatabase(initialized.db);
   }
 
   log.info("Dployr Base initialized");
-  return adapters;
+  return initialized;
 }
 
 export function buildBindings(a: Adapters): Bindings {
