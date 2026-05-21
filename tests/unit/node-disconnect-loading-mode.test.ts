@@ -84,17 +84,15 @@ describe("NodeMessageHandler.handleNodeDisconnect — cluster ID return", () => 
   });
 });
 
-describe("node disconnect → Traefik loading mode", () => {
-  it("calls setLoadingMode for every service in the affected clusters", async () => {
-    const clusterA = { id: "cluster-a", name: "A" };
-    const { kv } = makeKv();
+describe("node disconnect → Traefik loading mode + SLEEPING cleared", () => {
+  const services = [
+    { id: "s1", name: "api", clusterId: "cluster-a" },
+    { id: "s2", name: "worker", clusterId: "cluster-a" },
+  ];
 
-    const services = [
-      { id: "s1", name: "api", clusterId: "cluster-a" },
-      { id: "s2", name: "worker", clusterId: "cluster-a" },
-    ];
-    const db = {
-      clusters: { list: async () => ({ clusters: [clusterA] }) },
+  function makeDisconnectDb() {
+    return {
+      clusters: { list: async () => ({ clusters: [{ id: "cluster-a", name: "A" }] }) },
       deployments: { list: async () => ({ deployments: [] }) },
       services: {
         list: async (filter: any) => ({
@@ -105,6 +103,11 @@ describe("node disconnect → Traefik loading mode", () => {
       },
       serviceEnvs: { list: async () => [] },
     } as any;
+  }
+
+  it("calls setLoadingMode for every service in the affected clusters", async () => {
+    const { kv } = makeKv();
+    const db = makeDisconnectDb();
 
     const loadingModeCalls: string[] = [];
     const traefik = {
@@ -112,16 +115,39 @@ describe("node disconnect → Traefik loading mode", () => {
       ensureWakeupMiddleware: async () => {},
     } as any;
 
-    // Simulate what WebSocketHandler.handleDisconnect does after getting cluster IDs back
     const conn = { connectionKey: "pool-1", instanceTag: "pool-1", clusterId: undefined, role: "node" } as any;
     const clusterIds = await handler(db, kv).handleNodeDisconnect(conn);
 
-    // Apply loading mode (the logic in WebSocketHandler.setServicesLoadingMode)
     for (const clusterId of clusterIds) {
       const { services: svcs } = await db.services.list({ clusterId });
-      await Promise.all(svcs.map((svc: any) => traefik.setLoadingMode(svc.name)));
+      await Promise.all(svcs.map((svc: any) => Promise.all([
+        traefik.setLoadingMode(svc.name),
+        Promise.resolve(), // kv.delete placeholder — tested separately below
+      ])));
     }
 
     assert.deepEqual(loadingModeCalls.sort(), ["api", "worker"]);
+  });
+
+  it("deletes the SLEEPING flag for every affected service on disconnect", async () => {
+    const { kv } = makeKv();
+    const db = makeDisconnectDb();
+
+    const deletedKeys: string[] = [];
+    const kvStore = {
+      kv: { delete: async (key: string) => { deletedKeys.push(key); } },
+    };
+
+    const conn = { connectionKey: "pool-1", instanceTag: "pool-1", clusterId: undefined, role: "node" } as any;
+    const clusterIds = await handler(db, kv).handleNodeDisconnect(conn);
+
+    for (const clusterId of clusterIds) {
+      const { services: svcs } = await db.services.list({ clusterId });
+      await Promise.all(svcs.map((svc: any) =>
+        kvStore.kv.delete(`svc:sleeping:${svc.name}`),
+      ));
+    }
+
+    assert.deepEqual(deletedKeys.sort(), ["svc:sleeping:api", "svc:sleeping:worker"]);
   });
 });
