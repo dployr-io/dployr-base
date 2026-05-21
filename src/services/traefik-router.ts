@@ -93,21 +93,21 @@ export class TraefikService {
 
   /**
    * Writes the hobby-wakeup errors middleware to Redis once.
-   * Traefik intercepts `502/503` from sleeping services and serves the loading page.
+   * Traefik intercepts `502/503/504` from sleeping services and serves the loading page.
    * Safe to call multiple times — idempotent.
    */
   async ensureWakeupMiddleware(): Promise<void> {
     if (!this.baseUrl) return;
-    const loadingServiceKey = "dployr-base";
+    const baseKey = "dployr-base";
     await Promise.all([
       // Point the "dployr-base" Traefik service at base
       this.redis.put(
-        KV_KEYS.TRAEFIK.SERVICE_URL(loadingServiceKey),
+        KV_KEYS.TRAEFIK.SERVICE_URL(baseKey),
         `${this.baseUrl}`,
       ),
       // Errors middleware definition
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE), "502,503"),
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_SERVICE(WAKEUP_MIDDLEWARE), `${loadingServiceKey}@redis`),
+      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE), "502,503,504"),
+      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_SERVICE(WAKEUP_MIDDLEWARE), `${baseKey}@redis`),
       this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_QUERY(WAKEUP_MIDDLEWARE), "/loading.html"),
     ]);
   }

@@ -11,6 +11,7 @@ import "./hobby-ice-supervisor.test.js";
 import { registerRateLimitTests } from "./rate-limit.test.js";
 import { registerClusterIsolationTests } from "./cluster-isolation.test.js";
 import { registerServiceLimitTests } from "./service-limits.test.js";
+import { registerServicePatchTests } from "./service-patch.test.js";
 
 const TIMEOUT_FIXTURE_SETUP = 180_000;
 const TIMEOUT_CLEANUP = 60_000;
@@ -609,10 +610,6 @@ describe("Services", () => {
     assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
   });
 
-  it("DELETE /v1/services/:id/envs/:key rejects unauthenticated", async () => {
-    const res = await pub(`/v1/services/${unknownId}/envs/SOME_KEY`, { method: "DELETE" });
-    assert.ok([401, 403].includes(res.status), `Expected 401 or 403, got ${res.status}`);
-  });
 });
 
 describe("Deployments", () => {
@@ -702,7 +699,8 @@ registerNodeAuthTests(getFx);
 registerDeploymentLifecycleTests(getFx);
 
 registerClusterIsolationTests(getFx);
-registerRateLimitTests(getFx);
 registerServiceEnvTests(getFx);
 registerServiceSecretTests(getFx);
 registerServiceLimitTests(getFx);
+registerServicePatchTests(getFx);
+registerRateLimitTests(getFx);

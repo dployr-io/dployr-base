@@ -65,6 +65,9 @@ function makeDb({
           : services,
       }),
     },
+    serviceEnvs: {
+      list: async () => [],
+    },
   } as any;
 }
 
@@ -92,6 +95,10 @@ const noopJwtService = {
 function poolConn(instanceTag: string) {
   return { clusterId: undefined, instanceTag, ws: { readyState: 1 } } as any;
 }
+
+// handleNodeBroadcast is fire-and-forget inside handleMessage.
+// Waiting one macrotask tick drains all pending microtasks so KV writes are visible.
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 function broadcastMsg(instanceId: string, workloads: any) {
   return {
@@ -135,6 +142,7 @@ describe("NodeMessageHandler — pool workloads written to cluster-scoped KV key
 
     const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv, noopJwtService);
     await handler.handleMessage({ conn: poolConn(instanceId), message: broadcastMsg(instanceId, poolWorkloads) });
+    await flush();
 
     const keyA = KV_KEYS.CLUSTER.WORKLOADS("cluster-a", instanceId);
     const keyB = KV_KEYS.CLUSTER.WORKLOADS("cluster-b", instanceId);
@@ -166,6 +174,7 @@ describe("NodeMessageHandler — pool workloads written to cluster-scoped KV key
 
     const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv, noopJwtService);
     await handler.handleMessage({ conn: poolConn(instanceId), message: broadcastMsg(instanceId, poolWorkloads) });
+    await flush();
 
     const keyB = KV_KEYS.CLUSTER.WORKLOADS("cluster-b", instanceId);
     assert.ok(writes[keyB], "cluster B workloads key was written");
@@ -186,6 +195,7 @@ describe("NodeMessageHandler — pool workloads written to cluster-scoped KV key
 
     const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv, noopJwtService);
     await handler.handleMessage({ conn: poolConn(instanceId), message: broadcastMsg(instanceId, poolWorkloads) });
+    await flush();
 
     const keyA = KV_KEYS.CLUSTER.WORKLOADS("cluster-a", instanceId);
     assert.ok(writes[keyA], "cluster A workloads key was written");
@@ -210,6 +220,7 @@ describe("NodeMessageHandler — pool workloads written to cluster-scoped KV key
 
     const handler = new NodeMessageHandler(makeConnectionManager(), noopNotifier, db, kv, noopJwtService);
     await handler.handleMessage({ conn: poolConn(instanceId), message: broadcastMsg(instanceId, poolWorkloads) });
+    await flush();
 
     const keyA = KV_KEYS.CLUSTER.WORKLOADS("cluster-a", instanceId);
     assert.equal(writes[keyA].services.length, 1, "only matched service written");

@@ -94,7 +94,7 @@ export function createCorsMiddleware(getConfig: () => { allowed_origins?: string
       return origin;
     },
     credentials: true,
-    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowMethods: ["HEAD", "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   });
 }

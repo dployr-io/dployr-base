@@ -146,6 +146,7 @@ export async function createTestInstance(
   session: string,
   clusterId: string,
   suffix: string = Date.now().toString(36),
+  role: "instance" | "build" = "instance",
 ): Promise<{ instanceId: string; tag: string; bootstrapToken: string }> {
   const octets = () => Math.floor(Math.random() * 200) + 10;
   const tag = `ci-fn-${suffix}`;
@@ -156,6 +157,7 @@ export async function createTestInstance(
       clusterId,
       address: `10.${octets()}.${octets()}.${octets()}`,
       tag,
+      role,
     }),
   });
 
@@ -178,4 +180,29 @@ export async function deleteTestInstance(baseUrl: string, session: string, insta
     method: "DELETE",
     headers: { Cookie: session },
   }).catch(() => {});
+}
+
+/**
+ * Helper: create a build-role instance, exchange its token, and connect a FakeNode.
+ * Returns the connected node and cleanup function.
+ * Uses a pool-neutral cluster association — the build node is not scoped to any cluster.
+ */
+export async function createTestBuildNode(
+  baseUrl: string,
+  session: string,
+  clusterId: string,
+  suffix: string,
+): Promise<{ node: FakeNode; instanceId: string; cleanup: () => Promise<void> }> {
+  const inst = await createTestInstance(baseUrl, session, clusterId, `build-${suffix}`, "build");
+  const node = new FakeNode({ baseUrl, instanceTag: inst.tag, bootstrapToken: inst.bootstrapToken });
+  await node.exchangeToken();
+  await node.connect();
+  return {
+    node,
+    instanceId: inst.instanceId,
+    cleanup: async () => {
+      node.disconnect();
+      await deleteTestInstance(baseUrl, session, inst.instanceId);
+    },
+  };
 }

@@ -119,49 +119,6 @@ export function registerServiceSecretTests(getFx: () => TestFixtures) {
       }
     });
 
-    it("PUT /services/:id/secrets sets secrets and GET returns updated key list", async () => {
-      if (!serviceId) return;
-      const { baseUrl, session } = getFx();
-
-      const putRes = await fetch(`${baseUrl}/v1/services/${serviceId}/secrets`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Cookie: session },
-        body: JSON.stringify({ secrets: { SMTP_PASS: "mailpass", STRIPE_KEY: "sk_test_abc" } }),
-      });
-      if (putRes.status === 503) return;
-      assert.equal(putRes.status, 200, `PUT secrets failed: ${await putRes.text()}`);
-
-      const secretsRes = await fetch(`${baseUrl}/v1/services/${serviceId}/secrets`, {
-        headers: { Cookie: session },
-      });
-      if (secretsRes.status === 503) return;
-      const body = (await secretsRes.json()) as any;
-      const keys: string[] = (body.data?.secrets ?? []).map((s: any) => s.key);
-      assert.ok(keys.includes("SMTP_PASS"), "SMTP_PASS should be present");
-      assert.ok(keys.includes("STRIPE_KEY"), "STRIPE_KEY should be present");
-    });
-
-    it("DELETE /services/:id/secrets/:key removes a single secret", async () => {
-      if (!serviceId) return;
-      const { baseUrl, session } = getFx();
-
-      const delRes = await fetch(`${baseUrl}/v1/services/${serviceId}/secrets/STRIPE_KEY`, {
-        method: "DELETE",
-        headers: { Cookie: session },
-      });
-      if (delRes.status === 503) return;
-      assert.equal(delRes.status, 200, `DELETE secret key failed: ${await delRes.text()}`);
-
-      const secretsRes = await fetch(`${baseUrl}/v1/services/${serviceId}/secrets`, {
-        headers: { Cookie: session },
-      });
-      if (secretsRes.status === 503) return;
-      const body = (await secretsRes.json()) as any;
-      const keys: string[] = (body.data?.secrets ?? []).map((s: any) => s.key);
-      assert.ok(!keys.includes("STRIPE_KEY"), "STRIPE_KEY should be removed");
-      assert.ok(keys.includes("SMTP_PASS"), "SMTP_PASS should still be present");
-    });
-
     after(async () => {
       node?.disconnect();
       const { baseUrl, session } = getFx();
@@ -259,45 +216,6 @@ export function registerServiceEnvTests(getFx: () => TestFixtures) {
       const envs: Record<string, string> = envsBody.data?.envs ?? {};
       assert.equal(envs["NODE_ENV"], "production", "NODE_ENV should be 'production'");
       assert.equal(envs["PORT"], "3000", "PORT should be '3000'");
-    });
-
-    it("PUT /services/:id/envs overwrites all envs and GET returns the new set", async () => {
-      if (!serviceId) return;
-      const { baseUrl, session } = getFx();
-
-      const putRes = await fetch(`${baseUrl}/v1/services/${serviceId}/envs`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Cookie: session },
-        body: JSON.stringify({ envs: { APP_NAME: "dployr", LOG_LEVEL: "info" } }),
-      });
-      assert.equal(putRes.status, 200, `PUT envs failed: ${await putRes.text()}`);
-
-      const envsRes = await fetch(`${baseUrl}/v1/services/${serviceId}/envs`, {
-        headers: { Cookie: session },
-      });
-      const envsBody = (await envsRes.json()) as any;
-      const envs: Record<string, string> = envsBody.data?.envs ?? {};
-      assert.equal(envs["APP_NAME"], "dployr");
-      assert.equal(envs["LOG_LEVEL"], "info");
-    });
-
-    it("DELETE /services/:id/envs/:key removes a single key", async () => {
-      if (!serviceId) return;
-      const { baseUrl, session } = getFx();
-
-      const delRes = await fetch(`${baseUrl}/v1/services/${serviceId}/envs/LOG_LEVEL`, {
-        method: "DELETE",
-        headers: { Cookie: session },
-      });
-      assert.equal(delRes.status, 200, `DELETE env key failed: ${await delRes.text()}`);
-
-      const envsRes = await fetch(`${baseUrl}/v1/services/${serviceId}/envs`, {
-        headers: { Cookie: session },
-      });
-      const envsBody = (await envsRes.json()) as any;
-      const envs: Record<string, string> = envsBody.data?.envs ?? {};
-      assert.ok(!("LOG_LEVEL" in envs), "LOG_LEVEL should be removed");
-      assert.equal(envs["APP_NAME"], "dployr", "APP_NAME should still be present");
     });
 
     after(async () => {

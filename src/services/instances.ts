@@ -43,6 +43,7 @@ export class InstanceService {
     userId,
     c,
     managed,
+    role,
     metadata,
   }: {
     clusterId: string;
@@ -51,6 +52,7 @@ export class InstanceService {
     userId: string;
     c: Context;
     managed?: boolean;
+    role?: "instance" | "build";
     metadata?: Record<string, any> | undefined;
   }): Promise<{ instance: Instance; token: string }> {
     const db = getDbStore(c);
@@ -64,6 +66,7 @@ export class InstanceService {
         address,
         metadata,
         managed,
+        role,
       } as InstancePayload,
     });
 

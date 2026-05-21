@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { WebSocketService } from "@/services/websocket/index.js";
 import { worker } from "@/services/background/index.js";
 import { registerJobs } from "@/services/background/jobs/index.js";
-import { bootstrapMiddleware, getCorsConfig } from "@/lib/config/bootstrap.js";
+import { bootstrapMiddleware, getCorsConfig, initializeAdapters } from "@/lib/config/bootstrap.js";
 import { createCorsMiddleware } from "@/middleware/cors.js";
 import { globalRateLimit } from "@/middleware/ratelimit.js";
 import { loadSession } from "@/middleware/auth.js";
@@ -36,7 +36,7 @@ app.get("/favicon.ico", async (c) => {
 
 app.get("/loading.html", (c) => {
   const html = readFileSync(join(process.cwd(), "public/loading.html"), "utf-8");
-  return c.html(html, 200, { "Cache-Control": "no-store" });
+  return c.html(html, 200, { "Cache-Control": "no-store", "X-Dployr-Loading": "1" });
 });
 
 app.use("*", bootstrapMiddleware);
@@ -61,13 +61,18 @@ registerRoutes(app);
 
 // Node.js server startup
 if (isNode) {
-  const wsService = new WebSocketService(app);
-  wsService.start();
-
-  if (process.env.NODE_ENV !== "test") {
-    registerJobs(worker);
-    worker.start();
-  }
+  (async () => {
+    await initializeAdapters();
+    const wsService = new WebSocketService(app);
+    wsService.start();
+    if (process.env.NODE_ENV !== "test") {
+      registerJobs(worker);
+      worker.start();
+    }
+  })().catch((err) => {
+    console.error("Fatal: failed to initialize", err);
+    process.exit(1);
+  });
 }
 
 export default app;

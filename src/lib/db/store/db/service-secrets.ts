@@ -126,10 +126,12 @@ export class ServiceSecretStore extends BaseStore {
    */
   async replaceSelective({
     serviceId,
+    deploymentId,
     newSecrets,
     keepKeys,
   }: {
     serviceId: string;
+    deploymentId?: string;
     newSecrets: Record<string, string>;
     keepKeys: string[];
   }): Promise<void> {
@@ -137,10 +139,9 @@ export class ServiceSecretStore extends BaseStore {
     const newEntries = Object.entries(newSecrets);
     const now = this.now();
 
-    // Build DELETE statement: remove keys not in the preserve set
-    // Use a NOT IN clause so the delete + inserts are one atomic batch
+    // Remove service-linked secrets not in the preserve set
     const preserveList = [...preserve];
-    const deleteStmt = preserveList.length > 0
+    const serviceDeleteStmt = preserveList.length > 0
       ? this.db
           .prepare(
             `DELETE FROM service_secrets WHERE service_id = $1 AND key NOT IN (${preserveList.map((_, i) => `$${i + 2}`).join(", ")})`,
@@ -148,8 +149,20 @@ export class ServiceSecretStore extends BaseStore {
           .bind(serviceId, ...preserveList)
       : this.db.prepare(`DELETE FROM service_secrets WHERE service_id = $1`).bind(serviceId);
 
+    // Remove deployment-linked secrets not in the preserve set (kept/new ones stay so they still
+    // surface via the list JOIN until migrated to service-linked on a future write)
+    const depDeleteStmt = deploymentId
+      ? preserveList.length > 0
+        ? this.db
+            .prepare(`DELETE FROM service_secrets WHERE deployment_id = $1 AND key NOT IN (${preserveList.map((_, i) => `$${i + 2}`).join(", ")})`)
+            .bind(deploymentId, ...preserveList)
+        : this.db.prepare(`DELETE FROM service_secrets WHERE deployment_id = $1`).bind(deploymentId)
+      : null;
+
+    const deleteStmts = depDeleteStmt ? [serviceDeleteStmt, depDeleteStmt] : [serviceDeleteStmt];
+
     if (!newEntries.length) {
-      await deleteStmt.run();
+      await this.db.batch(deleteStmts);
       return;
     }
 
@@ -168,7 +181,7 @@ export class ServiceSecretStore extends BaseStore {
         .bind(id, serviceId, key, valueCipher, dekCipher, now, now);
     });
 
-    await this.db.batch([deleteStmt, ...upsertStmts]);
+    await this.db.batch([...deleteStmts, ...upsertStmts]);
   }
 
   /** Deletes orphaned secrets (service no longer exists) older than 6 months. Returns the number of deleted rows. */

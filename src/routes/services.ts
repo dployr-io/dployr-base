@@ -7,16 +7,17 @@ import z from "zod";
 import type { Bindings, Variables } from "@/types/index.js";
 import { resolveCluster, requireClusterViewer, requireClusterDeveloper, authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
-import { getDbStore, getWS, getJWTService, getTraefikRouterService } from "@/lib/config/context.js";
+import { getDbStore, getWS, getJWTService, getKVStore, getTraefikRouterService } from "@/lib/config/context.js";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
+import { enqueueBuild, computeBuildFingerprint, resolveRemoteAuthUrl } from "@/services/deployments.js";
+import { InstanceNotConnectedError } from "@/lib/errors/errors.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("Services");
 
 const services = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const dployrdService = new DployrdService();
-
 
 const patchServiceSchema = z.object({
   instanceName: z.string().min(1),
@@ -88,98 +89,97 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
     return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
   }
 
-  const [existing, instance] = await Promise.all([
-    service.deploymentId ? db.deployments.get(service.deploymentId) : Promise.resolve(null),
-    db.instances.find({ tag: instanceName }),
-  ]);
+  const [existing, instance] = await Promise.all([service.deploymentId ? db.deployments.get(service.deploymentId) : Promise.resolve(null), db.instances.find({ tag: instanceName })]);
 
   if (!instance) {
     return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
   }
 
   try {
-    // Persist env var changes (full atomic replace)
+    // Persist env var changes (full atomic replace, also clears deployment-linked rows)
     if (env_vars !== undefined) {
-      await db.serviceEnvs.replace({ serviceId, envs: env_vars });
+      await db.serviceEnvs.replace({ serviceId, deploymentId: service.deploymentId ?? undefined, envs: env_vars });
     }
 
-    // Persist secret changes (selective atomic replace) 
+    // Persist secret changes (selective atomic replace, also clears deployment-linked rows)
     if (secrets !== undefined || keep_secret_keys.length > 0) {
       if (db.serviceSecrets) {
         await db.serviceSecrets.replaceSelective({
           serviceId,
+          deploymentId: service.deploymentId ?? undefined,
           newSecrets: secrets ?? {},
           keepKeys: keep_secret_keys,
         });
       }
     }
 
-    // Merge fields with existing deployment values 
+    // Merge fields with existing deployment values
     // undefined in the request = keep existing value; null = explicitly clear it
-    const pick = <T>(incoming: T | null | undefined, fallback: T | null | undefined): T | undefined =>
-      incoming !== undefined ? (incoming ?? undefined) : (fallback ?? undefined);
+    const pick = <T>(incoming: T | null | undefined, fallback: T | null | undefined): T | undefined => (incoming !== undefined ? (incoming ?? undefined) : (fallback ?? undefined));
+
+    // When the request explicitly provides remote_url, the intent is a fresh rebuild —
+    // clear any image that was cached from a previous build so the routing logic and
+    // DB record both reflect "remote" consistently.
+    const explicitRemote = fields.remote_url !== undefined;
 
     const merged = {
-      description:    pick(fields.description,    existing?.description),
-      runCmd:         pick(fields.run_cmd,         existing?.runCmd),
-      buildCmd:       pick(fields.build_cmd,       existing?.buildCmd),
-      port:           pick(fields.port,            existing?.port),
-      workingDir:     pick(fields.working_dir,     existing?.workingDir),
-      staticDir:      pick(fields.static_dir,      existing?.staticDir),
-      image:          pick(fields.image,           existing?.image),
-      domain:         pick(fields.domain,          existing?.domain),
-      runtimeType:    pick(fields.runtime,         existing?.runtimeType),
-      runtimeVersion: pick(fields.version,         existing?.runtimeVersion),
-      remoteUrl:      pick(fields.remote_url,      existing?.remoteUrl),
-      remoteBranch:   pick(fields.remote_branch,   existing?.remoteBranch),
+      description: pick(fields.description, existing?.description),
+      runCmd: pick(fields.run_cmd, existing?.runCmd),
+      buildCmd: pick(fields.build_cmd, existing?.buildCmd),
+      port: pick(fields.port, existing?.port),
+      workingDir: pick(fields.working_dir, existing?.workingDir),
+      staticDir: pick(fields.static_dir, existing?.staticDir),
+      image: explicitRemote ? undefined : pick(fields.image, existing?.image),
+      domain: pick(fields.domain, existing?.domain),
+      runtimeType: pick(fields.runtime, existing?.runtimeType),
+      runtimeVersion: pick(fields.version, existing?.runtimeVersion),
+      remoteUrl: pick(fields.remote_url, existing?.remoteUrl),
+      remoteBranch: pick(fields.remote_branch, existing?.remoteBranch),
     };
 
-    // source follows the content: if image is set use "image", if remote_url is set use "remote",
+    // source follows the content: explicit remote_url always means "remote" (rebuild);
+    // if only image is set use "image"; if only remote_url is set use "remote";
     // otherwise preserve whatever was on the existing deployment.
-    const source = merged.image && !merged.remoteUrl
-      ? "image"
-      : merged.remoteUrl && !merged.image
-        ? "remote"
-        : (existing?.source ?? "remote");
+    const source = explicitRemote ? "remote" : merged.image && !merged.remoteUrl ? "image" : merged.remoteUrl && !merged.image ? "remote" : (existing?.source ?? "remote");
 
-    // Upsert a deployment record capturing this edit ─────────────────────
-    const deployment = await db.deployments.upsert({
-      clusterId,
-      userId: session.userId,
+    if (!existing) {
+      return c.json(createErrorResponse({ message: "Service has no deployment record", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+    }
+
+    // Persist config changes
+    const deployment = await db.deployments.patchConfig({
       name: service.name,
-      type: service.type,
       source,
-      description:       merged.description,
-      runCmd:            merged.runCmd,
-      buildCmd:          merged.buildCmd,
-      port:              merged.port,
-      workingDir:        merged.workingDir,
-      staticDir:         merged.staticDir,
-      image:             merged.image,
-      domain:            merged.domain,
-      runtimeType:       merged.runtimeType,
-      runtimeVersion:    merged.runtimeVersion,
-      remoteUrl:         merged.remoteUrl,
-      remoteBranch:      merged.remoteBranch,
-      remoteCommitHash:  existing?.remoteCommitHash ?? undefined,
+      description: merged.description,
+      runCmd: merged.runCmd,
+      buildCmd: merged.buildCmd,
+      port: merged.port,
+      workingDir: merged.workingDir,
+      staticDir: merged.staticDir,
+      image: merged.image,
+      domain: merged.domain,
+      runtimeType: merged.runtimeType,
+      runtimeVersion: merged.runtimeVersion,
+      remoteUrl: merged.remoteUrl,
+      remoteBranch: merged.remoteBranch,
     });
 
     if (!deployment) {
-      return c.json(createErrorResponse({ message: "Failed to create deployment record", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
+      return c.json(createErrorResponse({ message: "Failed to patch deployment record", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    // Read current env vars and secrets for the dispatch payload ──────────
+    // Read current env vars and secrets for the dispatch payload.
+    // Both use serviceName so deployment-linked rows (from initial deploy) are included via JOIN.
     const [envList, allSecretKeys] = await Promise.all([
-      db.serviceEnvs.list({ serviceId }),
-      db.serviceSecrets ? db.serviceSecrets.list({ serviceId }).then(r => r.map((s: any) => s.key)) : Promise.resolve([] as string[]),
+      db.serviceEnvs.list({ serviceId, serviceName: service.name }),
+      db.serviceSecrets ? db.serviceSecrets.list({ serviceId, serviceName: service.name }).then((r) => r.map((s: any) => s.key)) : Promise.resolve([] as string[]),
     ]);
 
     const currentEnvs: Record<string, string> = Object.fromEntries(envList.map((e: any) => [e.key, e.value]));
-    const { values: currentSecrets } = allSecretKeys.length > 0 && db.serviceSecrets
-      ? await db.serviceSecrets.getDecrypted({ serviceId, keys: allSecretKeys })
-      : { values: {} as Record<string, string> };
+    const { values: currentSecrets } =
+      allSecretKeys.length > 0 && db.serviceSecrets ? await db.serviceSecrets.getDecrypted({ serviceId, keys: allSecretKeys }) : { values: {} as Record<string, string> };
 
-    // Build and dispatch the deploy task ─────────────────────────────────
+    // Build and dispatch the deploy task
     const deployPayload = {
       name: service.name,
       user_id: session.userId,
@@ -191,7 +191,7 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
       run_cmd: deployment.runCmd ?? undefined,
       build_cmd: deployment.buildCmd ?? undefined,
       port: deployment.port ?? undefined,
-      working_dir: deployment.workingDir ?? undefined,
+      working_dir: deployment.workingDir && !deployment.workingDir.startsWith("/") ? deployment.workingDir : undefined,
       static_dir: deployment.staticDir ?? undefined,
       image: deployment.image ?? undefined,
       domain: deployment.domain ?? undefined,
@@ -201,24 +201,53 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
     };
 
     const jwtService = getJWTService(c);
-    const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
-    const taskId = ulid();
-    const task = dployrdService.createDeployTask(taskId, deployPayload as any, token);
-    const routingKey = await db.instances.getRoutingKey(clusterId);
+    const kv = getKVStore(c);
+    let taskId: string;
 
-    let dispatched = false;
-    try {
-      dispatched = getWS(c).sendTask(routingKey, task);
-    } catch {
-      // WS handler unavailable
+    if (deployPayload.source === "remote" && deployPayload.remote?.url) {
+      // source=remote: inject fresh git credentials and route through the build node.
+      // The build node clones + builds the image, then callbacks to the instance node to deploy.
+      const authUrl = await resolveRemoteAuthUrl(deployPayload.remote.url, clusterId, db, c.env);
+      const authedPayload = { ...deployPayload, remote: { ...deployPayload.remote, url: authUrl }, force_rebuild: false } as any;
+      const fingerprint = await computeBuildFingerprint(authedPayload);
+      try {
+        const result = await enqueueBuild({
+          db,
+          kv,
+          clusterId,
+          instanceName,
+          deployPayload: authedPayload,
+          fingerprint,
+          jwtService,
+          ws: getWS(c),
+          issuer: c.env.BASE_URL,
+        });
+        taskId = result.taskId;
+      } catch (err) {
+        if (err instanceof InstanceNotConnectedError) {
+          return c.json(createErrorResponse({ message: "No build node available", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
+        }
+        throw err;
+      }
+    } else {
+      // source=image: deploy directly to the instance node.
+      taskId = ulid();
+      const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
+      const task = dployrdService.createDeployTask(taskId, deployPayload as any, token);
+      const routingKey = await db.instances.getRoutingKey(clusterId);
+      let dispatched = false;
+      try {
+        dispatched = getWS(c).sendTask(routingKey, task);
+      } catch {
+        // WS handler unavailable
+      }
+      if (!dispatched) {
+        return c.json(createErrorResponse({ message: "No node connected to this cluster", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
+      }
     }
 
-    if (!dispatched) {
-      return c.json(createErrorResponse({ message: "No node connected to this cluster", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
-    }
-
-    log.info(`Dispatched update task ${taskId} for service ${service.name} in cluster ${clusterId}`);
-    return c.json(createSuccessResponse({ service, deployment, taskId }));
+    log.info(`Dispatched update task ${taskId!} for service ${service.name} in cluster ${clusterId}`);
+    return c.json(createSuccessResponse({ service, deployment, taskId: taskId! }));
   } catch (error) {
     log.error("Failed to update service:", error);
     return c.json(createErrorResponse({ message: "Failed to update service", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
@@ -330,7 +359,6 @@ services.post("/:id/start", resolveCluster("service", { path: "id" }), requireCl
   }
 });
 
-// Read env vars (display only — edits go through PATCH /:id)
 services.get("/:id/envs", resolveCluster("service", { path: "id" }), requireClusterViewer, async (c) => {
   const db = getDbStore(c);
   const serviceId = c.get("resolvedServiceId")!;
@@ -363,10 +391,7 @@ services.get("/metrics/:name", authMiddleware, requireClusterViewer, async (c) =
   const from = parseInt(c.req.query("from") ?? String(now - 24 * 60 * 60 * 1000), 10);
   const to = parseInt(c.req.query("to") ?? String(now), 10);
 
-  const [buckets, totals] = await Promise.all([
-    db.serviceMetrics.list(name, from, to),
-    db.serviceMetrics.totals(name, from, to),
-  ]);
+  const [buckets, totals] = await Promise.all([db.serviceMetrics.list(name, from, to), db.serviceMetrics.totals(name, from, to)]);
 
   return c.json(createSuccessResponse({ buckets, totals }));
 });

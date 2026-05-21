@@ -20,6 +20,7 @@ export const createInstanceSchema = z.object({
   tag: z.string().min(3, "Tag with a minimum of 3 characters is required").max(21, "Tag must be a maximum of 21 characters"),
   region: z.enum(INSTANCE_REGIONS).optional(),
   managed: z.boolean().optional().default(true),
+  role: z.enum(["instance", "build"]).optional().default("instance"),
 });
 
 const rotateSchema = z.object({
@@ -51,7 +52,7 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
       return c.json(createErrorResponse({ message: `Validation failed — ${message}`, code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const { clusterId, tag, address, region, managed } = validation.data;
+    const { clusterId, tag, address, region, managed, role } = validation.data;
 
     try {
       const instance = await getInstanceService(c).createInstance({
@@ -61,6 +62,7 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
         userId: sessionId ?? session.userId,
         c,
         managed,
+        role,
         metadata: region ? { region } : undefined,
       });
 

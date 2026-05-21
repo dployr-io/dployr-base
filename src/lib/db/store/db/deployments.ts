@@ -240,6 +240,75 @@ export class DeploymentStore extends BaseStore {
       .run();
   }
 
+  /**
+   * Unconditionally updates config fields on an existing deployment and sets status
+   * to `pending` so the node re-runs with the new config.
+   */
+  async patchConfig({
+    name,
+    source,
+    description,
+    runCmd,
+    buildCmd,
+    port,
+    workingDir,
+    staticDir,
+    image,
+    domain,
+    runtimeType,
+    runtimeVersion,
+    remoteUrl,
+    remoteBranch,
+  }: {
+    name: string;
+    source: "remote" | "image";
+    description?: string | null;
+    runCmd?: string | null;
+    buildCmd?: string | null;
+    port?: number | null;
+    workingDir?: string | null;
+    staticDir?: string | null;
+    image?: string | null;
+    domain?: string | null;
+    runtimeType?: string | null;
+    runtimeVersion?: string | null;
+    remoteUrl?: string | null;
+    remoteBranch?: string | null;
+  }): Promise<Deployment | null> {
+    const now = this.now();
+    const result = await this.db
+      .prepare(
+        `UPDATE deployments SET
+           source = $1, status = 'pending',
+           description = $2, run_cmd = $3, build_cmd = $4, port = $5,
+           working_dir = $6, static_dir = $7, image = $8, domain = $9,
+           runtime_type = $10, runtime_version = $11,
+           remote_url = $12, remote_branch = $13,
+           finished_at = NULL, updated_at = $14
+         WHERE name = $15
+         RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at`,
+      )
+      .bind(
+        source,
+        description ?? null,
+        runCmd ?? null,
+        buildCmd ?? null,
+        port ?? null,
+        workingDir ?? null,
+        staticDir ?? null,
+        image ?? null,
+        domain ?? null,
+        runtimeType ?? null,
+        runtimeVersion ?? null,
+        remoteUrl ?? null,
+        remoteBranch ?? null,
+        now,
+        name,
+      )
+      .first();
+    return result ? this.toDeployment(result) : null;
+  }
+
   async delete({ id }: { id: string }): Promise<void> {
     await this.db.prepare(`DELETE FROM deployments WHERE id = $1`).bind(id).run();
   }

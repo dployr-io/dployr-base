@@ -13,6 +13,7 @@ import { NODE_STATE_ENTITIES } from "@/lib/constants/node-state.js";
 import { MESSAGE_KIND, WSErrorCode } from "@/lib/constants/websocket.js";
 import { Logger } from "@/lib/logger.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import type { ServiceSecret } from "@/lib/db/store/db/service-secrets.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { JWTService } from "@/services/auth/jwt.js";
 import { BuildCallback, BuildQueueEntry } from "@/lib/db/store/kv/payload.js";
@@ -24,8 +25,13 @@ import { ulid } from "ulid";
 /**
  * Handles messages from dployrd connections.
  */
+const CLUSTER_META_TTL_MS = 60_000;
+
+type ClusterMeta = { names: Set<string>; dbIdByName: Map<string, string>; dbDeploymentIdByName: Map<string, string>; secretsByServiceId: Map<string, ServiceSecret[]>; envsByServiceId: Map<string, Record<string, string>>; ts: number };
+
 export class NodeMessageHandler {
   private log = new Logger("ws-node");
+  private clusterMetaCache = new Map<string, ClusterMeta>();
 
   constructor(
     private connectionManager: ConnectionManager,
@@ -47,74 +53,9 @@ export class NodeMessageHandler {
     }
 
     if (isNodeBroadcastMessage(message)) {
-      const update = (message as any).update as NodeUpdate;
-      let changedFlags = { deploymentsChanged: false };
-
-      if (update?.instance_id) {
-        (conn as any).nodeInstanceId = update.instance_id;
-        changedFlags = await new UpdateProcessor({
-          db: this.db,
-          kv: this.kv,
-          tag: update.instance_id,
-          message: update,
-        }).processUpdate();
-      }
-
-      const presentSections = NODE_STATE_ENTITIES.filter((s) => (update as any)[s] !== undefined);
-
-      if (!conn.clusterId) {
-        // Pool node: write cluster-scoped workloads to KV for each cluster, then broadcast.
-        // This ensures each cluster's clients only receive services that belong to them.
-        const { clusters } = await this.db.clusters.list({ instanceTag: conn.instanceTag });
-        const rawWorkloads = (update as any).workloads;
-
-        await Promise.all(
-          clusters.map(async (cluster) => {
-            if (rawWorkloads) {
-              const [{ deployments }, { services: dbServices }] = await Promise.all([
-                this.db.deployments.list({ clusterId: cluster.id, limit: 500 }),
-                this.db.services.list({ clusterId: cluster.id }),
-              ]);
-              const names = new Set(deployments.map((d) => d.name));
-              // Enrich with correct IDs.
-              // PS: ULIDs of entities from Nodes may drift after re-provision
-              const dbIdByName = new Map(dbServices.map((s) => [s.name, s.id]));
-              const filteredServices = Array.isArray(rawWorkloads.services)
-                ? rawWorkloads.services.filter((s: any) => s.name && names.has(s.name)).map((s: any) => ({ ...s, id: dbIdByName.get(s.name) ?? s.id }))
-                : [];
-              const filteredDeployments = Array.isArray(rawWorkloads.deployments) ? rawWorkloads.deployments.filter((d: any) => d.name && names.has(d.name)) : [];
-              await this.kv.entities.setEntity(KV_KEYS.CLUSTER.WORKLOADS(cluster.id, update.instance_id), { ...rawWorkloads, services: filteredServices, deployments: filteredDeployments });
-            }
-            await this.clientNotifier.broadcast(cluster.id, update.instance_id, presentSections);
-            if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(cluster.id, "deployments");
-            if (update?.instance_id) {
-              await this.kv.instanceCache.registerClusterNode(cluster.id, update.instance_id);
-            }
-          }),
-        );
-      } else if (conn.clusterId) {
-        // Dedicated node: write full workloads under the cluster key (no filtering needed).
-        const rawWorkloads = (update as any).workloads;
-        if (rawWorkloads) {
-          let workloadsToStore = rawWorkloads;
-          if (Array.isArray(rawWorkloads.services) && rawWorkloads.services.length > 0) {
-            // Enrich with correct IDs.
-            // PS: ULIDs of entities from Nodes may drift after re-provision
-            const { services: dbServices } = await this.db.services.list({ clusterId: conn.clusterId });
-            const dbIdByName = new Map(dbServices.map((s) => [s.name, s.id]));
-            workloadsToStore = {
-              ...rawWorkloads,
-              services: rawWorkloads.services.map((s: any) => ({ ...s, id: dbIdByName.get(s.name) ?? s.id })),
-            };
-          }
-          await this.kv.entities.setEntity(KV_KEYS.CLUSTER.WORKLOADS(conn.clusterId, update.instance_id), workloadsToStore);
-        }
-        await this.clientNotifier.broadcast(conn.clusterId, update.instance_id, presentSections);
-        if (changedFlags.deploymentsChanged) this.clientNotifier.notifyRefresh(conn.clusterId, "deployments");
-        if (update?.instance_id) {
-          await this.kv.instanceCache.registerClusterNode(conn.clusterId, update.instance_id);
-        }
-      }
+      this.handleNodeBroadcast({ conn, message }).catch((err) => {
+        this.log.error("handleNodeBroadcast failed", { error: String(err) });
+      });
       return;
     }
 
@@ -432,5 +373,122 @@ export class NodeMessageHandler {
     } catch (err) {
       this.log.error(`Error deregistering node ${nodeInstanceId}`, { error: String(err) });
     }
+  }
+
+  private async handleNodeBroadcast({ conn, message }: { conn: ClusterConnection; message: BaseMessage }): Promise<void> {
+    if (!isNodeBroadcastMessage(message)) {
+      return;
+    }
+
+    const update = message.update as NodeUpdate;
+
+    if (!update?.instance_id) {
+      return;
+    }
+
+    const changedFlags = await new UpdateProcessor({
+      db: this.db,
+      kv: this.kv,
+      tag: update.instance_id,
+      message: update,
+    }).processUpdate();
+
+    const presentSections = NODE_STATE_ENTITIES.filter((section) => (update as any)[section] !== undefined);
+
+    const workloads = (update as any).workloads;
+
+    const notifyCluster = async ({ clusterId, workloads }: { clusterId: string; workloads?: any }): Promise<void> => {
+      if (workloads) {
+        await this.kv.entities.setEntity(KV_KEYS.CLUSTER.WORKLOADS(clusterId, update.instance_id), workloads);
+      }
+
+      await this.clientNotifier.broadcast(clusterId, update.instance_id, presentSections);
+
+      if (changedFlags.deploymentsChanged) {
+        this.clientNotifier.notifyRefresh(clusterId, "deployments");
+      }
+
+      await this.kv.instanceCache.registerClusterNode(clusterId, update.instance_id);
+    };
+
+    if (conn.clusterId) {
+      await notifyCluster({
+        clusterId: conn.clusterId,
+        workloads,
+      });
+
+      return;
+    }
+
+    const { clusters } = await this.db.clusters.list({ instanceTag: conn.instanceTag });
+
+    await Promise.all(
+      clusters.map(async (cluster) => {
+        let clusterWorkloads = workloads;
+
+        if (workloads) {
+          const cached = this.clusterMetaCache.get(cluster.id);
+          let meta: ClusterMeta;
+
+          if (cached && Date.now() - cached.ts < CLUSTER_META_TTL_MS) {
+            meta = cached;
+          } else {
+            const [{ deployments }, { services: dbServices }] = await Promise.all([
+              this.db.deployments.list({ clusterId: cluster.id, limit: 500 }),
+              this.db.services.list({ clusterId: cluster.id }),
+            ]);
+            const secretsByServiceId = new Map<string, ServiceSecret[]>();
+            const envsByServiceId = new Map<string, Record<string, string>>();
+            await Promise.all(
+              dbServices.map(async (s) => {
+                if (this.db.serviceSecrets) {
+                  const secrets = await this.db.serviceSecrets.list({ serviceId: s.id, serviceName: s.name });
+                  secretsByServiceId.set(s.id, secrets);
+                }
+                const envs = await this.db.serviceEnvs.list({ serviceId: s.id, serviceName: s.name });
+                if (envs.length > 0) {
+                  envsByServiceId.set(s.id, Object.fromEntries(envs.map((e: any) => [e.key, e.value])));
+                }
+              }),
+            );
+            meta = {
+              names: new Set(deployments.map((d) => d.name)),
+              dbIdByName: new Map(dbServices.map((s) => [s.name, s.id])),
+              dbDeploymentIdByName: new Map(deployments.map((d) => [d.name, d.id])),
+              secretsByServiceId,
+              envsByServiceId,
+              ts: Date.now(),
+            };
+            this.clusterMetaCache.set(cluster.id, meta);
+          }
+
+          const { names, dbIdByName, dbDeploymentIdByName, secretsByServiceId, envsByServiceId } = meta;
+
+          clusterWorkloads = {
+            ...workloads,
+            services: Array.isArray(workloads.services)
+              ? workloads.services
+                  .filter((s: any) => s.name && names.has(s.name))
+                  .map((s: any) => {
+                    const id = dbIdByName.get(s.name) ?? s.id;
+                    return {
+                      ...s,
+                      id,
+                      secrets: secretsByServiceId.get(id) ?? [],
+                      env_vars: envsByServiceId.get(id) ?? s.env_vars ?? {},
+                    };
+                  })
+              : [],
+            deployments: Array.isArray(workloads.deployments)
+              ? workloads.deployments.filter((d: any) => d.name && names.has(d.name)).map((d: any) => ({ ...d, id: dbDeploymentIdByName.get(d.name) ?? d.id }))
+              : [],
+          };
+        }
+
+
+
+        await notifyCluster({ clusterId: cluster.id, workloads: clusterWorkloads });
+      }),
+    );
   }
 }

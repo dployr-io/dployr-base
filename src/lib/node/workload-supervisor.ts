@@ -16,6 +16,8 @@ import { EVENTS } from "../constants/events.js";
 import { Logger } from "@/lib/logger.js";
 import { REPROVISION_COOLDOWN_MS } from "../constants/index.js";
 import { computeBuildFingerprint, enqueueBuild } from "@/services/deployments.js";
+import { DployrdService } from "@/services/dployrd.js";
+import { ulid } from "ulid";
 
 type ReportedService = { name: string; type: ServiceType; deploymentId?: string };
 type WorkloadService = Record<string, any>;
@@ -217,10 +219,10 @@ export class WorkloadSupervisor {
       if (!workloads) continue;
 
       for (const svc of workloads) {
-        if (!svc.name || !svc.health_status) continue;
+        if (!svc.name || !svc.status) continue;
 
         const prevHealth = await this.kv.kv.get(KV_KEYS.SERVICE.HEALTH(svc.name));
-        const currHealth: string = svc.health_status;
+        const currHealth: string = svc.status;
 
         await this.kv.kv.put(KV_KEYS.SERVICE.HEALTH(svc.name), currHealth);
 
@@ -457,24 +459,40 @@ export class WorkloadSupervisor {
         return;
       }
 
-      const result = await enqueueBuild({
-        clusterId: cluster.id,
-        db: this.db,
-        kv: this.kv,
-        deployPayload: blueprint,
-        fingerprint,
-        instanceName: routingKey,
-        jwtService: this.jwtService,
-        ws: this.connectionManager,
-        issuer: this.tokenIssuer,
-      });
+      let taskId: string;
 
-      if (result?.taskId) {
-        this.reprovisionSentAt.set(cooldownKey, Date.now());
-        this.log.info(`Reprovisioning service ${service.name} via task ${result.taskId}`);
+      if (blueprint.source === "image") {
+        // Image is already built — send directly to the instance node, no build step needed.
+        taskId = ulid();
+        const token = await this.jwtService.createNodeAccessToken(routingKey, { issuer: this.tokenIssuer, audience: "dployr-instance" });
+        const task = new DployrdService().createDeployTask(taskId, blueprint, token);
+        const dispatched = this.connectionManager.sendTask(routingKey, task);
+        if (!dispatched) {
+          this.log.warn(`No connected node to reprovision ${service.name}`);
+          return;
+        }
       } else {
-        this.log.warn(`No connected node to reprovision ${service.name}`);
+        // source=remote: clone + build on the build node, then publish to instance node.
+        const result = await enqueueBuild({
+          clusterId: cluster.id,
+          db: this.db,
+          kv: this.kv,
+          deployPayload: blueprint,
+          fingerprint,
+          instanceName: routingKey,
+          jwtService: this.jwtService,
+          ws: this.connectionManager,
+          issuer: this.tokenIssuer,
+        });
+        if (!result?.taskId) {
+          this.log.warn(`No connected node to reprovision ${service.name}`);
+          return;
+        }
+        taskId = result.taskId;
       }
+
+      this.reprovisionSentAt.set(cooldownKey, Date.now());
+      this.log.info(`Reprovisioning service ${service.name} via task ${taskId}`);
     } catch (err) {
       this.log.error(`Failed to reprovision service ${service.name}`, { error: String(err) });
     }

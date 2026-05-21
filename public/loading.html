@@ -160,11 +160,8 @@
   </div>
 
   <script>
-    const POLL_MS  = 3000;
     const SLOW_MS  = 45000;
-    const domain   = location.hostname;
     const start    = Date.now();
-    let   pollTimer;
 
     const STEPS = [
       "Waking your app up",
@@ -220,23 +217,21 @@
     nextStep();
 
     function poll() {
-      fetch("/v1/status?domain=" + encodeURIComponent(domain))
-        .then(r => r.json())
-        .then(data => {
-          if (data.status === "ready") {
-            clearTimeout(pollTimer);
+      fetch(location.href, { method: "HEAD", cache: "no-store" })
+        .then(r => {
+          if (!r.headers.get("X-Dployr-Loading")) {
             removeCursor();
             appendLog("Ready — loading your page", true);
             statusTextEl.textContent = "Ready";
-            setTimeout(() => location.reload(), 400);
+            location.reload();
             return;
           }
           if (Date.now() - start > SLOW_MS) {
             document.getElementById("slow-msg").style.display = "block";
           }
-          pollTimer = setTimeout(poll, POLL_MS);
+          setTimeout(poll, 2000);
         })
-        .catch(() => { pollTimer = setTimeout(poll, POLL_MS); });
+        .catch(() => setTimeout(poll, 2000));
     }
 
     poll();

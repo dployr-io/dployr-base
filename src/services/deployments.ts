@@ -21,6 +21,7 @@ import type { WebSocketHandler } from "./websocket/instance-handler.js";
 
 const log = new Logger("DeploymentService");
 
+
 const dployrdService = new DployrdService();
 
 export type TaskSender = Pick<WebSocketHandler, "sendTask">;
@@ -48,6 +49,37 @@ export function injectToken(url: string, username: string, token: string): strin
   if (url.startsWith("http://")) url = "https://" + url.slice(7);
   if (!url.startsWith("https://")) return url;
   return url.replace("https://", `https://${username}:${token}@`);
+}
+
+/** Resolves and injects git credentials into a remote URL. Exported for use outside DeploymentService. */
+export async function resolveRemoteAuthUrl(remoteUrl: string, clusterId: string, db: DatabaseStore, env: Bindings): Promise<string> {
+  let token: string | null = null;
+  try {
+    const cluster = await db.clusters.get(clusterId);
+    const meta = cluster?.metadata as any;
+
+    if (remoteUrl.includes("github.com") && meta?.gitHub?.installationId) {
+      const github = new GitHubService({
+        appId: env.GITHUB_APP_ID,
+        privateKey: env.GITHUB_APP_PRIVATE_KEY,
+        clientId: env.GITHUB_CLIENT_ID,
+        clientSecret: env.GITHUB_CLIENT_SECRET,
+      });
+      token = await github.getInstallationToken(meta.gitHub.installationId);
+    } else if (remoteUrl.includes("gitlab.com") && meta?.gitLab?.accessToken) {
+      token = meta.gitLab.accessToken as string;
+    } else if (remoteUrl.includes("bitbucket.org") && meta?.bitBucket?.accessToken) {
+      token = meta.bitBucket.accessToken as string;
+    }
+  } catch (err) {
+    log.warn(`Failed to resolve repo token for cluster ${clusterId}:`, { error: String(err) });
+  }
+
+  if (!token) return remoteUrl;
+  if (remoteUrl.includes("github.com")) return injectToken(remoteUrl, "x-access-token", token);
+  if (remoteUrl.includes("gitlab.com")) return injectToken(remoteUrl, "oauth2", token);
+  if (remoteUrl.includes("bitbucket.org")) return injectToken(remoteUrl, "x-token-auth", token);
+  return injectToken(remoteUrl, "oauth2", token);
 }
 
 export class DeploymentService {
@@ -140,7 +172,7 @@ export class DeploymentService {
         runCmd: blueprint.run_cmd ?? payload?.run_cmd,
         buildCmd: blueprint.build_cmd ?? payload?.build_cmd,
         port: blueprint.port ?? payload?.port,
-        workingDir: blueprint.working_dir ?? payload?.working_dir,
+        workingDir: (blueprint.working_dir ?? payload?.working_dir)?.startsWith("/") ? undefined : (blueprint.working_dir ?? payload?.working_dir),
         staticDir: blueprint.static_dir ?? payload?.static_dir,
         image: blueprint.image ?? payload?.image,
         domain: blueprint.domain ?? payload?.domain,
