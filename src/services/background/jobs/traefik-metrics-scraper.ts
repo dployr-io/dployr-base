@@ -27,7 +27,6 @@ export const traefikMetricsScraper: JobFn = async ({ db, kv, adapters, setOutput
   const traefik = new TraefikService(
     cfg.tld ?? "dployr.run",
     adapters.traefikRedis,
-    adapters.config.server.base_url,
     cfg.metrics_url,
   );
 
