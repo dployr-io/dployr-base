@@ -121,40 +121,6 @@ ${domain} {
     reverse_proxy localhost:${app_port}
 }
 EOF
-
-  info "Configuring firewall..."
-  command -v ufw >/dev/null 2>&1 || apt-get install -y ufw >/dev/null 2>&1
-
-  ufw --force reset >/dev/null 2>&1
-  ufw default deny incoming >/dev/null 2>&1
-  ufw default allow outgoing >/dev/null 2>&1
-
-  local allowed_ips_raw; allowed_ips_raw="$(tget 'admin.allowed_ips')"
-  local allowed_ips=()
-  if [ -n "$allowed_ips_raw" ]; then
-    while IFS= read -r ip; do
-      ip="$(echo "$ip" | tr -d ' "' )"
-      [ -n "$ip" ] && allowed_ips+=("$ip")
-    done < <(echo "$allowed_ips_raw" | tr -d '[]' | tr ',' '\n')
-  fi
-
-  if [ ${#allowed_ips[@]} -gt 0 ]; then
-    for ip in "${allowed_ips[@]}"; do
-      ufw allow from "$ip" to any port 22 proto tcp >/dev/null 2>&1
-    done
-    info "ufw: SSH restricted to: ${allowed_ips[*]}"
-  else
-    ufw allow 22/tcp >/dev/null 2>&1
-    warn "No admin IPs configured — SSH is open to all. Set admin.allowed_ips in config to restrict access."
-  fi
-
-  ufw allow 80/tcp           >/dev/null 2>&1
-  ufw allow 443/tcp          >/dev/null 2>&1
-  ufw deny "${app_port}/tcp" >/dev/null 2>&1
-  ufw --force enable         >/dev/null 2>&1
-  info "ufw: allowed 80, 443 — blocked ${app_port} externally"
-  warn "For additional hardening, restrict ports 80/443 to Cloudflare IPs only in your cloud provider's firewall"
-
   systemctl enable caddy >/dev/null 2>&1
   systemctl restart caddy
   info "Caddy configured: https://${domain} → localhost:${app_port}"
