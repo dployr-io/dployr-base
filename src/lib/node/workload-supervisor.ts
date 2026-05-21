@@ -373,6 +373,12 @@ export class WorkloadSupervisor {
       return;
     }
 
+    const sleeping = await this.kv.kv.get(KV_KEYS.SERVICE.SLEEPING(service.name));
+    if (sleeping) {
+      this.log.debug(`Skipping reprovision for ${service.name} — service is sleeping`);
+      return;
+    }
+
     if (!this.db.serviceSecrets) {
       this.log.warn(`Cannot reprovision ${service.name}: encryption not configured`);
       return;

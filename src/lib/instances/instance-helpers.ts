@@ -3,7 +3,7 @@
 
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { ERROR, SUCCESS } from "@/lib/constants/index.js";
-import { getDbStore, getInstancePoolService, getInstanceService, getKVStore, getVMService, getWS } from "@/lib/config/context.js";
+import { getDbStore, getInstancePoolService, getInstanceService, getKVStore, getTraefikRouterService, getVMService, getWS } from "@/lib/config/context.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
@@ -149,6 +149,21 @@ export function attachDeleteInstance(app: Hono<{ Bindings: Bindings; Variables: 
           }),
           ERROR.REQUEST.BAD_REQUEST.status,
         );
+      }
+
+      const traefik = getTraefikRouterService(c);
+      if (traefik) {
+        try {
+          const { clusters } = await db.clusters.list({ instanceTag: instance.tag });
+          await Promise.all(
+            clusters.map(async ({ id: clusterId }) => {
+              const { services } = await db.services.list({ clusterId });
+              await Promise.all(services.map((svc) => traefik.setLoadingMode(svc.name)));
+            }),
+          );
+        } catch (err) {
+          log.error(`Failed to set loading mode before deleting instance ${instance.tag}`, { error: String(err) });
+        }
       }
 
       await db.instances.delete({ id: instance.id });

@@ -18,6 +18,7 @@ import { TerminalManager } from "./terminal-manager.js";
 import { parseMessage, type ClusterConnection } from "@/types/websocket-message.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 import { Logger } from "@/lib/logger.js";
 import { worker } from "@/services/background/index.js";
 import { NODES_HEALTH_JOB, NODES_SYNC_JOB } from "@/lib/constants/index.js";
@@ -145,7 +146,12 @@ export class WebSocketHandler {
     for (const clusterId of clusterIds) {
       try {
         const { services } = await this.dbStore.services.list({ clusterId });
-        await Promise.all(services.map((svc) => this.traefik!.setLoadingMode(svc.name)));
+        await Promise.all(
+          services.map((svc) => Promise.all([
+            this.traefik!.setLoadingMode(svc.name),
+            this.kvStore.kv.delete(KV_KEYS.SERVICE.SLEEPING(svc.name)),
+          ])),
+        );
         if (services.length > 0) {
           this.log.info(`Set loading mode for ${services.length} service(s) in cluster ${clusterId}`);
         }

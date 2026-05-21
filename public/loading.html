@@ -155,13 +155,14 @@
 
     <p class="slow" id="slow-msg">
       This is taking longer than usual.
-      <a href="javascript:location.reload()">Try refreshing</a> if the page doesn&rsquo;t load.
+      <a href="javascript:location.reload()">Try refreshing</a>.
     </p>
   </div>
 
   <script>
-    const SLOW_MS  = 45000;
-    const start    = Date.now();
+    const SLOW_MS   = 45000;
+    const BASE_URL  = "https://base.dployr.io";
+    const start     = Date.now();
 
     const STEPS = [
       "Waking your app up",
@@ -217,13 +218,15 @@
     nextStep();
 
     function poll() {
-      fetch(location.href, { method: "HEAD", cache: "no-store" })
-        .then(r => {
-          if (!r.headers.get("X-Dployr-Loading")) {
+      Promise.all([
+        fetch(location.href, { method: "HEAD", cache: "no-store" }),
+        fetch(`${BASE_URL}/status?domain=${encodeURIComponent(location.hostname)}`, { cache: "no-store" }),
+      ]).then(([headRes]) => {
+          if (!headRes.headers.get("X-Dployr-Loading")) {
             removeCursor();
             appendLog("Ready — loading your page", true);
             statusTextEl.textContent = "Ready";
-            location.reload();
+            setTimeout(() => location.reload(), 800);
             return;
           }
           if (Date.now() - start > SLOW_MS) {
@@ -234,7 +237,7 @@
         .catch(() => setTimeout(poll, 2000));
     }
 
-    poll();
+    setTimeout(poll, 1500);
   </script>
 </body>
 </html>
