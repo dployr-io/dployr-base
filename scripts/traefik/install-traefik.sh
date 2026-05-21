@@ -188,6 +188,11 @@ api:
   dashboard: true
   insecure: false
 
+serversTransport:
+  forwardingTimeouts:
+    dialTimeout: 5s
+    responseHeaderTimeout: 30s
+
 ping: {}
 
 metrics:
