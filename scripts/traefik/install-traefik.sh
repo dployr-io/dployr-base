@@ -10,6 +10,8 @@ TOMATO_VERSION="${TOMATO_VERSION:-1.0.0}"
 REPO="dployr-io/dployr-base"
 BRANCH="${BRANCH:-main}"
 
+SERVICE_STUB_ADDRESS="127.0.0.1:19503"
+
 CONFIG_DIR="/etc/traefik"
 DATA_DIR="/var/lib/traefik"
 LOG_DIR="/var/log/traefik"
@@ -398,22 +400,25 @@ setup_loading_stub() {
     "https://api.github.com/repos/${REPO}/contents/public/loading.html?ref=${BRANCH}" \
     -o "$html_dir/loading.html" || error "Failed to download loading.html"
 
-  cat > /etc/nginx/sites-available/dployr-loading <<EOF
-server {
-    listen 127.0.0.1:19503;
-    root ${html_dir};
-
-    location / {
-        add_header X-Dployr-Loading 1 always;
-        try_files /loading.html =503;
+  cat > /etc/nginx/nginx.conf <<EOF
+worker_processes 1;
+events { worker_connections 64; }
+http {
+    server {
+        listen ${SERVICE_STUB_ADDRESS};
+        root ${html_dir};
+        location / {
+            add_header X-Dployr-Loading 1 always;
+            try_files /loading.html =503;
+        }
     }
 }
 EOF
 
-  ln -sf /etc/nginx/sites-available/dployr-loading /etc/nginx/sites-enabled/dployr-loading
-  rm -f /etc/nginx/sites-enabled/default
-  if nginx -t; then systemctl reload nginx; else systemctl restart nginx; fi
-  info "Loading stub running on 127.0.0.1:19503"
+  nginx -t || error "nginx config test failed"
+  systemctl enable nginx >/dev/null 2>&1
+  systemctl restart nginx
+  info "Loading stub running on ${SERVICE_STUB_ADDRESS}"
 }
 
 main() {

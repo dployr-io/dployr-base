@@ -24,7 +24,6 @@ export class TraefikService {
   constructor(
     private baseDomain: string,
     redisClient: any,
-    private baseUrl?: string,
     private metricsUrl?: string,
   ) {
     this.redis = new RedisKV(redisClient);
@@ -98,18 +97,14 @@ export class TraefikService {
    * Safe to call multiple times — idempotent.
    */
   async ensureWakeupMiddleware(): Promise<void> {
-    if (!this.baseUrl) return;
-    const baseKey = "dployr-base";
+    const stubKey = "loading-stub";
     await Promise.all([
-      // Point the "dployr-base" Traefik service at base
-      this.redis.put(
-        KV_KEYS.TRAEFIK.SERVICE_URL(baseKey),
-        `${this.baseUrl}`,
-      ),
-      // Errors middleware definition
+      // Point the loading-stub service at the nginx stub on the Traefik server
+      this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(stubKey), SERVICE_STUB_ADDRESS),
+      // Errors middleware: intercept backend failures and serve the loading page
       this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE), "502,503,504"),
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_SERVICE(WAKEUP_MIDDLEWARE), `${baseKey}@redis`),
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_QUERY(WAKEUP_MIDDLEWARE), "/loading.html"),
+      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_SERVICE(WAKEUP_MIDDLEWARE), `${stubKey}@redis`),
+      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_QUERY(WAKEUP_MIDDLEWARE), "/"),
     ]);
   }
 
@@ -122,17 +117,7 @@ export class TraefikService {
    * @param instancePort    - The port on the instance (typically 80)
    * @param hobby           - When true, attaches the wakeup errors middleware
    */
-  async registerRoute({
-    serviceName,
-    instanceAddress,
-    instancePort = 80,
-    hobby = false,
-  }: {
-    serviceName: string;
-    instanceAddress: string;
-    instancePort?: number;
-    hobby?: boolean;
-  }): Promise<void> {
+  async registerRoute({ serviceName, instanceAddress, instancePort = 80, hobby = false }: { serviceName: string; instanceAddress: string; instancePort?: number; hobby?: boolean }): Promise<void> {
     const routeKey = serviceName;
     const hostname = `${serviceName}.${this.baseDomain}`;
     const backendUrl = `http://${instanceAddress}:${instancePort}`;
@@ -146,9 +131,7 @@ export class TraefikService {
 
     if (hobby) {
       await this.ensureWakeupMiddleware();
-      writes.push(
-        this.redis.put(KV_KEYS.TRAEFIK.ROUTER_MIDDLEWARE(routeKey, 0), WAKEUP_MIDDLEWARE),
-      );
+      writes.push(this.redis.put(KV_KEYS.TRAEFIK.ROUTER_MIDDLEWARE(routeKey, 0), WAKEUP_MIDDLEWARE));
     }
 
     await Promise.all(writes);
