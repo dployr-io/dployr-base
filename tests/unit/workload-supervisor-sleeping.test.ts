@@ -186,25 +186,27 @@ describe("WorkloadSupervisor — sleeping reconciliation", () => {
     assert.ok(notifier._calls.includes("c1"));
   });
 
-  it("does NOT clear SLEEPING flag when service is running but explicitly unhealthy", async () => {
-    const cluster: FakeCluster = { id: "c1", name: "C1" };
-    const instance: FakeInstance = { id: "i1", tag: "node-1", kind: "dedicated", clusterId: "c1" };
-    const service: FakeService = { id: "s1", name: "ronaldo", type: "web", clusterId: "c1" };
+  for (const nonReadyHealth of ["unhealthy", "starting"] as const) {
+    it(`does NOT clear SLEEPING flag when service health is "${nonReadyHealth}"`, async () => {
+      const cluster: FakeCluster = { id: "c1", name: "C1" };
+      const instance: FakeInstance = { id: "i1", tag: "node-1", kind: "dedicated", clusterId: "c1" };
+      const service: FakeService = { id: "s1", name: "ronaldo", type: "web", clusterId: "c1" };
 
-    const db = makeDb([cluster], [service], [instance]);
-    const kv = makeKv({
-      nodeWorkloads: { "node-1": [{ name: "ronaldo", type: "web" }] },
-      sleepingFlags: { "ronaldo": "1" },
-      clusterSleepingSet: { "c1": JSON.stringify(["ronaldo"]) },
-      healthFlags: { "ronaldo": "unhealthy" },
+      const db = makeDb([cluster], [service], [instance]);
+      const kv = makeKv({
+        nodeWorkloads: { "node-1": [{ name: "ronaldo", type: "web" }] },
+        sleepingFlags: { "ronaldo": "1" },
+        clusterSleepingSet: { "c1": JSON.stringify(["ronaldo"]) },
+        healthFlags: { "ronaldo": nonReadyHealth },
+      });
+      const notifier = makeNotifier();
+      const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, notifier);
+
+      await supervisor.run();
+
+      assert.equal(kv._store[KV_KEYS.SERVICE.SLEEPING("ronaldo")], "1", `SLEEPING flag must stay when health is "${nonReadyHealth}"`);
     });
-    const notifier = makeNotifier();
-    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, notifier);
-
-    await supervisor.run();
-
-    assert.equal(kv._store[KV_KEYS.SERVICE.SLEEPING("ronaldo")], "1", "SLEEPING flag must stay when service is unhealthy");
-  });
+  }
 
   it("keeps non-sleeping services out of the cluster sleeping set", async () => {
     const cluster: FakeCluster = { id: "c1", name: "C1" };
