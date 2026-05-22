@@ -127,7 +127,7 @@ export function resolveCluster(entity: "instance" | "domain" | "service" | "prox
         return c.json({ error: "Service identifier is required", code: ERROR.REQUEST.BAD_REQUEST.code }, ERROR.REQUEST.BAD_REQUEST.status);
       }
 
-      const service = await db.services.find({ id: value });
+      const service = await db.services.find({ name: value });
       if (!service) {
         return c.json({ error: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, ERROR.RESOURCE.MISSING_RESOURCE.status);
       }

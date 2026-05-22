@@ -7,6 +7,8 @@ import z from "zod";
 import type { Bindings, Variables } from "@/types/index.js";
 import { resolveCluster, requireClusterViewer, requireClusterDeveloper, authMiddleware } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
+import { RECENTLY_DELETED_SERVICE_TTL, SERVICE_WAKING_TTL } from "@/lib/constants/duration.js";
 import { getDbStore, getWS, getJWTService, getKVStore, getTraefikRouterService } from "@/lib/config/context.js";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
@@ -267,19 +269,18 @@ services.delete("/:id", resolveCluster("service", { path: "id" }), requireCluste
     return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
   }
 
-  const instance = await db.instances.find({ clusterId, kind: "dedicated" });
-
-  if (instance) {
-    try {
-      const jwtService = getJWTService(c);
-      const token = await jwtService.createInstanceAccessToken(session, instance.tag, clusterId);
-      const taskId = ulid();
-      const task = dployrdService.createServiceRemoveTask(taskId, service.name, token);
-      const routingKey = await db.instances.getRoutingKey(clusterId);
-      getWS(c).sendTask(routingKey, task);
-    } catch {
-      // Fire-and-forget — proceed with DB deletion regardless
-    }
+  try {
+    const jwtService = getJWTService(c);
+    const routingKey = await db.instances.getRoutingKey(clusterId);
+    const token = await jwtService.createInstanceAccessToken(session, routingKey, clusterId, {
+      issuer: c.env.BASE_URL,
+      audience: "dployr-instance",
+    });
+    const taskId = ulid();
+    const task = dployrdService.createServiceRemoveTask(taskId, service.name, token);
+    getWS(c).sendTask(routingKey, task);
+  } catch {
+    // Fire-and-forget — proceed with cleanup regardless
   }
 
   if (traefik) {
@@ -291,7 +292,24 @@ services.delete("/:id", resolveCluster("service", { path: "id" }), requireCluste
     }
   }
 
+  // Clean up all KV state for the service so stale flags don't affect other flows.
+  // DELETED tombstone prevents WorkloadSupervisor from re-creating the service if an
+  // in-flight build/publish task re-registers it on the node before the supervisor cycle runs.
+  const kv = getKVStore(c);
+  await Promise.all([
+    kv.kv.delete(KV_KEYS.SERVICE.SLEEPING(service.name)),
+    kv.kv.delete(KV_KEYS.SERVICE.WAKING(service.name)),
+    kv.kv.delete(KV_KEYS.SERVICE.LAST_ACTIVE(service.name)),
+    kv.kv.delete(KV_KEYS.SERVICE.HEALTH(service.name)),
+    kv.kv.put(KV_KEYS.SERVICE.DELETED(service.name), "1", { ttl: RECENTLY_DELETED_SERVICE_TTL }),
+  ]).catch((err) => log.error(`Failed to clean KV for deleted service ${service.name}:`, err));
+
   await db.services.delete({ id: serviceId });
+  if (service.deploymentId) {
+    await db.deployments.delete({ id: service.deploymentId }).catch((err) =>
+      log.error(`Failed to delete deployment ${service.deploymentId} for service ${service.name}:`, err)
+    );
+  }
   return c.json(createSuccessResponse({}));
 });
 
@@ -307,18 +325,25 @@ services.post("/:id/stop", resolveCluster("service", { path: "id" }), requireClu
     return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
   }
 
-  const instance = await db.instances.find({ clusterId, kind: "dedicated" });
-  if (!instance) {
-    return c.json(createErrorResponse({ message: "No node connected to this cluster", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
-  }
-
   try {
     const jwtService = getJWTService(c);
-    const token = await jwtService.createInstanceAccessToken(session, instance.tag, clusterId);
+    const routingKey = await db.instances.getRoutingKey(clusterId);
+    const token = await jwtService.createInstanceAccessToken(session, routingKey, clusterId, {
+      issuer: c.env.BASE_URL,
+      audience: "dployr-instance",
+    });
     const taskId = ulid();
     const task = dployrdService.createServiceSleepTask(taskId, service.name, token);
-    const routingKey = await db.instances.getRoutingKey(clusterId);
-    getWS(c).sendTask(routingKey, task);
+    const sent = getWS(c).sendTask(routingKey, task);
+    if (!sent) {
+      return c.json(createErrorResponse({ message: "No node connected to this cluster", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
+    }
+    const kv = getKVStore(c);
+    const traefik = getTraefikRouterService(c);
+    await Promise.all([
+      kv.kv.put(KV_KEYS.SERVICE.SLEEPING(service.name), "1"),
+      traefik ? traefik.setLoadingMode(service.name) : Promise.resolve(),
+    ]);
     log.info(`Dispatched stop task ${taskId} for service ${service.name}`);
     return c.json(createSuccessResponse({ taskId }));
   } catch (error) {
@@ -339,18 +364,28 @@ services.post("/:id/start", resolveCluster("service", { path: "id" }), requireCl
     return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
   }
 
-  const instance = await db.instances.find({ clusterId, kind: "dedicated" });
-  if (!instance) {
-    return c.json(createErrorResponse({ message: "No node connected to this cluster", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
-  }
-
   try {
     const jwtService = getJWTService(c);
-    const token = await jwtService.createInstanceAccessToken(session, instance.tag, clusterId);
+    const routingKey = await db.instances.getRoutingKey(clusterId);
+    const token = await jwtService.createInstanceAccessToken(session, routingKey, clusterId, {
+      issuer: c.env.BASE_URL,
+      audience: "dployr-instance",
+    });
     const taskId = ulid();
     const task = dployrdService.createServiceWakeTask(taskId, service.name, token);
-    const routingKey = await db.instances.getRoutingKey(clusterId);
-    getWS(c).sendTask(routingKey, task);
+    const sent = getWS(c).sendTask(routingKey, task);
+    if (!sent) {
+      return c.json(createErrorResponse({ message: "No node connected to this cluster", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
+    }
+    // Transition SLEEPING → WAKING so the loading page keeps polling until
+    // reconcileSleepingSet detects the container is healthy and restores the Traefik route.
+    // Deleting WAKING here would make status return "ready" before Traefik is updated,
+    // causing the loading page to reload into the stub again.
+    const kv = getKVStore(c);
+    await Promise.all([
+      kv.kv.delete(KV_KEYS.SERVICE.SLEEPING(service.name)),
+      kv.kv.put(KV_KEYS.SERVICE.WAKING(service.name), "1", { ttl: SERVICE_WAKING_TTL }),
+    ]);
     log.info(`Dispatched start task ${taskId} for service ${service.name}`);
     return c.json(createSuccessResponse({ taskId }));
   } catch (error) {

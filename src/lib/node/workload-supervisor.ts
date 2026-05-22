@@ -253,6 +253,10 @@ export class WorkloadSupervisor {
 
     for (const svc of services) {
       try {
+        // Skip deleted services
+        const deleted = await this.kv.kv.get(KV_KEYS.SERVICE.DELETED(svc.name));
+        if (deleted) continue;
+
         const deployment = await this.findDeployment(cluster.id, svc);
 
         await this.db.services.upsert({
@@ -294,7 +298,7 @@ export class WorkloadSupervisor {
           continue;
         }
 
-        await this.traefik.registerRoute({ serviceName, instanceAddress: instance.address, instancePort: port});
+        await this.traefik.registerRoute({ serviceName, instanceAddress: instance.address, instancePort: port });
         this.log.info(`Registered Traefik route for service ${serviceName}`);
         return;
       }
@@ -520,7 +524,7 @@ export class WorkloadSupervisor {
    * This is the authoritative source — no stale state.
    */
   private async reconcileSleepingSet(cluster: Cluster, dbServices: Service[], activeNames: Set<string>): Promise<boolean> {
-    const flags = await Promise.all(dbServices.map(s => this.kv.kv.get(KV_KEYS.SERVICE.SLEEPING(s.name))));
+    const flags = await Promise.all(dbServices.map((s) => this.kv.kv.get(KV_KEYS.SERVICE.SLEEPING(s.name))));
 
     const nowSleeping: string[] = [];
     for (let i = 0; i < dbServices.length; i++) {
@@ -545,7 +549,7 @@ export class WorkloadSupervisor {
 
     const prevRaw = await this.kv.kv.get(KV_KEYS.CLUSTER.SLEEPING_SERVICES(cluster.id));
     const prev: string[] = prevRaw ? JSON.parse(prevRaw) : [];
-    const changed = nowSleeping.length !== prev.length || nowSleeping.some(n => !prev.includes(n));
+    const changed = nowSleeping.length !== prev.length || nowSleeping.some((n) => !prev.includes(n));
 
     await this.kv.kv.put(KV_KEYS.CLUSTER.SLEEPING_SERVICES(cluster.id), JSON.stringify(nowSleeping));
     return changed;

@@ -53,6 +53,7 @@ export const KV_KEYS = {
     LAST_ACTIVE: (name: string) => `svc:last_active:${name}`,
     HEALTH: (name: string) => `svc:health:${name}`,
     ICE_WARNING_SENT: (name: string) => `svc:ice_warning:${name}`,
+    DELETED: (name: string) => `svc:deleted:${name}`,
   },
   METRICS: {
     TRAEFIK_COUNTERS: "metrics:traefik:counters",

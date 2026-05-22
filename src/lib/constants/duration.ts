@@ -120,6 +120,11 @@ export const DOMAIN_MAPPING_TTL = TTL_7_DAYS;
 /** Hobby service waking state TTL: 90 seconds (covers docker start time) */
 export const SERVICE_WAKING_TTL = TTL_90_SECONDS;
 
+/** Tombstone cooldown period to wait for deleted services showing as missing services 
+ * worthy of re-creation to prevent deleted services from entering a race condition
+ */
+export const RECENTLY_DELETED_SERVICE_TTL = TTL_5_MINUTES;
+
 /** Reprovision cooldown for workload processor: 8 minutes */
 export const REPROVISION_COOLDOWN_MS = MS_8_MINUTES;
 

@@ -124,7 +124,7 @@ export class InstanceService {
     }
 
     const jwt = getJWTService(c);
-    const token = await jwt.createInstanceAccessToken(session, instance.tag, role, { issuer: this.env.BASE_URL, audience: "dployr-daemon" });
+    const token = await jwt.createInstanceAccessToken(session, instance.tag, instance.clusterId ?? "", { issuer: this.env.BASE_URL, audience: "dployr-daemon" });
 
     let ttl = 240;
     try {
@@ -386,7 +386,7 @@ export class InstanceService {
     }
 
     const dployrd = new DployrdService();
-    const token = await jwtService.createInstanceAccessToken(session, tag, "owner", {
+    const token = await jwtService.createInstanceAccessToken(session, tag, clusterId, {
       issuer: c.env.BASE_URL,
       audience: "dployr-instance",
     });
@@ -435,7 +435,7 @@ export class InstanceService {
     }
 
     const dployrd = new DployrdService();
-    const token = await jwtService.createInstanceAccessToken(session, instanceId, "admin", {
+    const token = await jwtService.createInstanceAccessToken(session, instance.tag, clusterId, {
       issuer: c.env.BASE_URL,
       audience: "dployr-instance",
     });
@@ -483,7 +483,7 @@ export class InstanceService {
     }
 
     const dployrd = new DployrdService();
-    const token = await jwtService.createInstanceAccessToken(session, instanceId, "admin", {
+    const token = await jwtService.createInstanceAccessToken(session, instance.tag, clusterId, {
       issuer: c.env.BASE_URL,
       audience: "dployr-instance",
     });

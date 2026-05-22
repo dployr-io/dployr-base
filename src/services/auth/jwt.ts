@@ -22,16 +22,6 @@ export class JWTService {
    */
   async createBootstrapToken(instanceName: string): Promise<string> {
     const nonce = crypto.randomUUID();
-    return this.createBootstrapTokenWithNonce(instanceName, nonce);
-  }
-
-  /**
-   * Creates a new bootstrap token using an externally provided nonce.
-   * @param instanceName - The ID of the instance to create the token for.
-   * @param nonce - The nonce to use in the token.
-   * @returns A promise that resolves to the created token.
-   */
-  async createBootstrapTokenWithNonce(instanceName: string, nonce: string): Promise<string> {
     const privateKey = await this.keyStore.getPrivateKey();
     const publicKeyJwk = await this.keyStore.getPublicKey();
 
