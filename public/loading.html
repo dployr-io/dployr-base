@@ -217,11 +217,13 @@
     }
     nextStep();
 
+    let readyCount = 0;
+
     function poll() {
       Promise.all([
         fetch(location.href, { method: "HEAD", cache: "no-store" }),
         fetch(`${BASE_URL}/status?domain=${encodeURIComponent(location.hostname)}`, { cache: "no-store" }),
-      ]).then(([headRes]) => {
+      ]).then(([headRes, statusRes]) => {
           if (!headRes.headers.get("X-Dployr-Loading")) {
             removeCursor();
             appendLog("Ready — loading your page", true);
@@ -229,6 +231,17 @@
             setTimeout(() => location.reload(), 800);
             return;
           }
+          statusRes.json().then((body) => {
+            if (body?.status === "ready") {
+              readyCount++;
+              if (readyCount >= 3) {
+                location.reload();
+                return;
+              }
+            } else {
+              readyCount = 0;
+            }
+          }).catch(() => {});
           if (Date.now() - start > SLOW_MS) {
             document.getElementById("slow-msg").style.display = "block";
           }

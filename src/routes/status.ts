@@ -40,7 +40,7 @@ status.get("/", async (c) => {
     clusterId = customDomain.clusterId;
   } else {
     // Fall back to subdomain pattern: {name}.{tld}
-    const tld = c.env.TLD ?? "dployr.io";
+    const tld = c.env.TRAEFIK_TLD ?? "dployr.run";
     if (domain.endsWith(`.${tld}`)) {
       serviceName = domain.slice(0, -(tld.length + 1));
     }
@@ -82,12 +82,12 @@ status.get("/", async (c) => {
       const taskId = ulid();
       const token = await jwtService.createNodeAccessToken(routingKey, { issuer: c.env.BASE_URL, audience: "dployr-instance" });
       const task = dployrdService.createServiceWakeTask(taskId, serviceName, token);
-      connectionManager.sendTask(routingKey, task);
-
-      // Clear sleeping, set waking with 90s TTL (covers docker start time)
-      await kv.kv.delete(KV_KEYS.SERVICE.SLEEPING(serviceName));
-      await kv.kv.put(KV_KEYS.SERVICE.WAKING(serviceName), "1", { ttl: SERVICE_WAKING_TTL });
-      await kv.kv.put(KV_KEYS.SERVICE.LAST_ACTIVE(serviceName), String(Date.now()));
+      const sent = connectionManager.sendTask(routingKey, task);
+      if (sent) {
+        await kv.kv.delete(KV_KEYS.SERVICE.SLEEPING(serviceName));
+        await kv.kv.put(KV_KEYS.SERVICE.WAKING(serviceName), "1", { ttl: SERVICE_WAKING_TTL });
+        await kv.kv.put(KV_KEYS.SERVICE.LAST_ACTIVE(serviceName), String(Date.now()));
+      }
     }
   } catch (err) {
     log.warn(`Failed to dispatch wake task for ${serviceName}`, { error: String(err) });
