@@ -24,7 +24,6 @@ export const workloadSupervisor: JobFn = async ({ db, kv, jwt: jwtService, adapt
     trigger(NODES_SYNC_JOB);
   });
 
-  await traefik?.ensureWakeupMiddleware();
   await supervisor.run();
   setOutput(supervisor.getRunSummary());
 };
