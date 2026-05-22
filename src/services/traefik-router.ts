@@ -5,8 +5,6 @@ import { RedisKV } from "@/lib/storage/kv.interface.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { SERVICE_STUB_ADDRESS } from "@/lib/constants/index.js";
 
-const WAKEUP_MIDDLEWARE = "hobby-wakeup";
-
 export interface TraefikMetricsSample {
   serviceName: string;
   requests: number;
@@ -14,10 +12,6 @@ export interface TraefikMetricsSample {
   bytesOut: number;
 }
 
-/**
- * Service for managing Traefik routing rules in a separate Redis instance.
- * Writes routing configuration that Traefik instances poll and apply.
- */
 export class TraefikService {
   private redis: RedisKV;
 
@@ -29,11 +23,6 @@ export class TraefikService {
     this.redis = new RedisKV(redisClient);
   }
 
-  /**
-   * Fetches Traefik's Prometheus metrics endpoint and returns per-router
-   * request/byte totals. Returns null if metrics_url is not configured or
-   * the request fails.
-   */
   async scrapeMetrics(): Promise<TraefikMetricsSample[] | null> {
     if (!this.metricsUrl) return null;
 
@@ -69,7 +58,6 @@ export class TraefikService {
       const metricName = labelPart.slice(0, braceOpen);
       const labels = labelPart.slice(braceOpen + 1, -1);
 
-      // Only collect metrics for Redis-managed services; ignore @file, @internal, etc.
       const serviceMatch = labels.match(/service="([^"]+@redis)"/);
       if (!serviceMatch) continue;
       const name = serviceMatch[1].replace(/@redis$/, "");
@@ -91,86 +79,30 @@ export class TraefikService {
     }));
   }
 
-  /**
-   * Writes the hobby-wakeup errors middleware to Redis once.
-   * Traefik intercepts `502/503/504` from sleeping services and serves the loading page.
-   * Safe to call multiple times — idempotent.
-   */
-  async ensureWakeupMiddleware(): Promise<void> {
-    const stubKey = "loading-stub";
-    await Promise.all([
-      // Point the loading-stub service at the nginx stub on the Traefik server
-      this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(stubKey), SERVICE_STUB_ADDRESS),
-      // Errors middleware: intercept backend failures and serve the loading page.
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 0), "502"),
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 1), "503"),
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 2), "504"),
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_SERVICE(WAKEUP_MIDDLEWARE), `${stubKey}@redis`),
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_QUERY(WAKEUP_MIDDLEWARE), "/"),
-    ]);
-  }
-
-  /**
-   * Registers a route with Traefik.
-   * Writes routing rules to Redis in the format Traefik expects.
-   *
-   * @param serviceName     - The service name (e.g., "my-api")
-   * @param instanceAddress - The instance private IP to route to
-   * @param instancePort    - The port on the instance (typically 80)
-   * @param hobby           - When true, attaches the wakeup errors middleware
-   */
-  async registerRoute({ serviceName, instanceAddress, instancePort = 80, hobby = false }: { serviceName: string; instanceAddress: string; instancePort?: number; hobby?: boolean }): Promise<void> {
-    const routeKey = serviceName;
+  async registerRoute({ serviceName, instanceAddress, instancePort = 80 }: { serviceName: string; instanceAddress: string; instancePort?: number }): Promise<void> {
     const hostname = `${serviceName}.${this.baseDomain}`;
-    const backendUrl = `http://${instanceAddress}:${instancePort}`;
-
-    const writes: Promise<void>[] = [
-      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_RULE(routeKey), `Host(\`${hostname}\`)`),
-      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_ENTRYPOINTS(routeKey), "websecure"),
-      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_SERVICE(routeKey), routeKey),
-      this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(routeKey), backendUrl),
-    ];
-
-    if (hobby) {
-      await this.ensureWakeupMiddleware();
-      writes.push(this.redis.put(KV_KEYS.TRAEFIK.ROUTER_MIDDLEWARE(routeKey, 0), WAKEUP_MIDDLEWARE));
-    }
-
-    await Promise.all(writes);
-  }
-
-  /**
-   * Points the service backend at a guaranteed-closed local port so Traefik
-   * gets an immediate connection refused (502) instead of a dial timeout (504).
-   * The errors middleware intercepts 502 and serves loading.html.
-   * Call this when reprovisioning starts; registerRoute restores the real URL
-   * once the new backend is live.
-   */
-  async setLoadingMode(serviceName: string): Promise<void> {
-    await this.ensureWakeupMiddleware();
     await Promise.all([
-      this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName), SERVICE_STUB_ADDRESS),
-      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_MIDDLEWARE(serviceName, 0), WAKEUP_MIDDLEWARE),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_RULE(serviceName), `Host(\`${hostname}\`)`),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_ENTRYPOINTS(serviceName), "websecure"),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_SERVICE(serviceName), serviceName),
+      this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName), `http://${instanceAddress}:${instancePort}`),
     ]);
   }
 
-  /**
-   * Returns the currently registered backend URL for a service, or null if not registered.
-   * Used to detect missing or stale routes without doing a full re-register.
-   */
+  async setLoadingMode(serviceName: string): Promise<void> {
+    await this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName), SERVICE_STUB_ADDRESS);
+  }
+
   async getRouteBackendUrl(serviceName: string): Promise<string | null> {
     return this.redis.get(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName));
   }
 
   async unregisterRoute(serviceName: string): Promise<void> {
-    const routeKey = serviceName;
-
     await Promise.all([
-      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_RULE(routeKey)),
-      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_ENTRYPOINTS(routeKey)),
-      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_SERVICE(routeKey)),
-      this.redis.delete(KV_KEYS.TRAEFIK.SERVICE_URL(routeKey)),
-      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_MIDDLEWARE(routeKey, 0)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_RULE(serviceName)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_ENTRYPOINTS(serviceName)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_SERVICE(serviceName)),
+      this.redis.delete(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName)),
     ]);
   }
 }

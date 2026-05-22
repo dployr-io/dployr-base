@@ -294,7 +294,7 @@ export class WorkloadSupervisor {
           continue;
         }
 
-        await this.traefik.registerRoute({ serviceName, instanceAddress: instance.address, instancePort: port, hobby: true });
+        await this.traefik.registerRoute({ serviceName, instanceAddress: instance.address, instancePort: port});
         this.log.info(`Registered Traefik route for service ${serviceName}`);
         return;
       }
@@ -337,7 +337,7 @@ export class WorkloadSupervisor {
 
         if (currentUrl === expectedUrl) continue;
 
-        await this.traefik.registerRoute({ serviceName, instanceAddress, instancePort, hobby: true });
+        await this.traefik.registerRoute({ serviceName, instanceAddress, instancePort});
         this.log.info(`Traefik route ${currentUrl ? "updated" : "registered"} for service ${serviceName}`, {
           old: currentUrl ?? "none",
           new: expectedUrl,
