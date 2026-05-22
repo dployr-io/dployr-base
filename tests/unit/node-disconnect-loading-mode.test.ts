@@ -4,6 +4,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { NodeMessageHandler } from "@/services/websocket/handlers/node-handler.js";
+import { setServicesLoadingMode } from "@/services/websocket/instance-handler.js";
+import { KV_KEYS } from "@/lib/constants/kv.js";
 
 function makeKv(opts: { deregistered?: string[][] } = {}) {
   const deregistered: string[][] = opts.deregistered ?? [];
@@ -114,25 +116,12 @@ describe("node disconnect → Traefik loading mode + SLEEPING cleared", () => {
   }
 
   it("calls setLoadingMode for every service in the affected clusters", async () => {
-    const { kv } = makeKv();
     const db = makeDisconnectDb();
-
     const loadingModeCalls: string[] = [];
-    const traefik = {
-      setLoadingMode: async (name: string) => { loadingModeCalls.push(name); },
-      ensureWakeupMiddleware: async () => {},
-    } as any;
+    const traefik = { setLoadingMode: async (name: string) => { loadingModeCalls.push(name); } };
+    const kv = { put: async () => {} };
 
-    const conn = { connectionKey: "pool-1", instanceTag: "pool-1", clusterId: undefined, role: "node" } as any;
-    const clusterIds = await handler(db, kv).handleNodeDisconnect(conn);
-
-    for (const clusterId of clusterIds) {
-      const { services: svcs } = await db.services.list({ clusterId });
-      await Promise.all(svcs.map((svc: any) => Promise.all([
-        traefik.setLoadingMode(svc.name),
-        Promise.resolve(), // kv.delete placeholder — tested separately below
-      ])));
-    }
+    await setServicesLoadingMode(["cluster-a"], db.services, kv, traefik);
 
     assert.deepEqual(loadingModeCalls.sort(), ["api", "worker"]);
   });
@@ -159,25 +148,17 @@ describe("node disconnect → Traefik loading mode + SLEEPING cleared", () => {
     assert.equal(calls.length, 0);
   });
 
-  it("deletes the SLEEPING flag for every affected service on disconnect", async () => {
-    const { kv } = makeKv();
+  it("sets the SLEEPING flag for every affected service on disconnect", async () => {
     const db = makeDisconnectDb();
+    const putEntries: Array<[string, string]> = [];
+    const kv = { put: async (key: string, value: string) => { putEntries.push([key, value]); } };
+    const traefik = { setLoadingMode: async () => {} };
 
-    const deletedKeys: string[] = [];
-    const kvStore = {
-      kv: { delete: async (key: string) => { deletedKeys.push(key); } },
-    };
+    await setServicesLoadingMode(["cluster-a"], db.services, kv, traefik);
 
-    const conn = { connectionKey: "pool-1", instanceTag: "pool-1", clusterId: undefined, role: "node" } as any;
-    const clusterIds = await handler(db, kv).handleNodeDisconnect(conn);
-
-    for (const clusterId of clusterIds) {
-      const { services: svcs } = await db.services.list({ clusterId });
-      await Promise.all(svcs.map((svc: any) =>
-        kvStore.kv.delete(`svc:sleeping:${svc.name}`),
-      ));
-    }
-
-    assert.deepEqual(deletedKeys.sort(), ["svc:sleeping:api", "svc:sleeping:worker"]);
+    assert.deepEqual(
+      putEntries.filter(([k]) => k.startsWith("svc:sleeping:")).sort((a, b) => a[0].localeCompare(b[0])),
+      [[KV_KEYS.SERVICE.SLEEPING("api"), "1"], [KV_KEYS.SERVICE.SLEEPING("worker"), "1"]],
+    );
   });
 });

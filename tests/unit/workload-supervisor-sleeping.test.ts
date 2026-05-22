@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { WorkloadSupervisor } from "@/lib/node/workload-supervisor.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
+import { SERVICE_STUB_ADDRESS } from "@/lib/constants/index.js";
 
 type FakeInstance = { id: string; tag: string; kind: "pool" | "dedicated"; clusterId?: string; address?: string };
 type FakeService = { id: string; name: string; type: string; clusterId: string };
@@ -308,5 +309,79 @@ describe("WorkloadSupervisor — reconcileTraefikRoutes skips sleeping services"
     await supervisor.run();
 
     assert.ok(registerRouteCalls.includes("api"), "registerRoute should be called when URL differs and service is not sleeping");
+  });
+});
+
+describe("WorkloadSupervisor — reconcileSleepingSet sets loading mode", () => {
+  const cluster: FakeCluster = { id: "c1", name: "C1" };
+  const instance: FakeInstance = { id: "i1", tag: "node-1", kind: "dedicated", clusterId: "c1", address: "10.0.0.1" };
+  const service: FakeService = { id: "s1", name: "api", type: "web", clusterId: "c1" };
+
+  function makeTraefik(setLoadingModeCalls: string[], backendUrls: Record<string, string | null> = {}) {
+    return {
+      getRouteBackendUrl: async (name: string) => backendUrls[name] ?? null,
+      registerRoute: async () => {},
+      setLoadingMode: async (name: string) => { setLoadingModeCalls.push(name); },
+    } as any;
+  }
+
+  it("calls setLoadingMode when sleeping service points to real backend", async () => {
+    const db = makeDb([cluster], [service], [instance]);
+    const kv = makeKv({
+      nodeWorkloads: { "node-1": [] },
+      sleepingFlags: { "api": "1" },
+    });
+    const setLoadingModeCalls: string[] = [];
+    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, makeNotifier(), makeTraefik(setLoadingModeCalls, { "api": "http://10.0.0.1:62000" }));
+
+    await supervisor.run();
+
+    assert.ok(setLoadingModeCalls.includes("api"), "setLoadingMode should be called when sleeping service still points to real backend");
+  });
+
+  it("does NOT call setLoadingMode when route already points to stub address", async () => {
+    const db = makeDb([cluster], [service], [instance]);
+    const kv = makeKv({
+      nodeWorkloads: { "node-1": [] },
+      sleepingFlags: { "api": "1" },
+    });
+    const setLoadingModeCalls: string[] = [];
+    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, makeNotifier(), makeTraefik(setLoadingModeCalls, { "api": SERVICE_STUB_ADDRESS }));
+
+    await supervisor.run();
+
+    assert.equal(setLoadingModeCalls.length, 0, "setLoadingMode should NOT be called when route already points to stub (idempotent)");
+  });
+
+  it("does NOT call setLoadingMode when no route is registered", async () => {
+    const db = makeDb([cluster], [service], [instance]);
+    const kv = makeKv({
+      nodeWorkloads: { "node-1": [] },
+      sleepingFlags: { "api": "1" },
+    });
+    const setLoadingModeCalls: string[] = [];
+    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, makeNotifier(), makeTraefik(setLoadingModeCalls, { "api": null }));
+
+    await supervisor.run();
+
+    assert.equal(setLoadingModeCalls.length, 0, "setLoadingMode should NOT be called when no route exists yet");
+  });
+
+  it("calls setLoadingMode for each sleeping service pointing to real backend", async () => {
+    const services: FakeService[] = [
+      { id: "s1", name: "api", type: "web", clusterId: "c1" },
+      { id: "s2", name: "worker", type: "worker", clusterId: "c1" },
+    ];
+    const db = makeDb([cluster], services, [instance]);
+    const kv = makeKv({
+      nodeWorkloads: { "node-1": [] },
+      sleepingFlags: { "api": "1", "worker": "1" },
+    });
+    const setLoadingModeCalls: string[] = [];
+    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, makeNotifier(), makeTraefik(setLoadingModeCalls, { "api": "http://10.0.0.1:62000", "worker": "http://10.0.0.1:62001" }));
+
+    await supervisor.run();
+
+    assert.deepEqual(setLoadingModeCalls.sort(), ["api", "worker"], "setLoadingMode should be called for every sleeping service with a real backend URL");
   });
 });

@@ -14,7 +14,7 @@ import { DatabaseConflictError } from "../errors/errors.js";
 import { KV_KEYS } from "../constants/kv.js";
 import { EVENTS } from "../constants/events.js";
 import { Logger } from "@/lib/logger.js";
-import { REPROVISION_COOLDOWN_MS } from "../constants/index.js";
+import { REPROVISION_COOLDOWN_MS, SERVICE_STUB_ADDRESS } from "../constants/index.js";
 import { computeBuildFingerprint, enqueueBuild } from "@/services/deployments.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { ulid } from "ulid";
@@ -532,6 +532,13 @@ export class WorkloadSupervisor {
           this.log.info(`Cleared stale SLEEPING flag for running service ${svc.name}`);
         } else {
           nowSleeping.push(svc.name);
+          if (this.traefik) {
+            const currentUrl = await this.traefik.getRouteBackendUrl(svc.name);
+            if (currentUrl && currentUrl !== SERVICE_STUB_ADDRESS) {
+              await this.traefik.setLoadingMode(svc.name);
+              this.log.info(`Set loading mode for sleeping service ${svc.name}`);
+            }
+          }
         }
       }
     }

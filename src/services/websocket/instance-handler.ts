@@ -142,23 +142,8 @@ export class WebSocketHandler {
     }
   }
 
-  private async setServicesLoadingMode(clusterIds: string[]): Promise<void> {
-    for (const clusterId of clusterIds) {
-      try {
-        const { services } = await this.dbStore.services.list({ clusterId });
-        await Promise.all(
-          services.map((svc) => Promise.all([
-            this.traefik!.setLoadingMode(svc.name),
-            this.kvStore.kv.delete(KV_KEYS.SERVICE.SLEEPING(svc.name)),
-          ])),
-        );
-        if (services.length > 0) {
-          this.log.info(`Set loading mode for ${services.length} service(s) in cluster ${clusterId}`);
-        }
-      } catch (err) {
-        this.log.error(`Failed to set loading mode for cluster ${clusterId}`, { error: String(err) });
-      }
-    }
+  async setServicesLoadingMode(clusterIds: string[]): Promise<void> {
+    await setServicesLoadingMode(clusterIds, this.dbStore.services, this.kvStore.kv, this.traefik!);
   }
 
   /**
@@ -284,5 +269,30 @@ export class WebSocketHandler {
     this.connectionManager.stopCleanupLoop();
     this.terminalManager.destroy();
     this.log.info("WebSocket handler shutdown complete");
+  }
+}
+
+export async function setServicesLoadingMode(
+  clusterIds: string[],
+  services: { list: (filter: { clusterId: string }) => Promise<{ services: { name: string }[] }> },
+  kv: { put: (key: string, value: string) => Promise<void> },
+  traefik: { setLoadingMode: (name: string) => Promise<void> },
+): Promise<void> {
+  const log = new Logger("WebSocket");
+  for (const clusterId of clusterIds) {
+    try {
+      const { services: svcs } = await services.list({ clusterId });
+      await Promise.all(
+        svcs.map((svc) => Promise.all([
+          traefik.setLoadingMode(svc.name),
+          kv.put(KV_KEYS.SERVICE.SLEEPING(svc.name), "1"),
+        ])),
+      );
+      if (svcs.length > 0) {
+        log.info(`Set loading mode for ${svcs.length} service(s) in cluster ${clusterId}`);
+      }
+    } catch (err) {
+      log.error(`Failed to set loading mode for cluster ${clusterId}`, { error: String(err) });
+    }
   }
 }

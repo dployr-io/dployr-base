@@ -47,9 +47,6 @@ export const hobbySleepSupervisor: JobFn = async ({ db, kv, jwt: jwtService, ada
     if (sent) {
       await kv.kv.put(KV_KEYS.SERVICE.SLEEPING(service.name), "1");
       log.info(`Sleeping idle hobby service ${service.name} (inactive ${Math.round((now - lastActive) / 60000)}m)`);
-      adapters.traefik?.setLoadingMode(service.name).catch((err) => {
-        log.warn(`Failed to set loading mode for ${service.name}`, { error: String(err) });
-      });
     } else {
       log.warn(`No connection to instance ${routingKey} — could not sleep ${service.name}`);
     }
