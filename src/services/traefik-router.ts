@@ -146,7 +146,10 @@ export class TraefikService {
    */
   async setLoadingMode(serviceName: string): Promise<void> {
     await this.ensureWakeupMiddleware();
-    await this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName), SERVICE_STUB_ADDRESS);
+    await Promise.all([
+      this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName), SERVICE_STUB_ADDRESS),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_MIDDLEWARE(serviceName, 0), WAKEUP_MIDDLEWARE),
+    ]);
   }
 
   /**
