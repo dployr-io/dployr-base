@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { WorkloadSupervisor } from "@/lib/node/workload-supervisor.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 
-type FakeInstance = { id: string; tag: string; kind: "pool" | "dedicated"; clusterId?: string };
+type FakeInstance = { id: string; tag: string; kind: "pool" | "dedicated"; clusterId?: string; address?: string };
 type FakeService = { id: string; name: string; type: string; clusterId: string };
 type FakeCluster = { id: string; name: string; poolInstanceId?: string };
 
@@ -207,5 +207,47 @@ describe("WorkloadSupervisor — sleeping reconciliation", () => {
 
     const stored = kv._store[KV_KEYS.CLUSTER.SLEEPING_SERVICES("c1")];
     assert.deepEqual(JSON.parse(stored), ["worker"]);
+  });
+});
+
+describe("WorkloadSupervisor — reconcileTraefikRoutes skips sleeping services", () => {
+  const cluster: FakeCluster = { id: "c1", name: "C1" };
+  const instance: FakeInstance = { id: "i1", tag: "node-1", kind: "dedicated", clusterId: "c1", address: "10.0.0.1" };
+  const service: FakeService = { id: "s1", name: "api", type: "web", clusterId: "c1" };
+
+  function makeTraefik(registerRouteCalls: string[], currentUrl: string | null = null) {
+    return {
+      getRouteBackendUrl: async () => currentUrl,
+      registerRoute: async ({ serviceName }: { serviceName: string }) => { registerRouteCalls.push(serviceName); },
+      setLoadingMode: async () => {},
+    } as any;
+  }
+
+  it("does NOT call registerRoute when service has SLEEPING flag", async () => {
+    const db = makeDb([cluster], [service], [instance]);
+    const kv = makeKv({
+      nodeWorkloads: { "node-1": [{ name: "api", type: "web", host_port: 62000 }] },
+      sleepingFlags: { "api": "1" },
+    });
+    const registerRouteCalls: string[] = [];
+    // currentUrl differs from real backend so the URL-equality guard doesn't short-circuit
+    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, makeNotifier(), makeTraefik(registerRouteCalls, "http://127.0.0.1:19503"));
+
+    await supervisor.run();
+
+    assert.equal(registerRouteCalls.length, 0, "registerRoute must not be called for sleeping services");
+  });
+
+  it("calls registerRoute when service is not sleeping and URL differs", async () => {
+    const db = makeDb([cluster], [service], [instance]);
+    const kv = makeKv({
+      nodeWorkloads: { "node-1": [{ name: "api", type: "web", host_port: 62000 }] },
+    });
+    const registerRouteCalls: string[] = [];
+    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, makeNotifier(), makeTraefik(registerRouteCalls));
+
+    await supervisor.run();
+
+    assert.ok(registerRouteCalls.includes("api"), "registerRoute should be called when URL differs and service is not sleeping");
   });
 });
