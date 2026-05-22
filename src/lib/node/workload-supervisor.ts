@@ -336,8 +336,9 @@ export class WorkloadSupervisor {
         const currentUrl = await this.traefik.getRouteBackendUrl(serviceName);
 
         if (currentUrl === expectedUrl) continue;
+        if (await this.kv.kv.get(KV_KEYS.SERVICE.SLEEPING(serviceName))) continue;
 
-        await this.traefik.registerRoute({ serviceName, instanceAddress, instancePort});
+        await this.traefik.registerRoute({ serviceName, instanceAddress, instancePort });
         this.log.info(`Traefik route ${currentUrl ? "updated" : "registered"} for service ${serviceName}`, {
           old: currentUrl ?? "none",
           new: expectedUrl,
