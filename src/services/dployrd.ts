@@ -209,8 +209,8 @@ export class DployrdService {
   createServiceSleepTask(taskId: string, name: string, token?: string): NodeTask {
     return {
       ID: taskId,
-      Type: "services/sleep:post",
-      Payload: { name, token },
+      Type: `services/sleep?name=${encodeURIComponent(name)}:post`,
+      Payload: { token },
       Status: "pending",
     };
   }
@@ -218,8 +218,8 @@ export class DployrdService {
   createServiceWakeTask(taskId: string, name: string, token?: string): NodeTask {
     return {
       ID: taskId,
-      Type: "services/wake:post",
-      Payload: { name, token },
+      Type: `services/wake?name=${encodeURIComponent(name)}:post`,
+      Payload: { token },
       Status: "pending",
     };
   }
@@ -227,8 +227,8 @@ export class DployrdService {
   createServiceIceTask(taskId: string, name: string, token?: string): NodeTask {
     return {
       ID: taskId,
-      Type: "services/ice:post",
-      Payload: { name, token },
+      Type: `services/ice?name=${encodeURIComponent(name)}:post`,
+      Payload: { token },
       Status: "pending",
     };
   }

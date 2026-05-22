@@ -46,9 +46,13 @@ export const traefikMetricsScraper: JobFn = async ({ db, kv, adapters, setOutput
   const rows: { serviceName: string; bucket: number; requests: number; bytesIn: number; bytesOut: number }[] = [];
 
   for (const s of samples) {
-    const deltaReq = Math.max(0, s.requests - (prev.requests[s.serviceName] ?? 0));
-    const deltaIn = Math.max(0, s.bytesIn - (prev.bytesIn[s.serviceName] ?? 0));
-    const deltaOut = Math.max(0, s.bytesOut - (prev.bytesOut[s.serviceName] ?? 0));
+    const prevReq = prev.requests[s.serviceName] ?? 0;
+    const prevIn  = prev.bytesIn[s.serviceName] ?? 0;
+    const prevOut = prev.bytesOut[s.serviceName] ?? 0;
+    // If current < prev the counter was reset (Traefik restarted) — use current as the delta
+    const deltaReq = s.requests < prevReq ? s.requests : s.requests - prevReq;
+    const deltaIn  = s.bytesIn  < prevIn  ? s.bytesIn  : s.bytesIn  - prevIn;
+    const deltaOut = s.bytesOut < prevOut ? s.bytesOut : s.bytesOut - prevOut;
 
     if (deltaReq > 0 || deltaIn > 0 || deltaOut > 0) {
       rows.push({ serviceName: s.serviceName, bucket, requests: deltaReq, bytesIn: deltaIn, bytesOut: deltaOut });

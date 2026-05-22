@@ -12,7 +12,17 @@ import { hobbyIceSupervisor } from "./hobby-ice-supervisor.js";
 import { traefikMetricsScraper } from "./traefik-metrics-scraper.js";
 import { dockerPrune } from "./docker-prune.js";
 import { MS_30_SECONDS, MS_5_MINUTES, MS_12_HOURS, MS_24_HOURS, MS_10_SECONDS, MS_1_MINUTE } from "@/lib/constants/duration.js";
-import { NODES_HEALTH_JOB, NODES_SYNC_JOB, SECRETS_CLEANUP_JOB, WORKLOAD_SUPERVISOR_JOB, BUILD_NODE_SUPERVISOR_JOB, HOBBY_SLEEP_SUPERVISOR_JOB, HOBBY_ICE_SUPERVISOR_JOB, TRAEFIK_METRICS_SCRAPER_JOB, DOCKER_PRUNE_JOB } from "@/lib/constants/index.js";
+import {
+  NODES_HEALTH_JOB,
+  NODES_SYNC_JOB,
+  SECRETS_CLEANUP_JOB,
+  WORKLOAD_SUPERVISOR_JOB,
+  BUILD_NODE_SUPERVISOR_JOB,
+  HOBBY_SLEEP_SUPERVISOR_JOB,
+  HOBBY_ICE_SUPERVISOR_JOB,
+  TRAEFIK_METRICS_SCRAPER_JOB,
+  DOCKER_PRUNE_JOB,
+} from "@/lib/constants/index.js";
 
 export function registerJobs(worker: BackgroundWorker): void {
   worker
@@ -21,10 +31,10 @@ export function registerJobs(worker: BackgroundWorker): void {
     .schedule(SECRETS_CLEANUP_JOB, MS_12_HOURS, secretsCleanup)
     .schedule(WORKLOAD_SUPERVISOR_JOB, MS_10_SECONDS, workloadSupervisor)
     .schedule(BUILD_NODE_SUPERVISOR_JOB, MS_5_MINUTES, buildNodeSupervisor, { runImmediately: true })
-    .schedule(HOBBY_SLEEP_SUPERVISOR_JOB, MS_5_MINUTES, hobbySleepSupervisor)
+    .schedule(HOBBY_SLEEP_SUPERVISOR_JOB, MS_1_MINUTE, hobbySleepSupervisor)
     .schedule(HOBBY_ICE_SUPERVISOR_JOB, MS_24_HOURS, hobbyIceSupervisor)
     .schedule(TRAEFIK_METRICS_SCRAPER_JOB, MS_1_MINUTE, traefikMetricsScraper)
     .schedule(DOCKER_PRUNE_JOB, MS_24_HOURS, dockerPrune)
-.on(NODES_HEALTH_JOB, nodesHealth, { runImmediately: true })
+    .on(NODES_HEALTH_JOB, nodesHealth, { runImmediately: true })
     .on(NODES_SYNC_JOB, nodesSync, { runImmediately: true });
 }

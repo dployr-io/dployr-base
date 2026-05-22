@@ -65,6 +65,11 @@ function makeKv(workloadsByNodeTag: Record<string, Array<Record<string, unknown>
       registerClusterNode: async () => {},
       deregisterClusterNode: async () => {},
     },
+    kv: {
+      get: async (_key: string) => null,
+      put: async (_key: string, _value: string) => {},
+      delete: async (_key: string) => {},
+    },
   } as any;
 }
 

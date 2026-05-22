@@ -145,9 +145,7 @@ export class UpdateProcessor {
               this.deploymentsChanged = true;
             }
 
-            if (normalizedStatus === "success" && synced?.name) {
-              await this.kv.kv.put(KV_KEYS.SERVICE.LAST_ACTIVE(synced.name), String(Date.now())).catch(() => {});
-            }
+
 
             if (synced && payload) {
               const service = await this.db.services.find({ name: synced.name, clusterId: cluster.id });

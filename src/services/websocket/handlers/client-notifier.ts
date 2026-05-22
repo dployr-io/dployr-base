@@ -8,6 +8,7 @@ import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import type { NodeStateEntity } from "@/lib/constants/node-state.js";
 import { Logger } from "@/lib/logger.js";
+import { addSleepingServices } from "@/lib/node/sleeping.js";
 
 /**
  * Handles broadcasting messages to connected clients.
@@ -49,11 +50,7 @@ export class ClientNotifier {
    * which already contains only the services belonging to this cluster.
    * All other sections are read from the raw instance key as normal.
    */
-  async broadcast(
-    clusterId: string,
-    instanceId: string,
-    sections: NodeStateEntity[],
-  ): Promise<void> {
+  async broadcast(clusterId: string, instanceId: string, sections: NodeStateEntity[]): Promise<void> {
     const clients = this.conn.getClientConnections(clusterId);
     if (!clients.length) return;
 
@@ -61,9 +58,7 @@ export class ClientNotifier {
       const changed: Record<string, { data: unknown; version: number }> = {};
 
       for (const section of sections) {
-        const key = section === "workloads"
-          ? KV_KEYS.CLUSTER.WORKLOADS(clusterId, instanceId)
-          : KV_KEYS.INSTANCE.ENTITY(instanceId, section);
+        const key = section === "workloads" ? KV_KEYS.CLUSTER.WORKLOADS(clusterId, instanceId) : KV_KEYS.INSTANCE.ENTITY(instanceId, section);
 
         const entity = await this.kv.entities.getEntity(key);
         if (!entity) continue;
@@ -74,6 +69,8 @@ export class ClientNotifier {
           const hasServices = Array.isArray(d?.services) && d.services.length > 0;
           const hasDeployments = Array.isArray(d?.deployments) && d.deployments.length > 0;
           if (!hasServices && !hasDeployments) continue;
+
+          entity.data = await addSleepingServices(this.kv, d);
         }
 
         const clientVersion = this.conn.getClientVersion(client.connectionId, instanceId, section);

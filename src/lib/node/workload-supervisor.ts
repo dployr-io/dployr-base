@@ -124,13 +124,20 @@ export class WorkloadSupervisor {
         },
       );
 
+      // Keep cluster sleeping set in sync with individual service flags.
+      // Clears the flag for any service the node is actively running (woke up).
+      const sleepingChanged = await this.reconcileSleepingSet(cluster, dbServices, aggregatedNames);
+      changed = changed || sleepingChanged;
+
       changed = (await this.createMissingServices({ cluster, activeNodeIds, services: toCreate })) || changed;
       changed = (await this.backfillDeploymentLinks({ cluster, dbServices, aggregatedServices })) || changed;
 
       for (const svc of toReprovision) {
-        await this.reprovisionService(svc, cluster);
-        result.reprovisioned.push(svc.name);
-        changed = true;
+        const dispatched = await this.reprovisionService(svc, cluster);
+        if (dispatched) {
+          result.reprovisioned.push(svc.name);
+          changed = true;
+        }
       }
 
       result.created = toCreate.map((s) => s.name);
@@ -365,23 +372,23 @@ export class WorkloadSupervisor {
     return changed;
   }
 
-  private async reprovisionService(service: Service, cluster: Cluster): Promise<void> {
+  private async reprovisionService(service: Service, cluster: Cluster): Promise<boolean> {
     const cooldownKey = `${cluster.id}:${service.name}`;
     const lastSent = this.reprovisionSentAt.get(cooldownKey);
     if (lastSent && Date.now() - lastSent < REPROVISION_COOLDOWN_MS) {
       this.log.debug(`Skipping reprovision for ${service.name} — cooldown active`, { remainingMs: REPROVISION_COOLDOWN_MS - (Date.now() - lastSent) });
-      return;
+      return false;
     }
 
     const sleeping = await this.kv.kv.get(KV_KEYS.SERVICE.SLEEPING(service.name));
     if (sleeping) {
       this.log.debug(`Skipping reprovision for ${service.name} — service is sleeping`);
-      return;
+      return false;
     }
 
     if (!this.db.serviceSecrets) {
       this.log.warn(`Cannot reprovision ${service.name}: encryption not configured`);
-      return;
+      return false;
     }
 
     try {
@@ -397,7 +404,7 @@ export class WorkloadSupervisor {
         const inFlight = (workloadsEntity.data?.deployments ?? []).find((d: any) => d.name === service.name && (d.status === "pending" || d.status === "in_progress"));
         if (inFlight) {
           this.log.info(`Service ${service.name} has an in-flight deployment on ${nodeId} (${inFlight.status}) — skipping reprovision`);
-          return;
+          return false;
         }
       }
 
@@ -411,14 +418,14 @@ export class WorkloadSupervisor {
         });
         if (pendingInDb.length > 0) {
           this.log.info(`Service ${service.name} has a pending deployment in DB (no node data yet) — skipping reprovision`);
-          return;
+          return false;
         }
       }
 
       const deployment = await this.findDeployment(cluster.id, { name: service.name, type: service.type });
       if (!deployment) {
         this.log.warn(`No deployment found for service ${service.name} — skipping reprovision`);
-        return;
+        return false;
       }
 
       const blueprint: DeploymentPayload = {
@@ -452,7 +459,7 @@ export class WorkloadSupervisor {
         const { values, missing } = await this.db.serviceSecrets.getDecrypted({ serviceId: service.id, keys: secretKeys });
         if (missing.length > 0) {
           this.log.error(`Cannot reprovision ${service.name}: secrets missing — [${missing.join(", ")}]`);
-          return;
+          return false;
         }
         blueprint.secrets = values;
       }
@@ -462,20 +469,19 @@ export class WorkloadSupervisor {
 
       if (!routingKey) {
         this.log.error(`Failed to re-provision service ${service.name} for cluster ${cluster.name}. Could not determine routing key`);
-        return;
+        return false;
       }
 
       let taskId: string;
 
       if (blueprint.source === "image") {
-        // Image is already built — send directly to the instance node, no build step needed.
         taskId = ulid();
         const token = await this.jwtService.createNodeAccessToken(routingKey, { issuer: this.tokenIssuer, audience: "dployr-instance" });
         const task = new DployrdService().createDeployTask(taskId, blueprint, token);
         const dispatched = this.connectionManager.sendTask(routingKey, task);
         if (!dispatched) {
           this.log.warn(`No connected node to reprovision ${service.name}`);
-          return;
+          return false;
         }
       } else {
         // source=remote: clone + build on the build node, then publish to instance node.
@@ -492,7 +498,7 @@ export class WorkloadSupervisor {
         });
         if (!result?.taskId) {
           this.log.warn(`No connected node to reprovision ${service.name}`);
-          return;
+          return false;
         }
         taskId = result.taskId;
       }
@@ -500,9 +506,41 @@ export class WorkloadSupervisor {
       this.reprovisionSentAt.set(cooldownKey, Date.now());
       this.log.info(`Reprovisioning service ${service.name} via task ${taskId}`);
       await this.traefik?.setLoadingMode(service.name);
+      return true;
     } catch (err) {
       this.log.error(`Failed to reprovision service ${service.name}`, { error: String(err) });
+      return false;
     }
+  }
+
+  /**
+   * Derives the cluster sleeping set from individual service flags each cycle.
+   * Clears flags for services the node is actively running (they woke up).
+   * This is the authoritative source — no stale state.
+   */
+  private async reconcileSleepingSet(cluster: Cluster, dbServices: Service[], activeNames: Set<string>): Promise<boolean> {
+    const flags = await Promise.all(dbServices.map(s => this.kv.kv.get(KV_KEYS.SERVICE.SLEEPING(s.name))));
+
+    const nowSleeping: string[] = [];
+    for (let i = 0; i < dbServices.length; i++) {
+      const svc = dbServices[i];
+      if (flags[i]) {
+        const health = await this.kv.kv.get(KV_KEYS.SERVICE.HEALTH(svc.name));
+        if (activeNames.has(svc.name) && health === "healthy") {
+          await this.kv.kv.delete(KV_KEYS.SERVICE.SLEEPING(svc.name));
+          this.log.info(`Cleared stale SLEEPING flag for running service ${svc.name}`);
+        } else {
+          nowSleeping.push(svc.name);
+        }
+      }
+    }
+
+    const prevRaw = await this.kv.kv.get(KV_KEYS.CLUSTER.SLEEPING_SERVICES(cluster.id));
+    const prev: string[] = prevRaw ? JSON.parse(prevRaw) : [];
+    const changed = nowSleeping.length !== prev.length || nowSleeping.some(n => !prev.includes(n));
+
+    await this.kv.kv.put(KV_KEYS.CLUSTER.SLEEPING_SERVICES(cluster.id), JSON.stringify(nowSleeping));
+    return changed;
   }
 
   // Note: This does its best effort to get an instance to re-provison the service to

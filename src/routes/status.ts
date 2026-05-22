@@ -16,12 +16,9 @@ const dployrdService = new DployrdService();
 const status = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 /**
- * Public endpoint — no auth required.
- * Accepts ?domain=<hostname>
- * Returns { status: "ready" | "starting" | "not_found" }
- *
  * On first hit while a service is sleeping, fires a wake task so the
  * loading page can poll until the service is back up.
+ * @returns { status: "ready" | "starting" | "not_found" }
  */
 status.get("/", async (c) => {
   const domain = c.req.query("domain");

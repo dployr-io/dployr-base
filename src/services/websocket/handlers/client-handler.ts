@@ -55,6 +55,7 @@ import type { NodeStateEntity } from "@/lib/constants/node-state.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { Logger } from "@/lib/logger.js";
 import { toISO } from "@/lib/utils.js";
+import { addSleepingServices } from "@/lib/node/sleeping.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -263,8 +264,9 @@ export class ClientMessageHandler {
             ...s,
             id: dbIdByName.get(s.name) ?? s.id,
           }));
+          const enrichedData = await addSleepingServices(this.kv, { ...liveData, services: enrichedServices });
           changed["workloads"] = {
-            data: { ...liveData, services: enrichedServices },
+            data: enrichedData,
             version: workloadsEntity!.version,
           };
         }
@@ -274,7 +276,8 @@ export class ClientMessageHandler {
         // with another empty update.
         if (savedWorkloads) {
           if (savedWorkloads.version !== clientWorkloadsVersion) {
-            changed["workloads"] = { data: savedWorkloads.data, version: savedWorkloads.version };
+            const enrichedFallback = await addSleepingServices(this.kv, savedWorkloads.data);
+            changed["workloads"] = { data: enrichedFallback, version: savedWorkloads.version };
           }
         }
 

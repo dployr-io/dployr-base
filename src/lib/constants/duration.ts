@@ -40,6 +40,7 @@ export const MS_1_MINUTE = MS_MINUTE;
 export const MS_5_MINUTES = 5 * MS_MINUTE;
 export const MS_6_MINUTES = 6 * MS_MINUTE;
 export const MS_8_MINUTES = 8 * MS_MINUTE;
+export const MS_12_MINUTES = 12 * MS_MINUTE;
 export const MS_30_MINUTES = 30 * MS_MINUTE;
 export const MS_12_HOURS = 12 * MS_HOUR;
 export const MS_24_HOURS = 24 * MS_HOUR;

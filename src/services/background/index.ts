@@ -10,7 +10,7 @@ import { JWTService } from "@/services/auth/jwt.js";
 import { InstancePool } from "@/services/pool.js";
 import { Logger } from "@/lib/logger.js";
 
-const log = new Logger("Worker");
+const log = new Logger("worker");
 
 export interface JobContext {
   db: DatabaseStore;

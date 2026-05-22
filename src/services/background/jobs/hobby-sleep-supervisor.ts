@@ -4,7 +4,7 @@
 import type { JobFn } from "../index.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { DployrdService } from "@/services/dployrd.js";
-import { MS_30_MINUTES } from "@/lib/constants/duration.js";
+import { MS_12_MINUTES } from "@/lib/constants/duration.js";
 import { ulid } from "ulid";
 import { Logger } from "@/lib/logger.js";
 
@@ -24,12 +24,11 @@ export const hobbySleepSupervisor: JobFn = async ({ db, kv, jwt: jwtService, ada
     const plan = await db.billing.getEffectivePlan(service.clusterId);
     if (plan !== "hobby") continue;
 
-    // Skip if already sleeping or waking
     if (await kv.kv.get(KV_KEYS.SERVICE.SLEEPING(service.name))) continue;
 
     const lastActiveRaw = await kv.kv.get(KV_KEYS.SERVICE.LAST_ACTIVE(service.name));
     const lastActive    = lastActiveRaw ? parseInt(lastActiveRaw, 10) : service.createdAt;
-    if (now - lastActive < MS_30_MINUTES) continue;
+    if (now - lastActive < MS_12_MINUTES) continue;
 
     const routingKey = await db.instances.getRoutingKey(service.clusterId);
     if (!routingKey) {
