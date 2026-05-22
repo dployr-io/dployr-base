@@ -527,7 +527,7 @@ export class WorkloadSupervisor {
       const svc = dbServices[i];
       if (flags[i]) {
         const health = await this.kv.kv.get(KV_KEYS.SERVICE.HEALTH(svc.name));
-        if (activeNames.has(svc.name) && health === "healthy") {
+        if (activeNames.has(svc.name) && health !== "unhealthy") {
           await this.kv.kv.delete(KV_KEYS.SERVICE.SLEEPING(svc.name));
           this.log.info(`Cleared stale SLEEPING flag for running service ${svc.name}`);
         } else {

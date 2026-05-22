@@ -164,6 +164,48 @@ describe("WorkloadSupervisor — sleeping reconciliation", () => {
     assert.ok(notifier._calls.includes("c1"), "notifyRefresh should fire when service wakes up");
   });
 
+  it("clears SLEEPING flag when service is running and health key is absent", async () => {
+    const cluster: FakeCluster = { id: "c1", name: "C1" };
+    const instance: FakeInstance = { id: "i1", tag: "node-1", kind: "dedicated", clusterId: "c1" };
+    const service: FakeService = { id: "s1", name: "ronaldo", type: "web", clusterId: "c1" };
+
+    const db = makeDb([cluster], [service], [instance]);
+    const kv = makeKv({
+      nodeWorkloads: { "node-1": [{ name: "ronaldo", type: "web" }] },
+      sleepingFlags: { "ronaldo": "1" },
+      clusterSleepingSet: { "c1": JSON.stringify(["ronaldo"]) },
+      // no healthFlags — health key never written (e.g. notificationService not configured)
+    });
+    const notifier = makeNotifier();
+    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, notifier);
+
+    await supervisor.run();
+
+    assert.equal(kv._store[KV_KEYS.SERVICE.SLEEPING("ronaldo")], undefined, "SLEEPING flag should be cleared even without health key");
+    assert.deepEqual(JSON.parse(kv._store[KV_KEYS.CLUSTER.SLEEPING_SERVICES("c1")]), []);
+    assert.ok(notifier._calls.includes("c1"));
+  });
+
+  it("does NOT clear SLEEPING flag when service is running but explicitly unhealthy", async () => {
+    const cluster: FakeCluster = { id: "c1", name: "C1" };
+    const instance: FakeInstance = { id: "i1", tag: "node-1", kind: "dedicated", clusterId: "c1" };
+    const service: FakeService = { id: "s1", name: "ronaldo", type: "web", clusterId: "c1" };
+
+    const db = makeDb([cluster], [service], [instance]);
+    const kv = makeKv({
+      nodeWorkloads: { "node-1": [{ name: "ronaldo", type: "web" }] },
+      sleepingFlags: { "ronaldo": "1" },
+      clusterSleepingSet: { "c1": JSON.stringify(["ronaldo"]) },
+      healthFlags: { "ronaldo": "unhealthy" },
+    });
+    const notifier = makeNotifier();
+    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, notifier);
+
+    await supervisor.run();
+
+    assert.equal(kv._store[KV_KEYS.SERVICE.SLEEPING("ronaldo")], "1", "SLEEPING flag must stay when service is unhealthy");
+  });
+
   it("keeps non-sleeping services out of the cluster sleeping set", async () => {
     const cluster: FakeCluster = { id: "c1", name: "C1" };
     const instance: FakeInstance = { id: "i1", tag: "node-1", kind: "dedicated", clusterId: "c1" };
@@ -223,19 +265,34 @@ describe("WorkloadSupervisor — reconcileTraefikRoutes skips sleeping services"
     } as any;
   }
 
-  it("does NOT call registerRoute when service has SLEEPING flag", async () => {
+  it("does NOT call registerRoute when service is running but explicitly unhealthy", async () => {
     const db = makeDb([cluster], [service], [instance]);
     const kv = makeKv({
       nodeWorkloads: { "node-1": [{ name: "api", type: "web", host_port: 62000 }] },
       sleepingFlags: { "api": "1" },
+      healthFlags: { "api": "unhealthy" },
     });
     const registerRouteCalls: string[] = [];
-    // currentUrl differs from real backend so the URL-equality guard doesn't short-circuit
     const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, makeNotifier(), makeTraefik(registerRouteCalls, "http://127.0.0.1:19503"));
 
     await supervisor.run();
 
-    assert.equal(registerRouteCalls.length, 0, "registerRoute must not be called for sleeping services");
+    assert.equal(registerRouteCalls.length, 0, "registerRoute must not be called when service is unhealthy");
+  });
+
+  it("calls registerRoute when service woke up (SLEEPING set, running, health absent)", async () => {
+    const db = makeDb([cluster], [service], [instance]);
+    const kv = makeKv({
+      nodeWorkloads: { "node-1": [{ name: "api", type: "web", host_port: 62000 }] },
+      sleepingFlags: { "api": "1" },
+      // no healthFlags — health key never written
+    });
+    const registerRouteCalls: string[] = [];
+    const supervisor = new WorkloadSupervisor(db, kv, makeConnectionManager(["node-1"]), noopJwt, makeNotifier(), makeTraefik(registerRouteCalls, "http://127.0.0.1:19503"));
+
+    await supervisor.run();
+
+    assert.ok(registerRouteCalls.includes("api"), "registerRoute should fire once service woke up and health is unknown");
   });
 
   it("calls registerRoute when service is not sleeping and URL differs", async () => {
