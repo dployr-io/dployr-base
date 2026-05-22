@@ -375,6 +375,11 @@ export class NodeMessageHandler {
     } catch (err) {
       this.log.error(`Error deregistering node ${nodeInstanceId}`, { error: String(err) });
     }
+
+    for (const clusterId of clusterIds) {
+      this.clientNotifier.notifyRefresh(clusterId, "services");
+    }
+
     return clusterIds;
   }
 

@@ -41,6 +41,14 @@ const noopConnectionManager = {
   getConnections: () => [],
 } as any;
 
+function makeNotifier() {
+  const calls: Array<{ clusterId: string; entity: string }> = [];
+  return {
+    notifier: { broadcast: async () => {}, notifyRefresh: (clusterId: string, entity: string) => { calls.push({ clusterId, entity }); } } as any,
+    calls,
+  };
+}
+
 const noopNotifier = { broadcast: async () => {}, notifyRefresh: () => {} } as any;
 const noopJwt = { createNodeAccessToken: async () => "tok" } as any;
 
@@ -127,6 +135,28 @@ describe("node disconnect → Traefik loading mode + SLEEPING cleared", () => {
     }
 
     assert.deepEqual(loadingModeCalls.sort(), ["api", "worker"]);
+  });
+
+  it("calls notifyRefresh for every affected cluster on disconnect", async () => {
+    const { kv } = makeKv();
+    const db = makeDisconnectDb();
+    const { notifier, calls } = makeNotifier();
+
+    const conn = { connectionKey: "pool-1", instanceTag: "pool-1", clusterId: undefined, role: "node" } as any;
+    await new NodeMessageHandler(noopConnectionManager, notifier, db, kv, noopJwt).handleNodeDisconnect(conn);
+
+    assert.deepEqual(calls, [{ clusterId: "cluster-a", entity: "services" }]);
+  });
+
+  it("notifyRefresh is NOT called when instanceTag is missing", async () => {
+    const { kv } = makeKv();
+    const db = makeDisconnectDb();
+    const { notifier, calls } = makeNotifier();
+
+    const conn = { connectionKey: "anon", instanceTag: undefined, clusterId: undefined, role: "node" } as any;
+    await new NodeMessageHandler(noopConnectionManager, notifier, db, kv, noopJwt).handleNodeDisconnect(conn);
+
+    assert.equal(calls.length, 0);
   });
 
   it("deletes the SLEEPING flag for every affected service on disconnect", async () => {
