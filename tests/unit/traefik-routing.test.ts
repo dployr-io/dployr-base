@@ -24,11 +24,13 @@ function makeTraefik(redis: ReturnType<typeof makeRedis>) {
 const WAKEUP_MIDDLEWARE = "hobby-wakeup";
 
 describe("TraefikService.ensureWakeupMiddleware", () => {
-  it("writes all four middleware definition keys", async () => {
+  it("writes indexed status keys — flat string would silently break Traefik v3 KV matching", async () => {
     const redis = makeRedis();
     await makeTraefik(redis).ensureWakeupMiddleware();
 
-    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE)), "502,503,504");
+    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 0)), "502");
+    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 1)), "503");
+    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 2)), "504");
     assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_SERVICE(WAKEUP_MIDDLEWARE)), "loading-stub@redis");
     assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_QUERY(WAKEUP_MIDDLEWARE)), "/");
     assert.equal(redis.store.get(KV_KEYS.TRAEFIK.SERVICE_URL("loading-stub")), SERVICE_STUB_ADDRESS);
@@ -39,7 +41,7 @@ describe("TraefikService.ensureWakeupMiddleware", () => {
     const svc = makeTraefik(redis);
     await svc.ensureWakeupMiddleware();
     await svc.ensureWakeupMiddleware();
-    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE)), "502,503,504");
+    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 0)), "502");
   });
 });
 
@@ -63,7 +65,9 @@ describe("TraefikService.setLoadingMode", () => {
   it("writes middleware definition keys as part of setLoadingMode", async () => {
     const redis = makeRedis();
     await makeTraefik(redis).setLoadingMode("api");
-    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE)), "502,503,504");
+    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 0)), "502");
+    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 1)), "503");
+    assert.equal(redis.store.get(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 2)), "504");
   });
 });
 

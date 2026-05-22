@@ -101,8 +101,10 @@ export class TraefikService {
     await Promise.all([
       // Point the loading-stub service at the nginx stub on the Traefik server
       this.redis.put(KV_KEYS.TRAEFIK.SERVICE_URL(stubKey), SERVICE_STUB_ADDRESS),
-      // Errors middleware: intercept backend failures and serve the loading page
-      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE), "502,503,504"),
+      // Errors middleware: intercept backend failures and serve the loading page.
+      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 0), "502"),
+      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 1), "503"),
+      this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_STATUS(WAKEUP_MIDDLEWARE, 2), "504"),
       this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_SERVICE(WAKEUP_MIDDLEWARE), `${stubKey}@redis`),
       this.redis.put(KV_KEYS.TRAEFIK.MIDDLEWARE_ERRORS_QUERY(WAKEUP_MIDDLEWARE), "/"),
     ]);

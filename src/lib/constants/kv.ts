@@ -106,7 +106,7 @@ export const KV_KEYS = {
     ROUTER_SERVICE: (routeKey: string) => `traefik/http/routers/${routeKey}/service`,
     ROUTER_MIDDLEWARE: (routeKey: string, idx: number) => `traefik/http/routers/${routeKey}/middlewares/${idx}`,
     SERVICE_URL: (routeKey: string) => `traefik/http/services/${routeKey}/loadbalancer/servers/0/url`,
-    MIDDLEWARE_ERRORS_STATUS: (name: string) => `traefik/http/middlewares/${name}/errors/status`,
+    MIDDLEWARE_ERRORS_STATUS: (name: string, idx: number) => `traefik/http/middlewares/${name}/errors/status/${idx}`,
     MIDDLEWARE_ERRORS_SERVICE: (name: string) => `traefik/http/middlewares/${name}/errors/service`,
     MIDDLEWARE_ERRORS_QUERY: (name: string) => `traefik/http/middlewares/${name}/errors/query`,
   },
