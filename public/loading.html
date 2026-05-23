@@ -1,15 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Starting up…</title>
+  <link rel="icon" type="image/png" href="/icon.png" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%234f9cf9'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-weight='700' font-size='18' fill='white'%3ED%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500&family=instrument-mono:400" rel="stylesheet" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-    html, body {
+    html,
+    body {
       height: 100%;
       background: #000;
       color: #fff;
@@ -70,8 +82,15 @@
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.3; }
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.3;
+      }
     }
 
     .status-text {
@@ -102,11 +121,24 @@
       animation: appear 0.2s ease forwards;
     }
 
-    @keyframes appear { to { opacity: 1; } }
+    @keyframes appear {
+      to {
+        opacity: 1;
+      }
+    }
 
-    .log-time { color: #444; flex-shrink: 0; }
-    .log-msg  { color: #999; }
-    .log-msg.bright { color: #fff; }
+    .log-time {
+      color: #444;
+      flex-shrink: 0;
+    }
+
+    .log-msg {
+      color: #999;
+    }
+
+    .log-msg.bright {
+      color: #fff;
+    }
 
     .cursor {
       display: inline-block;
@@ -117,7 +149,11 @@
       animation: blink 1s step-end infinite;
     }
 
-    @keyframes blink { 50% { opacity: 0; } }
+    @keyframes blink {
+      50% {
+        opacity: 0;
+      }
+    }
 
     /* Slow warning */
     .slow {
@@ -135,11 +171,13 @@
     }
   </style>
 </head>
+
 <body>
 
   <div class="logo-mark">
     <svg viewBox="0 0 1307.56 1886.52" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-      <path d="M430.07 941.85H429l435.75-435.74a50.63 50.63 0 0 0 14.81-35.77V287.8a50.63 50.63 0 0 0-14.81-35.8L627.63 14.92c-31.87-31.87-86.35-9.3-86.35 35.76v306.74a50.58 50.58 0 0 1-14.82 35.77L14.82 904.83a50.59 50.59 0 0 0 0 71.55l264.48 264.34a50.59 50.59 0 0 0 71.53 0l153.27-153.3a50.59 50.59 0 0 0 0-71.54Zm447.42 2.82h1.07l-435.74 435.75a50.55 50.55 0 0 0-14.82 35.76v182.54a50.58 50.58 0 0 0 14.82 35.77l237.11 237.12c31.87 31.86 86.35 9.29 86.35-35.77V1529.1a50.59 50.59 0 0 1 14.82-35.77l511.65-511.64a50.6 50.6 0 0 0 0-71.55l-264.49-264.33a50.57 50.57 0 0 0-71.52 0l-153.28 153.3a50.58 50.58 0 0 0 0 71.53Z" />
+      <path
+        d="M430.07 941.85H429l435.75-435.74a50.63 50.63 0 0 0 14.81-35.77V287.8a50.63 50.63 0 0 0-14.81-35.8L627.63 14.92c-31.87-31.87-86.35-9.3-86.35 35.76v306.74a50.58 50.58 0 0 1-14.82 35.77L14.82 904.83a50.59 50.59 0 0 0 0 71.55l264.48 264.34a50.59 50.59 0 0 0 71.53 0l153.27-153.3a50.59 50.59 0 0 0 0-71.54Zm447.42 2.82h1.07l-435.74 435.75a50.55 50.55 0 0 0-14.82 35.76v182.54a50.58 50.58 0 0 0 14.82 35.77l237.11 237.12c31.87 31.86 86.35 9.29 86.35-35.77V1529.1a50.59 50.59 0 0 1 14.82-35.77l511.65-511.64a50.6 50.6 0 0 0 0-71.55l-264.49-264.33a50.57 50.57 0 0 0-71.52 0l-153.28 153.3a50.58 50.58 0 0 0 0 71.53Z" />
     </svg>
   </div>
 
@@ -160,9 +198,9 @@
   </div>
 
   <script>
-    const SLOW_MS   = 45000;
-    const BASE_URL  = "https://base.dployr.io/v1";
-    const start     = Date.now();
+    const SLOW_MS = 45000;
+    const BASE_URL = "https://base.dployr.io/v1";
+    const start = Date.now();
 
     const STEPS = [
       "Waking your app up",
@@ -172,7 +210,7 @@
       "Finishing up",
     ];
 
-    const logEl        = document.getElementById("log");
+    const logEl = document.getElementById("log");
     const statusTextEl = document.getElementById("status-text");
 
     function ts() {
@@ -217,40 +255,28 @@
     }
     nextStep();
 
-    let readyCount = 0;
-
     function poll() {
       Promise.all([
         fetch(location.href, { method: "HEAD", cache: "no-store" }),
         fetch(`${BASE_URL}/status?domain=${encodeURIComponent(location.hostname)}`, { cache: "no-store" }),
-      ]).then(([headRes, statusRes]) => {
-          if (!headRes.headers.get("X-Dployr-Loading")) {
-            removeCursor();
-            appendLog("Ready — loading your page", true);
-            statusTextEl.textContent = "Ready";
-            setTimeout(() => location.reload(), 800);
-            return;
-          }
-          statusRes.json().then((body) => {
-            if (body?.status === "ready") {
-              readyCount++;
-              if (readyCount >= 3) {
-                location.reload();
-                return;
-              }
-            } else {
-              readyCount = 0;
-            }
-          }).catch(() => {});
-          if (Date.now() - start > SLOW_MS) {
-            document.getElementById("slow-msg").style.display = "block";
-          }
-          setTimeout(poll, 2000);
-        })
+      ]).then(([headRes]) => {
+        if (!headRes.headers.get("X-Dployr-Loading")) {
+          removeCursor();
+          appendLog("Ready — loading your page", true);
+          statusTextEl.textContent = "Ready";
+          setTimeout(() => location.reload(), 800);
+          return;
+        }
+        if (Date.now() - start > SLOW_MS) {
+          document.getElementById("slow-msg").style.display = "block";
+        }
+        setTimeout(poll, 2000);
+      })
         .catch(() => setTimeout(poll, 2000));
     }
 
     setTimeout(poll, 1500);
   </script>
 </body>
+
 </html>
