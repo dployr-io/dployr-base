@@ -185,6 +185,11 @@ certificatesResolvers:
         resolvers:
           - "1.1.1.1:53"
           - "8.8.8.8:53"
+  letsencrypt:
+    acme:
+      email: "${email}"
+      storage: "${DATA_DIR}/acme-custom.json"
+      tlsChallenge: {}
 
 api:
   dashboard: true
@@ -448,8 +453,8 @@ main() {
   configure
   generate_traefik_yml
 
-  touch "$DATA_DIR/acme.json"
-  chmod 600 "$DATA_DIR/acme.json"
+  touch "$DATA_DIR/acme.json" "$DATA_DIR/acme-custom.json"
+  chmod 600 "$DATA_DIR/acme.json" "$DATA_DIR/acme-custom.json"
   chown -R "$SERVICE_USER:$SERVICE_USER" "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
 
   install_traefik
