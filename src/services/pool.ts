@@ -22,7 +22,7 @@ import {
 } from "@/lib/constants/vm.js";
 import type { SubscriptionPlan } from "@/types/index.js";
 import { EventEmittable } from "./notifications/emittable.js";
-import { ADJECTIVES, NOUNS, POOL_CAPACITY_BY_TIER } from "@/lib/constants/instances.js";
+import { ADJECTIVES, NOUNS, POOL_CAPACITY_BY_TIER, CONTAINER_LIMITS_BY_TIER } from "@/lib/constants/instances.js";
 import { Logger } from "@/lib/logger.js";
 
 export class InstancePool extends EventEmittable {
@@ -86,6 +86,7 @@ export class InstancePool extends EventEmittable {
     const token = await this.jwt.createBootstrapToken(tag);
     const decoded = await this.jwt.verifyToken(token);
 
+    const limits = CONTAINER_LIMITS_BY_TIER[tier];
     const droplet = await this.vm.create({
       image: DEFAULT_INSTANCE_IMAGE,
       name: tag,
@@ -93,7 +94,7 @@ export class InstancePool extends EventEmittable {
       size: DEFAULT_INSTANCE_SIZE,
       tags: buildInstanceTags(tier),
       sshKey: this.sshKey,
-      userData: buildInstallScript(token, tag, this.registry),
+      userData: buildInstallScript(token, tag, { ...this.registry, ...limits }),
     });
 
     // Create instance row before bootstrap token so the FK is satisfied.

@@ -63,12 +63,22 @@ export interface InstallScriptOptions {
   role?: "instance" | "build";
   registryUrl?: string;
   registryAuth?: string;
+  containerMemory?: number;
+  containerCpu?: number;
+  containerStorage?: number;
 }
 
 /** Bootstrap install script injected as user_data at droplet creation */
 export function buildInstallScript(token: string, instanceTag: string, opts: InstallScriptOptions = {}): string {
   const env = process.env.NODE_ENV === "production" ? "prod" : "dev";
-  const { role = "instance", registryUrl = "", registryAuth = "" } = opts;
+  const {
+    role = "instance",
+    registryUrl = "",
+    registryAuth = "",
+    containerMemory = 0,
+    containerCpu = 0,
+    containerStorage = 0,
+  } = opts;
 
   // Env vars are exported so that install.sh picks them up regardless of which
   // published version is on master — avoiding a flag-not-found failure when the
@@ -78,6 +88,9 @@ set -euo pipefail
 export NODE_ROLE="${role}"
 export REGISTRY_URL="${registryUrl}"
 export REGISTRY_AUTH="${registryAuth}"
+export CONTAINER_MEMORY="${containerMemory}"
+export CONTAINER_CPU="${containerCpu}"
+export CONTAINER_STORAGE="${containerStorage}"
 curl -sSL https://raw.githubusercontent.com/dployr-io/dployr/master/install.sh -o /tmp/dployr-install.sh
 bash /tmp/dployr-install.sh --token ${token} --instance ${instanceTag} --env ${env}
 `;
