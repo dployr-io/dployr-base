@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { DNSProvider } from "@/types/dns.js";
-import { NS_PATTERNS, OAUTH_SUPPORTED } from "@/lib/constants/dns.js";
+import { NS_PATTERNS } from "@/lib/constants/dns.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("DNS");
@@ -10,10 +10,7 @@ const log = new Logger("DNS");
 /**
  * Detects the DNS provider for a domain by querying NS records
  */
-export async function detectProvider(domain: string): Promise<{
-  provider: DNSProvider;
-  hasOAuth: boolean;
-}> {
+export async function detectProvider(domain: string): Promise<DNSProvider> {
   try {
     const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`, { headers: { Accept: "application/dns-json" } });
 
@@ -25,7 +22,7 @@ export async function detectProvider(domain: string): Promise<{
     for (const ns of nsRecords) {
       for (const [pattern, provider] of Object.entries(NS_PATTERNS)) {
         if (ns.includes(pattern)) {
-          return { provider, hasOAuth: OAUTH_SUPPORTED.includes(provider) };
+          return provider;
         }
       }
     }
@@ -33,15 +30,22 @@ export async function detectProvider(domain: string): Promise<{
     log.error("Provider detection failed:", err);
   }
 
-  return { provider: "unknown", hasOAuth: false };
+  return "unknown";
+}
+
+function apexFrom(domain: string): string {
+  const parts = domain.split(".");
+  return parts.length > 2 ? parts.slice(-2).join(".") : domain;
 }
 
 /**
- * Verifies a DNS TXT record for domain ownership
+ * Verifies a DNS TXT record for domain ownership.
+ * Always checks at the apex zone (e.g. _dployr.yasm.xyz, not _dployr.www.yasm.xyz).
  */
 export async function checkTxtRecord(domain: string, token: string): Promise<boolean> {
+  const apex = apexFrom(domain);
   try {
-    const res = await fetch(`https://cloudflare-dns.com/dns-query?name=_dployr.${encodeURIComponent(domain)}&type=TXT`, { headers: { Accept: "application/dns-json" } });
+    const res = await fetch(`https://cloudflare-dns.com/dns-query?name=_dployr.${encodeURIComponent(apex)}&type=TXT`, { headers: { Accept: "application/dns-json" } });
 
     if (!res.ok) return false;
 

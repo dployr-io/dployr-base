@@ -79,7 +79,6 @@ export function buildBindings(a: Adapters): Bindings {
   const vmConfig = a.config?.virtual_machines;
   const securityConfig = a.config?.security;
   const traefikConfig = a.config?.traefik;
-
   return {
     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
     APP_URL: serverConfig?.app_url || process.env.APP_URL || "",
@@ -111,6 +110,8 @@ export function buildBindings(a: Adapters): Bindings {
     REGISTRY_AUTH: a.config?.registry?.auth,
     TRAEFIK_ENABLED: traefikConfig?.enabled,
     TRAEFIK_TLD: traefikConfig?.tld,
+    TRAEFIK_IPV4: traefikConfig?.ipv4,
+    TRAEFIK_IPV6: traefikConfig?.ipv6,
   };
 }
 

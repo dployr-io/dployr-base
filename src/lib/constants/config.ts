@@ -146,6 +146,8 @@ export const CONFIG_SCHEMA = z.object({
     .object({
       enabled: z.boolean().default(false),
       tld: z.string().default("dployr.run"),
+      ipv4: z.string().optional(),
+      ipv6: z.string().optional(),
       redis_url: z.string().optional(),
       redis_host: z.string().optional(),
       redis_port: z.number().int().positive().optional(),

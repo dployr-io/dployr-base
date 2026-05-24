@@ -11,7 +11,8 @@ import { hobbySleepSupervisor } from "./hobby-sleep-supervisor.js";
 import { hobbyIceSupervisor } from "./hobby-ice-supervisor.js";
 import { traefikMetricsScraper } from "./traefik-metrics-scraper.js";
 import { dockerPrune } from "./docker-prune.js";
-import { MS_30_SECONDS, MS_5_MINUTES, MS_12_HOURS, MS_24_HOURS, MS_10_SECONDS, MS_1_MINUTE } from "@/lib/constants/duration.js";
+import { domainVerification } from "./domain-verification.js";
+import { MS_30_SECONDS, MS_5_MINUTES, MS_12_HOURS, MS_24_HOURS, MS_10_SECONDS, MS_1_MINUTE, MS_12_SECONDS } from "@/lib/constants/duration.js";
 import {
   NODES_HEALTH_JOB,
   NODES_SYNC_JOB,
@@ -22,6 +23,7 @@ import {
   HOBBY_ICE_SUPERVISOR_JOB,
   TRAEFIK_METRICS_SCRAPER_JOB,
   DOCKER_PRUNE_JOB,
+  DOMAIN_VERIFICATION_JOB,
 } from "@/lib/constants/index.js";
 
 export function registerJobs(worker: BackgroundWorker): void {
@@ -35,6 +37,7 @@ export function registerJobs(worker: BackgroundWorker): void {
     .schedule(HOBBY_ICE_SUPERVISOR_JOB, MS_24_HOURS, hobbyIceSupervisor)
     .schedule(TRAEFIK_METRICS_SCRAPER_JOB, MS_1_MINUTE, traefikMetricsScraper)
     .schedule(DOCKER_PRUNE_JOB, MS_24_HOURS, dockerPrune)
+    .schedule(DOMAIN_VERIFICATION_JOB, MS_12_SECONDS, domainVerification)
     .on(NODES_HEALTH_JOB, nodesHealth, { runImmediately: true })
     .on(NODES_SYNC_JOB, nodesSync, { runImmediately: true });
 }

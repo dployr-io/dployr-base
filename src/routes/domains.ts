@@ -4,10 +4,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { Bindings, Variables, createErrorResponse, createSuccessResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
-import type { DNSProvider } from "@/types/dns.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware, requireClusterViewer, requireClusterDeveloper, resolveCluster } from "@/middleware/auth.js";
-import { getDbStore, getKVStore, getDnsService, getInstanceService } from "@/lib/config/context.js";
+import { getDbStore, getKVStore, getDnsService, getInstanceService, getTraefikRouterService } from "@/lib/config/context.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("Domains");
@@ -28,34 +27,7 @@ const setupSchema = z.object({
     .max(253, "Domain must be at most 253 characters")
     .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i, "Invalid domain format"),
   clusterId: z.ulid("Invalid cluster ID"),
-});
-
-// Caddy verification endpoint (no auth - called by Caddy)
-domains.get("/verify", async (c) => {
-  const domain = c.req.query("domain")?.toLowerCase();
-  if (!domain) {
-    return c.text("missing domain parameter", 400);
-  }
-
-  const db = getDbStore(c);
-  const dns = getDnsService(c);
-  const record = await db.domains.find(domain);
-
-  if (!record) {
-    return c.text("domain not registered", 404);
-  }
-
-  if (record.status === "active") {
-    return c.text("ok", 200);
-  }
-
-  const verified = await dns.checkTxtRecord(domain, record.verificationToken);
-  if (!verified) {
-    return c.text("verification pending", 403);
-  }
-
-  await db.domains.activate(domain);
-  return c.text("ok", 200);
+  serviceName: z.string().min(1, "Service name is required"),
 });
 
 // Register instance with bootstrap token (this method is called by dployrd when a new node is brought online)
@@ -158,9 +130,8 @@ domains.post("/register", async (c) => {
 });
 
 // Create custom domain
-domains.post("/", authMiddleware, resolveCluster("instance", { body: "instanceId" }), requireClusterDeveloper, async (c) => {
+domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   const db = getDbStore(c);
-  const kv = getKVStore(c);
   const dns = getDnsService(c);
   const body = await c.req.json();
   const validation = setupSchema.safeParse(body);
@@ -169,12 +140,16 @@ domains.post("/", authMiddleware, resolveCluster("instance", { body: "instanceId
     return c.json(createErrorResponse({ message: msg, code: ERROR.REQUEST.BAD_REQUEST.code }), 400);
   }
 
-  const { domain, clusterId } = validation.data;
+  const { domain, clusterId, serviceName } = validation.data;
   const normalizedDomain = domain.toLowerCase();
 
-  const instance = await db.instances.find({ id: clusterId });
-  if (!instance) {
-    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
+  // Validate service exists and belongs to the cluster
+  const service = await db.services.find({ name: serviceName });
+  if (!service) {
+    return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
+  }
+  if (service.clusterId !== clusterId) {
+    return c.json(createErrorResponse({ message: "Service does not belong to this cluster", code: ERROR.PERMISSION.FORBIDDEN.code }), 403);
   }
 
   // Check domain not already claimed by another instance
@@ -183,32 +158,23 @@ domains.post("/", authMiddleware, resolveCluster("instance", { body: "instanceId
     return c.json(createErrorResponse({ message: "Domain already registered to another instance", code: ERROR.RESOURCE.CONFLICT.code }), 409);
   }
 
-  const { provider, hasOAuth } = await dns.detectProvider(normalizedDomain);
+  const provider = await dns.detectProvider(normalizedDomain);
 
   // Use existing domain data or create new
   let domainRecord = existing;
   if (!domainRecord) {
     const token = dns.generateToken();
-    domainRecord = await db.domains.create({ clusterId, domain: normalizedDomain, token, provider });
+    domainRecord = await db.domains.create({ clusterId, domain: normalizedDomain, token, provider, serviceName });
   }
 
-  const { record, verification } = dns.buildRecordsFromStored(normalizedDomain, instance.address!, domainRecord.verificationToken);
-
-  let autoSetupUrl: string | null = null;
-  if (hasOAuth) {
-    const state = crypto.randomUUID();
-    await kv.createState({ state, redirectUrl: `/settings/domains?domain=${encodeURIComponent(normalizedDomain)}` });
-    autoSetupUrl = dns.buildOAuthUrl(provider, state, c.env.BASE_URL);
-  }
+  const { records, verification } = dns.buildRecordsFromStored(normalizedDomain, domainRecord.serviceName, domainRecord.verificationToken);
 
   return c.json(
     createSuccessResponse({
       domain: normalizedDomain,
       provider,
-      hasOAuth,
-      record,
+      records,
       verification,
-      autoSetupUrl,
       manualGuideUrl: dns.getManualGuideUrl(provider),
     }),
   );
@@ -232,7 +198,13 @@ domains.post("/:domain/verify", authMiddleware, resolveCluster("domain", { path:
     }
 
     await db.domains.activate(domain);
-    return new Response(null, { status: 204 });
+
+    if (record.serviceName) {
+      const traefik = getTraefikRouterService(c);
+      if (traefik) await traefik.registerCustomDomain(domain, record.serviceName);
+    }
+
+    return c.body(null, 204);
   } catch (err) {
     log.error("Domain verification error:", err);
     return c.json(
@@ -256,11 +228,6 @@ domains.get("/:domain", authMiddleware, resolveCluster("domain", { path: "domain
     return c.json(createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
   }
 
-  const instance = await db.instances.find({ id: domainRecord.clusterId });
-  if (!instance) {
-    return c.json(createErrorResponse({ message: "Instance not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), 404);
-  }
-
   const response: any = {
     domain: domainRecord.domain,
     status: domainRecord.status,
@@ -271,22 +238,10 @@ domains.get("/:domain", authMiddleware, resolveCluster("domain", { path: "domain
   };
 
   // For pending domains, include verification records
-  // Use instance.address for A record target
   if (domainRecord.status === "pending") {
-    const { record, verification } = dns.buildRecordsFromStored(domain, instance.address!, domainRecord.verificationToken);
-    response.record = record;
+    const { records, verification } = dns.buildRecordsFromStored(domain, domainRecord.serviceName, domainRecord.verificationToken);
+    response.records = records;
     response.verification = verification;
-
-    // Add setup URLs if available
-    if (domainRecord.provider) {
-      const state = crypto.randomUUID();
-      const kv = getKVStore(c);
-      await kv.createState({ state, redirectUrl: `/settings/domains?domain=${encodeURIComponent(domain)}` });
-      const oauthUrl = dns.buildOAuthUrl(domainRecord.provider, state, c.env.BASE_URL);
-      if (oauthUrl) {
-        response.autoSetupUrl = oauthUrl;
-      }
-    }
     response.manualGuideUrl = dns.getManualGuideUrl(domainRecord.provider || "unknown");
   }
 
@@ -294,7 +249,7 @@ domains.get("/:domain", authMiddleware, resolveCluster("domain", { path: "domain
 });
 
 // List domains for a cluster
-domains.get("/", authMiddleware, resolveCluster("instance", { query: "clusterId" }), requireClusterViewer, async (c) => {
+domains.get("/", authMiddleware, requireClusterViewer, async (c) => {
   const clusterId = c.req.query("clusterId");
   const db = getDbStore(c);
   const { page, pageSize, offset } = parsePaginationParams(c.req.query("page"), c.req.query("pageSize"));
@@ -311,7 +266,13 @@ domains.delete("/:domain", authMiddleware, resolveCluster("domain", { path: "dom
   const session = c.get("session")!;
   const db = getDbStore(c);
 
+  const domainRecord = await db.domains.find(domain);
   await db.domains.delete(domain);
+
+  if (domainRecord?.status === "active") {
+    const traefik = getTraefikRouterService(c);
+    if (traefik) await traefik.unregisterCustomDomain(domain);
+  }
   const kv = getKVStore(c);
   await kv.logEvent({
     actor: {
@@ -328,91 +289,6 @@ domains.delete("/:domain", authMiddleware, resolveCluster("domain", { path: "dom
   });
 
   return c.body(null, 204);
-});
-
-// OAuth callbacks (per provider)
-domains.get("/callback/:provider", async (c) => {
-  const provider = c.req.param("provider") as DNSProvider;
-  const code = c.req.query("code");
-  const state = c.req.query("state");
-
-  if (!code || !state) {
-    return c.json(
-      createErrorResponse({
-        message: "Missing required query parameters",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
-      ERROR.REQUEST.BAD_REQUEST.status,
-    );
-  }
-
-  const kv = getKVStore(c);
-  const db = getDbStore(c);
-  const redirectPath = await kv.validateState(state);
-
-  if (!redirectPath) {
-    return c.json(
-      createErrorResponse({
-        message: "Invalid OAuth state",
-        code: ERROR.REQUEST.BAD_REQUEST.code,
-      }),
-      ERROR.REQUEST.BAD_REQUEST.status,
-    );
-  }
-
-  try {
-    const domainMatch = redirectPath.match(/domain=([^&]+)/);
-    if (!domainMatch) {
-      return c.json(
-        createErrorResponse({
-          message: "Invalid or missing domain in redirect state",
-          code: ERROR.REQUEST.BAD_REQUEST.code,
-        }),
-        ERROR.REQUEST.BAD_REQUEST.status,
-      );
-    }
-
-    const domain = decodeURIComponent(domainMatch[1]);
-    const domainRecord = await db.domains.find(domain);
-
-    if (!domainRecord) {
-      return c.json(
-        createErrorResponse({
-          message: "Domain not found",
-          code: ERROR.RESOURCE.MISSING_RESOURCE.code,
-        }),
-        ERROR.RESOURCE.MISSING_RESOURCE.status,
-      );
-    }
-
-    const oauthKey = `dns:oauth:${domain}:${provider}`;
-    await kv.kv.put(
-      oauthKey,
-      JSON.stringify({
-        code,
-        provider,
-        domain,
-        createdAt: Date.now(),
-      }),
-      {
-        ttl: 3600, // 1 hour
-      },
-    );
-
-    const url = new URL(`${c.env.APP_URL}${redirectPath}`);
-    url.searchParams.set("oauth", provider);
-    url.searchParams.set("status", "authorized");
-    return c.redirect(url.toString());
-  } catch (err) {
-    log.error("OAuth callback error:", err);
-    return c.json(
-      createErrorResponse({
-        message: "OAuth callback failed",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-      }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
-  }
 });
 
 export default domains;

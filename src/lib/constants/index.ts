@@ -21,6 +21,7 @@ export {
   HOBBY_ICE_SUPERVISOR_JOB,
   TRAEFIK_METRICS_SCRAPER_JOB,
   DOCKER_PRUNE_JOB,
+  DOMAIN_VERIFICATION_JOB,
 } from "./nodes.js";
 
 export * from "./db.js";

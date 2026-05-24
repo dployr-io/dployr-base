@@ -117,6 +117,9 @@ export const ENTITY_TOMBSTONE_TTL = TTL_7_DAYS;
 /** Domain mapping TTL: 7 days */
 export const DOMAIN_MAPPING_TTL = TTL_7_DAYS;
 
+/** DNS record TTL: 5 minutes — low enough for fast propagation during setup */
+export const DNS_RECORD_TTL = 5 * MINUTE;
+
 /** Hobby service waking state TTL: 90 seconds (covers docker start time) */
 export const SERVICE_WAKING_TTL = TTL_90_SECONDS;
 

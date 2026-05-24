@@ -28,7 +28,7 @@ export class ClientNotifier {
    * Emit a lightweight revalidation signal to all clients in a cluster.
    * Clients invalidate the relevant http client query cache (e.g Tanstack) and refetch via HTTP.
    */
-  notifyRefresh(clusterId: string, entity: "services" | "deployments"): void {
+  notifyRefresh(clusterId: string, entity: "services" | "deployments" | "domains"): void {
     const clients = this.conn.getClientConnections(clusterId);
     if (clients.length === 0) return;
 

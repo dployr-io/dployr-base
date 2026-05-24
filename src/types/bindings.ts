@@ -28,16 +28,6 @@ export type Bindings = {
   ADMIN_TOTP_SECRET: string;
   METRICS_SCRAPE_TOKEN?: string;
 
-  // DNS OAuth (optional)
-  CLOUDFLARE_CLIENT_ID?: string;
-  CLOUDFLARE_CLIENT_SECRET?: string;
-  GODADDY_CLIENT_ID?: string;
-  GODADDY_CLIENT_SECRET?: string;
-  DIGITALOCEAN_CLIENT_ID?: string;
-  DIGITALOCEAN_CLIENT_SECRET?: string;
-  GOOGLE_DNS_CLIENT_ID?: string;
-  GOOGLE_DNS_CLIENT_SECRET?: string;
-
   POLAR_ACCESS_TOKEN?: string;
   POLAR_WEBHOOK_SECRET?: string;
   POLAR_ENVIRONMENT?: string;
@@ -50,4 +40,6 @@ export type Bindings = {
 
   TRAEFIK_ENABLED?: boolean;
   TRAEFIK_TLD?: string;
+  TRAEFIK_IPV4?: string;
+  TRAEFIK_IPV6?: string;
 };

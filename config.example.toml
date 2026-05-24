@@ -11,6 +11,9 @@ app_url = "https://app.dployr.io"
 # Traefik routing configuration
 enabled = true
 tld = "dployr.run"
+# Reserved IPs attached to the Traefik droplet — used for apex domain A/AAAA records
+ipv4 = "1.2.3.4"
+ipv6 = "2001:db8::1"
 # Traefik Prometheus metrics endpoint (base URL — /metrics is appended automatically)
 metrics_url = "http://traefik-<instance>.dployr.run:8080"
 # Separate Redis instance for Traefik routes

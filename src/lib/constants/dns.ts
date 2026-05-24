@@ -1,27 +1,4 @@
-import { DNSProvider, OAuthConfig } from "@/types/dns.js";
-
-export const OAUTH_CONFIGS: Partial<Record<DNSProvider, OAuthConfig>> = {
-  cloudflare: {
-    authUrl: "https://dash.cloudflare.com/oauth2/authorize",
-    scopes: "zone:read zone:edit",
-    clientIdEnvKey: "CLOUDFLARE_CLIENT_ID",
-  },
-  godaddy: {
-    authUrl: "https://sso.godaddy.com/authorize",
-    scopes: "domain:dns:write",
-    clientIdEnvKey: "GODADDY_CLIENT_ID",
-  },
-  digitalocean: {
-    authUrl: "https://cloud.digitalocean.com/v1/oauth/authorize",
-    scopes: "write",
-    clientIdEnvKey: "DIGITALOCEAN_CLIENT_ID",
-  },
-  google: {
-    authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-    scopes: "https://www.googleapis.com/auth/ndev.clouddns.readwrite",
-    clientIdEnvKey: "GOOGLE_DNS_CLIENT_ID",
-  },
-};
+import { DNSProvider } from "@/types/dns.js";
 
 export const MANUAL_GUIDES: Record<DNSProvider, string> = {
   cloudflare: "https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/",
@@ -43,4 +20,3 @@ export const NS_PATTERNS: Record<string, DNSProvider> = {
   "google.com": "google",
 };
 
-export const OAUTH_SUPPORTED: DNSProvider[] = ["cloudflare", "godaddy", "digitalocean", "google"];

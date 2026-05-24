@@ -7,22 +7,23 @@ import type { CustomDomain, DNSProvider } from "@/types/dns.js";
 
 export class DomainStore extends BaseStore {
   protected readonly storeTable: AllowedTable = "domains";
-  async create({ clusterId, domain, token, provider }: { clusterId: string; domain: string; token: string; provider: DNSProvider | null }): Promise<CustomDomain> {
+  async create({ clusterId, domain, token, provider, serviceName }: { clusterId: string; domain: string; token: string; provider: DNSProvider | null; serviceName: string | null }): Promise<CustomDomain> {
     const id = this.generateId();
     const now = this.now();
 
     try {
       await this.db
         .prepare(
-          `INSERT INTO domains (id, cluster_id, domain, verification_token, provider, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT INTO domains (id, cluster_id, domain, verification_token, provider, service_name, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         )
-        .bind(id, clusterId, domain, token, provider, now)
+        .bind(id, clusterId, domain, token, provider, serviceName, now)
         .run();
 
       return {
         id,
         clusterId,
+        serviceName,
         domain,
         status: "pending",
         verificationToken: token,
@@ -44,7 +45,7 @@ export class DomainStore extends BaseStore {
   async find(domain: string): Promise<CustomDomain | null> {
     const row = await this.db
       .prepare(
-        `SELECT id, cluster_id, domain, status, verification_token, provider, created_at, activated_at
+        `SELECT id, cluster_id, domain, status, verification_token, provider, service_name, created_at, activated_at
          FROM domains WHERE domain = $1`,
       )
       .bind(domain)
@@ -75,7 +76,7 @@ export class DomainStore extends BaseStore {
 
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT id, cluster_id, domain, status, verification_token, provider, created_at, activated_at FROM domains ${clause} ORDER BY created_at DESC`;
+    let sql = `SELECT id, cluster_id, domain, status, verification_token, provider, service_name, created_at, activated_at FROM domains ${clause} ORDER BY created_at DESC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -106,6 +107,7 @@ export class DomainStore extends BaseStore {
     return {
       id: row.id as string,
       clusterId: row.cluster_id as string,
+      serviceName: (row.service_name as string) ?? null,
       domain: row.domain as string,
       status: row.status as "pending" | "active",
       verificationToken: row.verification_token as string,

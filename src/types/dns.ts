@@ -11,7 +11,7 @@ export type DNSProvider =
   | "unknown";
 
 export interface DNSRecord {
-  type: "A" | "CNAME" | "TXT";
+  type: "A" | "AAAA" | "CNAME" | "TXT";
   name: string;
   value: string;
   ttl?: number;
@@ -20,22 +20,15 @@ export interface DNSRecord {
 export interface DNSSetupResponse {
   domain: string;
   provider: DNSProvider;
-  hasOAuth: boolean;
-  record: DNSRecord;
+  records: DNSRecord[];
   verification: DNSRecord;
-  autoSetupUrl: string | null;
   manualGuideUrl: string;
-}
-
-export interface OAuthConfig {
-  authUrl: string;
-  scopes: string;
-  clientIdEnvKey: string;
 }
 
 export interface CustomDomain {
   id: string;
   clusterId: string;
+  serviceName: string | null;
   domain: string;
   status: "pending" | "active";
   verificationToken: string;

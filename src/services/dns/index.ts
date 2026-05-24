@@ -5,7 +5,8 @@ import type { DNSProvider, DNSRecord } from "@/types/dns.js";
 import type { Bindings } from "@/types/index.js";
 import { ulid } from "ulid";
 import { detectProvider, checkTxtRecord } from "@/lib/dns/provider.js";
-import { MANUAL_GUIDES, OAUTH_CONFIGS } from "@/lib/constants/dns.js";
+import { MANUAL_GUIDES } from "@/lib/constants/dns.js";
+import { DNS_RECORD_TTL } from "@/lib/constants/duration.js";
 
 export class DnsService {
   constructor(private env: Bindings) {}
@@ -13,10 +14,7 @@ export class DnsService {
   /**
    * Detects the DNS provider for a domain
    */
-  async detectProvider(domain: string): Promise<{
-    provider: DNSProvider;
-    hasOAuth: boolean;
-  }> {
+  async detectProvider(domain: string): Promise<DNSProvider> {
     return detectProvider(domain);
   }
 
@@ -36,47 +34,39 @@ export class DnsService {
   }
 
   /**
-   * Builds DNS records from stored domain data.
-   * Uses A record pointing directly to instance IP address.
+   * Builds DNS records for a custom domain.
+   * - Apex domain (e.g. myapp.com): A record → reserved IPv4, AAAA record → reserved IPv6
+   * - Subdomain (e.g. www.myapp.com): CNAME → serviceName.tld
+   * Always includes a TXT verification record.
    */
-  buildRecordsFromStored(domain: string, instanceAddress: string, verificationToken: string): { record: DNSRecord; verification: DNSRecord } {
+  buildRecordsFromStored(domain: string, serviceName: string | null, verificationToken: string): { records: DNSRecord[]; verification: DNSRecord } {
     const parts = domain.split(".");
-    const name = parts.length > 2 ? parts[0] : "@";
+    const isApex = parts.length === 2;
+    const tld = this.env.TRAEFIK_TLD ?? "dployr.run";
+
+    const records: DNSRecord[] = [];
+
+    if (isApex) {
+      if (this.env.TRAEFIK_IPV4) {
+        records.push({ type: "A", name: "@", value: this.env.TRAEFIK_IPV4, ttl: DNS_RECORD_TTL });
+      }
+      if (this.env.TRAEFIK_IPV6) {
+        records.push({ type: "AAAA", name: "@", value: this.env.TRAEFIK_IPV6, ttl: DNS_RECORD_TTL });
+      }
+    } else {
+      const subdomain = parts[0];
+      const cnameTarget = serviceName ? `${serviceName}.${tld}` : tld;
+      records.push({ type: "CNAME", name: subdomain, value: cnameTarget, ttl: DNS_RECORD_TTL });
+    }
 
     return {
-      record: {
-        type: "A",
-        name,
-        value: instanceAddress,
-        ttl: 300,
-      },
+      records,
       verification: {
         type: "TXT",
         name: "_dployr",
         value: `dployr-verify=${verificationToken}`,
       },
     };
-  }
-
-  /**
-   * Builds OAuth URL for DNS provider setup
-   */
-  buildOAuthUrl(provider: DNSProvider, state: string, baseUrl: string): string | null {
-    const config = OAUTH_CONFIGS[provider];
-    if (!config) return null;
-
-    const clientId = this.env[config.clientIdEnvKey as keyof Bindings];
-    if (!clientId) return null;
-
-    const params = new URLSearchParams({
-      client_id: clientId as string,
-      redirect_uri: `${baseUrl}/v1/dns/callback/${provider}`,
-      response_type: "code",
-      scope: config.scopes,
-      state,
-    });
-
-    return `${config.authUrl}?${params}`;
   }
 
   /**

@@ -105,4 +105,24 @@ export class TraefikService {
       this.redis.delete(KV_KEYS.TRAEFIK.SERVICE_URL(serviceName)),
     ]);
   }
+
+  async registerCustomDomain(domain: string, serviceName: string): Promise<void> {
+    await Promise.all([
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_RULE(domain), `Host(\`${domain}\`)`),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_ENTRYPOINTS(domain), "websecure"),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_SERVICE(domain), serviceName),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_TLS(domain), "true"),
+      this.redis.put(KV_KEYS.TRAEFIK.ROUTER_TLS_CERTRESOLVER(domain), "letsencrypt"),
+    ]);
+  }
+
+  async unregisterCustomDomain(domain: string): Promise<void> {
+    await Promise.all([
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_RULE(domain)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_ENTRYPOINTS(domain)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_SERVICE(domain)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_TLS(domain)),
+      this.redis.delete(KV_KEYS.TRAEFIK.ROUTER_TLS_CERTRESOLVER(domain)),
+    ]);
+  }
 }

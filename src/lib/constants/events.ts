@@ -27,6 +27,9 @@ export const EVENTS = {
     UPDATED: { code: "instance.updated", message: "Instance updated successfully" },
     DELETED: { code: "instance.deleted", message: "Instance deleted successfully" },
   },
+  DOMAIN: {
+    VERIFIED: { code: "domain.verified", message: "Domain verified successfully" },
+  },
   SERVICE: {
     UNHEALTHY: { code: "service.unhealthy", message: "Service is unhealthy" },
     ICING_WARNING: { code: "service.icing_warning", message: "Service will be iced in 5 days" },

@@ -79,18 +79,6 @@ CREATE TABLE IF NOT EXISTS bootstrap_tokens (
   FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS domains (
-  id TEXT PRIMARY KEY,
-  cluster_id TEXT NOT NULL,
-  domain TEXT NOT NULL UNIQUE,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active')),
-  verification_token TEXT NOT NULL,
-  provider TEXT,
-  created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
-  activated_at BIGINT,
-  FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS services (
   id            TEXT PRIMARY KEY,
   cluster_id    TEXT NOT NULL,
@@ -103,6 +91,19 @@ CREATE TABLE IF NOT EXISTS services (
   updated_at    BIGINT NOT NULL,
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE,
   CONSTRAINT check_service_name_format CHECK (name ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$' AND length(name) >= 2 AND length(name) <= 63)
+);
+
+CREATE TABLE IF NOT EXISTS domains (
+  id TEXT PRIMARY KEY,
+  cluster_id TEXT NOT NULL,
+  service_name TEXT REFERENCES services(name) ON DELETE SET NULL ON UPDATE CASCADE,
+  domain TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active')),
+  verification_token TEXT NOT NULL,
+  provider TEXT,
+  created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+  activated_at BIGINT,
+  FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS deployments (

@@ -105,6 +105,8 @@ export const KV_KEYS = {
     ROUTER_RULE: (routeKey: string) => `traefik/http/routers/${routeKey}/rule`,
     ROUTER_ENTRYPOINTS: (routeKey: string) => `traefik/http/routers/${routeKey}/entrypoints/0`,
     ROUTER_SERVICE: (routeKey: string) => `traefik/http/routers/${routeKey}/service`,
+    ROUTER_TLS: (routeKey: string) => `traefik/http/routers/${routeKey}/tls`,
+    ROUTER_TLS_CERTRESOLVER: (routeKey: string) => `traefik/http/routers/${routeKey}/tls/certresolver`,
     SERVICE_URL: (routeKey: string) => `traefik/http/services/${routeKey}/loadbalancer/servers/0/url`,
   },
 } as const;
