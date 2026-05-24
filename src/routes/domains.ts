@@ -217,6 +217,26 @@ domains.post("/:domain/verify", authMiddleware, resolveCluster("domain", { path:
   }
 });
 
+// Public endpoint: check whether a domain is active (used by Traefik/dployrd for routing decisions)
+domains.get("/verify", async (c) => {
+  const domain = c.req.query("domain");
+  if (!domain) {
+    return c.json(createErrorResponse({ message: "domain query param is required", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
+  }
+
+  const db = getDbStore(c);
+  const record = await db.domains.find(domain.toLowerCase());
+  if (!record) {
+    return c.json(createErrorResponse({ message: "Domain not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  }
+
+  if (record.status !== "active") {
+    return c.json(createErrorResponse({ message: "Domain not yet verified", code: ERROR.PERMISSION.FORBIDDEN.code }), ERROR.PERMISSION.FORBIDDEN.status);
+  }
+
+  return c.json(createSuccessResponse({ domain: record.domain, status: record.status, serviceName: record.serviceName }));
+});
+
 // Get domain details
 domains.get("/:domain", authMiddleware, resolveCluster("domain", { path: "domain" }), requireClusterViewer, async (c) => {
   const domain = c.req.param("domain").toLowerCase();

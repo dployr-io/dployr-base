@@ -92,7 +92,7 @@ function getClusterId(c: Context<{ Bindings: Bindings; Variables: Variables }>, 
  * @param options - Where to find the entity value: `path` for path param, `body` for request body field, `query` for query string
  * @param options.lookupBy - For "instance": whether to look up by "id" (default) or "tag"
  */
-export function resolveCluster(entity: "instance" | "domain" | "service" | "proxy", options: { path?: string; body?: string; query?: string; lookupBy?: "id" | "tag" }) {
+export function resolveCluster(entity: "instance" | "domain" | "service" | "proxy", options: { path?: string; body?: string; query?: string; lookupBy?: "id" | "tag" | "name" }) {
   return async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
     const db = getDbStore(c);
 
@@ -127,7 +127,9 @@ export function resolveCluster(entity: "instance" | "domain" | "service" | "prox
         return c.json({ error: "Service identifier is required", code: ERROR.REQUEST.BAD_REQUEST.code }, ERROR.REQUEST.BAD_REQUEST.status);
       }
 
-      const service = await db.services.find({ name: value });
+      const service = options.lookupBy === "name"
+        ? await db.services.find({ name: value })
+        : await db.services.find({ id: value });
       if (!service) {
         return c.json({ error: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }, ERROR.RESOURCE.MISSING_RESOURCE.status);
       }
