@@ -199,7 +199,7 @@
 
   <script>
     const SLOW_MS = 45000;
-    const BASE_URL = "https://base.dployr.io/v1";
+    const BASE_URLS = ["https://base.dployr.io/v1", "https://base.dployr.dev/v1"];
     const start = Date.now();
 
     const STEPS = [
@@ -256,9 +256,10 @@
     nextStep();
 
     function poll() {
+      const domain = encodeURIComponent(location.hostname);
       Promise.all([
         fetch(location.href, { method: "HEAD", cache: "no-store" }),
-        fetch(`${BASE_URL}/status?domain=${encodeURIComponent(location.hostname)}`, { cache: "no-store" }),
+        ...BASE_URLS.map(url => fetch(`${url}/status?domain=${domain}`, { cache: "no-store" })),
       ]).then(([headRes]) => {
         if (!headRes.headers.get("X-Dployr-Loading")) {
           removeCursor();
