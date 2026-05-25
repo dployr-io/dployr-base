@@ -7,6 +7,7 @@ import { Bindings, Variables, createErrorResponse, createSuccessResponse, parseP
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware, requireClusterViewer, requireClusterDeveloper, resolveCluster } from "@/middleware/auth.js";
 import { getDbStore, getKVStore, getDnsService, getInstanceService, getTraefikRouterService } from "@/lib/config/context.js";
+import { DOMAIN_LIMIT_BY_TIER } from "@/lib/constants/instances.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("Domains");
@@ -156,6 +157,23 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
   const existing = await db.domains.find(normalizedDomain);
   if (existing && existing.clusterId !== clusterId) {
     return c.json(createErrorResponse({ message: "Domain already registered to another instance", code: ERROR.RESOURCE.CONFLICT.code }), 409);
+  }
+
+  // Enforce per-service domain limit for new domains only
+  if (!existing) {
+    const plan = await db.billing.getEffectivePlan(clusterId);
+    const limit = DOMAIN_LIMIT_BY_TIER[plan];
+    const { domains: clusterDomains } = await db.domains.list({ clusterId });
+    const serviceDomainCount = clusterDomains.filter(d => d.serviceName === serviceName).length;
+    if (serviceDomainCount >= limit) {
+      return c.json(
+        createErrorResponse({
+          message: `Domain limit reached for the ${plan} plan (${limit} domains per service max). Upgrade your plan to add more.`,
+          code: ERROR.REQUEST.BAD_REQUEST.code,
+        }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
   }
 
   const provider = await dns.detectProvider(normalizedDomain);

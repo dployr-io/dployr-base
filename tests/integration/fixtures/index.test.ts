@@ -45,6 +45,8 @@ export interface TestFixtures {
   baseUrl: string;
   setClusterPlan: (clusterId: string, plan: "hobby" | "indie" | "pro") => Promise<void>;
   insertFakeServices: (clusterId: string, count: number) => Promise<void>;
+  insertServiceWithName: (clusterId: string, name: string) => Promise<void>;
+  insertFakeDomains: (clusterId: string, serviceName: string, count: number) => Promise<void>;
   cleanup: () => Promise<void>;
 }
 
@@ -269,6 +271,30 @@ export async function setupFixtures(): Promise<TestFixtures> {
     await db.close();
   };
 
+  const insertServiceWithName = async (cid: string, name: string) => {
+    const db = new PostgresAdapter(connectionString);
+    const ts = Date.now();
+    const id = `cisvc${ts.toString(36)}`;
+    await db.prepare(
+      `INSERT INTO services (id, cluster_id, name, type, created_at, updated_at) VALUES ($1, $2, $3, 'web', $4, $4)`
+    ).bind(id, cid, name, ts).run();
+    await db.close();
+  };
+
+  const insertFakeDomains = async (cid: string, serviceName: string, count: number) => {
+    const db = new PostgresAdapter(connectionString);
+    const ts = Date.now();
+    for (let i = 0; i < count; i++) {
+      const id = `cidom${ts.toString(36)}${i}`;
+      const domain = `ci-fake-${ts.toString(36)}-${i}.example.com`;
+      await db.prepare(
+        `INSERT INTO domains (id, cluster_id, domain, verification_token, provider, service_name, created_at)
+         VALUES ($1, $2, $3, $4, 'unknown', $5, $6)`
+      ).bind(id, cid, domain, `tok-${id}`, serviceName, ts).run();
+    }
+    await db.close();
+  };
+
   return {
     session: sessionCookie,
     otherSession: otherSessionCookie,
@@ -279,6 +305,8 @@ export async function setupFixtures(): Promise<TestFixtures> {
     baseUrl,
     setClusterPlan,
     insertFakeServices,
+    insertServiceWithName,
+    insertFakeDomains,
     cleanup: async () => {
       console.log("[fixtures] Killing server...");
       proc.kill("SIGTERM");

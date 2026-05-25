@@ -15,6 +15,13 @@ export const SERVICE_LIMIT_BY_TIER = {
   pro: 25,
 } as const;
 
+// Maximum number of custom domains per service, keyed by billing tier
+export const DOMAIN_LIMIT_BY_TIER = {
+  hobby: 2,
+  indie: 10,
+  pro: 25,
+} as const;
+
 /**
  * Per-container resource limits injected into dployrd at instance bootstrap,
  * keyed by billing tier. (Doesn't affect dedicated instances)

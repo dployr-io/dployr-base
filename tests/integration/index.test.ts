@@ -12,6 +12,7 @@ import { registerRateLimitTests } from "./rate-limit.test.js";
 import { registerClusterIsolationTests } from "./cluster-isolation.test.js";
 import { registerServiceLimitTests } from "./service-limits.test.js";
 import { registerServicePatchTests } from "./service-patch.test.js";
+import { registerDomainLimitTests } from "./domain-limits.test.js";
 
 const TIMEOUT_FIXTURE_SETUP = 180_000;
 const TIMEOUT_CLEANUP = 60_000;
@@ -703,4 +704,5 @@ registerServiceEnvTests(getFx);
 registerServiceSecretTests(getFx);
 registerServiceLimitTests(getFx);
 registerServicePatchTests(getFx);
+registerDomainLimitTests(getFx);
 registerRateLimitTests(getFx);
