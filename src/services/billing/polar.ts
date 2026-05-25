@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Bindings } from "@/types/index.js";
-import { PolarRequestValidationError } from "@/lib/errors/errors.js";
-import { BillingProvider, CustomerParams, CheckoutParams, RawWebhookEvent } from "./provider.js";
+import { BillingProvider, CheckoutParams, RawWebhookEvent } from "./provider.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("PolarService");
@@ -28,38 +27,32 @@ export class PolarService implements BillingProvider {
     };
   }
 
-  async getOrCreateCustomer(params: CustomerParams): Promise<{ id: string; email: string }> {
-    const existing = await fetch(`${this.baseUrl}/customers/external/${encodeURIComponent(params.clusterId)}`, { headers: this.headers });
+  async createCheckoutSession(params: CheckoutParams): Promise<string> {
+    const productId = this.env.BILLING_PRODUCT_IDS?.[params.plan];
+    if (!productId) throw new Error(`[PolarService] No product ID configured for plan: ${params.plan}`);
 
-    if (existing.ok) {
-      return existing.json() as Promise<{ id: string; email: string }>;
-    }
+    const successUrl = new URL(params.successUrl || `${this.env.APP_URL}/clusters`);
+    successUrl.searchParams.set("clusterId", params.clusterId);
 
-    const created = await fetch(`${this.baseUrl}/customers/`, {
+    const res = await fetch(`${this.baseUrl}/checkouts/`, {
       method: "POST",
       headers: this.headers,
       body: JSON.stringify({
-        email: params.email,
-        name: params.name || params.email,
-        external_id: params.clusterId,
+        products: [productId],
+        external_customer_id: params.clusterId,
+        customer_email: params.email,
+        customer_name: params.name || params.email,
+        success_url: successUrl.toString(),
       }),
     });
 
-    if (!created.ok) {
-      const err = await created.text();
-      try {
-        const parsed = JSON.parse(err);
-        if (typeof parsed === "object" && parsed !== null && "detail" in parsed) {
-          const detail = Array.isArray(parsed.detail) ? parsed.detail : [];
-          throw new PolarRequestValidationError(parsed.error?.field, detail);
-        }
-      } catch (e) {
-        if (e instanceof PolarRequestValidationError) throw e;
-      }
-      throw new Error(`[PolarService] Failed to create customer — ${err}`);
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`[PolarService] Failed to create checkout session — ${err}`);
     }
 
-    return created.json() as Promise<{ id: string; email: string }>;
+    const session = await res.json() as { url: string };
+    return session.url;
   }
 
   async updateCustomerEmail(params: { externalId: string; email: string; name?: string }): Promise<{ id: string; email: string } | null> {
@@ -80,59 +73,6 @@ export class PolarService implements BillingProvider {
     }
 
     return res.json() as Promise<{ id: string; email: string }>;
-  }
-
-  async buildCheckoutUrl(params: CheckoutParams): Promise<string> {
-    const { plan, clusterId, userId, email, successUrl } = params;
-
-    const checkoutBaseUrl = this.env.BILLING_CHECKOUT_URLS?.[plan];
-    if (!checkoutBaseUrl) {
-      throw new Error(`[PolarService] No checkout URL configured for plan: ${plan}`);
-    }
-
-    const baseSuccessUrl = successUrl || `${this.env.APP_URL}/clusters`;
-    const resolvedSuccessUrl = new URL(baseSuccessUrl);
-    resolvedSuccessUrl.searchParams.set("clusterId", clusterId);
-
-    const checkoutUrl = new URL(checkoutBaseUrl);
-    checkoutUrl.searchParams.set("customer_email", email);
-    checkoutUrl.searchParams.set("success_url", resolvedSuccessUrl.toString());
-    checkoutUrl.searchParams.set("metadata[cluster_id]", clusterId);
-    checkoutUrl.searchParams.set("metadata[user_id]", userId);
-
-    return checkoutUrl.toString();
-  }
-
-  async createCheckoutSession(params: {
-    productPriceId: string;
-    customerEmail: string;
-    customerId?: string;
-    successUrl: string;
-    metadata?: Record<string, string>;
-  }): Promise<{ id: string; url: string }> {
-    const body: Record<string, unknown> = {
-      product_price_id: params.productPriceId,
-      success_url: params.successUrl,
-      customer_email: params.customerEmail,
-      metadata: params.metadata || {},
-    };
-
-    if (params.customerId) {
-      body.customer_id = params.customerId;
-    }
-
-    const res = await fetch(`${this.baseUrl}/checkouts/`, {
-      method: "POST",
-      headers: this.headers,
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`[PolarService] Failed to create checkout session — ${err}`);
-    }
-
-    return res.json() as Promise<{ id: string; url: string }>;
   }
 
   async verifyWebhookSignature(params: { rawBody: string; signatureHeader: string; webhookId: string; webhookTimestamp: string }): Promise<boolean> {

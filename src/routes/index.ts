@@ -41,7 +41,6 @@ export function registerRoutes(app: Hono<{ Bindings: Bindings; Variables: Variab
   app.route("/v1/node", node);
   app.route("/v1/proxy", proxy);
   app.route("/v1/billing", billing);
-  app.route("/v1/status", status);
 
   // Health check endpoint
   app.get("/v1/health", (c) => {

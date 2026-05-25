@@ -7,7 +7,7 @@ export interface CustomerParams {
   clusterId: string;
   userId: string;
   email: string;
-  name?: string;
+  name?: string | null;
 }
 
 export interface CheckoutParams extends CustomerParams {
@@ -21,9 +21,8 @@ export interface RawWebhookEvent {
 }
 
 export interface BillingProvider {
-  getOrCreateCustomer(params: CustomerParams): Promise<{ id: string; email: string }>;
   updateCustomerEmail(params: { externalId: string; email: string; name?: string }): Promise<{ id: string; email: string } | null>;
-  buildCheckoutUrl(params: CheckoutParams): Promise<string>;
+  createCheckoutSession(params: CheckoutParams): Promise<string>;
   verifyWebhookSignature(params: { rawBody: string; signatureHeader: string; webhookId: string; webhookTimestamp: string }): Promise<boolean>;
   parseWebhookEvent(rawBody: string): Promise<RawWebhookEvent>;
 }

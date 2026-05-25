@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { cors } from "hono/cors";
+
 import { ulid } from "ulid";
 import type { Bindings, Variables } from "@/types/index.js";
 import { getDbStore, getKVStore, getWS } from "@/lib/config/context.js";
@@ -16,8 +16,6 @@ const log = new Logger("status");
 const dployrdService = new DployrdService();
 const status = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Public endpoint — polled by loading pages served from *.dployr.run and custom domains.
-status.use("/", cors({ origin: "*", allowMethods: ["GET", "OPTIONS"] }));
 
 /**
  * On first hit while a service is sleeping, fires a wake task so the

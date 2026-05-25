@@ -212,7 +212,7 @@ export function createBillingProvider(config: Config): BillingProvider | null {
         POLAR_ACCESS_TOKEN: config.billing.polar_access_token,
         POLAR_WEBHOOK_SECRET: config.billing.polar_webhook_secret,
         POLAR_ENVIRONMENT: config.billing.environment,
-        BILLING_CHECKOUT_URLS: config.billing.checkout_urls,
+        BILLING_PRODUCT_IDS: config.billing.product_ids,
       };
       return new PolarService(env as Bindings);
     }

@@ -74,30 +74,15 @@ export class BillingService {
     };
   }
 
-  async createCheckout(params: CheckoutParams, db: DatabaseStore): Promise<{ checkoutUrl: string; customerId: string }> {
-    const customer = await this.provider.getOrCreateCustomer({
-      userId: params.userId,
-      email: params.email,
-      name: params.name,
-      clusterId: params.clusterId,
-    });
-
-    const checkoutUrl = await this.provider.buildCheckoutUrl(params);
-
-    await db.billing.upsert({
-      clusterId: params.clusterId,
-      plan: await db.billing.getEffectivePlan(params.clusterId),
-      polarCustomerId: customer.id,
-      status: "active",
-    });
-
-    return { checkoutUrl, customerId: customer.id };
+  async createCheckout(params: CheckoutParams, _db: DatabaseStore): Promise<{ checkoutUrl: string }> {
+    const checkoutUrl = await this.provider.createCheckoutSession(params);
+    return { checkoutUrl };
   }
 
   async handleWebhook(event: PolarWebhookEvent, db: DatabaseStore, kv: KVStore): Promise<void> {
     const { type, data } = event;
 
-    log.info(`Polar webhook: ${type}`);
+    log.debug(`Polar webhook: ${type}`);
 
     switch (type) {
       case "subscription.created":
@@ -180,7 +165,12 @@ export class BillingService {
 
   private getPolarReferencedClusterId(data: Record<string, unknown>): string | null {
     const customer = data.customer as Record<string, unknown> | undefined;
-    return (customer?.["external_id"] as string | undefined) || null;
+    const fromCustomer = (customer?.["external_id"] as string | undefined) || null;
+    if (fromCustomer) return fromCustomer;
+
+    const metadata = data.metadata as Record<string, unknown> | undefined;
+    const fromMeta = (metadata?.["cluster_id"] as string | undefined) || null;
+    return fromMeta;
   }
 
   private getPolarCustomerId(data: Record<string, unknown>): string | null {
@@ -201,9 +191,21 @@ export class BillingService {
   }
 
   private async onSubscriptionCreatedOrUpdated(data: Record<string, unknown>, db: DatabaseStore, kv: KVStore): Promise<void> {
-    const clusterId = this.getPolarReferencedClusterId(data);
+    let clusterId = this.getPolarReferencedClusterId(data);
     const polarSubscriptionId = this.getPolarSubscriptionId(data);
     const polarCustomerId = this.getPolarCustomerId(data);
+
+    if (!clusterId) {
+      if (polarSubscriptionId) {
+        const existing = await db.billing.getByPolarSubscriptionId(polarSubscriptionId);
+        if (existing) clusterId = existing.clusterId;
+      }
+
+      if (!clusterId && polarCustomerId) {
+        const existing = await db.billing.getByPolarCustomerId(polarCustomerId);
+        if (existing) clusterId = existing.clusterId;
+      }
+    }
 
     if (!clusterId) {
       log.warn("subscription.created/updated: no cluster_id in metadata, skipping");
@@ -365,7 +367,16 @@ export class BillingService {
   }
 
   private async onSubscriptionPastDue(data: Record<string, unknown>, db: DatabaseStore, kv: KVStore): Promise<void> {
-    const clusterId = this.getPolarReferencedClusterId(data);
+    let clusterId = this.getPolarReferencedClusterId(data);
+
+    if (!clusterId) {
+      const polarSubscriptionId = this.getPolarSubscriptionId(data);
+      if (polarSubscriptionId) {
+        const existing = await db.billing.getByPolarSubscriptionId(polarSubscriptionId);
+        if (existing) clusterId = existing.clusterId;
+      }
+    }
+
     if (!clusterId) return;
 
     const existing = await db.billing.get(clusterId);

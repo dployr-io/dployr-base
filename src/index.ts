@@ -9,6 +9,7 @@ import { registerJobs } from "@/services/background/jobs/index.js";
 import { bootstrapMiddleware, getCorsConfig, initializeAdapters } from "@/lib/config/bootstrap.js";
 import { createCorsMiddleware } from "@/middleware/cors.js";
 import { globalRateLimit } from "@/middleware/ratelimit.js";
+import { cors } from "hono/cors";
 import { loadSession } from "@/middleware/auth.js";
 import { registerRoutes } from "@/routes/index.js";
 import admin from "@/routes/admin/index.js";
@@ -36,11 +37,14 @@ app.get("/favicon.ico", async (c) => {
 
 app.use("*", bootstrapMiddleware);
 
-// Restricted admin API - for management
-app.route("/v1/admin", admin);
-
 // Prometheus-format metrics 
 app.route("/metrics", metrics);
+
+// Status endpoint is public — polled from any origin (user services, custom domains)
+app.use("/v1/status", cors({ origin: "*", allowMethods: ["GET", "OPTIONS"] }));
+
+// Restricted admin API - for management
+app.route("/v1/admin", admin);
 
 // Load session before rate limiting so authenticated users get per-user buckets
 app.use("/v1/*", loadSession);

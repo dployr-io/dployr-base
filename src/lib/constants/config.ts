@@ -134,10 +134,10 @@ export const CONFIG_SCHEMA = z.object({
       polar_access_token: z.string().optional(),
       polar_webhook_secret: z.string().optional(),
       environment: z.enum(["sandbox", "production"]).default("sandbox"),
-      checkout_urls: z
+      product_ids: z
         .object({
-          indie: z.url().optional(),
-          pro: z.url().optional(),
+          indie: z.string().optional(),
+          pro: z.string().optional(),
         })
         .optional(),
     })

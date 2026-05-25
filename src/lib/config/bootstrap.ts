@@ -127,7 +127,7 @@ export function buildBindings(a: Adapters): Bindings {
     POLAR_ACCESS_TOKEN: billingConfig?.polar_access_token || process.env.POLAR_ACCESS_TOKEN || "",
     POLAR_WEBHOOK_SECRET: billingConfig?.polar_webhook_secret || process.env.POLAR_WEBHOOK_SECRET || "",
     POLAR_ENVIRONMENT: billingConfig?.environment || process.env.POLAR_ENVIRONMENT || (process.env.NODE_ENV === "production" ? "production" : "sandbox"),
-    BILLING_CHECKOUT_URLS: billingConfig?.checkout_urls,
+    BILLING_PRODUCT_IDS: billingConfig?.product_ids,
     DO_API_TOKEN: vmConfig?.do_api_token,
     SSH_KEY: vmConfig?.ssh_key,
     REGISTRY_URL: a.config?.registry?.url,

@@ -103,9 +103,10 @@ polar_access_token = "polar_oat_yM..."
 polar_webhook_secret = "polar_whs_..."
 polar_environment = "sandbox"
 
-[billing.checkout_urls]
-indie = "https://sandbox.polar.sh/checkout/polar_cl_..."
-pro = "https://sandbox.polar.sh/checkout/polar_cl_..."
+[billing.product_ids]
+# Polar dashboard → Products → copy the product UUID for each plan
+indie = "2e60e533-977f-4dea-a15c-8cbe838eebf7"
+pro = "886a574b-cbed-4e69-a8b3-c601b99a6b22"
 
 [proxy]
 # Enable the built-in reverse proxy

@@ -206,6 +206,11 @@ export class InstanceStore extends BaseStore {
         result = await client.query(
           `INSERT INTO instances (id, kind, address, tag, capacity, region, status, role, metadata, created_at, updated_at)
            VALUES ($1, 'pool', $2, $3, $4, $5, $6::instance_status, $7::node_role, $8::jsonb, $9, $10)
+           ON CONFLICT (tag) DO UPDATE SET
+             address  = EXCLUDED.address,
+             status   = EXCLUDED.status,
+             metadata = EXCLUDED.metadata,
+             updated_at = EXCLUDED.updated_at
            RETURNING id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at`,
           [id, entry.address ?? null, entry.tag, entry.capacity ?? DEFAULT_CAPACITY, entry.region ?? null, entry.status ?? "healthy", entry.role ?? "instance", JSON.stringify(entry.metadata ?? {}), now, now],
         );
