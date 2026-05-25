@@ -205,9 +205,11 @@ configure() {
 
   prompt "cors.allowed_origins"          "CORS allowed origins"
 
-  prompt "billing.polar_access_token"    "Polar access token"                       true
-  prompt "billing.polar_webhook_secret"  "Polar webhook secret"                     true
-  prompt "billing.polar_environment"     "Polar environment (sandbox/production)"
+  prompt "billing.polar_access_token"        "Polar access token"                       true
+  prompt "billing.polar_webhook_secret"      "Polar webhook secret"                     true
+  prompt "billing.polar_environment"         "Polar environment (sandbox/production)"
+  prompt "billing.product_ids.indie"         "Polar product ID for Indie plan (UUID)"
+  prompt "billing.product_ids.pro"           "Polar product ID for Pro plan (UUID)"
 
   prompt "virtual_machines.provider"     "VM provider (digitalocean)"
   prompt "virtual_machines.do_api_token" "DigitalOcean API token"                   true
