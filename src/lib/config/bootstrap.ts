@@ -15,6 +15,7 @@ import { WebSocketHandler } from "@/services/websocket/instance-handler.js";
 import { VmProvider } from "@/services/vm/index.js";
 import { EmailProvider } from "@/services/notifications/email/index.js";
 import { TraefikService } from "@/services/traefik-router.js";
+import { DomainStore } from "@/lib/db/store/db/domains.js";
 
 export interface Adapters {
   kv: IKVAdapter;
@@ -44,6 +45,29 @@ export function getAdapters(): Adapters | null {
  */
 export function getCorsConfig(): { allowed_origins?: string } | undefined {
   return adapters?.config?.cors;
+}
+
+let _domainStore: DomainStore | null = null;
+
+/**
+ * Returns an async function that checks whether a given host is a verified
+ * custom domain. Used as the CORS fallback for requests from custom domains.
+ */
+export function getCustomDomainChecker(): (host: string) => Promise<boolean> {
+  return async (host: string): Promise<boolean> => {
+    if (!adapters?.db) {
+      log.warn(`CORS custom domain check: adapters not ready for host=${host}`);
+      return false;
+    }
+    try {
+      if (!_domainStore) _domainStore = new DomainStore(adapters.db);
+      const domain = await _domainStore.find(host);
+      return domain?.status === "active";
+    } catch (err: any) {
+      log.error(`CORS custom domain check failed for host=${host}:`, err?.message ?? err);
+      return false;
+    }
+  };
 }
 
 /**

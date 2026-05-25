@@ -49,6 +49,7 @@ export const DeploymentSchema = z.object({
   secrets: z.record(z.string(), z.string()).optional(),
   remote: z.record(z.string(), z.any()).optional(),
   domain: z.string().optional(),
+  health_check: z.string().nullish(),
   force_rebuild: z.boolean().optional().default(false),
 });
 

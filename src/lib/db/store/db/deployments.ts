@@ -40,6 +40,7 @@ export class DeploymentStore extends BaseStore {
     createdAt,
     finishedAt,
     serviceId,
+    healthCheck,
   }: {
     clusterId: string;
     userId: string;
@@ -66,6 +67,7 @@ export class DeploymentStore extends BaseStore {
     createdAt?: number | null;
     finishedAt?: number | null;
     serviceId?: string | null;
+    healthCheck?: string | null;
   }): Promise<Deployment | null> {
     const nameValidation = validateString(name, "name");
     if (!nameValidation.valid) {
@@ -83,8 +85,8 @@ export class DeploymentStore extends BaseStore {
 
         const insertResult = await this.db
           .prepare(
-            `INSERT INTO deployments (id, cluster_id, user_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, created_at, logs, build_fingerprint, finished_at, service_id, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+            `INSERT INTO deployments (id, cluster_id, user_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, created_at, logs, build_fingerprint, finished_at, service_id, updated_at, health_check)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
            ON CONFLICT (name) DO UPDATE SET
              status = $7,
              description = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.description ELSE $8 END,
@@ -104,8 +106,9 @@ export class DeploymentStore extends BaseStore {
              build_fingerprint = CASE WHEN $23 IS NOT NULL THEN $23 ELSE deployments.build_fingerprint END,
              finished_at = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.finished_at ELSE $24 END,
              service_id = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.service_id ELSE $25 END,
-             updated_at = $26
-           RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at`,
+             updated_at = $26,
+             health_check = CASE WHEN deployments.finished_at IS NOT NULL THEN deployments.health_check ELSE $27 END
+           RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at, health_check`,
           )
           .bind(
             id,
@@ -134,6 +137,7 @@ export class DeploymentStore extends BaseStore {
             finishedAt ?? null,
             serviceId ?? null,
             now,
+            healthCheck ?? null,
           )
           .executeWithClient(client);
 
@@ -154,7 +158,7 @@ export class DeploymentStore extends BaseStore {
   async get(filter: string | { id?: string; name?: string }): Promise<Deployment | null> {
     const id = typeof filter === "string" ? filter : filter.id;
     const name = typeof filter === "object" ? filter.name : undefined;
-    const sel = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at FROM deployments WHERE`;
+    const sel = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at, health_check FROM deployments WHERE`;
     if (id) {
       const row = await this.db.prepare(`${sel} id = $1`).bind(id).first()
         ?? await this.db.prepare(`${sel} name = $1`).bind(id).first();
@@ -189,7 +193,7 @@ export class DeploymentStore extends BaseStore {
 
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at FROM deployments ${clause} ORDER BY created_at DESC`;
+    let sql = `SELECT id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at, health_check FROM deployments ${clause} ORDER BY created_at DESC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -222,7 +226,7 @@ export class DeploymentStore extends BaseStore {
 
   async updateLogs(id: string, logs: string): Promise<Deployment | null> {
     const result = await this.db
-      .prepare(`UPDATE deployments SET logs = $1, updated_at = $2 WHERE id = $3 RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at`)
+      .prepare(`UPDATE deployments SET logs = $1, updated_at = $2 WHERE id = $3 RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at, health_check`)
       .bind(logs, this.now(), id)
       .first();
 
@@ -259,6 +263,7 @@ export class DeploymentStore extends BaseStore {
     runtimeVersion,
     remoteUrl,
     remoteBranch,
+    healthCheck,
   }: {
     name: string;
     source: "remote" | "image";
@@ -274,6 +279,7 @@ export class DeploymentStore extends BaseStore {
     runtimeVersion?: string | null;
     remoteUrl?: string | null;
     remoteBranch?: string | null;
+    healthCheck?: string | null;
   }): Promise<Deployment | null> {
     const now = this.now();
     const result = await this.db
@@ -284,9 +290,10 @@ export class DeploymentStore extends BaseStore {
            working_dir = $6, static_dir = $7, image = $8, domain = $9,
            runtime_type = $10, runtime_version = $11,
            remote_url = $12, remote_branch = $13,
-           finished_at = NULL, updated_at = $14
-         WHERE name = $15
-         RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at`,
+           health_check = $14,
+           finished_at = NULL, updated_at = $15
+         WHERE name = $16
+         RETURNING id, cluster_id, user_id, service_id, name, type, source, status, description, run_cmd, build_cmd, port, working_dir, static_dir, image, domain, runtime_type, runtime_version, remote_url, remote_branch, remote_commit_hash, logs, build_fingerprint, created_at, finished_at, health_check`,
       )
       .bind(
         source,
@@ -302,6 +309,7 @@ export class DeploymentStore extends BaseStore {
         runtimeVersion ?? null,
         remoteUrl ?? null,
         remoteBranch ?? null,
+        healthCheck ?? null,
         now,
         name,
       )
@@ -338,6 +346,7 @@ export class DeploymentStore extends BaseStore {
       remoteCommitHash: row.remote_commit_hash as string | null,
       logs: row.logs as string | null,
       buildFingerprint: row.build_fingerprint as string | null,
+      healthCheck: row.health_check as string | null,
       createdAt: row.created_at as number,
       finishedAt: row.finished_at as number | null,
     };

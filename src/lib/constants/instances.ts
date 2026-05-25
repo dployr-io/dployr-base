@@ -18,11 +18,12 @@ export const SERVICE_LIMIT_BY_TIER = {
 /**
  * Per-container resource limits injected into dployrd at instance bootstrap,
  * keyed by billing tier. (Doesn't affect dedicated instances)
+ * Keys must match InstallScriptOptions (containerMemory / containerCpu / containerStorage).
  */
 export const CONTAINER_LIMITS_BY_TIER = {
-  hobby: { memory: 128, cpu: 100,  storage: 1 },
-  indie: { memory: 256, cpu: 250,  storage: 2 },
-  pro:   { memory: 0,   cpu: 0,    storage: 0 }, // unlimited — dedicated instance
+  hobby: { containerMemory: 128, containerCpu: 100,  containerStorage: 1 },
+  indie: { containerMemory: 256, containerCpu: 250,  containerStorage: 2 },
+  pro:   { containerMemory: 0,   containerCpu: 0,    containerStorage: 0 }, // unlimited — dedicated instance
 } as const;
 
 // Instance regions

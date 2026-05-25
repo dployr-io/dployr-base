@@ -51,3 +51,29 @@ export function toISO(value: number | string | null | undefined): string {
   const d = new Date(value);
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
+
+/**
+ * Normalizes a health check path to the canonical form: /foo/bar
+ *
+ * Accepts:
+ *   A.  foo/bar      → /foo/bar
+ *   B.  /foo/bar     → /foo/bar  (already canonical)
+ *   C.  /foo/bar/    → /foo/bar
+ *
+ * Returns `/` for empty/whitespace-only input.
+ */
+export function normalizeHealthCheckPath(raw: string | null | undefined): string {
+  const fallback = "/";
+  if (!raw) return fallback;
+  const trimmed = raw.trim();
+  if (!trimmed) return fallback;
+
+  // Strip trailing slashes; if nothing remains (e.g. bare "/"), return null
+  let p = trimmed.replace(/\/+$/, "");
+  if (!p) return fallback;
+
+  // Ensure exactly one leading slash
+  if (!p.startsWith("/")) p = "/" + p;
+
+  return p;
+}

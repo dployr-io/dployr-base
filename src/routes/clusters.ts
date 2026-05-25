@@ -17,6 +17,12 @@ const log = new Logger("Clusters");
 const clusters = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 clusters.use("*", authMiddleware);
 
+const notificationsUpsertSchema = z.object({
+  enabled: z.boolean(),
+  slackWebhookUrl: z.url().nullish(),
+  discordWebhookUrl: z.url().nullish(),
+});
+
 const renameClusterSchema = z.object({
   name: z.string().min(1).max(64),
 });
@@ -622,6 +628,55 @@ clusters.patch("/:id", requireClusterOwner, async (c) => {
     log.error("Rename cluster error:", error);
     return c.json(
       createErrorResponse({ message: "Failed to rename cluster", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }),
+      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
+    );
+  }
+});
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+/**
+ * Get notification config for a cluster
+ */
+clusters.get("/:id/notifications", requireClusterViewer, async (c) => {
+  const db = getDbStore(c);
+  const clusterId = c.req.param("id");
+
+  const config = await db.notifications.get(clusterId);
+  // Return a default-shaped object if no row exists yet (enabled=true, no webhooks)
+  return c.json(createSuccessResponse({ notifications: config ?? { clusterId, enabled: true, slackWebhookUrl: null, discordWebhookUrl: null } }));
+});
+
+/**
+ * Upsert notification config for a cluster
+ */
+clusters.put("/:id/notifications", requireClusterAdmin, async (c) => {
+  const db = getDbStore(c);
+  const clusterId = c.req.param("id");
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) {
+    return c.json(createErrorResponse({ message: "Request body is required", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
+  }
+
+  const parsed = notificationsUpsertSchema.safeParse(body);
+  if (!parsed.success) {
+    const errors = parsed.error.issues.map((e) => ({ field: e.path.join("."), message: e.message }));
+    return c.json(
+      createErrorResponse({ message: "Validation failed: " + errors.map((e) => `${e.field}: ${e.message}`).join(", "), code: ERROR.REQUEST.BAD_REQUEST.code }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
+  }
+
+  const { enabled, slackWebhookUrl, discordWebhookUrl } = parsed.data;
+
+  try {
+    const config = await db.notifications.upsert({ clusterId, enabled, slackWebhookUrl, discordWebhookUrl });
+    return c.json(createSuccessResponse({ notifications: config }));
+  } catch (error) {
+    log.error("Upsert notifications error:", error);
+    return c.json(
+      createErrorResponse({ message: "Failed to save notification config", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }),
       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
     );
   }

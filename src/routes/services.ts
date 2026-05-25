@@ -15,6 +15,7 @@ import { DployrdService } from "@/services/dployrd.js";
 import { enqueueBuild, computeBuildFingerprint, resolveRemoteAuthUrl } from "@/services/deployments.js";
 import { InstanceNotConnectedError } from "@/lib/errors/errors.js";
 import { Logger } from "@/lib/logger.js";
+import { normalizeHealthCheckPath } from "@/lib/utils.js";
 
 const log = new Logger("Services");
 
@@ -38,6 +39,7 @@ const patchServiceSchema = z.object({
   version: z.string().nullish(),
   remote_url: z.string().nullish(),
   remote_branch: z.string().nullish(),
+  health_check: z.string().nullish(),
 });
 
 function validationError(c: any, error: z.ZodError) {
@@ -137,6 +139,7 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
       runtimeVersion: pick(fields.version, existing?.runtimeVersion),
       remoteUrl: pick(fields.remote_url, existing?.remoteUrl),
       remoteBranch: pick(fields.remote_branch, existing?.remoteBranch),
+      healthCheck: pick(normalizeHealthCheckPath(fields.health_check), existing?.healthCheck),
     };
 
     // source follows the content: explicit remote_url always means "remote" (rebuild);
@@ -164,6 +167,7 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
       runtimeVersion: merged.runtimeVersion,
       remoteUrl: merged.remoteUrl,
       remoteBranch: merged.remoteBranch,
+      healthCheck: merged.healthCheck,
     });
 
     if (!deployment) {
@@ -200,6 +204,7 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
       env_vars: Object.keys(currentEnvs).length > 0 ? currentEnvs : undefined,
       secrets: Object.keys(currentSecrets).length > 0 ? currentSecrets : undefined,
       remote: deployment.remoteUrl ? { url: deployment.remoteUrl, branch: deployment.remoteBranch, commit_hash: deployment.remoteCommitHash } : undefined,
+      health_check: deployment.healthCheck ?? undefined,
     };
 
     const jwtService = getJWTService(c);
@@ -417,6 +422,8 @@ services.get("/:id/secrets", resolveCluster("service", { path: "id" }), requireC
   const secrets = await db.serviceSecrets.list({ serviceId, serviceName: service?.name ?? null });
   return c.json(createSuccessResponse({ secrets }));
 });
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
 
 services.get("/metrics/:name", authMiddleware, requireClusterViewer, async (c) => {
   const db = getDbStore(c);

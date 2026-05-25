@@ -32,6 +32,7 @@ export const EVENTS = {
   },
   SERVICE: {
     UNHEALTHY: { code: "service.unhealthy", message: "Service is unhealthy" },
+    RECOVERED: { code: "service.recovered", message: "Service has recovered" },
     ICING_WARNING: { code: "service.icing_warning", message: "Service will be iced in 5 days" },
     ICED: { code: "service.iced", message: "Service has been iced due to inactivity" },
   },
@@ -207,6 +208,12 @@ export const EVENT_METADATA: EventMetadataMap = {
     title: "Service Unhealthy",
     description: (data: any) => `Service **${data.serviceName}** is failing its health check.`,
     color: 0xff0000,
+    category: "instance",
+  },
+  [EVENTS.SERVICE.RECOVERED.code]: {
+    title: "✅ Service Recovered",
+    description: (data: any) => `Service **${data.serviceName}** has recovered and is healthy again.`,
+    color: 0x00ff00,
     category: "instance",
   },
   [EVENTS.SERVICE.ICING_WARNING.code]: {

@@ -54,6 +54,8 @@ export const KV_KEYS = {
     HEALTH: (name: string) => `svc:health:${name}`,
     ICE_WARNING_SENT: (name: string) => `svc:ice_warning:${name}`,
     DELETED: (name: string) => `svc:deleted:${name}`,
+    CONSECUTIVE_FAILURES: (name: string) => `svc:fail_count:${name}`,
+    WATCHDOG_COOLDOWN: (name: string) => `svc:watchdog_cooldown:${name}`,
   },
   METRICS: {
     TRAEFIK_COUNTERS: "metrics:traefik:counters",

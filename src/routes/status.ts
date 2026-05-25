@@ -42,6 +42,7 @@ status.get("/", async (c) => {
   const customDomain = await db.domains.find(domain);
   if (customDomain) {
     clusterId = customDomain.clusterId;
+    serviceName = customDomain.serviceName ?? null;
   } else {
     // Fall back to subdomain pattern: {name}.{tld}
     const tld = c.env.TRAEFIK_TLD ?? "dployr.run";
@@ -50,7 +51,7 @@ status.get("/", async (c) => {
     }
   }
 
-  // If we have a clusterId from custom domain, get the service name
+  // If custom domain didn't carry a service name, resolve from cluster
   if (clusterId && !serviceName) {
     const { services } = await db.services.list({ clusterId });
     if (services.length === 0) return c.json({ status: "not_found" });

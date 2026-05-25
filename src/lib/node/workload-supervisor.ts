@@ -14,7 +14,7 @@ import { DatabaseConflictError } from "../errors/errors.js";
 import { KV_KEYS } from "../constants/kv.js";
 import { EVENTS } from "../constants/events.js";
 import { Logger } from "@/lib/logger.js";
-import { REPROVISION_COOLDOWN_MS, SERVICE_STUB_ADDRESS } from "../constants/index.js";
+import { REPROVISION_COOLDOWN_MS, SERVICE_STUB_ADDRESS, WATCHDOG_COOLDOWN_NOTIFICATION_TTL } from "../constants/index.js";
 import { computeBuildFingerprint, enqueueBuild } from "@/services/deployments.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { ulid } from "ulid";
@@ -226,19 +226,111 @@ export class WorkloadSupervisor {
       if (!workloads) continue;
 
       for (const svc of workloads) {
-        if (!svc.name || !svc.status) continue;
+        if (!svc.name) continue;
 
+        // svc.status = container state (running/starting/stopped) - can trigger reprovision
+        // svc.health = host HTTP probe result (healthy/degraded) - doesn't trigger reprovison
         const prevHealth = await this.kv.kv.get(KV_KEYS.SERVICE.HEALTH(svc.name));
-        const currHealth: string = svc.status;
+        const currHealth: string = svc.health ?? "healthy";
 
         await this.kv.kv.put(KV_KEYS.SERVICE.HEALTH(svc.name), currHealth);
 
-        if (currHealth === "unhealthy" && prevHealth !== "unhealthy") {
-          this.log.warn(`Service ${svc.name} transitioned to unhealthy`, { cluster: cluster.name });
+        // Recovered: degraded → healthy
+        if (currHealth === "healthy" && prevHealth === "degraded") {
+          this.log.info(`Service ${svc.name} recovered`, { cluster: cluster.name });
+          await this.kv.kv.delete(KV_KEYS.SERVICE.CONSECUTIVE_FAILURES(svc.name));
+          this.notificationService
+            .triggerEvent(EVENTS.SERVICE.RECOVERED.code, { clusterId: cluster.id, clusterName: cluster.name, serviceName: svc.name }, this.db)
+            .catch((err) => this.log.error(`Failed to send recovered notification for ${svc.name}`, { error: String(err) }));
+          continue;
+        }
+
+        // Newly degraded: fire the standard notification on first transition
+        if (currHealth === "degraded" && prevHealth !== "degraded") {
+          this.log.warn(`Service ${svc.name} transitioned to degraded`, { cluster: cluster.name });
           this.notificationService
             .triggerEvent(EVENTS.SERVICE.UNHEALTHY.code, { clusterId: cluster.id, clusterName: cluster.name, serviceName: svc.name }, this.db)
-            .catch((err) => this.log.error(`Failed to send unhealthy notification for ${svc.name}`, { error: String(err) }));
+            .catch((err) => this.log.error(`Failed to send degraded notification for ${svc.name}`, { error: String(err) }));
         }
+
+        // Watchdog: track consecutive failures and escalate via configured channels
+        if (currHealth === "degraded") {
+          this.checkWatchdog(svc.name, cluster).catch((err) =>
+            this.log.error(`Watchdog check failed for ${svc.name}`, { error: String(err) }),
+          );
+        }
+      }
+    }
+  }
+
+  private async checkWatchdog(serviceName: string, cluster: Cluster): Promise<void> {
+    // Watchdog is a pro-tier feature — skip for hobby clusters
+    const billing = await this.db.billing.get(cluster.id);
+    if (!billing || billing.plan !== "pro") return;
+
+    // Read cluster-level notification config; default to enabled if no row exists
+    const config = await this.db.notifications.get(cluster.id);
+    if (config?.enabled === false) return;
+
+    const FAIL_THRESHOLD = 3;
+
+    // Increment consecutive failure count
+    const countRaw = await this.kv.kv.get(KV_KEYS.SERVICE.CONSECUTIVE_FAILURES(serviceName));
+    const count = countRaw ? parseInt(countRaw, 10) + 1 : 1;
+    await this.kv.kv.put(KV_KEYS.SERVICE.CONSECUTIVE_FAILURES(serviceName), String(count));
+
+    if (count < FAIL_THRESHOLD) return;
+
+    // Suppress if we are within the cooldown window
+    const inCooldown = await this.kv.kv.get(KV_KEYS.SERVICE.WATCHDOG_COOLDOWN(serviceName));
+    if (inCooldown) return;
+
+    // Arm the cooldown before dispatching so a slow dispatch can't double-fire
+    await this.kv.kv.put(KV_KEYS.SERVICE.WATCHDOG_COOLDOWN(serviceName), "1", { ttl: WATCHDOG_COOLDOWN_NOTIFICATION_TTL });
+
+    this.log.warn(`Watchdog firing for ${serviceName} (${count} consecutive failures)`, { cluster: cluster.name });
+    await this.dispatchWatchdogAlert(serviceName, cluster, config);
+  }
+
+  private async dispatchWatchdogAlert(
+    serviceName: string,
+    cluster: Cluster,
+    config: { slackWebhookUrl?: string | null; discordWebhookUrl?: string | null } | null,
+  ): Promise<void> {
+    // Always fire email via the existing notification pipeline
+    try {
+      await this.notificationService!.triggerEvent(
+        EVENTS.SERVICE.UNHEALTHY.code,
+        { clusterId: cluster.id, clusterName: cluster.name, serviceName },
+        this.db,
+      );
+    } catch (err) {
+      this.log.error(`Watchdog email dispatch failed`, { service: serviceName, error: String(err) });
+    }
+
+    // Slack
+    if (config?.slackWebhookUrl) {
+      try {
+        await fetch(config.slackWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: `🚨 *Watchdog*: Service *${serviceName}* in cluster *${cluster.name}* has degraded.` }),
+        });
+      } catch (err) {
+        this.log.error(`Watchdog Slack dispatch failed`, { service: serviceName, error: String(err) });
+      }
+    }
+
+    // Discord
+    if (config?.discordWebhookUrl) {
+      try {
+        await fetch(config.discordWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: `🚨 **Watchdog**: Service **${serviceName}** in cluster **${cluster.name}** has degraded.` }),
+        });
+      } catch (err) {
+        this.log.error(`Watchdog Discord dispatch failed`, { service: serviceName, error: String(err) });
       }
     }
   }
@@ -388,6 +480,12 @@ export class WorkloadSupervisor {
     const sleeping = await this.kv.kv.get(KV_KEYS.SERVICE.SLEEPING(service.name));
     if (sleeping) {
       this.log.debug(`Skipping reprovision for ${service.name} — service is sleeping`);
+      return false;
+    }
+
+    const waking = await this.kv.kv.get(KV_KEYS.SERVICE.WAKING(service.name));
+    if (waking) {
+      this.log.debug(`Skipping reprovision for ${service.name} — service is waking up`);
       return false;
     }
 

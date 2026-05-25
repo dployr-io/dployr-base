@@ -106,6 +106,15 @@ CREATE TABLE IF NOT EXISTS domains (
   FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS notifications (
+  cluster_id          TEXT PRIMARY KEY REFERENCES clusters(id) ON DELETE CASCADE,
+  enabled             BOOLEAN NOT NULL DEFAULT true,
+  slack_webhook_url   TEXT,
+  discord_webhook_url TEXT,
+  created_at          BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+  updated_at          BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
+);
+
 CREATE TABLE IF NOT EXISTS deployments (
   id                 TEXT PRIMARY KEY,
   cluster_id         TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
@@ -128,6 +137,7 @@ CREATE TABLE IF NOT EXISTS deployments (
   remote_url         TEXT,
   remote_branch      TEXT,
   remote_commit_hash TEXT,
+  health_check       TEXT,
   logs               TEXT,
   build_fingerprint  TEXT,
   created_at         BIGINT NOT NULL,

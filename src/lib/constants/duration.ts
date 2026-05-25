@@ -93,6 +93,9 @@ export const ADMIN_JWT_TTL = 8 * HOUR;
 /** Billing notification cache: 24 hours */
 export const BILLING_NOTIFICATION_TTL = TTL_24_HOURS;
 
+/** Watchdog notification */
+export const WATCHDOG_COOLDOWN_NOTIFICATION_TTL = TTL_24_HOURS;
+
 /** Pool provision lock duration: 300 seconds */
 export const POOL_PROVISION_LOCK_TTL = 300;
 
