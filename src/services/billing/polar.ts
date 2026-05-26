@@ -5,7 +5,7 @@ import type { Bindings } from "@/types/index.js";
 import { BillingProvider, CheckoutParams, RawWebhookEvent } from "./provider.js";
 import { Logger } from "@/lib/logger.js";
 
-const log = new Logger("PolarService");
+const log = new Logger("polar-service");
 
 export class PolarService implements BillingProvider {
   private baseUrl: string;
@@ -48,11 +48,27 @@ export class PolarService implements BillingProvider {
 
     if (!res.ok) {
       const err = await res.text();
-      throw new Error(`[PolarService] Failed to create checkout session — ${err}`);
+      throw new Error(`Failed to create checkout session — ${err}`);
     }
 
     const session = await res.json() as { url: string };
     return session.url;
+  }
+
+  async createCustomerPortalSession(clusterId: string): Promise<string> {
+    const res = await fetch(`${this.baseUrl}/customer-sessions`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify({ external_customer_id: clusterId }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to create customer portal session — ${err}`);
+    }
+
+    const session = await res.json() as { customer_portal_url: string };
+    return session.customer_portal_url;
   }
 
   async updateCustomerEmail(params: { externalId: string; email: string; name?: string }): Promise<{ id: string; email: string } | null> {

@@ -12,7 +12,7 @@ import { getKVStore, getBillingProvider, getBillingService, getDbStore } from "@
 import { PLANS } from "@/lib/constants/billing.js";
 import { Logger } from "@/lib/logger.js";
 
-const log = new Logger("Billing");
+const log = new Logger("billing");
 
 const billing = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -115,6 +115,28 @@ billing.post("/checkout", requireClusterOwner, async (c) => {
         message: "Failed to create checkout session",
         code: ERROR.REQUEST.INTERNAL_SERVER_ERROR.code,
       }),
+      ERROR.REQUEST.INTERNAL_SERVER_ERROR.status,
+    );
+  }
+});
+
+billing.get("/portal", requireClusterOwner, async (c) => {
+  const clusterId = c.req.query("clusterId")!;
+  const billingProvider = getBillingProvider(c);
+  if (!billingProvider) {
+    return c.json(
+      createErrorResponse({ message: "Billing is not configured", code: ERROR.REQUEST.INTERNAL_SERVER_ERROR.code }),
+      ERROR.REQUEST.INTERNAL_SERVER_ERROR.status,
+    );
+  }
+
+  try {
+    const portalUrl = await billingProvider.createCustomerPortalSession(clusterId);
+    return c.redirect(portalUrl, 302);
+  } catch (error) {
+    log.error("Failed to create customer portal session:", error);
+    return c.json(
+      createErrorResponse({ message: "Failed to open subscription portal", code: ERROR.REQUEST.INTERNAL_SERVER_ERROR.code }),
       ERROR.REQUEST.INTERNAL_SERVER_ERROR.status,
     );
   }

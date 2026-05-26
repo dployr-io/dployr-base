@@ -23,6 +23,7 @@ export interface RawWebhookEvent {
 export interface BillingProvider {
   updateCustomerEmail(params: { externalId: string; email: string; name?: string }): Promise<{ id: string; email: string } | null>;
   createCheckoutSession(params: CheckoutParams): Promise<string>;
+  createCustomerPortalSession(clusterId: string): Promise<string>;
   verifyWebhookSignature(params: { rawBody: string; signatureHeader: string; webhookId: string; webhookTimestamp: string }): Promise<boolean>;
   parseWebhookEvent(rawBody: string): Promise<RawWebhookEvent>;
 }
