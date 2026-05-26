@@ -198,6 +198,7 @@ configure() {
 
   prompt "security.encryption_key"       "Encryption key (AES-256, hex 32 bytes)"   true
   prompt "security.session_ttl"          "Session TTL (seconds)"
+  prompt "security.turnstile_secret_key" "Cloudflare Turnstile secret key"          true
 
   prompt "logging.level"                 "Log level (debug|info|warn|error)"
   prompt "logging.betterstack_endpoint"  "Better Stack ingestion endpoint (leave blank to skip)"
