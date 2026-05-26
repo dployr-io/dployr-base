@@ -4,7 +4,6 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { verifyGitHubWebhook } from "@/lib/utils.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
 import { GitLabAuthenticationError, GitLabPermissionError, GitLabNotFoundError, GitLabRateLimitError, GitLabAPIError } from "@/lib/errors/errors.js";
@@ -15,76 +14,6 @@ const log = new Logger("Integrations");
 
 const integrations = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// GitHub webhook
-integrations.post("/github/webhook", async (c) => {
-  try {
-    const signature = c.req.header("x-hub-signature-256");
-    const event = c.req.header("x-github-event");
-    const payload = await c.req.text();
-    const body = JSON.parse(payload);
-
-    if (!signature) {
-      return c.json(
-        createErrorResponse({
-          message: "Missing signature",
-          code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code,
-        }),
-        ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status,
-      );
-    }
-
-    const isValid = await verifyGitHubWebhook({
-      payload,
-      signature,
-      secret: c.env.GITHUB_WEBHOOK_SECRET,
-    });
-
-    if (!isValid) {
-      return c.json(
-        createErrorResponse({
-          message: "Invalid signature",
-          code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code,
-        }),
-        ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status,
-      );
-    }
-
-    const integrationsService = getIntegrationsService(c);
-
-    // Handle installation events
-    if (event === "installation" && body.action === "created") {
-      await integrationsService.handleGitHubInstallation(body);
-    }
-
-    // Handle meta events (app deleted)
-    if (event === "meta" && body.action === "deleted") {
-      await integrationsService.handleGitHubMeta(body);
-    }
-
-    // Handle workflow_run events (completed)
-    if (event === "workflow_run") {
-      await integrationsService.handleGitHubWorkflowRun(body);
-    }
-
-    // Handle push events
-    if (event === "push") {
-      await integrationsService.handleGitHubPush(body);
-    }
-
-    return c.json(createSuccessResponse({}, "Webhook processed"));
-  } catch (error) {
-    log.error("Webhook error:", error);
-    const helpLink = "https://monitoring.dployr.io";
-    return c.json(
-      createErrorResponse({
-        message: "Internal server error",
-        code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code,
-        helpLink,
-      }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
-  }
-});
 
 // GitHub install
 integrations.get("/github/install", requireClusterDeveloper, async (c) => {

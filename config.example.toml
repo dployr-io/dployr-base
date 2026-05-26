@@ -143,3 +143,26 @@ url = "registry.digitalocean.com/dployr"
 # For DigitalOcean: use a personal access token (same value for username and password).
 # Generate at: https://cloud.digitalocean.com/account/api/tokens
 auth = ""
+
+[listmonk]
+# Listmonk newsletter and mailing list manager — installed on the same VM by the installer.
+# Runs on localhost:9000 internally; exposed at the domain you configure (e.g. lists.dployr.io).
+# dployr-base uses the admin API (HTTP Basic Auth) to subscribe users from sign-up opt-ins.
+#
+# After installing, configure SMTP in the Listmonk admin UI → Settings → SMTP:
+#   Host: smtp.zeptomail.com  Port: 587  Username: emailapikey  Password: <zepto_api_key>
+#
+# Install: the installer (install.sh) handles this — run it and answer yes to the Listmonk prompt.
+enabled        = false
+url            = "https://lists.dployr.io"
+admin_user     = "listmonk"
+admin_password = ""
+# Newsletter list UUID — written automatically by the installer
+list_uuid      = ""
+# Secret verified on every inbound ZeptoMail bounce webhook.
+# Generated automatically by the installer.
+# In ZeptoMail: Mail Agents → <agent> → Webhooks → Add
+#   Authorization headers → Key: Authorization  Value: Bearer <this value>
+#   Webhook URL: https://base.dployr.io/webhooks/zepto/bounce
+#   Events: Hard bounces, Feedback loop
+bounce_webhook_secret = ""

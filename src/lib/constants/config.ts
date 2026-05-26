@@ -178,6 +178,23 @@ export const CONFIG_SCHEMA = z.object({
       auth: z.string().optional(),
     })
     .optional(),
+  listmonk: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** Public-facing URL of the Listmonk instance (e.g. https://lists.dployr.io) */
+      url: z.string().optional(),
+      admin_user: z.string().optional(),
+      admin_password: z.string().optional(),
+      /** UUID of the primary newsletter list — written automatically by the installer */
+      list_uuid: z.string().optional(),
+      /**
+       * Shared secret verified on every inbound ZeptoMail bounce webhook.
+       * Set this value in the ZeptoMail dashboard under Mail Agents → Webhooks → Secret Token.
+       * Generate with: openssl rand -hex 32
+       */
+      bounce_webhook_secret: z.string().optional(),
+    })
+    .optional(),
   logging: z.object({
     level: z.enum(["debug", "info", "warn", "error"]).default("info"),
   }).optional(),

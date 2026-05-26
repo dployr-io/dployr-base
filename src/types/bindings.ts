@@ -43,4 +43,10 @@ export type Bindings = {
   TRAEFIK_TLD?: string;
   TRAEFIK_IPV4?: string;
   TRAEFIK_IPV6?: string;
+
+  LISTMONK_URL?: string;
+  LISTMONK_ADMIN_USER?: string;
+  LISTMONK_ADMIN_PASSWORD?: string;
+  LISTMONK_LIST_UUID?: string;
+  LISTMONK_BOUNCE_WEBHOOK_SECRET?: string;
 };

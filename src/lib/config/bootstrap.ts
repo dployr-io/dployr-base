@@ -103,6 +103,7 @@ export function buildBindings(a: Adapters): Bindings {
   const vmConfig = a.config?.virtual_machines;
   const securityConfig = a.config?.security;
   const traefikConfig = a.config?.traefik;
+  const listmonkConfig = a.config?.listmonk;
   return {
     BASE_URL: serverConfig?.base_url || process.env.BASE_URL || "",
     APP_URL: serverConfig?.app_url || process.env.APP_URL || "",
@@ -137,6 +138,11 @@ export function buildBindings(a: Adapters): Bindings {
     TRAEFIK_TLD: traefikConfig?.tld,
     TRAEFIK_IPV4: traefikConfig?.ipv4,
     TRAEFIK_IPV6: traefikConfig?.ipv6,
+    LISTMONK_URL: listmonkConfig?.url || process.env.LISTMONK_URL,
+    LISTMONK_ADMIN_USER: listmonkConfig?.admin_user || process.env.LISTMONK_ADMIN_USER,
+    LISTMONK_ADMIN_PASSWORD: listmonkConfig?.admin_password || process.env.LISTMONK_ADMIN_PASSWORD,
+    LISTMONK_LIST_UUID: listmonkConfig?.list_uuid || process.env.LISTMONK_LIST_UUID,
+    LISTMONK_BOUNCE_WEBHOOK_SECRET: listmonkConfig?.bounce_webhook_secret || process.env.LISTMONK_BOUNCE_WEBHOOK_SECRET,
   };
 }
 

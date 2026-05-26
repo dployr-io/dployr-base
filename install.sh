@@ -20,6 +20,11 @@ CONFIG_DIR="/etc/dployr-base"
 CONFIG_PATH="$CONFIG_DIR/config.toml"
 SERVICE_USER="dployr"
 REPO="dployr-io/dployr-base"
+LISTMONK_VERSION="${LISTMONK_VERSION:-4.1.0}"
+LISTMONK_DIR="/opt/listmonk"
+LISTMONK_CONFIG_DIR="/etc/listmonk"
+LISTMONK_CONFIG="$LISTMONK_CONFIG_DIR/config.toml"
+LISTMONK_USER="listmonk"
 
 SKIP_PROMPTS=false
 
@@ -286,20 +291,31 @@ setup_vector() {
 
   mkdir -p /etc/vector
 
+  # Include Listmonk logs if it is installed alongside dployr-base
+  local listmonk_source="" inputs='"dployr_base"'
+  if command -v listmonk >/dev/null 2>&1; then
+    listmonk_source='
+[sources.listmonk]
+type    = "file"
+include = ["/var/log/listmonk/output.log"]
+'
+    inputs='"dployr_base", "listmonk"'
+  fi
+
   cat > /etc/vector/vector.toml <<EOF
 [sources.dployr_base]
-type = "file"
+type    = "file"
 include = ["/var/log/dployr-base/output.log"]
-
+${listmonk_source}
 [sinks.better_stack]
-type = "http"
-inputs = ["dployr_base"]
-uri = "${endpoint}"
+type   = "http"
+inputs = [${inputs}]
+uri    = "${endpoint}"
 encoding.codec = "json"
 
 [sinks.better_stack.auth]
 strategy = "bearer"
-token = "${token}"
+token    = "${token}"
 EOF
 
   mkdir -p /etc/systemd/system/vector.service.d
@@ -318,6 +334,311 @@ EOF
   systemctl enable vector >/dev/null 2>&1
   systemctl restart vector
   info "Vector configured → Better Stack"
+}
+
+install_listmonk_binary() {
+  if command -v listmonk >/dev/null 2>&1; then
+    info "Listmonk already installed: $(listmonk version 2>/dev/null | head -1 || echo ok)"
+    return
+  fi
+  info "Downloading Listmonk v${LISTMONK_VERSION}..."
+  local url="https://github.com/knadh/listmonk/releases/download/v${LISTMONK_VERSION}/listmonk_${LISTMONK_VERSION}_linux_amd64.tar.gz"
+  local tmp; tmp="$(mktemp -d)"
+  curl -fsSL "$url" -o "$tmp/listmonk.tar.gz" || { rm -rf "$tmp"; error "Failed to download Listmonk"; }
+  tar -xzf "$tmp/listmonk.tar.gz" -C "$tmp"   || { rm -rf "$tmp"; error "Failed to extract Listmonk"; }
+  mv "$tmp/listmonk" /usr/local/bin/listmonk
+  chmod +x /usr/local/bin/listmonk
+  rm -rf "$tmp"
+  info "Listmonk installed"
+}
+
+# Parse postgresql://user:pass@host:port/dbname into named variables.
+# Usage: parse_pg_url "$url" host_var port_var user_var pass_var name_var
+parse_pg_url() {
+  local url="$1"
+  if [[ "$url" =~ ^postgresql://([^:]+):([^@]+)@([^:/]+):([0-9]+)/([^?]+) ]]; then
+    printf -v "$2" '%s' "${BASH_REMATCH[3]}"  # host
+    printf -v "$3" '%s' "${BASH_REMATCH[4]}"  # port
+    printf -v "$4" '%s' "${BASH_REMATCH[1]}"  # user
+    printf -v "$5" '%s' "${BASH_REMATCH[2]}"  # pass
+    printf -v "$6" '%s' "${BASH_REMATCH[5]}"  # dbname
+    return 0
+  fi
+  return 1
+}
+
+# Poll until the Listmonk API responds (max 40 s).
+listmonk_api_ready() {
+  local i=0
+  info "Waiting for Listmonk API..."
+  while [ $i -lt 20 ]; do
+    curl -sf "http://localhost:9000/api/health" >/dev/null 2>&1 && return 0
+    sleep 2; ((i++))
+  done
+  return 1
+}
+
+# Configure SMTP in Listmonk via PUT /api/settings.
+# Pulls ZeptoMail key + from address straight from the already-configured [email] section.
+listmonk_configure_smtp() {
+  local lm_user="$1" lm_pass="$2" root_url="$3"
+  local api="http://localhost:9000/api"
+  local zepto_key from_addr
+  zepto_key="$(tget 'email.zepto_api_key')"
+  from_addr="$(tget 'email.from_address')"
+
+  if [ -z "$zepto_key" ]; then
+    warn "Listmonk: email.zepto_api_key not set — SMTP skipped"
+    return
+  fi
+  [ -z "$from_addr" ] && from_addr="hello@dployr.io"
+
+  local current
+  current="$(curl -sf -u "${lm_user}:${lm_pass}" "${api}/settings" | jq '.data')"
+  if [ -z "$current" ] || [ "$current" = "null" ]; then
+    warn "Listmonk: could not read settings — SMTP not configured"
+    return
+  fi
+
+  local patched
+  patched="$(echo "$current" | jq \
+    --arg url  "$root_url"  \
+    --arg from "$from_addr" \
+    --arg pass "$zepto_key" \
+    '."app.root_url"    = $url  |
+     ."app.from_email"  = $from |
+     ."app.bounce_enable_webhooks" = true |
+     ."app.bounce_hard_threshold"  = 1    |
+     ."app.bounce_soft_threshold"  = 2    |
+     .smtp = [{
+       "enabled":         true,
+       "host":            "smtp.zeptomail.com",
+       "port":            587,
+       "auth_protocol":   "login",
+       "username":        "emailapikey",
+       "password":        $pass,
+       "hello_hostname":  "",
+       "max_conns":       10,
+       "idle_timeout":    "15s",
+       "wait_timeout":    "5s",
+       "retries":         2,
+       "tls_type":        "STARTTLS",
+       "tls_skip_verify": false,
+       "email_headers":   []
+     }]')"
+
+  local ok
+  ok="$(curl -sf -X PUT -u "${lm_user}:${lm_pass}" \
+    -H "Content-Type: application/json" \
+    -d "$patched" "${api}/settings" | jq -r '.data')"
+
+  if [ "$ok" = "true" ]; then
+    info "Listmonk: SMTP configured (smtp.zeptomail.com)"
+  else
+    warn "Listmonk: SMTP config failed — check journalctl -u listmonk"
+  fi
+}
+
+# Create the Newsletter list via POST /api/lists.
+# Idempotent — returns existing UUID if the list already exists.
+listmonk_create_list() {
+  local lm_user="$1" lm_pass="$2"
+  local api="http://localhost:9000/api"
+
+  local existing_uuid
+  existing_uuid="$(curl -sf -u "${lm_user}:${lm_pass}" "${api}/lists?page=1&per_page=100" \
+    | jq -r '.data.results[] | select(.name == "Newsletter") | .uuid' 2>/dev/null | head -1)"
+  if [ -n "$existing_uuid" ]; then
+    info "Listmonk: 'Newsletter' list already exists (${existing_uuid})"
+    echo "$existing_uuid"; return
+  fi
+
+  local resp uuid
+  resp="$(curl -sf -X POST -u "${lm_user}:${lm_pass}" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"Newsletter","type":"public","optin":"single","tags":["newsletter"]}' \
+    "${api}/lists")"
+  uuid="$(echo "$resp" | jq -r '.data.uuid')"
+
+  if [ -n "$uuid" ] && [ "$uuid" != "null" ]; then
+    info "Listmonk: 'Newsletter' list created (${uuid})"
+    echo "$uuid"
+  else
+    warn "Listmonk: list creation failed — $(echo "$resp" | jq -r '.message // "unknown"')"
+    echo ""
+  fi
+}
+
+prompt_listmonk() {
+  $SKIP_PROMPTS && return
+
+  echo ""
+  printf "Install Listmonk (newsletter & mailing list manager)? (y/n): "
+  local choice; read -r choice
+  [[ "$choice" != "y" && "$choice" != "Y" ]] && return
+
+  # Two prompts only: domain + admin password 
+  local domain lm_user lm_pass
+
+  printf "Listmonk domain [lists.dployr.io]: "
+  read -r domain; domain="${domain:-lists.dployr.io}"
+
+  echo ""
+  printf "Admin username [listmonk]: "; read -r lm_user; lm_user="${lm_user:-listmonk}"
+  printf "Admin password: ";             read -r lm_pass
+  [ -z "$lm_pass" ] && { warn "Admin password is required — skipping Listmonk setup"; return; }
+
+  # Reuse the existing PostgreSQL database — no separate DB needed 
+  local pg_url; pg_url="$(tget 'database.url')"
+  [ -z "$pg_url" ] && error "database.url is not set — run the configure step first"
+
+  local db_host db_port db_user db_pass db_name
+  parse_pg_url "$pg_url" db_host db_port db_user db_pass db_name \
+    || error "Could not parse database.url (expected postgresql://user:pass@host:port/dbname)"
+  info "Listmonk will use the existing database: ${db_name} @ ${db_host}:${db_port}"
+
+  # Install binary 
+  install_listmonk_binary
+
+  # Create user and directories 
+  id "$LISTMONK_USER" &>/dev/null || useradd --system --no-create-home --shell /bin/false "$LISTMONK_USER"
+  mkdir -p "$LISTMONK_DIR" "$LISTMONK_CONFIG_DIR" /var/log/listmonk
+
+  # Write config.toml (app + db only — everything else via API) 
+  cat > "$LISTMONK_CONFIG" <<EOF
+[app]
+address        = "localhost:9000"
+admin_username = "${lm_user}"
+admin_password = "${lm_pass}"
+
+[db]
+host         = "${db_host}"
+port         = ${db_port}
+user         = "${db_user}"
+password     = "${db_pass}"
+database     = "${db_name}"
+ssl_mode     = "disable"
+max_open     = 25
+max_idle     = 25
+max_lifetime = "300s"
+EOF
+
+  chmod 600 "$LISTMONK_CONFIG"
+  chown -R "$LISTMONK_USER:$LISTMONK_USER" "$LISTMONK_DIR" "$LISTMONK_CONFIG_DIR" /var/log/listmonk
+
+  # Bootstrap DB schema (idempotent — safe to re-run) 
+  info "Bootstrapping Listmonk database..."
+  listmonk --config "$LISTMONK_CONFIG" --install --yes \
+    || warn "DB bootstrap failed — run manually: listmonk --config $LISTMONK_CONFIG --install"
+
+  # Systemd unit 
+  info "Creating Listmonk systemd service..."
+  cat > /etc/systemd/system/listmonk.service <<EOF
+[Unit]
+Description=Listmonk — mailing list and newsletter manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${LISTMONK_USER}
+WorkingDirectory=${LISTMONK_DIR}
+ExecStart=/usr/local/bin/listmonk --config ${LISTMONK_CONFIG}
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/listmonk/output.log
+StandardError=append:/var/log/listmonk/output.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  # Log rotation 
+  cat > /etc/logrotate.d/listmonk <<EOF
+/var/log/listmonk/output.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+
+  # Caddy vhost (appended if Caddy is already configured) 
+  if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
+    if ! grep -qF "$domain" /etc/caddy/Caddyfile 2>/dev/null; then
+      cat >> /etc/caddy/Caddyfile <<EOF
+
+${domain} {
+    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+    reverse_proxy localhost:9000
+}
+EOF
+      systemctl reload caddy 2>/dev/null || true
+      info "Caddy: https://${domain} -> localhost:9000"
+    fi
+  fi
+
+  # Start service 
+  systemctl daemon-reload
+  systemctl enable listmonk >/dev/null 2>&1
+  systemctl restart listmonk 2>/dev/null || systemctl start listmonk
+
+  # Configure everything via API (no UI required) 
+  if listmonk_api_ready; then
+    listmonk_configure_smtp "$lm_user" "$lm_pass" "https://${domain}"
+
+    local list_uuid
+    list_uuid="$(listmonk_create_list "$lm_user" "$lm_pass")"
+
+    # Generate a bounce webhook secret and persist it
+    local bounce_secret
+    bounce_secret="$(openssl rand -hex 32)"
+
+    tset "listmonk.enabled"               "true"
+    tset "listmonk.url"                   "https://${domain}"
+    tset "listmonk.admin_user"            "$lm_user"
+    tset "listmonk.admin_password"        "$lm_pass"
+    tset "listmonk.bounce_webhook_secret" "$bounce_secret"
+    [ -n "$list_uuid" ] && tset "listmonk.list_uuid" "$list_uuid"
+
+    local base_url; base_url="$(tget 'server.base_url')"
+    local bounce_url="${base_url}/webhooks/zepto/bounce"
+
+    echo ""
+    echo "  ┌─ ZeptoMail bounce webhook ──────────────────────────────────────┐"
+    echo "  │ ZeptoMail dashboard → Mail Agents → <agent> → Webhooks → Add   │"
+    echo "  │                                                                  │"
+    echo "  │  Webhook URL : ${bounce_url}"
+    echo "  │                                                                  │"
+    echo "  │  Authorization headers:                                          │"
+    echo "  │    Key   : Authorization                                         │"
+    echo "  │    Value : Bearer ${bounce_secret}"
+    echo "  │                                                                  │"
+    echo "  │  Events to select: Hard bounces  Feedback loop                  │"
+    echo "  └──────────────────────────────────────────────────────────────────┘"
+    echo ""
+  else
+    warn "Listmonk API not ready — check: journalctl -u listmonk -n 50"
+    tset "listmonk.enabled"        "true"
+    tset "listmonk.url"            "https://${domain}"
+    tset "listmonk.admin_user"     "$lm_user"
+    tset "listmonk.admin_password" "$lm_pass"
+  fi
+
+  if systemctl is-active --quiet listmonk; then
+    info "Listmonk is running"
+  else
+    warn "Listmonk failed to start — check: journalctl -u listmonk -n 50"
+  fi
+
+  echo ""
+  echo "  Listmonk admin : https://${domain}/admin"
+  echo "  Config         : $LISTMONK_CONFIG"
+  echo "  Logs           : journalctl -u listmonk -f"
+  echo ""
 }
 
 prompt_caddy() {
@@ -398,6 +719,7 @@ main() {
 
   configure
   prompt_caddy
+  prompt_listmonk
   setup_vector
 
   info "Creating systemd service..."
@@ -457,8 +779,12 @@ EOF
   echo ""
   echo "Installation complete"
   echo ""
-  echo "  Config : $CONFIG_PATH"
-  echo "  Logs   : journalctl -u dployr-base -f"
+  echo "  Config        : $CONFIG_PATH"
+  echo "  Logs          : journalctl -u dployr-base -f"
+  if command -v listmonk >/dev/null 2>&1; then
+  echo "  Listmonk logs : journalctl -u listmonk -f"
+  echo "  Listmonk cfg  : $LISTMONK_CONFIG"
+  fi
   echo ""
   echo "To reconfigure: sudo bash $0"
 }
