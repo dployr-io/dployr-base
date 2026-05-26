@@ -23,6 +23,7 @@ export type PolarWebhookEvent = { type: string; data: Record<string, unknown> };
 
 export interface CheckoutParams {
   plan: SubscriptionPlan;
+  interval: "monthly" | "annual";
   clusterId: string;
   userId: string;
   email: string;

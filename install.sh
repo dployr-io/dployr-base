@@ -209,8 +209,10 @@ configure() {
   prompt "billing.polar_access_token"        "Polar access token"                       true
   prompt "billing.polar_webhook_secret"      "Polar webhook secret"                     true
   prompt "billing.polar_environment"         "Polar environment (sandbox/production)"
-  prompt "billing.product_ids.indie"         "Polar product ID for Indie plan (UUID)"
-  prompt "billing.product_ids.pro"           "Polar product ID for Pro plan (UUID)"
+  prompt "billing.product_ids.indie_monthly"  "Polar product ID — Indie Monthly (UUID)"
+  prompt "billing.product_ids.indie_annual"   "Polar product ID — Indie Annual (UUID)"
+  prompt "billing.product_ids.pro_monthly"    "Polar product ID — Pro Monthly (UUID)"
+  prompt "billing.product_ids.pro_annual"     "Polar product ID — Pro Annual (UUID)"
 
   prompt "virtual_machines.provider"     "VM provider (digitalocean)"
   prompt "virtual_machines.do_api_token" "DigitalOcean API token"                   true

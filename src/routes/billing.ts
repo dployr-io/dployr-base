@@ -18,6 +18,7 @@ const billing = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const checkoutSchema = z.object({
   plan: z.enum(["indie", "pro"]),
+  interval: z.enum(["monthly", "annual"]).default("monthly"),
   clusterId: z.string().min(1),
   successUrl: z.url().optional(),
 });
@@ -60,7 +61,7 @@ billing.post("/checkout", requireClusterOwner, async (c) => {
     );
   }
 
-  const { plan, clusterId, successUrl } = validation.data;
+  const { plan, interval, clusterId, successUrl } = validation.data;
   const db = getDbStore(c);
   const billingService = getBillingService(c);
   if (!billingService) {
@@ -89,6 +90,7 @@ billing.post("/checkout", requireClusterOwner, async (c) => {
     const result = await billingService.createCheckout(
       {
         plan,
+        interval,
         clusterId,
         userId: user.id,
         email: user.email,

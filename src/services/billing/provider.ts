@@ -10,8 +10,11 @@ export interface CustomerParams {
   name?: string | null;
 }
 
+export type BillingInterval = "monthly" | "annual";
+
 export interface CheckoutParams extends CustomerParams {
   plan: SubscriptionPlan;
+  interval: BillingInterval;
   successUrl?: string;
 }
 

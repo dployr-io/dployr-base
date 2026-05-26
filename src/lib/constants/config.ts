@@ -142,8 +142,10 @@ export const CONFIG_SCHEMA = z.object({
       environment: z.enum(["sandbox", "production"]).default("sandbox"),
       product_ids: z
         .object({
-          indie: z.string().optional(),
-          pro: z.string().optional(),
+          indie_monthly: z.string().optional(),
+          indie_annual: z.string().optional(),
+          pro_monthly: z.string().optional(),
+          pro_annual: z.string().optional(),
         })
         .optional(),
     })

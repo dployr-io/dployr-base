@@ -32,7 +32,7 @@ export type Bindings = {
   POLAR_ACCESS_TOKEN?: string;
   POLAR_WEBHOOK_SECRET?: string;
   POLAR_ENVIRONMENT?: string;
-  BILLING_PRODUCT_IDS?: Record<string, string>;
+  BILLING_PRODUCT_IDS?: { indie_monthly?: string; indie_annual?: string; pro_monthly?: string; pro_annual?: string };
 
   DO_API_TOKEN?: string;
   SSH_KEY?: number;

@@ -108,9 +108,11 @@ polar_webhook_secret = "polar_whs_..."
 polar_environment = "sandbox"
 
 [billing.product_ids]
-# Polar dashboard → Products → copy the product UUID for each plan
-indie = "2e60e533-977f-4dea-a15c-8cbe838eebf7"
-pro = "886a574b-cbed-4e69-a8b3-c601b99a6b22"
+# Polar dashboard → Products → create one product per billing interval, copy each UUID
+indie_monthly = ""
+indie_annual  = ""
+pro_monthly   = ""
+pro_annual    = ""
 
 [proxy]
 # Enable the built-in reverse proxy

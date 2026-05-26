@@ -28,8 +28,9 @@ export class PolarService implements BillingProvider {
   }
 
   async createCheckoutSession(params: CheckoutParams): Promise<string> {
-    const productId = this.env.BILLING_PRODUCT_IDS?.[params.plan];
-    if (!productId) throw new Error(`[PolarService] No product ID configured for plan: ${params.plan}`);
+    const key = `${params.plan}_${params.interval}` as keyof NonNullable<typeof this.env.BILLING_PRODUCT_IDS>;
+    const productId = this.env.BILLING_PRODUCT_IDS?.[key];
+    if (!productId) throw new Error(`[PolarService] No product ID configured for plan: ${params.plan} (${params.interval})`);
 
     const successUrl = new URL(params.successUrl || `${this.env.APP_URL}/clusters`);
     successUrl.searchParams.set("clusterId", params.clusterId);
