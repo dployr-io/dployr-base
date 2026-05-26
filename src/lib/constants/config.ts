@@ -122,6 +122,12 @@ export const CONFIG_SCHEMA = z.object({
      * Can also be set via the ENCRYPTION_KEY environment variable.
      */
     encryption_key: z.string().length(64).optional(),
+    /**
+     * Cloudflare Turnstile secret key for bot protection on the email login endpoint.
+     * Obtain from the Cloudflare dashboard → Turnstile → your site → Secret Key.
+     * When unset, Turnstile verification is skipped (useful for local dev).
+     */
+    turnstile_secret_key: z.string().optional(),
   }),
   cors: z
     .object({

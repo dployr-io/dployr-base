@@ -120,6 +120,7 @@ export function buildBindings(a: Adapters): Bindings {
     MICROSOFT_CLIENT_SECRET: authConfig?.microsoft_client_secret || process.env.MICROSOFT_CLIENT_SECRET || "",
     CORS_ALLOWED_ORIGINS: corsConfig?.allowed_origins || process.env.CORS_ALLOWED_ORIGINS || "",
     ENCRYPTION_KEY: securityConfig?.encryption_key || process.env.ENCRYPTION_KEY || "",
+    TURNSTILE_SECRET_KEY: securityConfig?.turnstile_secret_key || process.env.TURNSTILE_SECRET_KEY || undefined,
     ADMIN_API_KEY: adminConfig?.admin_api_key || process.env.ADMIN_API_KEY || "",
     ALLOWED_DPLOYR_ADMINISTRATORS: Array.isArray(adminConfig?.allowed_ips) ? adminConfig.allowed_ips.join(",") : adminConfig?.allowed_ips || process.env.ALLOWED_DPLOYR_ADMINISTRATORS || "",
     ADMIN_TOTP_SECRET: adminConfig?.totp_secret || process.env.ADMIN_TOTP_SECRET || "",

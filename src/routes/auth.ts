@@ -18,7 +18,25 @@ const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const loginSchema = z.object({
   email: z.email(),
+  "cf-turnstile-response": z.string().optional(),
 });
+
+async function verifyTurnstile(token: string, secret: string, ip?: string): Promise<boolean> {
+  try {
+    const body = new URLSearchParams({ secret, response: token });
+    if (ip) body.set("remoteip", ip);
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+    const data = (await res.json()) as { success: boolean };
+    return data.success === true;
+  } catch (err) {
+    log.error("Turnstile verification error:", err);
+    return false;
+  }
+}
 
 const otpSchema = z.object({
   email: z.email(),
@@ -135,11 +153,31 @@ auth.post("/login/email", async (c) => {
   }
 
   const { email } = validation.data;
+  const turnstileToken = validation.data["cf-turnstile-response"];
+  const turnstileSecret = c.env.TURNSTILE_SECRET_KEY;
+  const isTestEnv = process.env.NODE_ENV === "test";
+
+  if (!isTestEnv && turnstileSecret) {
+    if (!turnstileToken) {
+      return c.json(
+        createErrorResponse({ message: "Bot verification required", code: ERROR.REQUEST.BAD_REQUEST.code }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
+    const ip = c.req.header("CF-Connecting-IP") ?? c.req.header("X-Forwarded-For")?.split(",")[0].trim();
+    const valid = await verifyTurnstile(turnstileToken, turnstileSecret, ip);
+    if (!valid) {
+      return c.json(
+        createErrorResponse({ message: "Bot verification failed. Please try again.", code: ERROR.REQUEST.BAD_REQUEST.code }),
+        ERROR.REQUEST.BAD_REQUEST.status,
+      );
+    }
+  }
+
   const authService = getAuthService(c);
 
   await authService.findOrCreateEmailUser({ email });
 
-  const isTestEnv = process.env.NODE_ENV === "test";
   if (!isTestEnv) {
     try {
       await authService.sendOTP({ email, emailService: getEmailService(c) });

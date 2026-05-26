@@ -134,6 +134,7 @@ function loadConfigFromEnv(): Config {
       jwt_algorithm: "RS256",
       global_rate_limit: 100,
       strict_rate_limit: 10,
+      turnstile_secret_key: process.env.TURNSTILE_SECRET_KEY,
     },
     cors: {
       allowed_origins: process.env.CORS_ALLOWED_ORIGINS,

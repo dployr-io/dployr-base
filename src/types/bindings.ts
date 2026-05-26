@@ -27,6 +27,7 @@ export type Bindings = {
   ALLOWED_DPLOYR_ADMINISTRATORS: string;
   ADMIN_TOTP_SECRET: string;
   METRICS_SCRAPE_TOKEN?: string;
+  TURNSTILE_SECRET_KEY?: string;
 
   POLAR_ACCESS_TOKEN?: string;
   POLAR_WEBHOOK_SECRET?: string;

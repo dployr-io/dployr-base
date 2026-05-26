@@ -90,7 +90,11 @@ strict_rate_limit = 10
 # Generate with: openssl rand -hex 32
 # Keep this secret and back it up. Losing it makes all service secrets unrecoverable.
 # To rotate: generate a new key, run the rewrap migration, then update this value.
-# encryption_key = "bdd5f30db77378..."
+encryption_key = "bdd5f30db77378..."
+# Cloudflare Turnstile secret key — protects the email login endpoint from bots.
+# Get it from: Cloudflare dashboard → Turnstile → your site → Secret Key
+# Leave unset to disable verification (local development).
+turnstile_secret_key = ""
 
 [logging]
 level = "info"  # debug | info | warn | error
