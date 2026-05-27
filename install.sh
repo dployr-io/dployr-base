@@ -475,7 +475,7 @@ build_smtp_patch() {
      .smtp = [{
        "enabled":         true,
        "host":            "smtp.zeptomail.com",
-       "port":            587,
+       "port":            2525,
        "auth_protocol":   "login",
        "username":        "emailapikey",
        "password":        $pass,
