@@ -501,9 +501,9 @@ port         = ${db_port}
 user         = "${db_user}"
 password     = "${db_pass}"
 database     = "${db_name}"
-ssl_mode     = "disable"
-max_open     = 25
-max_idle     = 25
+ssl_mode     = "require"
+max_open     = 2
+max_idle     = 1
 max_lifetime = "300s"
 EOF
 }
