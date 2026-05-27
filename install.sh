@@ -539,7 +539,7 @@ prompt_listmonk() {
   local choice; read -r choice
   [[ "$choice" != "y" && "$choice" != "Y" ]] && return
 
-  # Two prompts only: domain + admin password 
+  # Two prompts only: domain + admin password
   local domain lm_user lm_pass
 
   printf "Listmonk domain [lists.dployr.io]: "
@@ -550,14 +550,18 @@ prompt_listmonk() {
   printf "Admin password: ";             read -r lm_pass
   [ -z "$lm_pass" ] && { warn "Admin password is required — skipping Listmonk setup"; return; }
 
-  # Reuse the existing PostgreSQL database — no separate DB needed 
-  local pg_url; pg_url="$(tget 'database.url')"
-  [ -z "$pg_url" ] && error "database.url is not set — run the configure step first"
+  # Dedicated Listmonk database — isolated from the main dployr-base DB for security
+  local lm_pg_url; lm_pg_url="$(tget 'listmonk.database_url' 2>/dev/null || true)"
+  if [ -z "$lm_pg_url" ]; then
+    printf "Listmonk database URL: "; read -r lm_pg_url
+    [ -z "$lm_pg_url" ] && { warn "Listmonk database URL is required — skipping Listmonk setup"; return; }
+    tset "listmonk.database_url" "$lm_pg_url"
+  fi
 
   local db_host db_port db_user db_pass db_name
-  parse_pg_url "$pg_url" db_host db_port db_user db_pass db_name \
-    || error "Could not parse database.url (expected postgresql://user:pass@host:port/dbname)"
-  info "Listmonk will use the existing database: ${db_name} @ ${db_host}:${db_port}"
+  parse_pg_url "$lm_pg_url" db_host db_port db_user db_pass db_name \
+    || error "Could not parse listmonk.database_url (expected postgresql://user:pass@host:port/dbname)"
+  info "Listmonk database: ${db_name} @ ${db_host}:${db_port}"
 
   # Install binary 
   install_listmonk_binary

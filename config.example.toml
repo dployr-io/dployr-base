@@ -157,6 +157,7 @@ enabled        = false
 url            = "https://lists.dployr.io"
 admin_user     = "listmonk"
 admin_password = ""
+database_url   = "postgresql://listmonk:password@host:25061/listmonk-pool?sslmode=require"
 # Newsletter list UUID — written automatically by the installer
 list_uuid      = ""
 # Secret verified on every inbound ZeptoMail bounce webhook.

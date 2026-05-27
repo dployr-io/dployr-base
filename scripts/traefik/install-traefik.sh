@@ -20,13 +20,15 @@ SERVICE_USER="traefik"
 
 SKIP_PROMPTS=false
 
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --non-interactive|-y) SKIP_PROMPTS=true; shift ;;
-    --version) TRAEFIK_VERSION="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --non-interactive|-y) SKIP_PROMPTS=true; shift ;;
+      --version) TRAEFIK_VERSION="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+fi
 
 [ ! -t 0 ] && SKIP_PROMPTS=true
 
@@ -120,26 +122,14 @@ configure() {
   fi
 }
 
-generate_traefik_yml() {
-  local instance; instance="$(tget 'instance.name')"
-  local tld; tld="$(tget 'domains.tld')"
-  local redis_host; redis_host="$(tget 'redis.host')"
-  local redis_port; redis_port="$(tget 'redis.port')"
-  local redis_user; redis_user="$(tget 'redis.username')"
-  local redis_pass; redis_pass="$(tget 'redis.password')"
-  local redis_tls; redis_tls="$(tget 'redis.tls')"
-  local redis_key; redis_key="$(tget 'redis.root_key')"
-  local email; email="$(tget 'tls.acme_email')"
-
-  [ -z "$redis_key" ] && redis_key="traefik"
-
-  local username_block=""
+render_traefik_yml() {
+  local instance="$1" tld="$2" redis_host="$3" redis_port="$4" redis_user="$5"
+  local redis_pass="$6" redis_tls="$7" redis_key="$8" email="$9"
+  local log_dir="${10}" data_dir="${11}" config_dir="${12}"
+  local username_block="" tls_block=""
   [ -n "$redis_user" ] && username_block="    username: \"${redis_user}\""
-
-  local tls_block=""
   [ "$redis_tls" = "true" ] && tls_block="    tls: {}"
-
-  cat > "$CONFIG_DIR/traefik.yml" <<EOF
+  cat <<EOF
 global:
   checkNewVersion: false
   sendAnonymousUsage: false
@@ -172,14 +162,14 @@ ${username_block}
 ${tls_block}
     rootKey: "${redis_key}"
   file:
-    directory: "${CONFIG_DIR}/dynamic"
+    directory: "${config_dir}/dynamic"
     watch: true
 
 certificatesResolvers:
   cloudflare:
     acme:
       email: "${email}"
-      storage: "${DATA_DIR}/acme.json"
+      storage: "${data_dir}/acme.json"
       dnsChallenge:
         provider: cloudflare
         resolvers:
@@ -188,7 +178,7 @@ certificatesResolvers:
   letsencrypt:
     acme:
       email: "${email}"
-      storage: "${DATA_DIR}/acme-custom.json"
+      storage: "${data_dir}/acme-custom.json"
       tlsChallenge: {}
 
 api:
@@ -207,10 +197,10 @@ metrics:
 
 log:
   level: INFO
-  filePath: "${LOG_DIR}/traefik.log"
+  filePath: "${log_dir}/traefik.log"
 
 accessLog:
-  filePath: "${LOG_DIR}/access.log"
+  filePath: "${log_dir}/access.log"
   bufferingSize: 100
   fields:
     headers:
@@ -219,10 +209,49 @@ accessLog:
         User-Agent: keep
         X-Forwarded-For: keep
 EOF
+}
+
+render_dashboard_yml() {
+  local user="$1" hash="$2" dashboard_domain="$3" ip_middleware_ref="$4" ip_middleware_block="$5"
+  cat <<EOF
+http:
+  routers:
+    dashboard:
+      rule: "Host(\`${dashboard_domain}\`)"
+      service: api@internal
+      entryPoints:
+        - websecure
+      middlewares:
+${ip_middleware_ref}        - dashboard-auth
+      tls: {}
+
+  middlewares:
+${ip_middleware_block}    dashboard-auth:
+      basicAuth:
+        users:
+          - '${user}:${hash}'
+EOF
+}
+
+generate_traefik_yml() {
+  local instance; instance="$(tget 'instance.name')"
+  local tld; tld="$(tget 'domains.tld')"
+  local redis_host; redis_host="$(tget 'redis.host')"
+  local redis_port; redis_port="$(tget 'redis.port')"
+  local redis_user; redis_user="$(tget 'redis.username')"
+  local redis_pass; redis_pass="$(tget 'redis.password')"
+  local redis_tls; redis_tls="$(tget 'redis.tls')"
+  local redis_key; redis_key="$(tget 'redis.root_key')"
+  local email; email="$(tget 'tls.acme_email')"
+
+  [ -z "$redis_key" ] && redis_key="traefik"
+
+  render_traefik_yml "$instance" "$tld" "$redis_host" "$redis_port" "$redis_user" \
+    "$redis_pass" "$redis_tls" "$redis_key" "$email" \
+    "$LOG_DIR" "$DATA_DIR" "$CONFIG_DIR" > "$CONFIG_DIR/traefik.yml"
 
   local user; user="$(tget 'dashboard.username')"
   local hash; hash="$(tget 'dashboard.password_hash')"
-  # strip any leading "user:" prefix if the hash was stored with it
   hash="${hash#*:}"
   local dashboard_domain="traefik-${instance}.${tld}"
 
@@ -250,24 +279,8 @@ ${source_ranges}"
   fi
 
   mkdir -p "$CONFIG_DIR/dynamic"
-  cat > "$CONFIG_DIR/dynamic/dashboard.yml" <<EOF
-http:
-  routers:
-    dashboard:
-      rule: "Host(\`${dashboard_domain}\`)"
-      service: api@internal
-      entryPoints:
-        - websecure
-      middlewares:
-${ip_middleware_ref}        - dashboard-auth
-      tls: {}
-
-  middlewares:
-${ip_middleware_block}    dashboard-auth:
-      basicAuth:
-        users:
-          - '${user}:${hash}'
-EOF
+  render_dashboard_yml "$user" "$hash" "$dashboard_domain" \
+    "$ip_middleware_ref" "$ip_middleware_block" > "$CONFIG_DIR/dynamic/dashboard.yml"
 }
 
 install_traefik() {
@@ -293,17 +306,9 @@ install_vector() {
   rm -rf /etc/vector/examples
 }
 
-setup_vector() {
-  local endpoint; endpoint="$(tget 'logging.betterstack_endpoint')"
-  local token;    token="$(tget 'logging.betterstack_token')"
-
-  [ -z "$endpoint" ] || [ -z "$token" ] && return
-
-  install_vector
-
-  mkdir -p /etc/vector
-
-  cat > /etc/vector/vector.toml <<EOF
+render_vector_config() {
+  local endpoint="$1" token="$2"
+  cat <<EOF
 [sources.traefik]
 type = "file"
 include = ["/var/log/traefik/*.log"]
@@ -318,6 +323,18 @@ encoding.codec = "json"
 strategy = "bearer"
 token = "${token}"
 EOF
+}
+
+setup_vector() {
+  local endpoint; endpoint="$(tget 'logging.betterstack_endpoint')"
+  local token;    token="$(tget 'logging.betterstack_token')"
+
+  [ -z "$endpoint" ] || [ -z "$token" ] && return
+
+  install_vector
+
+  mkdir -p /etc/vector
+  render_vector_config "$endpoint" "$token" > /etc/vector/vector.toml
 
   mkdir -p /etc/systemd/system/vector.service.d
   cat > /etc/systemd/system/vector.service.d/override.conf <<EOF
@@ -337,39 +354,48 @@ EOF
   info "Vector configured → Better Stack"
 }
 
-setup_service() {
-  local cf_token; cf_token="$(tget 'tls.cf_api_token')"
-  [ -z "$cf_token" ] && warn "Cloudflare API token not set — TLS issuance will fail"
+render_traefik_env() {
+  local cf_token="$1"
+  printf 'CF_DNS_API_TOKEN=%s\n' "$cf_token"
+}
 
-  cat > "$CONFIG_DIR/traefik.env" <<EOF
-CF_DNS_API_TOKEN=${cf_token}
-EOF
-  chmod 600 "$CONFIG_DIR/traefik.env"
-
-  cat > /etc/systemd/system/traefik.service <<EOF
+render_traefik_unit() {
+  local service_user="$1" config_dir="$2" data_dir="$3" log_dir="$4"
+  cat <<EOF
 [Unit]
 Description=Dployr Traffic Router (Traefik)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=${SERVICE_USER}
-Group=${SERVICE_USER}
-EnvironmentFile=${CONFIG_DIR}/traefik.env
-ExecStart=/usr/local/bin/traefik --configFile=${CONFIG_DIR}/traefik.yml
+User=${service_user}
+Group=${service_user}
+EnvironmentFile=${config_dir}/traefik.env
+ExecStart=/usr/local/bin/traefik --configFile=${config_dir}/traefik.yml
 Restart=always
 RestartSec=5
 LimitNOFILE=65536
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=${DATA_DIR} ${LOG_DIR}
+ReadWritePaths=${data_dir} ${log_dir}
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target
 EOF
+}
+
+setup_service() {
+  local cf_token; cf_token="$(tget 'tls.cf_api_token')"
+  [ -z "$cf_token" ] && warn "Cloudflare API token not set — TLS issuance will fail"
+
+  render_traefik_env "$cf_token" > "$CONFIG_DIR/traefik.env"
+  chmod 600 "$CONFIG_DIR/traefik.env"
+
+  render_traefik_unit "$SERVICE_USER" "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" \
+    > /etc/systemd/system/traefik.service
 
   cat > /etc/logrotate.d/traefik <<EOF
 ${LOG_DIR}/*.log {
@@ -392,6 +418,24 @@ EOF
   setup_loading_stub
 }
 
+render_nginx_conf() {
+  local stub_address="$1" html_dir="$2"
+  cat <<EOF
+worker_processes 1;
+events { worker_connections 64; }
+http {
+    server {
+        listen ${stub_address};
+        root ${html_dir};
+        location / {
+            add_header X-Dployr-Loading 1 always;
+            try_files /loading.html =503;
+        }
+    }
+}
+EOF
+}
+
 setup_loading_stub() {
   apt-get install -y nginx >/dev/null 2>&1
 
@@ -405,20 +449,7 @@ setup_loading_stub() {
     "https://api.github.com/repos/${REPO}/contents/public/loading.html?ref=${BRANCH}" \
     -o "$html_dir/loading.html" || error "Failed to download loading.html"
 
-  cat > /etc/nginx/nginx.conf <<EOF
-worker_processes 1;
-events { worker_connections 64; }
-http {
-    server {
-        listen ${SERVICE_STUB_ADDRESS};
-        root ${html_dir};
-        location / {
-            add_header X-Dployr-Loading 1 always;
-            try_files /loading.html =503;
-        }
-    }
-}
-EOF
+  render_nginx_conf "$SERVICE_STUB_ADDRESS" "$html_dir" > /etc/nginx/nginx.conf
 
   nginx -t || error "nginx config test failed"
   systemctl enable nginx >/dev/null 2>&1
@@ -487,4 +518,7 @@ main() {
   echo "To reconfigure: sudo bash $0"
 }
 
-main
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main
+  exit 0
+fi
