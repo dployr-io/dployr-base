@@ -668,7 +668,9 @@ EOF
 
 ${domain} {
     tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
-    reverse_proxy localhost:9000
+    reverse_proxy localhost:9000 {
+      header_up Host {http.request.host}
+    }
 }
 EOF
       systemctl reload caddy 2>/dev/null || true
