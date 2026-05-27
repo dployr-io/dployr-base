@@ -435,13 +435,17 @@ parse_pg_url() {
   return 1
 }
 
-# Poll until the Listmonk API responds (max 40 s).
+# Poll until the Listmonk API responds (max 90 s).
 listmonk_api_ready() {
   local i=0
   info "Waiting for Listmonk API..."
-  while [ $i -lt 20 ]; do
-    curl -sf "http://localhost:9000/api/health" >/dev/null 2>&1 && return 0
-    sleep 2; ((i++))
+  while [ $i -lt 30 ]; do
+    if curl -sf --max-time 3 "http://localhost:9000/health" >/dev/null 2>&1; then
+      info "Listmonk API is ready"
+      return 0
+    fi
+    sleep 3; ((i++))
+    info "  still waiting... (${i}/30)"
   done
   return 1
 }
