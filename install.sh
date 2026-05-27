@@ -28,7 +28,7 @@ LISTMONK_USER="listmonk"
 
 SKIP_PROMPTS=false
 
-if [[ "${BASH_SOURCE[0]:-}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
   while [[ $# -gt 0 ]]; do
     case $1 in
       --non-interactive|-y) SKIP_PROMPTS=true; shift ;;
@@ -822,7 +822,7 @@ EOF
   echo "To reconfigure: sudo bash $0"
 }
 
-if [[ "${BASH_SOURCE[0]:-}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
   main "$@"
   exit 0
 fi
