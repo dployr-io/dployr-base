@@ -166,6 +166,12 @@ source "$BATS_TEST_DIRNAME/../../install.sh"
   echo "$output" | jq -e '."app.from_email" == "from@example.com"' >/dev/null
 }
 
+@test "build_smtp_patch: sets display name format when from_name provided" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+  run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123" "https://base.example.com" "Emmanuel from dployr"
+  echo "$output" | jq -e '."app.from_email" == "Emmanuel from dployr <from@example.com>"' >/dev/null
+}
+
 @test "build_smtp_patch: sets smtp password to provided key" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
   run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123" "https://base.example.com"

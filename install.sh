@@ -451,12 +451,15 @@ listmonk_api_ready() {
 }
 
 build_smtp_patch() {
-  local current="$1" root_url="$2" from_addr="$3" zepto_key="$4" base_url="$5"
+  local current="$1" root_url="$2" from_addr="$3" zepto_key="$4" base_url="$5" from_name="$6"
   local logo_url="${base_url}/icon.png"
   local favicon_url="${base_url}/favicon.ico"
+  # Build RFC 5322 display name format: "Name <email>" or plain email if no name
+  local from_field="$from_addr"
+  [ -n "$from_name" ] && from_field="${from_name} <${from_addr}>"
   echo "$current" | jq \
     --arg url       "$root_url"     \
-    --arg from      "$from_addr"    \
+    --arg from      "$from_field"   \
     --arg pass      "$zepto_key"    \
     --arg logo      "$logo_url"     \
     --arg favicon   "$favicon_url"  \
@@ -525,15 +528,16 @@ listmonk_web_login() {
 listmonk_configure_smtp() {
   local jar="$1" root_url="$2" base_url="$3"
   local api="http://localhost:9000/api"
-  local zepto_key from_addr
+  local zepto_key from_addr from_name
   zepto_key="$(tget 'email.zepto_api_key')"
-  from_addr="$(tget 'email.from_address')"
+  from_addr="$(tget 'listmonk.from_address')"
+  from_name="$(tget 'listmonk.from_name')"
 
   if [ -z "$zepto_key" ]; then
     warn "Listmonk: email.zepto_api_key not set — SMTP skipped"
     return
   fi
-  [ -z "$from_addr" ] && from_addr="hello@dployr.io"
+  [ -z "$from_addr" ] && from_addr="$(tget 'email.from_address')"
 
   local current
   current="$(curl -sf --max-time 5 -b "$jar" "${api}/settings" | jq '.data')"
@@ -543,7 +547,7 @@ listmonk_configure_smtp() {
   fi
 
   local patched
-  patched="$(build_smtp_patch "$current" "$root_url" "$from_addr" "$zepto_key" "$base_url")"
+  patched="$(build_smtp_patch "$current" "$root_url" "$from_addr" "$zepto_key" "$base_url" "$from_name")"
 
   local ok
   ok="$(curl -sf --max-time 5 -X PUT -b "$jar" \
@@ -636,6 +640,8 @@ prompt_listmonk() {
   [[ "$choice" != "y" && "$choice" != "Y" ]] && return
 
   prompt "listmonk.url"           "Listmonk domain URL (e.g. https://lists.dployr.io)"
+  prompt "listmonk.from_address"  "Newsletter from address (e.g. hello@dployr.io)"
+  prompt "listmonk.from_name"     "Newsletter sender name (e.g. Emmanuel from dployr)"
   prompt "listmonk.admin_user"    "Listmonk admin username"
   prompt "listmonk.admin_password" "Listmonk admin password" true
   prompt "listmonk.database_url"  "Listmonk database URL"    true
