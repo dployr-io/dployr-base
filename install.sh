@@ -28,13 +28,15 @@ LISTMONK_USER="listmonk"
 
 SKIP_PROMPTS=false
 
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --non-interactive|-y) SKIP_PROMPTS=true; shift ;;
-    -v|--version) VERSION="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --non-interactive|-y) SKIP_PROMPTS=true; shift ;;
+      -v|--version) VERSION="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+fi
 
 
 info()  { echo "[INFO]  $*"; }
@@ -93,6 +95,25 @@ detect_node() {
   NODE_BIN="/usr/local/bin/node"
 }
 
+render_caddyfile() {
+  local domain="$1" app_port="$2"
+  cat <<EOF
+:80 {
+    error 403
+}
+
+:443 {
+    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+    error 403
+}
+
+${domain} {
+    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+    reverse_proxy localhost:${app_port}
+}
+EOF
+}
+
 install_caddy() {
   if command -v caddy >/dev/null 2>&1; then
     info "Caddy already installed: $(caddy version)"
@@ -111,21 +132,7 @@ install_caddy() {
 setup_caddy() {
   local domain="$1" app_port="$2"
 
-  cat > /etc/caddy/Caddyfile <<EOF
-:80 {
-    error 403
-}
-
-:443 {
-    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
-    error 403
-}
-
-${domain} {
-    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
-    reverse_proxy localhost:${app_port}
-}
-EOF
+  render_caddyfile "$domain" "$app_port" > /etc/caddy/Caddyfile
   systemctl enable caddy >/dev/null 2>&1
   systemctl restart caddy
   info "Caddy configured: https://${domain} → localhost:${app_port}"
@@ -269,6 +276,34 @@ read_pem() {
   done
 }
 
+render_vector_config() {
+  local endpoint="$1" token="$2" with_listmonk="${3:-false}"
+  local listmonk_source="" inputs='"dployr_base"'
+  if $with_listmonk; then
+    listmonk_source='
+[sources.listmonk]
+type    = "file"
+include = ["/var/log/listmonk/output.log"]
+'
+    inputs='"dployr_base", "listmonk"'
+  fi
+  cat <<EOF
+[sources.dployr_base]
+type    = "file"
+include = ["/var/log/dployr-base/output.log"]
+${listmonk_source}
+[sinks.better_stack]
+type   = "http"
+inputs = [${inputs}]
+uri    = "${endpoint}"
+encoding.codec = "json"
+
+[sinks.better_stack.auth]
+strategy = "bearer"
+token    = "${token}"
+EOF
+}
+
 install_vector() {
   if ! command -v vector >/dev/null 2>&1; then
     info "Installing Vector..."
@@ -289,34 +324,11 @@ setup_vector() {
 
   install_vector
 
+  local with_listmonk=false
+  command -v listmonk >/dev/null 2>&1 && with_listmonk=true
+
   mkdir -p /etc/vector
-
-  # Include Listmonk logs if it is installed alongside dployr-base
-  local listmonk_source="" inputs='"dployr_base"'
-  if command -v listmonk >/dev/null 2>&1; then
-    listmonk_source='
-[sources.listmonk]
-type    = "file"
-include = ["/var/log/listmonk/output.log"]
-'
-    inputs='"dployr_base", "listmonk"'
-  fi
-
-  cat > /etc/vector/vector.toml <<EOF
-[sources.dployr_base]
-type    = "file"
-include = ["/var/log/dployr-base/output.log"]
-${listmonk_source}
-[sinks.better_stack]
-type   = "http"
-inputs = [${inputs}]
-uri    = "${endpoint}"
-encoding.codec = "json"
-
-[sinks.better_stack.auth]
-strategy = "bearer"
-token    = "${token}"
-EOF
+  render_vector_config "$endpoint" "$token" "$with_listmonk" > /etc/vector/vector.toml
 
   mkdir -p /etc/systemd/system/vector.service.d
   cat > /etc/systemd/system/vector.service.d/override.conf <<EOF
@@ -356,12 +368,12 @@ install_listmonk_binary() {
 # Usage: parse_pg_url "$url" host_var port_var user_var pass_var name_var
 parse_pg_url() {
   local url="$1"
-  if [[ "$url" =~ ^postgresql?://([^:]+):([^@]+)@([^:/]+):([0-9]+)/([^?]+) ]]; then
-    printf -v "$2" '%s' "${BASH_REMATCH[3]}"  # host
-    printf -v "$3" '%s' "${BASH_REMATCH[4]}"  # port
-    printf -v "$4" '%s' "${BASH_REMATCH[1]}"  # user
-    printf -v "$5" '%s' "${BASH_REMATCH[2]}"  # pass
-    printf -v "$6" '%s' "${BASH_REMATCH[5]}"  # dbname
+  if [[ "$url" =~ ^postgres(ql)?://([^:]+):([^@]+)@([^:/]+):([0-9]+)/([^?]+) ]]; then
+    printf -v "$2" '%s' "${BASH_REMATCH[4]}"  # host
+    printf -v "$3" '%s' "${BASH_REMATCH[5]}"  # port
+    printf -v "$4" '%s' "${BASH_REMATCH[2]}"  # user
+    printf -v "$5" '%s' "${BASH_REMATCH[3]}"  # pass
+    printf -v "$6" '%s' "${BASH_REMATCH[6]}"  # dbname
     return 0
   fi
   return 1
@@ -376,6 +388,35 @@ listmonk_api_ready() {
     sleep 2; ((i++))
   done
   return 1
+}
+
+build_smtp_patch() {
+  local current="$1" root_url="$2" from_addr="$3" zepto_key="$4"
+  echo "$current" | jq \
+    --arg url  "$root_url"  \
+    --arg from "$from_addr" \
+    --arg pass "$zepto_key" \
+    '."app.root_url"    = $url  |
+     ."app.from_email"  = $from |
+     ."app.bounce_enable_webhooks" = true |
+     ."app.bounce_hard_threshold"  = 1    |
+     ."app.bounce_soft_threshold"  = 2    |
+     .smtp = [{
+       "enabled":         true,
+       "host":            "smtp.zeptomail.com",
+       "port":            587,
+       "auth_protocol":   "login",
+       "username":        "emailapikey",
+       "password":        $pass,
+       "hello_hostname":  "",
+       "max_conns":       10,
+       "idle_timeout":    "15s",
+       "wait_timeout":    "5s",
+       "retries":         2,
+       "tls_type":        "STARTTLS",
+       "tls_skip_verify": false,
+       "email_headers":   []
+     }]'
 }
 
 # Configure SMTP in Listmonk via PUT /api/settings.
@@ -401,31 +442,7 @@ listmonk_configure_smtp() {
   fi
 
   local patched
-  patched="$(echo "$current" | jq \
-    --arg url  "$root_url"  \
-    --arg from "$from_addr" \
-    --arg pass "$zepto_key" \
-    '."app.root_url"    = $url  |
-     ."app.from_email"  = $from |
-     ."app.bounce_enable_webhooks" = true |
-     ."app.bounce_hard_threshold"  = 1    |
-     ."app.bounce_soft_threshold"  = 2    |
-     .smtp = [{
-       "enabled":         true,
-       "host":            "smtp.zeptomail.com",
-       "port":            587,
-       "auth_protocol":   "login",
-       "username":        "emailapikey",
-       "password":        $pass,
-       "hello_hostname":  "",
-       "max_conns":       10,
-       "idle_timeout":    "15s",
-       "wait_timeout":    "5s",
-       "retries":         2,
-       "tls_type":        "STARTTLS",
-       "tls_skip_verify": false,
-       "email_headers":   []
-     }]')"
+  patched="$(build_smtp_patch "$current" "$root_url" "$from_addr" "$zepto_key")"
 
   local ok
   ok="$(curl -sf -X PUT -u "${lm_user}:${lm_pass}" \
@@ -469,6 +486,50 @@ listmonk_create_list() {
   fi
 }
 
+render_listmonk_config() {
+  local lm_user="$1" lm_pass="$2" db_host="$3" db_port="$4" db_user="$5" db_pass="$6" db_name="$7"
+  cat <<EOF
+[app]
+address        = "localhost:9000"
+admin_username = "${lm_user}"
+admin_password = "${lm_pass}"
+
+[db]
+host         = "${db_host}"
+port         = ${db_port}
+user         = "${db_user}"
+password     = "${db_pass}"
+database     = "${db_name}"
+ssl_mode     = "disable"
+max_open     = 25
+max_idle     = 25
+max_lifetime = "300s"
+EOF
+}
+
+render_listmonk_unit() {
+  local listmonk_user="$1" listmonk_dir="$2" listmonk_config="$3"
+  cat <<EOF
+[Unit]
+Description=Listmonk — mailing list and newsletter manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${listmonk_user}
+WorkingDirectory=${listmonk_dir}
+ExecStart=/usr/local/bin/listmonk --config ${listmonk_config}
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/listmonk/output.log
+StandardError=append:/var/log/listmonk/output.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
 prompt_listmonk() {
   $SKIP_PROMPTS && return
 
@@ -504,24 +565,8 @@ prompt_listmonk() {
   id "$LISTMONK_USER" &>/dev/null || useradd --system --no-create-home --shell /bin/false "$LISTMONK_USER"
   mkdir -p "$LISTMONK_DIR" "$LISTMONK_CONFIG_DIR" /var/log/listmonk
 
-  # Write config.toml (app + db only — everything else via API) 
-  cat > "$LISTMONK_CONFIG" <<EOF
-[app]
-address        = "localhost:9000"
-admin_username = "${lm_user}"
-admin_password = "${lm_pass}"
-
-[db]
-host         = "${db_host}"
-port         = ${db_port}
-user         = "${db_user}"
-password     = "${db_pass}"
-database     = "${db_name}"
-ssl_mode     = "disable"
-max_open     = 25
-max_idle     = 25
-max_lifetime = "300s"
-EOF
+  # Write config.toml (app + db only — everything else via API)
+  render_listmonk_config "$lm_user" "$lm_pass" "$db_host" "$db_port" "$db_user" "$db_pass" "$db_name" > "$LISTMONK_CONFIG"
 
   chmod 600 "$LISTMONK_CONFIG"
   chown -R "$LISTMONK_USER:$LISTMONK_USER" "$LISTMONK_DIR" "$LISTMONK_CONFIG_DIR" /var/log/listmonk
@@ -531,27 +576,9 @@ EOF
   listmonk --config "$LISTMONK_CONFIG" --install --yes \
     || warn "DB bootstrap failed — run manually: listmonk --config $LISTMONK_CONFIG --install"
 
-  # Systemd unit 
+  # Systemd unit
   info "Creating Listmonk systemd service..."
-  cat > /etc/systemd/system/listmonk.service <<EOF
-[Unit]
-Description=Listmonk — mailing list and newsletter manager
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=${LISTMONK_USER}
-WorkingDirectory=${LISTMONK_DIR}
-ExecStart=/usr/local/bin/listmonk --config ${LISTMONK_CONFIG}
-Restart=always
-RestartSec=10
-StandardOutput=append:/var/log/listmonk/output.log
-StandardError=append:/var/log/listmonk/output.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
+  render_listmonk_unit "$LISTMONK_USER" "$LISTMONK_DIR" "$LISTMONK_CONFIG" > /etc/systemd/system/listmonk.service
 
   # Log rotation 
   cat > /etc/logrotate.d/listmonk <<EOF
@@ -663,6 +690,32 @@ prompt_caddy() {
   setup_caddy "$domain" "$app_port"
 }
 
+render_dployr_unit() {
+  local install_dir="$1" config_dir="$2" service_user="$3" node_bin="$4" version="$5"
+  cat <<EOF
+[Unit]
+Description=Dployr Base
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${service_user}
+WorkingDirectory=${install_dir}
+Environment="NODE_ENV=production"
+Environment="CONFIG_PATH=${config_dir}/config.toml"
+Environment="BASE_VERSION=${version}"
+ExecStart=${node_bin} --import tsx ${install_dir}/src/index.ts
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/dployr-base/output.log
+StandardError=append:/var/log/dployr-base/output.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
 main() {
   echo ""
   echo "Dployr Base Installer"
@@ -724,28 +777,8 @@ main() {
 
   info "Creating systemd service..."
 
-  cat > /etc/systemd/system/dployr-base.service <<EOF
-[Unit]
-Description=Dployr Base
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-WorkingDirectory=$INSTALL_DIR
-Environment="NODE_ENV=production"
-Environment="CONFIG_PATH=$CONFIG_DIR/config.toml"
-Environment="BASE_VERSION=$VERSION"
-ExecStart=$NODE_BIN --import tsx $INSTALL_DIR/src/index.ts
-Restart=always
-RestartSec=10
-StandardOutput=append:/var/log/dployr-base/output.log
-StandardError=append:/var/log/dployr-base/output.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
+  render_dployr_unit "$INSTALL_DIR" "$CONFIG_DIR" "$SERVICE_USER" "$NODE_BIN" "$VERSION" \
+    > /etc/systemd/system/dployr-base.service
 
   info "Configuring log rotation..."
 
@@ -789,5 +822,7 @@ EOF
   echo "To reconfigure: sudo bash $0"
 }
 
-main "$@"
-exit 0
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+  exit 0
+fi
