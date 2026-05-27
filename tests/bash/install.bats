@@ -154,20 +154,27 @@ source "$BATS_TEST_DIRNAME/../../install.sh"
 
 @test "build_smtp_patch: configures zeptomail smtp host" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
-  run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123"
+  run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123" "https://base.example.com"
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.smtp[0].host == "smtp.zeptomail.com"' >/dev/null
 }
 
 @test "build_smtp_patch: sets root url and from address" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
-  run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123"
+  run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123" "https://base.example.com"
   echo "$output" | jq -e '."app.root_url" == "https://lists.example.com"' >/dev/null
   echo "$output" | jq -e '."app.from_email" == "from@example.com"' >/dev/null
 }
 
 @test "build_smtp_patch: sets smtp password to provided key" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
-  run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123"
+  run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123" "https://base.example.com"
   echo "$output" | jq -e '.smtp[0].password == "apikey123"' >/dev/null
+}
+
+@test "build_smtp_patch: sets logo and favicon url from base_url" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+  run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123" "https://base.example.com"
+  echo "$output" | jq -e '."app.logo_url" == "https://base.example.com/icon.png"' >/dev/null
+  echo "$output" | jq -e '."app.favicon_url" == "https://base.example.com/favicon.ico"' >/dev/null
 }

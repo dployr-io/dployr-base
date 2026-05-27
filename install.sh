@@ -451,13 +451,19 @@ listmonk_api_ready() {
 }
 
 build_smtp_patch() {
-  local current="$1" root_url="$2" from_addr="$3" zepto_key="$4"
+  local current="$1" root_url="$2" from_addr="$3" zepto_key="$4" base_url="$5"
+  local logo_url="${base_url}/icon.png"
+  local favicon_url="${base_url}/favicon.ico"
   echo "$current" | jq \
-    --arg url  "$root_url"  \
-    --arg from "$from_addr" \
-    --arg pass "$zepto_key" \
-    '."app.root_url"    = $url  |
-     ."app.from_email"  = $from |
+    --arg url       "$root_url"     \
+    --arg from      "$from_addr"    \
+    --arg pass      "$zepto_key"    \
+    --arg logo      "$logo_url"     \
+    --arg favicon   "$favicon_url"  \
+    '."app.root_url"              = $url     |
+     ."app.from_email"            = $from    |
+     ."app.logo_url"              = $logo    |
+     ."app.favicon_url"           = $favicon |
      ."app.bounce_enable_webhooks" = true |
      ."app.bounce_hard_threshold"  = 1    |
      ."app.bounce_soft_threshold"  = 2    |
@@ -479,10 +485,45 @@ build_smtp_patch() {
      }]'
 }
 
-# Configure SMTP in Listmonk via PUT /api/settings.
-# Pulls ZeptoMail key + from address straight from the already-configured [email] section.
+# Log in via the Listmonk web form; writes a session cookie jar and prints its path.
+# v6 removed Basic Auth for admin users — session cookies work for API calls.
+listmonk_web_login() {
+  local lm_user="$1" lm_pass="$2"
+  local jar; jar="$(mktemp)"
+
+  # Fetch login page to obtain the nonce cookie + nonce hidden field value
+  local html
+  html="$(curl -sf --max-time 5 -c "$jar" http://localhost:9000/admin/login)" || {
+    rm -f "$jar"; warn "Listmonk: could not reach login page"; return 1
+  }
+  local nonce
+  nonce="$(printf '%s' "$html" | grep -oP 'name="nonce"\s+value="\K[^"]+')"
+  if [ -z "$nonce" ]; then
+    rm -f "$jar"; warn "Listmonk: could not extract login nonce"; return 1
+  fi
+
+  # POST the login form — a 302 redirect means success
+  local code
+  code="$(curl -s --max-time 5 -b "$jar" -c "$jar" \
+    -o /dev/null -w "%{http_code}" \
+    --data-urlencode "username=$lm_user" \
+    --data-urlencode "password=$lm_pass" \
+    --data-urlencode "nonce=$nonce" \
+    --data-urlencode "next=/admin" \
+    -X POST http://localhost:9000/admin/login)"
+
+  if [[ "$code" == "302" ]]; then
+    echo "$jar"; return 0
+  fi
+  rm -f "$jar"
+  warn "Listmonk: web login failed (HTTP $code) — check credentials"
+  return 1
+}
+
+# Configure SMTP + root URL in Listmonk via PUT /api/settings.
+# Pulls ZeptoMail key + from address from the already-configured [email] section.
 listmonk_configure_smtp() {
-  local lm_user="$1" lm_pass="$2" root_url="$3"
+  local jar="$1" root_url="$2" base_url="$3"
   local api="http://localhost:9000/api"
   local zepto_key from_addr
   zepto_key="$(tget 'email.zepto_api_key')"
@@ -495,22 +536,22 @@ listmonk_configure_smtp() {
   [ -z "$from_addr" ] && from_addr="hello@dployr.io"
 
   local current
-  current="$(curl -sf -u "${lm_user}:${lm_pass}" "${api}/settings" | jq '.data')"
+  current="$(curl -sf --max-time 5 -b "$jar" "${api}/settings" | jq '.data')"
   if [ -z "$current" ] || [ "$current" = "null" ]; then
     warn "Listmonk: could not read settings — SMTP not configured"
     return
   fi
 
   local patched
-  patched="$(build_smtp_patch "$current" "$root_url" "$from_addr" "$zepto_key")"
+  patched="$(build_smtp_patch "$current" "$root_url" "$from_addr" "$zepto_key" "$base_url")"
 
   local ok
-  ok="$(curl -sf -X PUT -u "${lm_user}:${lm_pass}" \
+  ok="$(curl -sf --max-time 5 -X PUT -b "$jar" \
     -H "Content-Type: application/json" \
     -d "$patched" "${api}/settings" | jq -r '.data')"
 
   if [ "$ok" = "true" ]; then
-    info "Listmonk: SMTP configured (smtp.zeptomail.com)"
+    info "Listmonk: SMTP + root URL configured"
   else
     warn "Listmonk: SMTP config failed — check journalctl -u listmonk"
   fi
@@ -518,32 +559,29 @@ listmonk_configure_smtp() {
 
 # Create the Newsletter list via POST /api/lists.
 # Idempotent — returns existing UUID if the list already exists.
+# Prints ONLY the UUID to stdout; all logging done by the caller.
 listmonk_create_list() {
-  local lm_user="$1" lm_pass="$2"
+  local jar="$1"
   local api="http://localhost:9000/api"
 
   local existing_uuid
-  existing_uuid="$(curl -sf -u "${lm_user}:${lm_pass}" "${api}/lists?page=1&per_page=100" \
+  existing_uuid="$(curl -sf --max-time 5 -b "$jar" "${api}/lists?page=1&per_page=100" \
     | jq -r '.data.results[] | select(.name == "Newsletter") | .uuid' 2>/dev/null | head -1)"
   if [ -n "$existing_uuid" ]; then
-    info "Listmonk: 'Newsletter' list already exists (${existing_uuid})"
-    echo "$existing_uuid"; return
+    echo "$existing_uuid"; return 0
   fi
 
   local resp uuid
-  resp="$(curl -sf -X POST -u "${lm_user}:${lm_pass}" \
+  resp="$(curl -sf --max-time 5 -X POST -b "$jar" \
     -H "Content-Type: application/json" \
     -d '{"name":"Newsletter","type":"public","optin":"single","tags":["newsletter"]}' \
     "${api}/lists")"
-  uuid="$(echo "$resp" | jq -r '.data.uuid')"
+  uuid="$(echo "$resp" | jq -r '.data.uuid // empty' 2>/dev/null)"
 
-  if [ -n "$uuid" ] && [ "$uuid" != "null" ]; then
-    info "Listmonk: 'Newsletter' list created (${uuid})"
-    echo "$uuid"
-  else
-    warn "Listmonk: list creation failed — $(echo "$resp" | jq -r '.message // "unknown"')"
-    echo ""
+  if [ -n "$uuid" ]; then
+    echo "$uuid"; return 0
   fi
+  return 1
 }
 
 render_listmonk_config() {
@@ -597,38 +635,24 @@ prompt_listmonk() {
   local choice; read -r choice
   [[ "$choice" != "y" && "$choice" != "Y" ]] && return
 
-  # Two prompts only: domain + admin password
-  local domain lm_user lm_pass
+  prompt "listmonk.url"           "Listmonk domain URL (e.g. https://lists.dployr.io)"
+  prompt "listmonk.admin_user"    "Listmonk admin username"
+  prompt "listmonk.admin_password" "Listmonk admin password" true
+  prompt "listmonk.database_url"  "Listmonk database URL"    true
 
-  local domain
+  local domain lm_user lm_pass lm_pg_url
   domain="$(tget 'listmonk.url' 2>/dev/null || true)"
   domain="${domain#https://}"
-  if [ -z "$domain" ]; then
-    printf "Listmonk domain [lists.dployr.io]: "; read -r domain; domain="${domain:-lists.dployr.io}"
-  fi
-
-  echo ""
-  local lm_user lm_pass
   lm_user="$(tget 'listmonk.admin_user' 2>/dev/null || true)"
   lm_pass="$(tget 'listmonk.admin_password' 2>/dev/null || true)"
+  lm_pg_url="$(tget 'listmonk.database_url' 2>/dev/null || true)"
 
-  if [ -z "$lm_user" ]; then
-    printf "Admin username [listmonk]: "; read -r lm_user; lm_user="${lm_user:-listmonk}"
-    tset "listmonk.admin_user" "$lm_user"
-  fi
-  if [ -z "$lm_pass" ]; then
-    printf "Admin password: "; read -r lm_pass
-    [ -z "$lm_pass" ] && { warn "Admin password is required — skipping Listmonk setup"; return; }
-    tset "listmonk.admin_password" "$lm_pass"
-  fi
+  [ -z "$domain" ]    && { warn "Listmonk URL is required — skipping"; return; }
+  [ -z "$lm_user" ]   && { warn "Listmonk admin username is required — skipping"; return; }
+  [ -z "$lm_pass" ]   && { warn "Listmonk admin password is required — skipping"; return; }
+  [ -z "$lm_pg_url" ] && { warn "Listmonk database URL is required — skipping"; return; }
 
   # Dedicated Listmonk database — isolated from the main dployr-base DB for security
-  local lm_pg_url; lm_pg_url="$(tget 'listmonk.database_url' 2>/dev/null || true)"
-  if [ -z "$lm_pg_url" ]; then
-    printf "Listmonk database URL: "; read -r lm_pg_url
-    [ -z "$lm_pg_url" ] && { warn "Listmonk database URL is required — skipping Listmonk setup"; return; }
-    tset "listmonk.database_url" "$lm_pg_url"
-  fi
 
   local db_host db_port db_user db_pass db_name
   parse_pg_url "$lm_pg_url" db_host db_port db_user db_pass db_name \
@@ -693,12 +717,26 @@ EOF
   systemctl enable listmonk >/dev/null 2>&1
   systemctl restart listmonk 2>/dev/null || systemctl start listmonk
 
-  # Configure everything via API (no UI required) 
+  # Configure everything via API (no UI required)
   if listmonk_api_ready; then
-    listmonk_configure_smtp "$lm_user" "$lm_pass" "https://${domain}"
+    local lm_jar
+    lm_jar="$(listmonk_web_login "$lm_user" "$lm_pass")" || lm_jar=""
 
-    local list_uuid
-    list_uuid="$(listmonk_create_list "$lm_user" "$lm_pass")"
+    local base_url; base_url="$(tget 'server.base_url')"
+    if [ -n "$lm_jar" ]; then
+      listmonk_configure_smtp "$lm_jar" "https://${domain}" "$base_url"
+    else
+      warn "Listmonk: could not log in — SMTP not configured"
+    fi
+
+    local list_uuid=""
+    if [ -n "${lm_jar:-}" ]; then
+      if list_uuid="$(listmonk_create_list "$lm_jar")"; then
+        info "Listmonk: Newsletter list ready (${list_uuid})"
+      else
+        warn "Listmonk: Newsletter list creation failed"
+      fi
+    fi
 
     # Generate a bounce webhook secret and persist it
     local bounce_secret
@@ -711,7 +749,6 @@ EOF
     tset "listmonk.bounce_webhook_secret" "$bounce_secret"
     [ -n "$list_uuid" ] && tset "listmonk.list_uuid" "$list_uuid"
 
-    local base_url; base_url="$(tget 'server.base_url')"
     local bounce_url="${base_url}/webhooks/zepto/bounce"
 
     echo ""
@@ -727,6 +764,7 @@ EOF
     echo "  │  Events to select: Hard bounces  Feedback loop                  │"
     echo "  └──────────────────────────────────────────────────────────────────┘"
     echo ""
+    [ -n "${lm_jar:-}" ] && rm -f "$lm_jar"
   else
     warn "Listmonk API not ready — check: journalctl -u listmonk -n 50"
     tset "listmonk.enabled"        "true"
