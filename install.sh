@@ -185,12 +185,6 @@ prompt_array() {
   local key="$1" label="$2"
   local current; current="$(tget "$key")"
 
-  # Normalize existing value if it's not already a TOML array
-  if [ -n "$current" ] && [[ ! "$current" =~ ^\[.*\]$ ]]; then
-    tset "$key" "$(normalize_toml_array "$current")"
-    current="$(tget "$key")"
-  fi
-
   $SKIP_PROMPTS && return
 
   if [ -n "$current" ]; then
@@ -199,13 +193,13 @@ prompt_array() {
     case "$choice" in
       ""|"y"|"Y") return 0 ;;
       "n"|"N") ;;
-      *) tset "$key" "$(normalize_toml_array "$choice")"; return 0 ;;
+      *) tset "$key" "$choice"; return 0 ;;
     esac
   fi
 
   printf "%s (e.g. 1.2.3.4 or 1.2.3.4, 5.6.7.8): " "$label"
   local val; read -r val
-  [ -n "$val" ] && tset "$key" "$(normalize_toml_array "$val")"
+  [ -n "$val" ] && tset "$key" "$val"
   return 0
 }
 

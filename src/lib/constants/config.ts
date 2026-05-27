@@ -1,6 +1,24 @@
 import { z } from "zod";
 
 /**
+ * Coerces a config value to a string array.
+ */
+export function coerceStringArray(val: unknown): unknown {
+  if (Array.isArray(val)) return val;
+  if (typeof val !== "string" || val.trim() === "") return [];
+  const s = val.trim();
+  if (s.startsWith("[")) {
+    try {
+      return JSON.parse(s);
+    } catch {}
+  }
+  return s
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+/**
  * Type-safe configuration schema
  */
 export const CONFIG_SCHEMA = z.object({
@@ -76,7 +94,7 @@ export const CONFIG_SCHEMA = z.object({
   }),
   admin: z.object({
     admin_api_key: z.string().optional().default(""),
-    allowed_ips: z.array(z.string()).default([]),
+    allowed_ips: z.preprocess(coerceStringArray, z.array(z.string())).default([]),
     totp_secret: z.string().optional().default(""),
     metrics_scrape_token: z.string().optional(),
   }),
