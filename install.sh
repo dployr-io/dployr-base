@@ -540,13 +540,27 @@ prompt_listmonk() {
   # Two prompts only: domain + admin password
   local domain lm_user lm_pass
 
-  printf "Listmonk domain [lists.dployr.io]: "
-  read -r domain; domain="${domain:-lists.dployr.io}"
+  local domain
+  domain="$(tget 'listmonk.url' 2>/dev/null || true)"
+  domain="${domain#https://}"
+  if [ -z "$domain" ]; then
+    printf "Listmonk domain [lists.dployr.io]: "; read -r domain; domain="${domain:-lists.dployr.io}"
+  fi
 
   echo ""
-  printf "Admin username [listmonk]: "; read -r lm_user; lm_user="${lm_user:-listmonk}"
-  printf "Admin password: ";             read -r lm_pass
-  [ -z "$lm_pass" ] && { warn "Admin password is required — skipping Listmonk setup"; return; }
+  local lm_user lm_pass
+  lm_user="$(tget 'listmonk.admin_user' 2>/dev/null || true)"
+  lm_pass="$(tget 'listmonk.admin_password' 2>/dev/null || true)"
+
+  if [ -z "$lm_user" ]; then
+    printf "Admin username [listmonk]: "; read -r lm_user; lm_user="${lm_user:-listmonk}"
+    tset "listmonk.admin_user" "$lm_user"
+  fi
+  if [ -z "$lm_pass" ]; then
+    printf "Admin password: "; read -r lm_pass
+    [ -z "$lm_pass" ] && { warn "Admin password is required — skipping Listmonk setup"; return; }
+    tset "listmonk.admin_password" "$lm_pass"
+  fi
 
   # Dedicated Listmonk database — isolated from the main dployr-base DB for security
   local lm_pg_url; lm_pg_url="$(tget 'listmonk.database_url' 2>/dev/null || true)"
