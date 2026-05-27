@@ -178,6 +178,26 @@ source "$BATS_TEST_DIRNAME/../../install.sh"
   echo "$output" | jq -e '.smtp[0].password == "apikey123"' >/dev/null
 }
 
+@test "strip_subdomain: removes single subdomain" {
+  result="$(strip_subdomain 'https://app.dployr.io')"
+  [ "$result" = "https://dployr.io" ]
+}
+
+@test "strip_subdomain: removes single subdomain over http" {
+  result="$(strip_subdomain 'http://app.example.com')"
+  [ "$result" = "http://example.com" ]
+}
+
+@test "strip_subdomain: leaves root domain unchanged" {
+  result="$(strip_subdomain 'https://dployr.io')"
+  [ "$result" = "https://dployr.io" ]
+}
+
+@test "strip_subdomain: removes only the first subdomain level" {
+  result="$(strip_subdomain 'https://foo.bar.dployr.io')"
+  [ "$result" = "https://bar.dployr.io" ]
+}
+
 @test "build_smtp_patch: sets logo and favicon url from base_url" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
   run build_smtp_patch '{"app.from_email":"old@example.com","smtp":[]}' "https://lists.example.com" "from@example.com" "apikey123" "https://base.example.com"
