@@ -75,7 +75,7 @@ source "$BATS_TEST_DIRNAME/../../install.sh"
 }
 
 @test "render_listmonk_config: contains db connection params" {
-  run render_listmonk_config "admin" "secret" "db.host.com" "5432" "dbuser" "dbpass" "appdb"
+  run render_listmonk_config "db.host.com" "5432" "dbuser" "dbpass" "appdb"
   [[ "$output" == *'host         = "db.host.com"'* ]]
   [[ "$output" == *'port         = 5432'* ]]
   [[ "$output" == *'user         = "dbuser"'* ]]
@@ -83,15 +83,15 @@ source "$BATS_TEST_DIRNAME/../../install.sh"
   [[ "$output" == *'database     = "appdb"'* ]]
 }
 
-@test "render_listmonk_config: contains app credentials" {
-  run render_listmonk_config "admin" "secret" "db.host.com" "5432" "dbuser" "dbpass" "appdb"
-  [[ "$output" == *'admin_username = "admin"'* ]]
-  [[ "$output" == *'admin_password = "secret"'* ]]
+@test "render_listmonk_config: does not contain deprecated admin credentials" {
+  run render_listmonk_config "db.host.com" "5432" "dbuser" "dbpass" "appdb"
+  [[ "$output" != *'admin_username'* ]]
+  [[ "$output" != *'admin_password'* ]]
 }
 
 @test "render_listmonk_config: binds to localhost:9000" {
-  run render_listmonk_config "admin" "secret" "db.host.com" "5432" "dbuser" "dbpass" "appdb"
-  [[ "$output" == *'address        = "localhost:9000"'* ]]
+  run render_listmonk_config "db.host.com" "5432" "dbuser" "dbpass" "appdb"
+  [[ "$output" == *'address = "localhost:9000"'* ]]
 }
 
 @test "render_listmonk_unit: contains user, working dir, and config path" {

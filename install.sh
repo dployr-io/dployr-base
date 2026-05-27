@@ -488,12 +488,10 @@ listmonk_create_list() {
 }
 
 render_listmonk_config() {
-  local lm_user="$1" lm_pass="$2" db_host="$3" db_port="$4" db_user="$5" db_pass="$6" db_name="$7"
+  local db_host="$1" db_port="$2" db_user="$3" db_pass="$4" db_name="$5"
   cat <<EOF
 [app]
-address        = "localhost:9000"
-admin_username = "${lm_user}"
-admin_password = "${lm_pass}"
+address = "localhost:9000"
 
 [db]
 host         = "${db_host}"
@@ -571,14 +569,15 @@ prompt_listmonk() {
   mkdir -p "$LISTMONK_DIR" "$LISTMONK_CONFIG_DIR" /var/log/listmonk
 
   # Write config.toml (app + db only — everything else via API)
-  render_listmonk_config "$lm_user" "$lm_pass" "$db_host" "$db_port" "$db_user" "$db_pass" "$db_name" > "$LISTMONK_CONFIG"
+  render_listmonk_config "$db_host" "$db_port" "$db_user" "$db_pass" "$db_name" > "$LISTMONK_CONFIG"
 
   chmod 600 "$LISTMONK_CONFIG"
   chown -R "$LISTMONK_USER:$LISTMONK_USER" "$LISTMONK_DIR" "$LISTMONK_CONFIG_DIR" /var/log/listmonk
 
-  # Bootstrap DB schema (idempotent — safe to re-run) 
+  # Bootstrap DB schema — pass admin credentials as env vars (v4+ method)
   info "Bootstrapping Listmonk database..."
-  listmonk --config "$LISTMONK_CONFIG" --install --yes \
+  LISTMONK_ADMIN_USER="$lm_user" LISTMONK_ADMIN_PASSWORD="$lm_pass" \
+    listmonk --config "$LISTMONK_CONFIG" --install --yes \
     || warn "DB bootstrap failed — run manually: listmonk --config $LISTMONK_CONFIG --install"
 
   # Systemd unit
