@@ -537,10 +537,11 @@ listmonk_create_list() {
 }
 
 render_listmonk_config() {
-  local db_host="$1" db_port="$2" db_user="$3" db_pass="$4" db_name="$5"
+  local public_url="$1" db_host="$2" db_port="$3" db_user="$4" db_pass="$5" db_name="$6"
   cat <<EOF
 [app]
-address = "localhost:9000"
+address    = "localhost:9000"
+public_url = "${public_url}"
 
 [db]
 host         = "${db_host}"
@@ -632,7 +633,7 @@ prompt_listmonk() {
   mkdir -p "$LISTMONK_DIR" "$LISTMONK_CONFIG_DIR" /var/log/listmonk
 
   # Write config.toml (app + db only — everything else via API)
-  render_listmonk_config "$db_host" "$db_port" "$db_user" "$db_pass" "$db_name" > "$LISTMONK_CONFIG"
+  render_listmonk_config "https://${domain}" "$db_host" "$db_port" "$db_user" "$db_pass" "$db_name" > "$LISTMONK_CONFIG"
 
   chmod 600 "$LISTMONK_CONFIG"
   chown -R "$LISTMONK_USER:$LISTMONK_USER" "$LISTMONK_DIR" "$LISTMONK_CONFIG_DIR" /var/log/listmonk
