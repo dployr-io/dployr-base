@@ -20,7 +20,7 @@ CONFIG_DIR="/etc/dployr-base"
 CONFIG_PATH="$CONFIG_DIR/config.toml"
 SERVICE_USER="dployr"
 REPO="dployr-io/dployr-base"
-LISTMONK_VERSION="${LISTMONK_VERSION:-4.1.0}"
+LISTMONK_VERSION="${LISTMONK_VERSION:-6.1.0}"
 LISTMONK_DIR="/opt/listmonk"
 LISTMONK_CONFIG_DIR="/etc/listmonk"
 LISTMONK_CONFIG="$LISTMONK_CONFIG_DIR/config.toml"
@@ -400,18 +400,24 @@ EOF
 
 install_listmonk_binary() {
   if command -v listmonk >/dev/null 2>&1; then
-    info "Listmonk already installed: $(listmonk version 2>/dev/null | head -1 || echo ok)"
-    return
+    local installed; installed="$(listmonk version 2>/dev/null | grep -oP 'v\K[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")"
+    if [ "$installed" = "$LISTMONK_VERSION" ]; then
+      info "Listmonk already at v${LISTMONK_VERSION}, skipping download"
+      return
+    fi
+    info "Upgrading Listmonk v${installed} → v${LISTMONK_VERSION}..."
+  else
+    info "Downloading Listmonk v${LISTMONK_VERSION}..."
   fi
-  info "Downloading Listmonk v${LISTMONK_VERSION}..."
   local url="https://github.com/knadh/listmonk/releases/download/v${LISTMONK_VERSION}/listmonk_${LISTMONK_VERSION}_linux_amd64.tar.gz"
   local tmp; tmp="$(mktemp -d)"
   curl -fsSL "$url" -o "$tmp/listmonk.tar.gz" || { rm -rf "$tmp"; error "Failed to download Listmonk"; }
   tar -xzf "$tmp/listmonk.tar.gz" -C "$tmp"   || { rm -rf "$tmp"; error "Failed to extract Listmonk"; }
+  systemctl stop listmonk 2>/dev/null || true
   mv "$tmp/listmonk" /usr/local/bin/listmonk
   chmod +x /usr/local/bin/listmonk
   rm -rf "$tmp"
-  info "Listmonk installed"
+  info "Listmonk v${LISTMONK_VERSION} installed"
 }
 
 # Parse postgresql://user:pass@host:port/dbname into named variables.
