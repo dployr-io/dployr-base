@@ -356,7 +356,7 @@ install_listmonk_binary() {
 # Usage: parse_pg_url "$url" host_var port_var user_var pass_var name_var
 parse_pg_url() {
   local url="$1"
-  if [[ "$url" =~ ^postgresql://([^:]+):([^@]+)@([^:/]+):([0-9]+)/([^?]+) ]]; then
+  if [[ "$url" =~ ^postgresql?://([^:]+):([^@]+)@([^:/]+):([0-9]+)/([^?]+) ]]; then
     printf -v "$2" '%s' "${BASH_REMATCH[3]}"  # host
     printf -v "$3" '%s' "${BASH_REMATCH[4]}"  # port
     printf -v "$4" '%s' "${BASH_REMATCH[1]}"  # user
