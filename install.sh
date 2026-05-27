@@ -154,6 +154,61 @@ install_tomato() {
 tget() { tomato get "$1" "$CONFIG_PATH" 2>/dev/null || echo ""; }
 tset() { tomato set "$1" "$2" "$CONFIG_PATH" >/dev/null 2>&1; }
 
+# Normalise any user input into a TOML array string, e.g.:
+#   102.88.54.231              → ["102.88.54.231"]
+#   102.88.54.231, 1.1.1.1    → ["102.88.54.231", "1.1.1.1"]
+#   ["102.88.54.231"]          → ["102.88.54.231"]   (passed through)
+normalize_toml_array() {
+  local input="$1"
+  # Already a TOML array — pass through
+  if [[ "$input" =~ ^\[.*\]$ ]]; then
+    echo "$input"
+    return
+  fi
+  # Comma-separated values — split, quote each, wrap
+  local result='['
+  local first=true
+  IFS=',' read -ra parts <<< "$input"
+  for part in "${parts[@]}"; do
+    part="${part#"${part%%[![:space:]]*}"}"  # ltrim
+    part="${part%"${part##*[![:space:]]}"}"  # rtrim
+    part="${part#\"}" ; part="${part%\"}"    # strip existing quotes
+    $first || result+=', '
+    result+="\"$part\""
+    first=false
+  done
+  result+=']'
+  echo "$result"
+}
+
+prompt_array() {
+  local key="$1" label="$2"
+  local current; current="$(tget "$key")"
+
+  # Normalize existing value if it's not already a TOML array
+  if [ -n "$current" ] && [[ ! "$current" =~ ^\[.*\]$ ]]; then
+    tset "$key" "$(normalize_toml_array "$current")"
+    current="$(tget "$key")"
+  fi
+
+  $SKIP_PROMPTS && return
+
+  if [ -n "$current" ]; then
+    printf "%s [%s] Keep this value? (y/n): " "$label" "$current"
+    local choice; read -r choice
+    case "$choice" in
+      ""|"y"|"Y") return 0 ;;
+      "n"|"N") ;;
+      *) tset "$key" "$(normalize_toml_array "$choice")"; return 0 ;;
+    esac
+  fi
+
+  printf "%s (e.g. 1.2.3.4 or 1.2.3.4, 5.6.7.8): " "$label"
+  local val; read -r val
+  [ -n "$val" ] && tset "$key" "$(normalize_toml_array "$val")"
+  return 0
+}
+
 prompt() {
   local key="$1" label="$2" secret="${3:-false}"
   local current; current="$(tget "$key")"
@@ -201,7 +256,7 @@ configure() {
 
   prompt "admin.admin_api_key"           "Admin API key"                            true
   prompt "admin.totp_secret"             "Admin TOTP secret"                        true
-  prompt "admin.allowed_ips"             "Allowed admin IPs (TOML array)"
+  prompt_array "admin.allowed_ips"       "Allowed admin IPs"
 
   prompt "integrations.github_token"     "GitHub personal access token"             true
 

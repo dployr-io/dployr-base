@@ -2,6 +2,31 @@
 
 source "$BATS_TEST_DIRNAME/../../install.sh"
 
+@test "normalize_toml_array: single IP without brackets" {
+  result="$(normalize_toml_array '102.88.54.231')"
+  [ "$result" = '["102.88.54.231"]' ]
+}
+
+@test "normalize_toml_array: two IPs comma-separated" {
+  result="$(normalize_toml_array '102.88.54.231, 1.1.1.1')"
+  [ "$result" = '["102.88.54.231", "1.1.1.1"]' ]
+}
+
+@test "normalize_toml_array: already a TOML array passes through" {
+  result="$(normalize_toml_array '["102.88.54.231", "1.1.1.1"]')"
+  [ "$result" = '["102.88.54.231", "1.1.1.1"]' ]
+}
+
+@test "normalize_toml_array: strips extra whitespace around IPs" {
+  result="$(normalize_toml_array '  102.88.54.231  ,  1.1.1.1  ')"
+  [ "$result" = '["102.88.54.231", "1.1.1.1"]' ]
+}
+
+@test "normalize_toml_array: strips surrounding quotes from input" {
+  result="$(normalize_toml_array '"102.88.54.231"')"
+  [ "$result" = '["102.88.54.231"]' ]
+}
+
 @test "parse_pg_url: accepts postgres:// scheme" {
   parse_pg_url "postgres://alice:s3cr3t@db.example.com:5432/mydb" h p u pw n
   [ "$h" = "db.example.com" ]
