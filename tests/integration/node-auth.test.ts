@@ -85,6 +85,44 @@ export function registerNodeAuthTests(getFx: () => TestFixtures) {
       });
     });
 
+    it("node WS rejects token issued for a different instance", async () => {
+      if (!bootstrapToken || !tag) return;
+      const { baseUrl, session, clusterId } = getFx();
+
+      const instB = await createTestInstance(baseUrl, session, clusterId, `auth-b-${Date.now().toString(36)}`);
+
+      try {
+        // Exchange instance-A's bootstrap token for a node access token
+        const tokenRes = await fetch(`${baseUrl}/v1/node/token`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${bootstrapToken}` },
+        });
+        const tokenBody = (await tokenRes.json()) as any;
+        const nodeAToken = tokenBody.data?.token as string;
+        assert.ok(nodeAToken, "Must have node token for instance-A");
+
+        // Connect to instance-B's WS endpoint using instance-A's token — must be rejected
+        const wsUrl = baseUrl.replace(/^http/, "ws") + `/v1/node/ws?instanceName=${instB.tag}`;
+        const { WebSocket } = await import("ws");
+
+        await new Promise<void>((resolve, reject) => {
+          const ws = new WebSocket(wsUrl, { headers: { Authorization: `Bearer ${nodeAToken}` } });
+          ws.once("unexpected-response", (_req, res) => {
+            assert.equal(res.statusCode, 401, `Expected 401, got ${res.statusCode}`);
+            resolve();
+          });
+          ws.once("open", () => {
+            ws.close();
+            reject(new Error("Should not have connected to instance-B with instance-A's token"));
+          });
+          ws.once("error", () => resolve());
+          setTimeout(() => resolve(), 3_000);
+        });
+      } finally {
+        await deleteTestInstance(baseUrl, session, instB.instanceId);
+      }
+    });
+
     it("node WS rejects connection with missing Authorization", async () => {
       if (!tag) return;
       const { baseUrl } = getFx();

@@ -215,7 +215,12 @@ export class WebSocketService {
           if (this.adapters?.kv) {
             const jwtService = new JWTService(new KVStore(this.adapters.kv));
             try {
-              await jwtService.verifyToken(auth.slice(7));
+              const payload = await jwtService.verifyToken(auth.slice(7));
+              if ((payload.instance_id as string) !== instanceTag) {
+                socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+                socket.destroy();
+                return;
+              }
             } catch {
               socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
               socket.destroy();
