@@ -144,7 +144,7 @@ export class InstancePool extends EventEmittable {
     });
 
     await this.db.bootstrapTokens.create(instance.id, decoded.nonce as string);
-    await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId);
+    await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId, clusterName);
     this.log.info(`Provisioned dedicated instance for pro cluster ${clusterName ?? clusterId}`);
   }
 
@@ -186,7 +186,7 @@ export class InstancePool extends EventEmittable {
     const clusterName = cluster?.name ?? clusterId;
     try {
       await this.db.instances.assignPool(clusterId);
-      await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
+      await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId, clusterName);
       this.log.info(`Assigned shared pool instance to cluster ${clusterName}`);
     } catch (err) {
       if (!(err instanceof PoolCapacityExceededError)) throw err;
@@ -204,14 +204,14 @@ export class InstancePool extends EventEmittable {
 
       this.log.info(`Pool at capacity — provisioning new instance for cluster ${clusterName}`);
       await this.createPoolInstance(tier);
-      await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId);
+      await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId, clusterName);
 
       // Another concurrent caller may have already assigned a pool instance while we
       // were provisioning. Re-try only if this cluster is still unassigned.
       const alreadyAssigned = await this.db.instances.getClusterPoolInstance(clusterId);
       if (!alreadyAssigned) {
         await this.db.instances.assignPool(clusterId);
-        await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
+        await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId, clusterName);
       }
       this.log.info(`Provisioned and assigned new instance to cluster ${clusterName}`);
     }

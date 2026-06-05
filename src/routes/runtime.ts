@@ -215,10 +215,16 @@ runtime.get("/events", authMiddleware, requireClusterViewer, async (c) => {
       window: (c.req.query("window") as EventsFilters["window"]) || "all",
     };
 
+    const actorFilter = c.req.query("actor");
+
     const now = Date.now();
     const windowMs = filters.window === "24h" ? 24 * 60 * 60 * 1000 : filters.window === "7d" ? 7 * 24 * 60 * 60 * 1000 : filters.window === "30d" ? 30 * 24 * 60 * 60 * 1000 : null;
 
     let filteredEvents = events;
+
+    if (actorFilter && actorFilter !== "all") {
+      filteredEvents = filteredEvents.filter((event: any) => event.actor?.type === actorFilter);
+    }
 
     if (filters.type) {
       filteredEvents = filteredEvents.filter((event: any) => event.type === filters.type);

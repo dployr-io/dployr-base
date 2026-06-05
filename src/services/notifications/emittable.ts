@@ -10,11 +10,11 @@ export abstract class EventEmittable {
   }
 
   /** Emit a system event with the given event code and target tag. */
-  protected async emit(type: string, tag: string): Promise<void> {
+  protected async emit(type: string, tag: string, name?: string): Promise<void> {
     try {
       await this.kv.logSystemEvent({
         type,
-        targets: [{ id: tag }],
+        targets: [{ id: tag, name }],
       });
     } catch (err) {
       log.error(`Failed to emit ${type} for ${tag}:`, { error: err instanceof Error ? err.message : String(err) });

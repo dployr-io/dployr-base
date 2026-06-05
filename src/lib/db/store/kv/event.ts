@@ -24,7 +24,7 @@ export class EventStore {
    * @param targets - Optional list of entities the action was performed on.
    * @param request - The raw HTTP request, used to extract ray ID and timezone.
    */
-  async logEvent({ type, actor, targets, request }: { type: string; actor: { id: string; type: ActorType }; targets?: { id: string }[]; request: Request }): Promise<void> {
+  async logEvent({ type, actor, targets, request }: { type: string; actor: { id: string; type: ActorType }; targets?: { id: string; name?: string }[]; request: Request }): Promise<void> {
     const headers = request.headers;
 
     const timezone = headers.get("x-timezone") || "UTC";
@@ -173,7 +173,7 @@ export class EventStore {
    * Used by background jobs where no ray ID or timezone is available.
    * Deduplication is skipped — each call produces a distinct event entry.
    */
-  async logSystemEvent({ type, targets }: { type: string; targets?: { id: string }[] }): Promise<void> {
+  async logSystemEvent({ type, targets }: { type: string; targets?: { id: string; name?: string }[] }): Promise<void> {
     const actor = { id: "system", type: "headless" as ActorType };
     const base = { type, actor, timestamp: Date.now(), timezone: "UTC" };
 
