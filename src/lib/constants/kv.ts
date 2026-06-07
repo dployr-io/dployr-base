@@ -75,6 +75,7 @@ export const KV_KEYS = {
     RENAME_HISTORY: (clusterId: string) => `cluster:${clusterId}:renames`,
     WORKLOADS: (clusterId: string, nodeId: string) => `cluster:${clusterId}:node:${nodeId}:workloads`,
     SLEEPING_SERVICES: (clusterId: string) => `cluster:${clusterId}:sleeping`,
+    DEDICATED_PROVISIONING: (clusterId: string) => `cluster:${clusterId}:dedicated:provisioning`,
   },
   GITHUB: {
     PENDING_INSTALL: (userId: string) => `pending_github_install:${userId}`,

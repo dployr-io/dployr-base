@@ -106,6 +106,7 @@ export class NodeDoctor extends EventEmittable {
     await this.demoteUnhealthyInstancesToMaintenance(poolMap);
     await this.allocateUnassignedCapacity(droplets.length);
     await this.syncDedicatedInstances(dedicatedInstances, dropletMap);
+    await this.cleanupOrphanedDedicatedInstances(dropletMap);
 
     this.nodesDrain(poolEntries);
     this.log.debug("Completed node sync");
@@ -431,6 +432,17 @@ export class NodeDoctor extends EventEmittable {
       if (tags.includes(tier)) return tier;
     }
     return "hobby";
+  }
+
+  /** Phase 6: destroy dedicated VMs whose cluster_id was nulled by transitionToSharedPool. */
+  private async cleanupOrphanedDedicatedInstances(dropletMap: Map<string, VirtualMachine & { id?: number | string }>): Promise<void> {
+    if (!this.vm) return;
+    const orphaned = await this.db.instances.listOrphanedDedicated();
+    if (orphaned.length === 0) return;
+    this.log.info(`Found ${orphaned.length} orphaned dedicated instance(s) to clean up`);
+    for (const instance of orphaned) {
+      await this.destroyDroplet(instance, dropletMap);
+    }
   }
 
   /** Reconcile build node capacity and re-queue in-flight builds from degraded nodes. */

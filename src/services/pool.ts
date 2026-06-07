@@ -5,7 +5,7 @@ import { Instance } from "@/types/index.js";
 import { VmProvider } from "./vm/index.js";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { KVStore } from "@/lib/db/store/kv/index.js";
-import { POOL_PROVISION_LOCK_TTL } from "@/lib/constants/index.js";
+import { POOL_PROVISION_LOCK_TTL, DEDICATED_PROVISION_LOCK_TTL } from "@/lib/constants/index.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { EVENTS } from "@/lib/constants/events.js";
 import { PoolCapacityExceededError } from "@/lib/errors/errors.js";
@@ -115,37 +115,49 @@ export class InstancePool extends EventEmittable {
   public async spawnDedicatedInstance({ clusterId, clusterName }: { clusterId: string; clusterName?: string | undefined }): Promise<void> {
     if (!this.vm || !this.jwt) return;
 
-    const tag = await this.generateTag();
+    const lockKey = KV_KEYS.CLUSTER.DEDICATED_PROVISIONING(clusterId);
+    const lockCount = await this.kv.kv.incr(lockKey, DEDICATED_PROVISION_LOCK_TTL);
+    if (lockCount > 1) {
+      this.log.info(`Dedicated provisioning already in progress for cluster ${clusterName ?? clusterId} — skipping`);
+      return;
+    }
 
-    const token = await this.jwt.createBootstrapToken(tag);
-    const decoded = await this.jwt.verifyToken(token);
+    try {
+      const tag = await this.generateTag();
 
-    const droplet = await this.vm.create({
-      image: DEFAULT_INSTANCE_IMAGE,
-      name: tag,
-      region: DEFAULT_INSTANCE_REGION,
-      size: DEFAULT_INSTANCE_SIZE,
-      tags: buildInstanceTags("pro"),
-      sshKey: this.sshKey,
-      userData: buildInstallScript(token, tag, this.registry),
-    });
+      const token = await this.jwt.createBootstrapToken(tag);
+      const decoded = await this.jwt.verifyToken(token);
 
-    const instance = await this.db.instances.create({
-      clusterId,
-      data: {
-        address: droplet.ipv4 ?? null,
-        tag,
-        region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
-        managed: true,
-        status: "provisioning",
-        role: "instance",
-        metadata: { managed: true, tier: "pro" },
-      },
-    });
+      const droplet = await this.vm.create({
+        image: DEFAULT_INSTANCE_IMAGE,
+        name: tag,
+        region: DEFAULT_INSTANCE_REGION,
+        size: DEFAULT_INSTANCE_SIZE,
+        tags: buildInstanceTags("pro"),
+        sshKey: this.sshKey,
+        userData: buildInstallScript(token, tag, this.registry),
+      });
 
-    await this.db.bootstrapTokens.create(instance.id, decoded.nonce as string);
-    await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId, clusterName);
-    this.log.info(`Provisioned dedicated instance for pro cluster ${clusterName ?? clusterId}`);
+      const instance = await this.db.instances.create({
+        clusterId,
+        data: {
+          address: droplet.ipv4 ?? null,
+          tag,
+          region: PROVIDER_TO_INSTANCE_REGION[droplet.region],
+          managed: true,
+          status: "provisioning",
+          role: "instance",
+          metadata: { managed: true, tier: "pro" },
+        },
+      });
+
+      await this.db.bootstrapTokens.create(instance.id, decoded.nonce as string);
+      await this.emit(EVENTS.NODE.PROVISIONED.code, clusterId, clusterName);
+      this.log.info(`Provisioned dedicated instance for pro cluster ${clusterName ?? clusterId}`);
+    } catch (err) {
+      await this.kv.kv.delete(lockKey);
+      throw err;
+    }
   }
 
   /** Provision a dedicated build node (role: "build"). Not tied to any cluster. */
@@ -185,7 +197,7 @@ export class InstancePool extends EventEmittable {
     const cluster = await this.db.clusters.find({ id: clusterId });
     const clusterName = cluster?.name ?? clusterId;
     try {
-      await this.db.instances.assignPool(clusterId);
+      await this.db.instances.assignPool(clusterId, tier);
       await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId, clusterName);
       this.log.info(`Assigned shared pool instance to cluster ${clusterName}`);
     } catch (err) {
@@ -210,7 +222,7 @@ export class InstancePool extends EventEmittable {
       // were provisioning. Re-try only if this cluster is still unassigned.
       const alreadyAssigned = await this.db.instances.getClusterPoolInstance(clusterId);
       if (!alreadyAssigned) {
-        await this.db.instances.assignPool(clusterId);
+        await this.db.instances.assignPool(clusterId, tier);
         await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId, clusterName);
       }
       this.log.info(`Provisioned and assigned new instance to cluster ${clusterName}`);

@@ -297,6 +297,60 @@ export class InstanceStore extends BaseStore {
     }
   }
 
+  async releaseDedicatedInstance(clusterId: string): Promise<void> {
+    const now = this.now();
+    try {
+      await this.db.prepare(`UPDATE instances SET cluster_id = NULL, updated_at = $1 WHERE cluster_id = $2 AND kind = 'dedicated'`).bind(now, clusterId).run();
+    } catch (error) {
+      this.parsePostgresError(error);
+    }
+  }
+
+  /**
+   * Atomically releases the dedicated instance and assigns the cluster to a
+   * shared pool instance of the given tier within a single transaction.
+   * Prevents NodeDoctor from observing the cluster as unassigned between the
+   * two operations, which would cause spurious re-allocation.
+   */
+  async transitionToSharedPool(clusterId: string, tier: SubscriptionPlan): Promise<void> {
+    const now = this.now();
+    await this.db.withTransaction(async (client) => {
+      await client.query(
+        `UPDATE instances SET cluster_id = NULL, updated_at = $1 WHERE cluster_id = $2 AND kind = 'dedicated'`,
+        [now, clusterId],
+      );
+
+      const result = await client.query(
+        `SELECT i.id
+         FROM instances i
+         WHERE i.kind = 'pool'
+           AND i.status = 'healthy'
+           AND i.metadata->>'tier' = $1
+           AND (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = i.id) < COALESCE(i.capacity, ${DEFAULT_CAPACITY})
+         ORDER BY (SELECT COUNT(*) FROM clusters c WHERE c.pool_instance_id = i.id) ASC
+         LIMIT 1
+         FOR UPDATE OF i`,
+        [tier],
+      );
+
+      if (!result.rows.length) throw new PoolCapacityExceededError();
+
+      const instanceId = result.rows[0].id as string;
+      try {
+        await client.query(`UPDATE clusters SET pool_instance_id = $1, updated_at = $2 WHERE id = $3`, [instanceId, now, clusterId]);
+      } catch (error) {
+        this.parsePostgresError(error);
+      }
+    });
+  }
+
+  async listOrphanedDedicated(): Promise<Instance[]> {
+    const result = await this.db
+      .prepare(`SELECT id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at FROM instances WHERE kind = 'dedicated' AND cluster_id IS NULL`)
+      .all();
+    return result.results.map((r) => this.toInstance(r));
+  }
+
   /** Returns a map of all pooled instances and assigned clusters */
   async getPoolClustersMap(): Promise<Array<{ clusterId: string; instanceId: string }>> {
     const result = await this.db.prepare(`SELECT id AS cluster_id, pool_instance_id AS instance_id FROM clusters WHERE pool_instance_id IS NOT NULL`).all();

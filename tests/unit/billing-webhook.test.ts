@@ -62,9 +62,30 @@ function makeDb(billing: ReturnType<typeof makeBillingStore>) {
     },
     instances: {
       async releasePoolInstance() {},
+      async releaseDedicatedInstance() {},
       async assignPool() {},
+      async transitionToSharedPool() {},
     },
   } as any;
+}
+
+function makeTrackedDb(billing: ReturnType<typeof makeBillingStore>) {
+  const calls: { method: string; args: unknown[] }[] = [];
+  return {
+    db: {
+      billing,
+      clusters: { async get() { return null; } },
+      instances: {
+        async releasePoolInstance(clusterId: string) { calls.push({ method: "releasePoolInstance", args: [clusterId] }); },
+        async releaseDedicatedInstance(clusterId: string) { calls.push({ method: "releaseDedicatedInstance", args: [clusterId] }); },
+        async assignPool(clusterId: string, tier: string) { calls.push({ method: "assignPool", args: [clusterId, tier] }); },
+        async transitionToSharedPool(clusterId: string, tier: string) { calls.push({ method: "transitionToSharedPool", args: [clusterId, tier] }); },
+      },
+    } as any,
+    calls,
+    calledMethods() { return calls.map((c) => c.method); },
+    transitionTiers() { return calls.filter((c) => c.method === "transitionToSharedPool").map((c) => c.args[1]); },
+  };
 }
 
 function makeKv() {
@@ -397,6 +418,93 @@ describe("BillingService.handleWebhook — subscription.past_due", () => {
 
     assert.equal(billing.upserted[0].status, "past_due");
     assert.equal(billing.upserted[0].clusterId, "cluster-abc");
+  });
+});
+
+describe("BillingService — transitionPlan instance reallocation", () => {
+  it("upgrade hobby→pro: releases pool and clears stale dedicated (no shared pool assignment)", async () => {
+    const billing = makeBillingStore(makeSubscription({ clusterId: "cluster-abc", plan: "hobby" }));
+    const { db, calledMethods } = makeTrackedDb(billing);
+    const service = makeService();
+
+    await service.handleWebhook(
+      { type: "subscription.updated", data: subPayload({ externalId: "cluster-abc", productName: "Pro" }) },
+      db,
+      makeKv(),
+    );
+
+    assert.ok(calledMethods().includes("releasePoolInstance"), "must release pool slot");
+    assert.ok(calledMethods().includes("releaseDedicatedInstance"), "must clear stale dedicated");
+    assert.ok(!calledMethods().includes("assignPool"), "must not assign a shared pool on pro upgrade");
+    assert.ok(!calledMethods().includes("transitionToSharedPool"), "must not call transitionToSharedPool on pro upgrade");
+  });
+
+  it("upgrade indie→pro: releases pool and clears stale dedicated", async () => {
+    const billing = makeBillingStore(makeSubscription({ clusterId: "cluster-abc", plan: "indie" }));
+    const { db, calledMethods } = makeTrackedDb(billing);
+    const service = makeService();
+
+    await service.handleWebhook(
+      { type: "subscription.updated", data: subPayload({ externalId: "cluster-abc", productName: "Pro" }) },
+      db,
+      makeKv(),
+    );
+
+    assert.ok(calledMethods().includes("releasePoolInstance"), "must release pool slot");
+    assert.ok(calledMethods().includes("releaseDedicatedInstance"), "must clear stale dedicated");
+    assert.ok(!calledMethods().includes("transitionToSharedPool"), "must not call transitionToSharedPool on pro upgrade");
+  });
+
+  it("downgrade pro→indie: uses atomic transitionToSharedPool with indie tier", async () => {
+    const billing = makeBillingStore(makeSubscription({ clusterId: "cluster-abc", plan: "pro", polarSubscriptionId: "sub-xyz" }));
+    const { db, calledMethods, transitionTiers } = makeTrackedDb(billing);
+    const service = makeService();
+
+    await service.handleWebhook(
+      { type: "subscription.updated", data: subPayload({ externalId: "cluster-abc", productName: "Indie" }) },
+      db,
+      makeKv(),
+    );
+
+    assert.ok(calledMethods().includes("transitionToSharedPool"), "must use atomic transitionToSharedPool");
+    assert.equal(transitionTiers()[0], "indie", "must target indie tier pool");
+    assert.ok(!calledMethods().includes("releasePoolInstance"), "must not call releasePoolInstance separately");
+    assert.ok(!calledMethods().includes("releaseDedicatedInstance"), "must not call releaseDedicatedInstance separately");
+    assert.ok(!calledMethods().includes("assignPool"), "must not call assignPool separately");
+  });
+
+  it("downgrade pro→hobby (revoked): uses atomic transitionToSharedPool with hobby tier", async () => {
+    const billing = makeBillingStore(makeSubscription({ clusterId: "cluster-abc", plan: "pro", polarSubscriptionId: "sub-xyz" }));
+    const { db, calledMethods, transitionTiers } = makeTrackedDb(billing);
+    const service = makeService();
+
+    await service.handleWebhook(
+      { type: "subscription.revoked", data: subPayload({ subscriptionId: "sub-xyz" }) },
+      db,
+      makeKv(),
+    );
+
+    assert.ok(calledMethods().includes("transitionToSharedPool"), "must use atomic transitionToSharedPool");
+    assert.equal(transitionTiers()[0], "hobby", "must target hobby tier pool");
+    assert.ok(!calledMethods().includes("releaseDedicatedInstance"), "must not call releaseDedicatedInstance separately");
+    assert.ok(!calledMethods().includes("assignPool"), "must not call assignPool separately");
+  });
+
+  it("hobby→indie swap: releases pool and assigns indie pool directly (no transitionToSharedPool)", async () => {
+    const billing = makeBillingStore(makeSubscription({ clusterId: "cluster-abc", plan: "hobby" }));
+    const { db, calledMethods, calls } = makeTrackedDb(billing);
+    const service = makeService();
+
+    await service.handleWebhook(
+      { type: "subscription.updated", data: subPayload({ externalId: "cluster-abc", productName: "Indie" }) },
+      db,
+      makeKv(),
+    );
+
+    assert.ok(calledMethods().includes("releasePoolInstance"), "must release hobby pool slot");
+    assert.ok(calledMethods().includes("assignPool"), "must assign to indie pool");
+    assert.equal(calls.find((c) => c.method === "assignPool")?.args[1], "indie", "must assign to indie tier pool");
+    assert.ok(!calledMethods().includes("transitionToSharedPool"), "must not use transitionToSharedPool for shared-tier swaps");
   });
 });
 

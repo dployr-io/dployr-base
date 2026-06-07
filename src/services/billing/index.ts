@@ -339,18 +339,21 @@ export class BillingService {
 
     try {
       // Upgrading to pro:
-      // remove the cluster from the shared pool system
+      // release pool slot and clear any stale dedicated instance record so
+      // NodeDoctor picks this cluster up and provisions a fresh dedicated instance on its next sync.
       if (to === "pro") {
         await db.instances.releasePoolInstance(clusterId);
-        log.info(`Released pool instance for "${name}" (upgrading to pro)`);
+        await db.instances.releaseDedicatedInstance(clusterId);
+        log.info(`Released instance assignments for "${name}" (upgrading to pro)`);
         return;
       }
 
       // Downgrading from pro:
-      // assign the cluster to the target shared pool
+      // atomic transaction: releases dedicated record and assigns to shared pool
+      // in one shot so NodeDoctor never observes the cluster as unassigned.
       if (from === "pro") {
-        await db.instances.assignPool(clusterId, to);
-        log.info(`Assigned "${name}" to ${to} pool (downgrading from pro)`);
+        await db.instances.transitionToSharedPool(clusterId, to);
+        log.info(`Transitioned "${name}" from dedicated to ${to} pool (downgrading from pro)`);
         return;
       }
 

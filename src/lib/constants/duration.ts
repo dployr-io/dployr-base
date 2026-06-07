@@ -99,6 +99,9 @@ export const WATCHDOG_COOLDOWN_NOTIFICATION_TTL = TTL_24_HOURS;
 /** Pool provision lock duration: 300 seconds */
 export const POOL_PROVISION_LOCK_TTL = 300;
 
+/** Dedicated instance provision lock duration: 600 seconds (covers VM boot + registration) */
+export const DEDICATED_PROVISION_LOCK_TTL = 600;
+
 /** Node connected heartbeat refresh: 60 seconds */
 export const NODE_CONNECTED_TTL = TTL_1_MINUTE;
 
