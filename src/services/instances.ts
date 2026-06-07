@@ -84,7 +84,7 @@ export class InstanceService {
           id: clusterId,
         },
       ],
-      type: EVENTS.BOOTSTRAP.BOOTSTRAP_SETUP_COMPLETED.code,
+      type: EVENTS.INSTANCE.CREATED.code,
       request: c.req.raw,
     });
 

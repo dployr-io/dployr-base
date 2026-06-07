@@ -43,39 +43,16 @@ export class RedisKV implements IKVAdapter {
     await this.client.del(key);
   }
 
-  private async *scanKeys(pattern: string): AsyncGenerator<string> {
-    const coerce = (raw: unknown): string =>
-      typeof raw === 'string' ? raw : ((raw as any)?.name ?? String(raw));
-
-    if (typeof this.client.scanIterator === 'function') {
-      for await (const raw of this.client.scanIterator({ MATCH: pattern, COUNT: 100 }))
-        yield coerce(raw);
-    } else {
-      let cursor = 0;
-      do {
-        const res: any = await this.client.scan(cursor, { match: pattern, count: 100 });
-        // Upstash returns [cursor, keys[]]; node-redis returns { cursor, keys }
-        const [newCursor, batch]: [number, unknown[]] = Array.isArray(res)
-          ? [Number(res[0] ?? 0), res[1] ?? []]
-          : [Number(res?.cursor ?? 0), res?.keys ?? []];
-        cursor = newCursor;
-        for (const raw of batch) yield coerce(raw);
-      } while (cursor !== 0);
-    }
-  }
-
   async list(options: { prefix: string; limit?: number }): Promise<Array<{ name: string }>> {
-    const keys: string[] = [];
+    const pattern = `${options.prefix}*`;
     try {
-      for await (const key of this.scanKeys(`${options.prefix}*`)) {
-        keys.push(key);
-        if (options.limit && keys.length >= options.limit) break;
-      }
+      const keys: string[] = await this.client.keys(pattern);
+      const result = options.limit ? keys.slice(0, options.limit) : keys;
+      return result.map((name: string) => ({ name }));
     } catch (error) {
-      log.error('Scan failed:', error);
+      log.error('Keys lookup failed:', error);
       throw error;
     }
-    return keys.map(name => ({ name }));
   }
 
   async incr(key: string, ttl?: number): Promise<number> {

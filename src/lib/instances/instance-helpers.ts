@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
-import { ERROR, SUCCESS } from "@/lib/constants/index.js";
+import { ERROR, EVENTS, SUCCESS } from "@/lib/constants/index.js";
 import { getDbStore, getInstancePoolService, getInstanceService, getKVStore, getTraefikRouterService, getVMService, getWS } from "@/lib/config/context.js";
+import { worker } from "@/services/background/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
 import { Bindings, Variables } from "@/types/index.js";
 import { Hono } from "hono";
 import z from "zod";
@@ -65,6 +67,8 @@ export function attachCreateInstance(app: Hono<{ Bindings: Bindings; Variables: 
         role,
         metadata: region ? { region } : undefined,
       });
+
+      worker.dispatch(notify(EVENTS.INSTANCE.CREATED.code, { clusterId, instanceId: instance.instance.id }));
 
       return c.json(createSuccessResponse(instance), SUCCESS.CREATED.status);
     } catch (error: any) {
@@ -168,6 +172,11 @@ export function attachDeleteInstance(app: Hono<{ Bindings: Bindings; Variables: 
 
       await db.instances.delete({ id: instance.id });
       getWS(c).evictNodeByTag(instance.tag);
+
+      if (instance.clusterId) {
+        worker.dispatch(notify(EVENTS.INSTANCE.DELETED.code, { clusterId: instance.clusterId, instanceId: instance.id }));
+      }
+
       return c.json({ success: true, data: { deleted: true, instance: instance.tag } });
     } catch {
       return c.json(

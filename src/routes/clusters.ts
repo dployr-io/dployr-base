@@ -303,6 +303,8 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
 
     const { users } = validation.data;
 
+    const removedUserRecords = await Promise.all(users.map((userId) => db.users.find({ id: userId })));
+
     await db.clusters.removeUsers(id, users);
 
     for (const userId of users) {
@@ -311,6 +313,8 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
         await kv.refreshSession({ sessionId, updates: { clusters: await db.clusters.listUserClusters(userId) } });
       }
     }
+
+    const cluster = await db.clusters.get(id);
 
     await kv.logEvent({
       actor: {
@@ -325,6 +329,12 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
       type: EVENTS.CLUSTER.REMOVED_USER.code,
       request: c.req.raw,
     });
+
+    for (const user of removedUserRecords) {
+      if (user?.email) {
+        worker.dispatch(notify(EVENTS.CLUSTER.REMOVED_USER.code, { clusterId: id, clusterName: cluster?.name, userEmail: user.email, to: user.email }));
+      }
+    }
 
     return c.json(createSuccessResponse({ users }, "Users removed successfully"));
   } catch (error) {
@@ -382,6 +392,9 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
 
     const { roles } = validation.data;
 
+    const { users: currentUsers } = await db.clusters.listUsers(id, { invited: false });
+    const emailToOldRole = new Map(currentUsers.map((u) => [u.email, u.role]));
+
     const updates = {
       owner: [], // leave empty
       admin: roles.admin || [],
@@ -411,9 +424,18 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
           id,
         },
       ],
-      type: EVENTS.PERMISSION.ADMIN_ACCESS_GRANTED.code,
+      type: EVENTS.CLUSTER.USER_ROLE_CHANGED.code,
       request: c.req.raw,
     });
+
+    for (const [newRole, emails] of Object.entries(roles) as [string, string[]][]) {
+      for (const email of emails ?? []) {
+        const oldRole = emailToOldRole.get(email);
+        if (oldRole && oldRole !== newRole) {
+          worker.dispatch(notify(EVENTS.CLUSTER.USER_ROLE_CHANGED.code, { clusterId: id, clusterName: cluster?.name, userEmail: email, oldRole, newRole, to: email }));
+        }
+      }
+    }
 
     return c.json(createSuccessResponse({ cluster }, "Roles updated successfully"));
   } catch (error) {
@@ -443,6 +465,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
  * Transfer ownership of cluster to a new user
  */
 clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
+  const session = c.get("session")!;
   const db = getDbStore(c);
   const kv = getKVStore(c);
 
@@ -467,20 +490,46 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
 
     const { newOwnerId, previousOwnerRole } = validation.data;
 
-    const previousOwner = await db.clusters.getOwner(id);
+    const previousOwnerId = await db.clusters.getOwner(id);
 
     await db.clusters.transferOwnership(id, newOwnerId, previousOwnerRole);
 
-    if (previousOwner) {
-      const sessionId = await kv.getSessionIdByUserId(previousOwner);
+    if (previousOwnerId) {
+      const sessionId = await kv.getSessionIdByUserId(previousOwnerId);
       if (sessionId) {
-        await kv.refreshSession({ sessionId, updates: { clusters: await db.clusters.listUserClusters(previousOwner) } });
+        await kv.refreshSession({ sessionId, updates: { clusters: await db.clusters.listUserClusters(previousOwnerId) } });
       }
     }
 
     const newSessionId = await kv.getSessionIdByUserId(newOwnerId);
     if (newSessionId) {
       await kv.refreshSession({ sessionId: newSessionId, updates: { clusters: await db.clusters.listUserClusters(newOwnerId) } });
+    }
+
+    const [previousOwnerUser, newOwnerUser, cluster] = await Promise.all([
+      previousOwnerId ? db.users.find({ id: previousOwnerId }) : Promise.resolve(null),
+      db.users.find({ id: newOwnerId }),
+      db.clusters.get(id),
+    ]);
+
+    await kv.logEvent({
+      actor: { id: session.userId, type: "user" },
+      targets: [{ id }],
+      type: EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code,
+      request: c.req.raw,
+    });
+
+    if (newOwnerUser?.email) {
+      const payload = {
+        clusterId: id,
+        clusterName: cluster?.name,
+        newOwner: newOwnerUser.email,
+        previousOwner: previousOwnerUser?.email ?? session.email,
+      };
+      worker.dispatch(notify(EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code, { ...payload, userEmail: newOwnerUser.email, to: newOwnerUser.email }));
+      if (previousOwnerUser?.email) {
+        worker.dispatch(notify(EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code, { ...payload, userEmail: previousOwnerUser.email, to: previousOwnerUser.email }));
+      }
     }
 
     return c.json(createSuccessResponse({ newOwnerId, previousOwnerRole }, "Ownership transferred successfully"));

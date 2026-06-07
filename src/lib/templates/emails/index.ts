@@ -7,28 +7,47 @@ const layout = (title: string, content: string): string => `<!DOCTYPE html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
+  <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&display=swap');</style>
 </head>
-<body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 0;">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.10);">
 
         <tr>
-          <td style="background:#0f0f0f;padding:20px 32px;">
-            <span style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:-0.3px;">dployr</span>
+          <td style="background:#0f0f0f;padding:15px 32px;">
+            <a href="https://dployr.io" style="text-decoration:none;display:inline-block;line-height:1;">
+              <img src="https://dployr.io/wordmark-light.png" alt="dployr" width="140" height="28" style="display:block;border:0;width:140px;height:28px;" />
+            </a>
           </td>
         </tr>
 
         <tr>
-          <td style="padding:32px;color:#111111;font-size:15px;line-height:1.6;">
+          <td style="padding:36px 32px 32px;color:#111111;font-size:15px;line-height:1.65;">
             ${content}
           </td>
         </tr>
 
         <tr>
-          <td style="border-top:1px solid #eaeaea;padding:20px 32px;color:#6b7280;font-size:13px;line-height:1.5;">
-            <a href="https://dployr.io" style="color:#6b7280;text-decoration:none;">dployr.io</a> — Your app, your server, your rules!<br>
-            <span style="color:#9ca3af;">This email is from an unattended mailbox and cannot receive replies.</span>
+          <td style="background:#0f0f0f;padding:28px 32px 24px;text-align:center;">
+            <p style="margin:0 0 4px 0;color:#f9fafb;font-size:13px;font-weight:600;letter-spacing:-0.1px;">Ship apps, not infrastructure.</p>
+            <p style="margin:0 0 20px 0;color:#4b5563;font-size:11px;line-height:1.6;">This email is from an unattended mailbox and cannot receive replies.</p>
+            <p style="margin:0 0 16px 0;font-size:12px;line-height:1.5;">
+              <a href="https://dployr.io/docs/introduction" style="color:#9ca3af;text-decoration:none;">Docs</a>
+              <span style="color:#2d3748;margin:0 8px;">&middot;</span>
+              <a href="https://status.dployr.io/" style="color:#9ca3af;text-decoration:none;">Status</a>
+              <span style="color:#2d3748;margin:0 8px;">&middot;</span>
+              <a href="https://discord.gg/tY8ZbjvrSZ" style="color:#9ca3af;text-decoration:none;">Discord</a>
+              <span style="color:#2d3748;margin:0 8px;">&middot;</span>
+              <a href="https://x.com/dployr" style="color:#9ca3af;text-decoration:none;">X</a>
+              <span style="color:#2d3748;margin:0 8px;">&middot;</span>
+              <a href="mailto:support@dployr.io" style="color:#9ca3af;text-decoration:none;">Support</a>
+              <span style="color:#2d3748;margin:0 8px;">&middot;</span>
+              <a href="https://dployr.io/legal/privacy-policy" style="color:#9ca3af;text-decoration:none;">Privacy</a>
+              <span style="color:#2d3748;margin:0 8px;">&middot;</span>
+              <a href="https://dployr.io/legal/terms-of-service" style="color:#9ca3af;text-decoration:none;">Terms</a>
+            </p>
+            <p style="margin:0;color:#374151;font-size:11px;">Copyright &copy; 2026 Dployr</p>
           </td>
         </tr>
 
@@ -46,9 +65,7 @@ const btn = (label: string, url: string, variant: "primary" | "danger" = "primar
 const detail = (label: string, value: string): string =>
   `<tr><td style="padding:6px 0;color:#6b7280;font-size:13px;width:120px;vertical-align:top;">${label}</td><td style="padding:6px 0;font-size:13px;">${value}</td></tr>`;
 
-const detailTable = (rows: string[]): string =>
-  `<table cellpadding="0" cellspacing="0" style="margin:20px 0;width:100%;">${rows.join("")}</table>`;
-
+const detailTable = (rows: string[]): string => `<table cellpadding="0" cellspacing="0" style="margin:20px 0;width:100%;">${rows.join("")}</table>`;
 
 export type EmailTemplate<T> = (data: T) => { subject: string; html: string };
 
@@ -76,12 +93,7 @@ export const inviteEmail: EmailTemplate<{ clusterName: string; clusterId: string
   ),
 });
 
-
-export const memberJoinedEmail: EmailTemplate<{ memberEmail: string; clusterName: string; clusterId: string }> = ({
-  memberEmail,
-  clusterName,
-  clusterId,
-}) => ({
+export const memberJoinedEmail: EmailTemplate<{ memberEmail: string; clusterName: string; clusterId: string }> = ({ memberEmail, clusterName, clusterId }) => ({
   subject: `${memberEmail} joined ${clusterName}`,
   html: layout(
     "New Member",
@@ -90,32 +102,18 @@ export const memberJoinedEmail: EmailTemplate<{ memberEmail: string; clusterName
   ),
 });
 
-export const sessionAlertEmail: EmailTemplate<{ userEmail: string; clusterName: string; clusterId: string; ipAddress?: string }> = ({
-  userEmail,
-  clusterName,
-  clusterId,
-  ipAddress,
-}) => ({
+export const sessionAlertEmail: EmailTemplate<{ userEmail: string; clusterName: string; clusterId: string; ipAddress?: string }> = ({ userEmail, clusterName, clusterId, ipAddress }) => ({
   subject: `New sign-in detected — ${clusterName}`,
   html: layout(
     "Sign-in Detected",
     `<p>A new sign-in was detected for your cluster <strong>${clusterName}</strong>.</p>
-    ${detailTable([
-      detail("User", userEmail),
-      detail("Cluster", clusterName),
-      detail("IP Address", ipAddress ?? "Unknown"),
-      detail("Time", new Date().toUTCString()),
-    ])}
+    ${detailTable([detail("User", userEmail), detail("Cluster", clusterName), detail("IP Address", ipAddress ?? "Unknown"), detail("Time", new Date().toUTCString())])}
     <p style="color:#6b7280;font-size:13px;">If this wasn't you, review your cluster access immediately.</p>
     ${btn("Review Access", `https://app.dployr.io/clusters/${clusterId}/settings/members`)}`,
   ),
 });
 
-export const instanceCreatedEmail: EmailTemplate<{ instanceId: string; clusterName: string; clusterId: string }> = ({
-  instanceId,
-  clusterName,
-  clusterId,
-}) => ({
+export const instanceCreatedEmail: EmailTemplate<{ instanceId: string; clusterName: string; clusterId: string }> = ({ instanceId, clusterName, clusterId }) => ({
   subject: `Instance created — ${clusterName}`,
   html: layout(
     "Instance Created",
@@ -125,11 +123,7 @@ export const instanceCreatedEmail: EmailTemplate<{ instanceId: string; clusterNa
   ),
 });
 
-export const instanceUpdatedEmail: EmailTemplate<{ instanceId: string; clusterName: string; clusterId: string }> = ({
-  instanceId,
-  clusterName,
-  clusterId,
-}) => ({
+export const instanceUpdatedEmail: EmailTemplate<{ instanceId: string; clusterName: string; clusterId: string }> = ({ instanceId, clusterName, clusterId }) => ({
   subject: `Instance updated — ${clusterName}`,
   html: layout(
     "Instance Updated",
@@ -138,11 +132,7 @@ export const instanceUpdatedEmail: EmailTemplate<{ instanceId: string; clusterNa
   ),
 });
 
-export const instanceDeletedEmail: EmailTemplate<{ instanceId: string; clusterName: string; clusterId: string }> = ({
-  instanceId,
-  clusterName,
-  clusterId,
-}) => ({
+export const instanceDeletedEmail: EmailTemplate<{ instanceId: string; clusterName: string; clusterId: string }> = ({ instanceId, clusterName, clusterId }) => ({
   subject: `Instance deleted — ${clusterName}`,
   html: layout(
     "Instance Deleted",
@@ -151,11 +141,7 @@ export const instanceDeletedEmail: EmailTemplate<{ instanceId: string; clusterNa
   ),
 });
 
-export const userRemovedEmail: EmailTemplate<{ memberEmail: string; clusterName: string; clusterId: string }> = ({
-  memberEmail,
-  clusterName,
-  clusterId,
-}) => ({
+export const userRemovedEmail: EmailTemplate<{ memberEmail: string; clusterName: string; clusterId: string }> = ({ memberEmail, clusterName, clusterId }) => ({
   subject: `User removed from ${clusterName}`,
   html: layout(
     "User Removed",
@@ -180,56 +166,59 @@ export const roleChangedEmail: EmailTemplate<{ memberEmail: string; oldRole: str
   ),
 });
 
-export const serviceUnhealthyEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({
-  serviceName,
-  clusterName,
-  clusterId,
-}) => ({
+export const serviceUnhealthyEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({ serviceName, clusterName, clusterId }) => ({
   subject: `Service down — ${serviceName}`,
   html: layout(
     "Service Unhealthy",
     `<p>Your service <strong>${serviceName}</strong> in <strong>${clusterName}</strong> is failing its health check.</p>
     <p>The container is running but not responding as expected. This usually means the application crashed or is stuck.</p>
-    ${btn("View Service", `https://app.dployr.io/clusters/${clusterId}/services/${serviceName}`, "danger")}
+    ${btn("View Service", `https://app.dployr.io/clusters/${clusterId}/services/${serviceName}`)}
     <p style="color:#6b7280;font-size:13px;margin-top:16px;">If the service recovers on its own, you won't receive another email until it goes down again.</p>`,
   ),
 });
 
-export const serviceIcingWarningEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({
-  serviceName,
-  clusterName,
-  clusterId,
-}) => ({
+export const serviceIcingWarningEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({ serviceName, clusterName, clusterId }) => ({
   subject: `Your app will be frozen in 5 days — ${serviceName}`,
   html: layout(
     "App Freezing Soon",
     `<p>Your app <strong>${serviceName}</strong> in <strong>${clusterName}</strong> hasn't received any real visitors in 25 days.</p>
-    <p>If it stays inactive, it will be <strong>frozen in 5 days</strong>. A frozen app stops running and its image is removed to free up resources. You can reactivate it at any time by redeploying.</p>
+    <p>If it stays inactive, it will be <strong>frozen in 5 days</strong>. A frozen app stops running and its image is removed to free up resources. You can reactivate it with one click at any time by redeploying.</p>
     <p style="color:#6b7280;font-size:13px;">This only applies to the hobby plan. Upgrade to keep your app running 24/7.</p>
     ${btn("View App", `https://app.dployr.io/clusters/${clusterId}/services/${serviceName}`)}`,
   ),
 });
 
-export const serviceIcedEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({
-  serviceName,
-  clusterName,
-  clusterId,
-}) => ({
+export const serviceIcedEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({ serviceName, clusterName, clusterId }) => ({
   subject: `Your app has been frozen — ${serviceName}`,
   html: layout(
     "App Frozen",
     `<p>Your app <strong>${serviceName}</strong> in <strong>${clusterName}</strong> has been frozen after 30 days with no real visitors.</p>
-    <p>The app is no longer running. To bring it back, redeploy it from your dashboard — it will be up within a minute.</p>
+    <p>The app is no longer running. To bring it back, redeploy with one click at anytime from your dashboard.</p>
     ${btn("Reactivate App", `https://app.dployr.io/clusters/${clusterId}/services/${serviceName}`)}
     <p style="color:#6b7280;font-size:13px;">Your configuration and environment variables are saved. Upgrade to a paid plan to prevent this from happening again.</p>`,
   ),
 });
 
-export const paymentSuccessEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string }> = ({
-  plan,
-  clusterName,
-  clusterId,
-}) => ({
+export const serviceRecoveredEmail: EmailTemplate<{ serviceName: string; clusterName: string; clusterId: string }> = ({ serviceName, clusterName, clusterId }) => ({
+  subject: `Service recovered — ${serviceName}`,
+  html: layout(
+    "Service Recovered",
+    `<p>Your service <strong>${serviceName}</strong> in <strong>${clusterName}</strong> has recovered and is ready to serve traffic.</p>
+    ${btn("View Service", `https://app.dployr.io/clusters/${clusterId}/services/${serviceName}`)}`,
+  ),
+});
+
+export const ownershipTransferredEmail: EmailTemplate<{ newOwner: string; previousOwner: string; clusterName: string; clusterId: string }> = ({ newOwner, previousOwner, clusterName, clusterId }) => ({
+  subject: `Cluster ownership transferred — ${clusterName}`,
+  html: layout(
+    "Ownership Transferred",
+    `<p>Ownership of the <strong>${clusterName}</strong> cluster has been transferred.</p>
+    ${detailTable([detail("Previous owner", previousOwner), detail("New owner", newOwner)])}
+    ${btn("View Cluster", `https://app.dployr.io/clusters/${clusterId}/settings/members`)}`,
+  ),
+});
+
+export const paymentSuccessEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string }> = ({ plan, clusterName, clusterId }) => ({
   subject: `Payment successful — ${clusterName}`,
   html: layout(
     "Payment Successful",
@@ -238,26 +227,17 @@ export const paymentSuccessEmail: EmailTemplate<{ plan: string; clusterName: str
   ),
 });
 
-export const paymentFailedEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string }> = ({
-  plan,
-  clusterName,
-  clusterId,
-}) => ({
+export const paymentFailedEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string }> = ({ plan, clusterName, clusterId }) => ({
   subject: `Action required: Payment failed — ${clusterName}`,
   html: layout(
     "Payment Failed",
     `<p>Your <strong>${plan}</strong> plan payment for <strong>${clusterName}</strong> has failed.</p>
     <p>Please update your payment method within <strong>7 days</strong> to avoid service interruption.</p>
-    ${btn("Update Payment Method", `https://app.dployr.io/clusters/${clusterId}/settings/billing`, "danger")}`,
+    ${btn("Update Payment Method", `https://app.dployr.io/clusters/${clusterId}/settings/billing`)}`,
   ),
 });
 
-export const subscriptionCancelledEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string; periodEnd: number | null }> = ({
-  plan,
-  clusterName,
-  clusterId,
-  periodEnd,
-}) => {
+export const subscriptionCancelledEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string; periodEnd: number | null }> = ({ plan, clusterName, clusterId, periodEnd }) => {
   const accessUntil = periodEnd ? new Date(periodEnd).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : null;
 
   return {
@@ -280,11 +260,7 @@ export const subscriptionExpiredEmail: EmailTemplate<{ clusterName: string; clus
   ),
 });
 
-export const subscriptionResumedEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string }> = ({
-  plan,
-  clusterName,
-  clusterId,
-}) => ({
+export const subscriptionResumedEmail: EmailTemplate<{ plan: string; clusterName: string; clusterId: string }> = ({ plan, clusterName, clusterId }) => ({
   subject: `Subscription resumed — ${clusterName}`,
   html: layout(
     "Subscription Resumed",
