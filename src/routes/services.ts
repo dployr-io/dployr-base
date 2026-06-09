@@ -9,7 +9,9 @@ import { resolveCluster, requireClusterViewer, requireClusterDeveloper, authMidd
 import { ERROR } from "@/lib/constants/index.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { RECENTLY_DELETED_SERVICE_TTL, SERVICE_WAKING_TTL } from "@/lib/constants/duration.js";
-import { getDbStore, getWS, getJWTService, getKVStore, getTraefikRouterService } from "@/lib/config/context.js";
+import { getDbStore, getWS, getJWTService, getKVStore, getTraefikRouterService, getLokiClient } from "@/lib/config/context.js";
+import { fromNanoseconds } from "@/services/loki.js";
+import { stream } from "hono/streaming";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { enqueueBuild, computeBuildFingerprint, resolveRemoteAuthUrl } from "@/services/deployments.js";
@@ -423,7 +425,112 @@ services.get("/:id/secrets", resolveCluster("service", { path: "id" }), requireC
   return c.json(createSuccessResponse({ secrets }));
 });
 
-// ── Metrics ───────────────────────────────────────────────────────────────────
+services.get("/:id/logs", async (c) => {
+  const db = getDbStore(c);
+  const session = c.get("session");
+  if (!session) {
+    return c.json(createErrorResponse({ message: "Not authenticated", code: ERROR.AUTH.BAD_SESSION.code }), ERROR.AUTH.BAD_SESSION.status);
+  }
+
+  const idOrName = c.req.param("id");
+
+  // Resolve service by name (CLI passes name) with fallback to ID
+  let service = await db.services.find({ name: idOrName });
+  if (!service) service = await db.services.find({ id: idOrName });
+  if (!service) {
+    return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  }
+
+  // Verify cluster access
+  const canRead = await db.clusters.canRead(session.userId, service.clusterId).catch(() => false);
+  if (!canRead) {
+    return c.json(createErrorResponse({ message: "Not a member of this cluster", code: ERROR.PERMISSION.FORBIDDEN.code }), ERROR.PERMISSION.FORBIDDEN.status);
+  }
+
+  const loki = getLokiClient(c);
+  if (!loki || !loki.isEnabled) {
+    return c.json(createErrorResponse({ message: "Centralized logs are not available on this server", code: "LOGS_NOT_AVAILABLE" }), 501);
+  }
+
+  const rawSource = c.req.query("source") ?? "all";
+  const limitParam = parseInt(c.req.query("limit") ?? "1000", 10);
+  const limit = isNaN(limitParam) || limitParam < 1 ? 1000 : Math.min(limitParam, 5000);
+  const follow = c.req.query("follow") === "true" || c.req.query("follow") === "1";
+
+  const sinceMs = parseInt(c.req.query("since") ?? "0", 10) || Date.now() - 24 * 60 * 60 * 1000;
+  const untilMs = parseInt(c.req.query("until") ?? "0", 10) || Date.now();
+
+  const startNs = (BigInt(sinceMs) * 1_000_000n).toString();
+  const endNs = (BigInt(untilMs) * 1_000_000n).toString();
+
+  const sourceLabel: Partial<{ serviceId: string; source: string }> = { serviceId: service.name };
+  if (rawSource === "build") sourceLabel.source = "build|deploy";
+  else if (rawSource === "runtime") sourceLabel.source = "runtime";
+  // "all" or anything else: no source filter
+
+  function entryToChunk(entry: { timestampNs: string; line: string; streamLabels?: Record<string, string> }) {
+    const timestamp = fromNanoseconds(entry.timestampNs);
+    const entrySource = entry.streamLabels?.source ?? rawSource;
+    let level = "info";
+    let message = entry.line;
+    try {
+      const json = JSON.parse(entry.line);
+      if (typeof json.msg === "string") message = json.msg;
+      else if (typeof json.message === "string") message = json.message;
+      if (typeof json.level === "string") {
+        const l = json.level.toLowerCase();
+        if (l.startsWith("warn")) level = "warn";
+        else if (l.startsWith("err") || l.startsWith("fatal") || l.startsWith("crit")) level = "error";
+      }
+    } catch {
+      // plain text line
+    }
+    return { timestamp, source: entrySource, level, message };
+  }
+
+  if (!follow) {
+    const result = await loki.query(sourceLabel as any, startNs, endNs, limit);
+    const chunks = result.entries.map(entryToChunk);
+    return c.json(chunks);
+  }
+
+  // Streaming: replay history then poll for new entries
+  c.header("Content-Type", "application/x-ndjson");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("Cache-Control", "no-cache");
+
+  return stream(c, async (s) => {
+    let cancelled = false;
+    s.onAbort(() => { cancelled = true; });
+
+    // Replay history
+    let cursor = startNs;
+    let hasMore = true;
+    while (hasMore && !cancelled) {
+      const result = await loki.query(sourceLabel as any, cursor, endNs, 500);
+      for (const entry of result.entries) {
+        if (cancelled) return;
+        await s.write(JSON.stringify(entryToChunk(entry)) + "\n");
+      }
+      cursor = result.nextCursor;
+      hasMore = result.hasMore;
+    }
+
+    // Poll for new entries every 2s
+    while (!cancelled) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (cancelled) return;
+      const nowNs = (BigInt(Date.now()) * 1_000_000n).toString();
+      const result = await loki.query(sourceLabel as any, cursor, nowNs, 200);
+      for (const entry of result.entries) {
+        if (cancelled) return;
+        await s.write(JSON.stringify(entryToChunk(entry)) + "\n");
+      }
+      if (result.entries.length > 0) cursor = result.nextCursor;
+    }
+  });
+});
+
 
 services.get("/metrics/:name", authMiddleware, requireClusterViewer, async (c) => {
   const db = getDbStore(c);

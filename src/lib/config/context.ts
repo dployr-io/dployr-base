@@ -27,6 +27,7 @@ import { VmProvider } from "@/services/vm/index.js";
 import { InstancePool } from "@/services/pool.js";
 import { EmailProvider } from "@/services/notifications/email/index.js";
 import { Logger } from "@/lib/logger.js";
+import { LokiClient } from "@/services/loki.js";
 
 const log = new Logger("Config");
 
@@ -252,6 +253,10 @@ export function getEmailService(c: AppContext): EmailService {
     throw new Error("Email provider not configured");
   }
   return new EmailService(provider, c.env);
+}
+
+export function getLokiClient(c: AppContext): LokiClient | null {
+  return c.get("lokiClient") ?? null;
 }
 
 export function getTraefikRouterService(c: AppContext): TraefikService | null {

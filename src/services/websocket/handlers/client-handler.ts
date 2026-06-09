@@ -8,6 +8,7 @@ import type {
   ClusterConnection,
   BaseMessage,
   LogSubscribeMessage,
+  LogHistoryPageMessage,
   FileReadMessage,
   FileWriteMessage,
   FileCreateMessage,
@@ -31,6 +32,7 @@ import {
   isFileTreeMessage,
   isLogSubscribeMessage,
   isLogUnsubscribeMessage,
+  isLogHistoryPageMessage,
   isAckMessage,
   isFileWatchMessage,
   isFileUnwatchMessage,
@@ -43,7 +45,6 @@ import {
 } from "@/types/websocket-message.js";
 import { DployrdService } from "@/services/dployrd.js";
 import { JWTService } from "@/services/auth/jwt.js";
-import { InstanceService } from "@/services/instances.js";
 import { ulid } from "ulid";
 import { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { TerminalManager } from "@/services/websocket/terminal-manager.js";
@@ -56,6 +57,7 @@ import { KV_KEYS } from "@/lib/constants/kv.js";
 import { Logger } from "@/lib/logger.js";
 import { toISO } from "@/lib/utils.js";
 import { addSleepingServices } from "@/lib/node/sleeping.js";
+import { LokiClient, fromNanoseconds, type LokiLabels } from "@/services/loki.js";
 
 export interface ClientHandlerDependencies {
   connectionManager: ConnectionManager;
@@ -64,6 +66,7 @@ export interface ClientHandlerDependencies {
   jwtService: JWTService;
   dployrdService: DployrdService;
   terminalManager: TerminalManager;
+  loki?: LokiClient;
 }
 
 /**
@@ -81,6 +84,8 @@ export class ClientMessageHandler {
   // Prevents heartbeat spam when KV is persistently empty.
   private nodeHeartbeatRequestedAt = new Map<string, number>();
 
+  private loki?: LokiClient;
+
   constructor(deps: ClientHandlerDependencies) {
     this.connectionManager = deps.connectionManager;
     this.kv = deps.kv;
@@ -88,6 +93,7 @@ export class ClientMessageHandler {
     this.jwtService = deps.jwtService;
     this.dployrdService = deps.dployrdService;
     this.terminalManager = deps.terminalManager;
+    this.loki = deps.loki;
   }
 
   /**
@@ -131,6 +137,11 @@ export class ClientMessageHandler {
 
     if (isLogUnsubscribeMessage(message)) {
       this.handleLogUnsubscribe(conn, message.path, message.requestId!);
+      return;
+    }
+
+    if (isLogHistoryPageMessage(message)) {
+      await this.handleLogHistoryPage(conn, message);
       return;
     }
 
@@ -265,8 +276,14 @@ export class ClientMessageHandler {
             id: dbIdByName.get(s.name) ?? s.id,
           }));
           const enrichedData = await addSleepingServices(this.kv, { ...liveData, services: enrichedServices });
+          const liveDeployments = (enrichedData.deployments ?? []) as any[];
+          const liveNames = new Set(liveDeployments.map((d: any) => d.name));
+          const pendingFromDB = ((savedWorkloads?.data.deployments ?? []) as any[]).filter(
+            (d: any) => (d.status === "pending" || d.status === "running") && !liveNames.has(d.name)
+          );
+
           changed["workloads"] = {
-            data: enrichedData,
+            data: { ...enrichedData, deployments: [...liveDeployments, ...pendingFromDB] },
             version: workloadsEntity!.version,
           };
         }
@@ -423,61 +440,153 @@ export class ClientMessageHandler {
   }
 
   /**
-   * Handle log stream for deployments, services, and system logs
+   * Handle log stream for deployments, services, and system logs.
    * path formats:
    *   - "app" or "" for system (daemon) logs
-   *   - "<deployment-id>" for deployment logs (resolved to service name before forwarding)
-   *   - "service:<service-name>" for service runtime logs
+   *   - "service:<name>" for service runtime logs  → joins "service:<name>" stream on instance node
+   *   - "<deployment-id-or-name>" for a specific deployment → joins active build/deploy stream
+   *
+   * Deployment paths never require a cluster instance to exist — they look up the active
+   * build: or deploy: stream directly, which may be on a build node with no instance yet.
    */
   private async handleLogSubscribe(conn: ClusterConnection, message: LogSubscribeMessage): Promise<void> {
-    const { path, streamId, duration, startFrom } = message;
+    const { path, streamId, duration, startFrom, source } = message;
 
     if (!path || !streamId || !duration) {
-      this.sendError(conn, streamId, WSErrorCode.MISSING_FIELD, "token, path, streamId, and duration are required");
+      this.sendError(conn, streamId, WSErrorCode.MISSING_FIELD, "path, streamId, and duration are required");
       return;
     }
 
-    // Check for existing stream and reuse if possible
-    if (this.connectionManager.updateLogStreamClient(streamId, conn.ws)) {
+    const isDeploymentPath = !path.startsWith("service:") && path !== "app" && path !== "";
+
+    if (isDeploymentPath) {
+      const deployment = await this.db.deployments.get(path).catch(() => null);
+      if (!deployment) {
+        this.sendError(conn, streamId, WSErrorCode.NOT_FOUND, "Deployment not found");
+        return;
+      }
+      const serviceName = deployment.name;
+      const streamKey = `logs:${serviceName}`;
+
+      if (this.connectionManager.getLogStreamByPath(streamKey)) {
+        this.connectionManager.addClientToLogStream(streamKey, conn.ws);
+        this.log.info(`Client joined log stream "${streamKey}" for deployment "${path}"`);
+      }
+
+      if (this.loki?.isEnabled && startFrom !== -1) {
+        await this.replayLokiHistory(conn, streamId, serviceName, duration, deployment.id, "", source);
+      }
+
+      this.log.info(`Client subscribed to deployment logs for "${path}" (streamId=${streamId})`);
       return;
     }
 
-    const startOffset = startFrom === -1 ? undefined : startFrom;
+    const resolvedPath = path; // "service:my-app" or "app" — used as the backend stream key
+    const serviceName = path.startsWith("service:") ? path.slice(8) : path;
 
-    const result = await InstanceService.findInstanceWithWorkload({ path, clusterId: conn.clusterId, db: this.db, kv: this.kv });
-    if (!result) {
-      this.log.error(`No instance found with deployment/service at path ${path}`);
-      this.sendError(conn, streamId, WSErrorCode.INTERNAL_ERROR, "Deployment or service not found on any instance");
+    const instance = await this.findInstanceForCluster(conn.clusterId);
+    if (!instance) {
+      this.log.error(`No instance found for cluster "${conn.clusterId}" (path "${path}")`);
+      this.sendError(conn, streamId, WSErrorCode.INTERNAL_ERROR, "No instance available for this cluster");
       return;
     }
 
-    const { instance, resolvedPath } = result;
-
-    this.connectionManager.addLogStream({
-      streamId,
-      path,
-      ws: conn.ws,
-      startOffset,
-      duration,
-    });
-
-    const nodeToken = await this.jwtService.createNodeAccessToken(instance.tag);
-    const task = this.dployrdService.createLogStreamTask({
-      streamId,
-      path: resolvedPath,
-      startOffset,
-      duration,
-      token: nodeToken,
-    });
-
-    const routingKey = instance.tag;
-    const sent = this.connectionManager.sendTask(routingKey, task);
-
-    if (!sent) {
-      this.log.error(`Failed to send log task - no node connections for routing key ${routingKey}`);
+    const existingStream = this.connectionManager.getLogStreamByPath(resolvedPath);
+    if (!existingStream) {
+      const nodeStreamId = ulid();
+      const added = this.connectionManager.addLogStream({
+        nodeStreamId,
+        key: resolvedPath,
+        path: serviceName,
+        meta: { serviceId: serviceName, clusterId: conn.clusterId ?? "", source: "runtime" },
+        clients: new Set(),
+        duration,
+      });
+      if (added) {
+        const nodeToken = await this.jwtService.createNodeAccessToken(instance.tag);
+        const task = this.dployrdService.createLogStreamTask({ streamId: nodeStreamId, path: serviceName, duration, token: nodeToken });
+        if (!this.connectionManager.sendTask(instance.tag, task)) {
+          this.connectionManager.removeLogStream(resolvedPath);
+          this.log.error(`Failed to send log task — no node connection for ${instance.tag}`);
+          this.sendError(conn, streamId, WSErrorCode.INTERNAL_ERROR, "Node not connected");
+          return;
+        }
+        this.log.info(`Started runtime log stream for "${resolvedPath}" on ${instance.tag}`);
+      }
     }
 
-    this.log.info(`Created log stream ${streamId} for ${resolvedPath} on ${instance.tag}`);
+    this.connectionManager.addClientToLogStream(resolvedPath, conn.ws);
+
+    if (this.loki?.isEnabled && startFrom !== -1) {
+      await this.replayLokiHistory(conn, streamId, serviceName, duration, undefined, "", source);
+    }
+
+    this.log.info(`Client subscribed to runtime stream "${resolvedPath}" (streamId=${streamId})`);
+  }
+
+  /**
+   * Returns the best available instance for a cluster: dedicated first, then pool.
+   * Returns null only if the cluster itself doesn't exist or has no instances.
+   */
+  private async findInstanceForCluster(clusterId?: string) {
+    if (!clusterId) return null;
+    const cluster = await this.db.clusters.find({ id: clusterId });
+    if (!cluster) return null;
+
+    const dedicated = await this.db.instances.find({ clusterId, kind: "dedicated" });
+    if (dedicated) return dedicated;
+
+    if (cluster.poolInstanceId) {
+      return this.db.instances.find({ id: cluster.poolInstanceId });
+    }
+    return null;
+  }
+
+  private async handleLogHistoryPage(conn: ClusterConnection, message: LogHistoryPageMessage): Promise<void> {
+    const { streamId, path, cursor, duration, deploymentId, source } = message;
+    const serviceName = path.startsWith("service:") ? path.slice(8) : path;
+    await this.replayLokiHistory(conn, streamId, serviceName, duration, deploymentId, cursor, source);
+  }
+
+  private async replayLokiHistory(
+    conn: ClusterConnection,
+    streamId: string,
+    serviceName: string,
+    duration: string,
+    deploymentId: string | undefined,
+    cursor = "",
+    source?: string,
+  ): Promise<void> {
+    const durationMs = parseDurationMs(duration);
+    const endNs = (Date.now() * 1_000_000).toString();
+    const startNs = cursor || ((Date.now() - durationMs) * 1_000_000).toString();
+
+    // System/daemon log streams have an empty serviceName — Loki rejects empty-string matchers.
+    if (!serviceName) return;
+
+    const labels: Partial<LokiLabels> = { serviceId: serviceName };
+    if (deploymentId) labels.deploymentId = deploymentId;
+    if (source) labels.source = source as LokiLabels["source"];
+
+    try {
+      const history = await this.loki!.query(labels, startNs, endNs, 500);
+      if (history.entries.length > 0) {
+        const payload = JSON.stringify({
+          kind: "log_chunk",
+          streamId,
+          entries: history.entries.map((e) => ({ time: new Date(fromNanoseconds(e.timestampNs)).toISOString(), msg: e.line })),
+          eof: false,
+          hasMore: history.hasMore,
+          nextCursor: history.nextCursor,
+          deploymentId,
+          source,
+          path: serviceName,
+        });
+        try { conn.ws.send(payload); } catch {}
+      }
+    } catch (err) {
+      this.log.warn(`Loki history query failed for "${serviceName}"`, { error: String(err) });
+    }
   }
 
   /**
@@ -972,5 +1081,18 @@ export class ClientMessageHandler {
       this.log.error(`Failed to retrieve process history for ${instanceId}`, { error: String(error) });
       this.sendError(conn, requestId, WSErrorCode.INTERNAL_ERROR, "Failed to retrieve process history");
     }
+  }
+}
+
+function parseDurationMs(duration: string): number {
+  const match = duration.match(/^(\d+)(s|m|h|d)$/);
+  if (!match) return 60 * 60 * 1000;
+  const value = parseInt(match[1]);
+  switch (match[2]) {
+    case "s": return value * 1_000;
+    case "m": return value * 60 * 1_000;
+    case "h": return value * 60 * 60 * 1_000;
+    case "d": return value * 24 * 60 * 60 * 1_000;
+    default:  return 60 * 60 * 1_000;
   }
 }

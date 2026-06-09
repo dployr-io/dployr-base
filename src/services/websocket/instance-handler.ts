@@ -23,6 +23,9 @@ import { Logger } from "@/lib/logger.js";
 import { worker } from "@/services/background/index.js";
 import { NODES_HEALTH_JOB, NODES_SYNC_JOB } from "@/lib/constants/index.js";
 import { TraefikService } from "@/services/traefik-router.js";
+import { LokiClient } from "@/services/loki.js";
+import type { LokiStreamMeta } from "@/types/websocket-message.js";
+import { ulid } from "ulid";
 
 export interface WebSocketHandlerConfig {
   connectionManager?: Partial<ConnectionManagerConfig>;
@@ -44,6 +47,8 @@ export class WebSocketHandler {
 
   private kvStore: KVStore;
   private traefik?: TraefikService;
+  private jwtService: JWTService;
+  private dployrdService: DployrdService;
   private log = new Logger("WebSocket");
 
   constructor(
@@ -51,6 +56,7 @@ export class WebSocketHandler {
     private db: PostgresAdapter,
     traefik?: TraefikService,
     config?: WebSocketHandlerConfig,
+    private loki?: LokiClient,
   ) {
     this.traefik = traefik;
     this.connectionManager = new ConnectionManager(config?.connectionManager);
@@ -60,19 +66,20 @@ export class WebSocketHandler {
 
     this.clientNotifier = new ClientNotifier(this.connectionManager, this.kvStore);
 
-    const jwtService = new JWTService(this.kvStore);
-    const dployrdService = new DployrdService();
+    this.jwtService = new JWTService(this.kvStore);
+    this.dployrdService = new DployrdService();
 
-    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore, jwtService);
+    this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore, this.jwtService, loki);
 
     this.terminalManager = new TerminalManager(300000);
     this.clientHandler = new ClientMessageHandler({
       connectionManager: this.connectionManager,
       kv: this.kvStore,
       db: this.dbStore,
-      jwtService,
-      dployrdService,
+      jwtService: this.jwtService,
+      dployrdService: this.dployrdService,
       terminalManager: this.terminalManager,
+      loki,
     });
   }
 
@@ -207,6 +214,36 @@ export class WebSocketHandler {
    */
   public sendTask(routingKey: string, task: NodeTask): boolean {
     return this.connectionManager.sendTask(routingKey, task);
+  }
+
+  /**
+   * Subscribe base itself to a node's log stream so all log chunks flow into Loki
+   * regardless of whether any client is watching.
+   * No-ops silently if a stream for this path already exists or the node is not connected.
+   */
+  public async subscribeToNodeLogs(nodeTag: string, path: string, meta: LokiStreamMeta, key?: string): Promise<void> {
+    const streamKey = key ?? path;
+    const nodeStreamId = ulid();
+    const added = this.connectionManager.addLogStream({
+      nodeStreamId,
+      key: streamKey,
+      path,
+      meta,
+      clients: new Set(),
+      duration: "24h",
+    });
+    if (!added) this.connectionManager.handoffLogStream(streamKey, nodeStreamId, meta);
+    
+    const token = await this.jwtService.createNodeAccessToken(nodeTag).catch(() => undefined);
+    const task = this.dployrdService.createLogStreamTask({ streamId: nodeStreamId, path, duration: "24h", token });
+    const sent = this.connectionManager.sendTask(nodeTag, task);
+
+    if (!sent) {
+      this.connectionManager.removeLogStream(streamKey);
+      this.log.warn(`Cannot start background log stream for "${path}" (key="${streamKey}") — ${nodeTag} not connected`);
+    } else {
+      this.log.info(`Background log stream started: path="${path}" key="${streamKey}" node=${nodeTag} streamId=${nodeStreamId}`);
+    }
   }
 
   /**

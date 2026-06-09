@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "@/types/index.js";
 import { requireClusterViewer, requireClusterDeveloper, authMiddleware } from "@/middleware/auth.js";
 import { ERROR, SUCCESS } from "@/lib/constants/index.js";
-import { getJWTService } from "@/lib/config/context.js";
+import { getJWTService, getDbStore } from "@/lib/config/context.js";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DeploymentSchema } from "@/lib/tasks/types.js";
 import { DatabaseConflictError, handleInstanceError } from "@/lib/errors/errors.js";
@@ -18,7 +18,6 @@ const finishDeploymentSchema = z.object({
   token: z.string().min(1, "Token is required"),
   id: z.ulid("Invalid deployment ID"),
   blueprint: z.record(z.string(), z.any()).optional().default({}),
-  logs: z.string().min(1, "Logs are required"),
 });
 
 deployments.post("/finish", async (c) => {
@@ -31,7 +30,7 @@ deployments.post("/finish", async (c) => {
       return c.json(createErrorResponse({ message: "Validation failed " + JSON.stringify(errors), code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
     }
 
-    const { token, id, logs, blueprint } = validation.data;
+    const { token, id, blueprint } = validation.data;
     const jwtService = getJWTService(c);
     let decoded: Awaited<ReturnType<typeof jwtService.verifyToken>>;
     try {
@@ -54,7 +53,7 @@ deployments.post("/finish", async (c) => {
       return c.json(createErrorResponse({ message: "Invalid token: missing instance_id", code: ERROR.AUTH.BAD_TOKEN.code }), ERROR.AUTH.BAD_TOKEN.status);
     }
 
-    const updated = await service.finish(c, { id, logs, blueprint, isNodeToken, instanceId, userId });
+    const updated = await service.finish(c, { id, blueprint, isNodeToken, instanceId, userId });
     if (!updated) {
       return c.json(createErrorResponse({ message: "Failed to update deployment logs", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
     }
@@ -64,7 +63,7 @@ deployments.post("/finish", async (c) => {
     if (error instanceof DatabaseConflictError && error.field === "name") {
       return c.json(createErrorResponse({ message: "Service name is already in use by another cluster. Service names must be globally unique.", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
     }
-    return c.json(createErrorResponse({ message: "Failed to update deployment logs", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    return c.json(createErrorResponse({ message: "Failed to finish deployment", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
 
@@ -72,6 +71,7 @@ deployments.use("*", authMiddleware);
 
 deployments.post("/", requireClusterDeveloper, async (c) => {
   const service = new DeploymentService(c.env);
+  const db = getDbStore(c);
   const clusterId = c.req.query("clusterId")!;
   const session = c.get("session")!;
 
@@ -80,15 +80,39 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     return c.json(createErrorResponse({ message: "Request body is required", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
-  const { instanceName, payload } = body as { instanceName?: string; payload?: unknown };
-  if (!instanceName || !payload) {
-    return c.json(createErrorResponse({ message: "instanceName and payload are required", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
-  }
+  const payload = {
+    name: body.name,
+    description: body.description,
+    user_id: session.userId,
+    type: body.type,
+    source: body.source,
+    runtime: body.runtimeType ?? body.runtime,
+    version: body.runtimeVersion ?? body.version,
+    run_cmd: body.runCmd ?? body.run_cmd,
+    build_cmd: body.buildCmd ?? body.build_cmd,
+    port: body.port,
+    working_dir: body.workingDir ?? body.working_dir,
+    static_dir: body.staticDir ?? body.static_dir,
+    health_check: body.healthCheck ?? body.health_check,
+    image: body.image,
+    domain: body.domain,
+    env_vars: body.envVars ?? body.env_vars,
+    secrets: body.secrets,
+    remote: (body.remoteUrl ?? body.remote?.url)
+      ? { url: body.remoteUrl ?? body.remote?.url, branch: body.remoteBranch ?? body.remote?.branch, commit_hash: body.remoteCommitHash ?? body.remote?.commit_hash }
+      : undefined,
+    force_rebuild: body.forceRebuild ?? body.force_rebuild ?? false,
+  };
 
   const validation = DeploymentSchema.safeParse(payload);
   if (!validation.success) {
     const errors = validation.error.issues.map((e) => ({ field: e.path.join("."), message: e.message }));
     return c.json(createErrorResponse({ message: "Validation failed: " + errors.map((e) => `${e.field}: ${e.message}`).join(", "), code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
+  }
+
+  const instanceName = await db.instances.getRoutingKey(clusterId);
+  if (!instanceName || instanceName === clusterId) {
+    return c.json(createErrorResponse({ message: "Cluster has no assigned instance", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
   }
 
   try {

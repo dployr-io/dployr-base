@@ -92,11 +92,24 @@ export interface LogSubscribeMessage extends BaseRequestMessage {
   streamId: string;
   startFrom: number;
   duration: string;
+  /** Optional Loki source filter: "runtime" | "build" | "deploy". Omit for no filter. */
+  source?: string;
 }
 
 export interface LogUnsubscribeMessage extends BaseRequestMessage {
   kind: typeof MESSAGE_KIND.LOG_UNSUBSCRIBE;
   path?: string;
+}
+
+export interface LogHistoryPageMessage extends BaseRequestMessage {
+  kind: typeof MESSAGE_KIND.LOG_HISTORY_PAGE;
+  streamId: string;
+  path: string;
+  /** Nanosecond timestamp cursor from previous log_chunk.nextCursor; "" = start of duration window */
+  cursor: string;
+  duration: string;
+  deploymentId?: string;
+  source?: string;
 }
 
 /** @deprecated */
@@ -596,13 +609,28 @@ export interface ClusterConnection {
   connectedAt: number;
 }
 
-export interface LogStreamSubscription {
-  ws: WebSocket;
-  streamId: string;
+export type LogSource = "runtime" | "build" | "deploy";
+
+export interface LokiStreamMeta {
+  serviceId: string;
+  source: LogSource;
+  deploymentId?: string;
+  clusterId?: string;
+}
+
+export interface ActiveLogStream {
+  /** streamId sent to the node — correlates incoming log_chunk messages back to this stream */
+  nodeStreamId: string;
+  /** connectionManager map key — namespaced by phase, e.g. "build:my-app", "deploy:my-app", "service:my-app" */
+  key: string;
+  /** logical path sent to the node in the log_stream task (e.g. "my-app", "service:my-app") */
   path: string;
-  startOffset?: number;
-  limit?: number;
+  /** metadata used to tag entries in Loki */
+  meta: LokiStreamMeta;
+  /** client WebSockets currently subscribed — empty for background-only streams */
+  clients: Set<WebSocket>;
   duration?: string;
+  startOffset?: number;
 }
 
 export interface FileNode {
@@ -713,6 +741,10 @@ export function isLogSubscribeMessage(msg: BaseMessage): msg is LogSubscribeMess
 
 export function isLogUnsubscribeMessage(msg: BaseMessage): msg is LogUnsubscribeMessage {
   return msg.kind === MESSAGE_KIND.LOG_UNSUBSCRIBE;
+}
+
+export function isLogHistoryPageMessage(msg: BaseMessage): msg is LogHistoryPageMessage {
+  return msg.kind === MESSAGE_KIND.LOG_HISTORY_PAGE;
 }
 /** @deprecated */
 export function isDeployMessage(msg: BaseMessage): msg is DeployMessage {

@@ -1,14 +1,28 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
+import { createWriteStream, mkdirSync } from "fs";
+import { dirname } from "path";
+import type { WriteStream } from "fs";
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 const LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
 let activeLevel: number = LEVELS["info"];
+let fileStream: WriteStream | null = null;
 
 export function setLogLevel(level: LogLevel) {
   activeLevel = LEVELS[level] ?? LEVELS["info"];
+}
+
+export function initFileLogging(path: string) {
+  mkdirSync(dirname(path), { recursive: true });
+  fileStream = createWriteStream(path, { flags: "a" });
+}
+
+function write(line: string) {
+  fileStream?.write(line + "\n");
 }
 
 function fmt(data?: any): string {
@@ -32,18 +46,30 @@ export class Logger {
   }
 
   debug(msg: string, data?: any) {
-    if (LEVELS.debug >= activeLevel) console.debug(`[DEBUG] [${this.tag}] ${msg}${fmt(data)}`);
+    if (LEVELS.debug < activeLevel) return;
+    const line = `[DEBUG] [${this.tag}] ${msg}${fmt(data)}`;
+    console.debug(line);
+    write(line);
   }
 
   info(msg: string, data?: any) {
-    if (LEVELS.info >= activeLevel) console.log(`[INFO]  [${this.tag}] ${msg}${fmt(data)}`);
+    if (LEVELS.info < activeLevel) return;
+    const line = `[INFO]  [${this.tag}] ${msg}${fmt(data)}`;
+    console.log(line);
+    write(line);
   }
 
   warn(msg: string, data?: any) {
-    if (LEVELS.warn >= activeLevel) console.warn(`[WARN]  [${this.tag}] ${msg}${fmt(data)}`);
+    if (LEVELS.warn < activeLevel) return;
+    const line = `[WARN]  [${this.tag}] ${msg}${fmt(data)}`;
+    console.warn(line);
+    write(line);
   }
 
   error(msg: string, data?: any) {
-    if (LEVELS.error >= activeLevel) console.error(`[ERROR] [${this.tag}] ${msg}${fmt(data)}`);
+    if (LEVELS.error < activeLevel) return;
+    const line = `[ERROR] [${this.tag}] ${msg}${fmt(data)}`;
+    console.error(line);
+    write(line);
   }
 }

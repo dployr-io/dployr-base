@@ -55,9 +55,9 @@ clusters.get("/", async (c) => {
   const session = c.get("session")!;
   const db = getDbStore(c);
 
-  const _clusters = await db.clusters.listUserClusters(session.userId);
+  const { clusters } = await db.clusters.list({ userId: session.userId });
 
-  return c.json(createSuccessResponse({ clusters: _clusters }));
+  return c.json(createSuccessResponse({ clusters }));
 });
 
 /**
@@ -107,8 +107,8 @@ clusters.get("/:id/users/invites/accept", async (c) => {
 
     const sessionId = await kv.getSessionIdByUserId(session.userId);
     if (sessionId) {
-      const clusters = await db.clusters.listUserClusters(session.userId);
-      await kv.refreshSession({ sessionId, updates: { clusters } });
+      const { clusters: userClusters } = await db.clusters.list({ userId: session.userId });
+      await kv.refreshSession({ sessionId, updates: { clusters: userClusters.map((cl) => ({ id: cl.id, name: cl.name, owner: cl.owner ?? "", role: cl.role ?? "" })) } });
     }
 
     const cluster = await db.clusters.get(clusterId);
@@ -162,8 +162,8 @@ clusters.get("/:id/users/invites/decline", async (c) => {
 
     const sessionId = await kv.getSessionIdByUserId(session.userId);
     if (sessionId) {
-      const clusters = await db.clusters.listUserClusters(session.userId);
-      await kv.refreshSession({ sessionId, updates: { clusters } });
+      const { clusters: userClusters } = await db.clusters.list({ userId: session.userId });
+      await kv.refreshSession({ sessionId, updates: { clusters: userClusters.map((cl) => ({ id: cl.id, name: cl.name, owner: cl.owner ?? "", role: cl.role ?? "" })) } });
     }
 
     return c.json(createSuccessResponse({ clusterId }, "Invite declined"));
@@ -310,7 +310,8 @@ clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
     for (const userId of users) {
       const sessionId = await kv.getSessionIdByUserId(userId);
       if (sessionId) {
-        await kv.refreshSession({ sessionId, updates: { clusters: await db.clusters.listUserClusters(userId) } });
+        const { clusters: userClusters } = await db.clusters.list({ userId });
+        await kv.refreshSession({ sessionId, updates: { clusters: userClusters.map((cl) => ({ id: cl.id, name: cl.name, owner: cl.owner ?? "", role: cl.role ?? "" })) } });
       }
     }
 
@@ -497,13 +498,15 @@ clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
     if (previousOwnerId) {
       const sessionId = await kv.getSessionIdByUserId(previousOwnerId);
       if (sessionId) {
-        await kv.refreshSession({ sessionId, updates: { clusters: await db.clusters.listUserClusters(previousOwnerId) } });
+        const { clusters: prevClusters } = await db.clusters.list({ userId: previousOwnerId });
+        await kv.refreshSession({ sessionId, updates: { clusters: prevClusters.map((cl) => ({ id: cl.id, name: cl.name, owner: cl.owner ?? "", role: cl.role ?? "" })) } });
       }
     }
 
     const newSessionId = await kv.getSessionIdByUserId(newOwnerId);
     if (newSessionId) {
-      await kv.refreshSession({ sessionId: newSessionId, updates: { clusters: await db.clusters.listUserClusters(newOwnerId) } });
+      const { clusters: newOwnerClusters } = await db.clusters.list({ userId: newOwnerId });
+      await kv.refreshSession({ sessionId: newSessionId, updates: { clusters: newOwnerClusters.map((cl) => ({ id: cl.id, name: cl.name, owner: cl.owner ?? "", role: cl.role ?? "" })) } });
     }
 
     const [previousOwnerUser, newOwnerUser, cluster] = await Promise.all([
@@ -666,8 +669,8 @@ clusters.patch("/:id", requireClusterOwner, async (c) => {
       users.map(async (user) => {
         const sessionId = await kv.getSessionIdByUserId(user.id);
         if (sessionId) {
-          const clusters = await db.clusters.listUserClusters(user.id);
-          await kv.refreshSession({ sessionId, updates: { clusters } });
+          const { clusters: memberClusters } = await db.clusters.list({ userId: user.id });
+          await kv.refreshSession({ sessionId, updates: { clusters: memberClusters.map((cl) => ({ id: cl.id, name: cl.name, owner: cl.owner ?? "", role: cl.role ?? "" })) } });
         }
       }),
     );

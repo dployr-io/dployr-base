@@ -4,11 +4,12 @@ import * as OTPAuth from "otpauth";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { Bindings, createErrorResponse, createSuccessResponse, Variables } from "@/types/index.js";
-import { getKVStore, getDbStore, getWS } from "@/lib/config/context.js";
+import { getKVStore, getDbStore, getWS, getKV } from "@/lib/config/context.js";
 import { requireDployrAdministrator, requireDployrAdministratorIPAddress } from "@/middleware/auth.js";
 import instances from "./instances/index.js";
 import { ADMIN_JWT_TTL, ERROR } from "@/lib/constants/index.js";
 import { getVMService } from "@/lib/config/context.js";
+import { getAdapters } from "@/lib/config/bootstrap.js";
 import { Logger } from "@/lib/logger.js";
 import { AdminService } from "@/services/admin.js";
 
@@ -324,6 +325,81 @@ admin.get("/build-queue", requireDployrAdministrator, async (c) => {
   );
 
   return c.json(createSuccessResponse({ queue, nodes: nodeSlots }));
+});
+
+admin.get("/infra-health", async (c) => {
+  const db = getDbStore(c);
+  const kv = getKV(c);
+  const config = getAdapters()?.config;
+
+  type ServiceStatus = { status: "ok" | "degraded" | "unreachable"; latencyMs?: number; error?: string };
+
+  async function probe(url: string, timeoutMs = 3000): Promise<{ latencyMs: number; ok: boolean }> {
+    const t0 = Date.now();
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    return { latencyMs: Date.now() - t0, ok: res.ok };
+  }
+
+  const services: Record<string, ServiceStatus> = {};
+
+  const [pgResult, kvResult] = await Promise.allSettled([
+    (async () => { const t0 = Date.now(); await db.clusters.count(); return Date.now() - t0; })(),
+    (async () => { const t0 = Date.now(); await kv.get("__health_ping__"); return Date.now() - t0; })(),
+  ]);
+
+  services.postgres = pgResult.status === "fulfilled"
+    ? { status: "ok", latencyMs: pgResult.value }
+    : { status: "unreachable", error: (pgResult.reason as Error)?.message };
+
+  services.redis = kvResult.status === "fulfilled"
+    ? { status: "ok", latencyMs: kvResult.value }
+    : { status: "unreachable", error: (kvResult.reason as Error)?.message };
+
+  try {
+    const { latencyMs, ok } = await probe("http://localhost:2019/");
+    services.caddy = { status: ok ? "ok" : "degraded", latencyMs };
+  } catch (err: any) {
+    services.caddy = { status: "unreachable", error: err?.message };
+  }
+
+  if (config?.traefik?.enabled) {
+    try {
+      const url = config.traefik.metrics_url;
+      if (!url) throw new Error("Traefik is not properly configured");   
+      url.replace(/\/metrics$/, "/ping");
+      const { latencyMs, ok } = await probe(url);
+      services.traefik = { status: ok ? "ok" : "degraded", latencyMs };
+    } catch (err: any) {
+      services.traefik = { status: "unreachable", error: err?.message };
+    }
+  }
+
+  if (config?.listmonk?.enabled && config.listmonk.url) {
+    try {
+      const { latencyMs, ok } = await probe(`${config.listmonk.url}/health`);
+      services.listmonk = { status: ok ? "ok" : "degraded", latencyMs };
+    } catch (err: any) {
+      services.listmonk = { status: "unreachable", error: err?.message };
+    }
+  }
+
+  if (config?.loki?.enabled && config.loki.url) {
+    try {
+      const { latencyMs, ok } = await probe(`${config.loki.url}/ready`);
+      services.loki = { status: ok ? "ok" : "degraded", latencyMs };
+    } catch (err: any) {
+      services.loki = { status: "unreachable", error: err?.message };
+    }
+
+    try {
+      const { latencyMs, ok } = await probe("http://localhost:8686/health");
+      services.vector = { status: ok ? "ok" : "degraded", latencyMs };
+    } catch (err: any) {
+      services.vector = { status: "unreachable", error: err?.message };
+    }
+  }
+
+  return c.json(createSuccessResponse({ services }));
 });
 
 admin.route("/instances", instances);

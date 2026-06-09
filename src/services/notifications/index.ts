@@ -24,6 +24,7 @@ import {
   serviceIcingWarningEmail,
   serviceIcedEmail,
   ownershipTransferredEmail,
+  apiTokenKeyRevokedEmail,
 } from "@/lib/templates/emails/index.js";
 
 const log = new Logger("NotificationService");
@@ -88,6 +89,15 @@ function buildEmail(event: NotificationEvent, data: NotificationData): { subject
     case EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code:
       if (!data.newOwner || !data.previousOwner) return null;
       return ownershipTransferredEmail({ newOwner: data.newOwner, previousOwner: data.previousOwner, clusterName, clusterId: data.clusterId });
+
+    case EVENTS.AUTH.API_TOKEN_KEY_REVOKED.code:
+      if (!data.keyVersion) return null;
+      return apiTokenKeyRevokedEmail({
+        keyVersion: data.keyVersion,
+        clusterName,
+        clusterId: data.clusterId,
+        tokenCount: data.tokenCount ?? 0,
+      });
 
     default:
       return null;

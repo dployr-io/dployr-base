@@ -268,3 +268,25 @@ export const subscriptionResumedEmail: EmailTemplate<{ plan: string; clusterName
     ${btn("View Dashboard", `https://app.dployr.io/clusters/${clusterId}`)}`,
   ),
 });
+
+export const apiTokenKeyRevokedEmail: EmailTemplate<{ keyVersion: string; clusterName: string; clusterId: string; tokenCount: number }> = ({
+  keyVersion,
+  clusterName,
+  clusterId,
+  tokenCount,
+}) => ({
+  subject: `Security alert: API tokens revoked — ${clusterName}`,
+  html: layout(
+    "API Tokens Revoked",
+    `<p>A dployr administrator has revoked API token key version <strong>${keyVersion}</strong>.</p>
+    ${detailTable([
+      detail("Cluster", clusterName),
+      detail("Key version", keyVersion),
+      detail("Tokens affected", String(tokenCount)),
+      detail("Time", new Date().toUTCString()),
+    ])}
+    <p>Any CI/CD pipelines or scripts using a <code style="background:#f4f5f7;padding:2px 6px;border-radius:4px;font-size:13px;">dpat_</code> token created under this key version are now <strong>invalid</strong>. You'll need to generate a new token and update your environments.</p>
+    ${btn("Regenerate Tokens", `https://app.dployr.io/clusters/${clusterId}/settings/tokens`, "danger")}
+    <p style="color:#6b7280;font-size:13px;margin-top:16px;">If you're unsure why this happened, contact your dployr administrator. This action is typically taken in response to a security incident.</p>`,
+  ),
+});

@@ -162,5 +162,13 @@ function loadConfigFromEnv(): Config {
     logging: {
       level: (process.env.LOG_LEVEL as "debug" | "info" | "warn" | "error") || "info",
     },
+    loki: {
+      enabled: process.env.LOKI_ENABLED === "true",
+      url: process.env.LOKI_URL || "http://localhost:3100",
+      r2_account_id: process.env.LOKI_R2_ACCOUNT_ID,
+      r2_bucket: process.env.LOKI_R2_BUCKET,
+      r2_access_key: process.env.LOKI_R2_ACCESS_KEY,
+      r2_secret_key: process.env.LOKI_R2_SECRET_KEY,
+    },
   });
 }

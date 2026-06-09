@@ -27,6 +27,7 @@ import { VmProvider } from "@/services/vm/index.js";
 import { InstancePool } from "@/services/pool.js";
 import { EmailProvider } from "@/services/notifications/email/index.js";
 import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
+import { LokiClient } from "@/services/loki.js";
 
 export type { Bindings };
 
@@ -51,6 +52,7 @@ export interface Service {
   label: string | null;
   type: ServiceType;
   deploymentId: string | null;
+  deploymentName?: string | null;
   icedAt: number | null;
   createdAt: number;
   updatedAt: number;
@@ -81,9 +83,9 @@ export interface Deployment {
   remoteBranch: string | null;
   remoteCommitHash: string | null;
   healthCheck: string | null;
-  logs: string | null;
   buildFingerprint: string | null;
   createdAt: number;
+  updatedAt: number;
   finishedAt: number | null;
 }
 
@@ -120,6 +122,7 @@ export interface Session {
   clusters: { id: string; name: string; owner: string; role: string }[];
   createdAt: number;
   expiresAt: number;
+  scopes?: string[];
 }
 
 export type Variables = {
@@ -147,6 +150,7 @@ export type Variables = {
   vmProvider?: VmProvider | null;
   emailProvider?: EmailProvider | null;
   traefikRedisClient?: any;
+  lokiClient?: LokiClient;
   session?: Session;
   resolvedClusterId?: string;
   resolvedServiceId?: string;
@@ -215,12 +219,16 @@ export interface Instance {
 export interface Cluster {
   id: string;
   name: string;
-  users: string[]; // Array of user emails
-  roles: Record<Role, string[]>; // role -> array of user emails
+  users: string[];
+  roles: Record<Role, string[]>; // role -> array of user IDs
   poolInstanceId?: string | null;
   metadata?: Record<string, any> | undefined;
   createdAt: number;
   updatedAt: number;
+  /** Populated when listed with a userId filter — the requesting user's role in this cluster. */
+  role?: string;
+  /** Populated when listed with a userId filter — display name of the cluster owner. */
+  owner?: string;
 }
 
 export interface GitHubIntegration {

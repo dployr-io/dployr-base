@@ -8,6 +8,7 @@ import { BillingStore } from "./billing.js";
 import { EntityStore } from "./entity.js";
 import { PayloadStore } from "./payload.js";
 import { ClusterStore } from "./cluster.js";
+import { JwksCacheStore } from "./jwks-cache.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 
 export class KVStore {
@@ -21,6 +22,7 @@ export class KVStore {
   public readonly entities: EntityStore;
   public readonly payloads: PayloadStore;
   public readonly clusters: ClusterStore;
+  public readonly jwksCache: JwksCacheStore;
 
   constructor(
     public kv: IKVAdapter,
@@ -36,6 +38,7 @@ export class KVStore {
     this.entities = new EntityStore(kv);
     this.payloads = new PayloadStore(kv);
     this.clusters = new ClusterStore(kv);
+    this.jwksCache = new JwksCacheStore(kv);
   }
 
   // SessionStore delegation
@@ -128,4 +131,8 @@ export class KVStore {
   getRenameQuota = (...args: Parameters<ClusterStore["getRenameQuota"]>) => this.clusters.getRenameQuota(...args);
   recordRename = (...args: Parameters<ClusterStore["recordRename"]>) => this.clusters.recordRename(...args);
   clearRenameHistory = (...args: Parameters<ClusterStore["clearRenameHistory"]>) => this.clusters.clearRenameHistory(...args);
+
+  // JwksCacheStore delegation
+  getJwks = (...args: Parameters<JwksCacheStore["get"]>) => this.jwksCache.get(...args);
+  setJwks = (...args: Parameters<JwksCacheStore["set"]>) => this.jwksCache.set(...args);
 }

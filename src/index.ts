@@ -50,7 +50,9 @@ app.route("/v1/admin", admin);
 app.use("/v1/*", loadSession);
 
 // Global rate limiting
-app.use("/v1/*", globalRateLimit);
+if (process.env.NODE_ENV !== "test") {
+  app.use("/v1/*", globalRateLimit);
+}
 
 // CORS middleware
 app.use("/v1/*", createCorsMiddleware(getCorsConfig));

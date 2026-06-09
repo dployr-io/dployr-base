@@ -24,7 +24,10 @@ const log = new Logger("DeploymentService");
 
 const dployrdService = new DployrdService();
 
-export type TaskSender = Pick<WebSocketHandler, "sendTask">;
+export type TaskSender = {
+  sendTask: WebSocketHandler["sendTask"];
+  subscribeToNodeLogs?: WebSocketHandler["subscribeToNodeLogs"];
+};
 
 export async function computeBuildFingerprint(payload: DeploymentPayload): Promise<string> {
   const parts = [
@@ -136,14 +139,12 @@ export class DeploymentService {
     c: Context,
     {
       id,
-      logs,
       blueprint,
       isNodeToken,
       instanceId,
       userId,
     }: {
       id: string;
-      logs: string;
       blueprint: Record<string, any>;
       isNodeToken: boolean;
       instanceId?: string;
@@ -181,7 +182,6 @@ export class DeploymentService {
         remoteUrl: blueprint.remote_url ?? blueprint.remote?.url ?? payload?.remote?.url,
         remoteBranch: blueprint.remote_branch ?? blueprint.remote?.branch ?? payload?.remote?.branch,
         remoteCommitHash: blueprint.remote_commit_hash ?? blueprint.remote?.commit_hash ?? payload?.remote?.commit_hash,
-        logs,
       });
 
       if (synced) {
@@ -212,9 +212,42 @@ export class DeploymentService {
           }
         }
       }
+
+      return synced;
     }
 
-    return db.deployments.updateLogs(id, logs);
+    // Pre-created pending record exists (from notifyPending in create()).
+    // Service creation was deferred — run it now with blueprint data.
+    const kv = getKVStore(c);
+    const pending = await kv.payloads.consumeDeploymentPayload({ clusterId: deployment.clusterId, name: blueprint.name });
+    const payload = pending?.payload;
+
+    const service = await db.services.upsert({
+      clusterId: deployment.clusterId,
+      name: deployment.name,
+      type: blueprint.type ?? deployment.type,
+      deploymentId: deployment.id,
+    }).catch((err) => {
+      log.error(`Failed to upsert service for deployment ${deployment.id}:`, err);
+      return null;
+    });
+
+    if (payload) {
+      const envTarget = service ? { serviceId: service.id } : { deploymentId: deployment.id };
+
+      if (payload.env_vars && typeof payload.env_vars === "object") {
+        await db.serviceEnvs.set({ ...envTarget, envs: payload.env_vars }).catch((err) => {
+          log.error(`Failed to set envs for deployment ${deployment.id}:`, err);
+        });
+      }
+      if (payload.secrets && typeof payload.secrets === "object" && db.serviceSecrets) {
+        await db.serviceSecrets.set({ ...envTarget, secrets: payload.secrets }).catch((err) => {
+          log.error(`Failed to set secrets for deployment ${deployment.id}:`, err);
+        });
+      }
+    }
+
+    return deployment;
   }
 
   async create(
@@ -267,17 +300,69 @@ export class DeploymentService {
       throw new ResourceNotFoundError("Instance");
     }
 
+    const notifyPending = async (taskId: string) => {
+      const existing = await db.deployments.get({ name: deployPayload.name });
+      if (existing) {
+        // Redeployment: patch config unconditionally so the new version/config is
+        // immediately visible, then let the build finish update status.
+        await db.deployments.patchConfig({
+          name: deployPayload.name,
+          source: deployPayload.source,
+          description: deployPayload.description ?? null,
+          runCmd: deployPayload.run_cmd ?? null,
+          buildCmd: deployPayload.build_cmd ?? null,
+          port: deployPayload.port ?? null,
+          workingDir: deployPayload.working_dir ?? null,
+          staticDir: deployPayload.static_dir ?? null,
+          image: deployPayload.image ?? null,
+          domain: deployPayload.domain ?? null,
+          runtimeType: deployPayload.runtime ?? null,
+          runtimeVersion: deployPayload.version ?? null,
+          remoteUrl: deployPayload.remote?.url ?? null,
+          remoteBranch: deployPayload.remote?.branch ?? null,
+          healthCheck: deployPayload.health_check ?? null,
+        }).catch((err) => log.warn(`Failed to patch deployment config for ${deployPayload.name}:`, err));
+      } else {
+        await db.deployments.upsert({
+          id: taskId,
+          clusterId,
+          userId: session.userId,
+          name: deployPayload.name,
+          type: deployPayload.type,
+          source: deployPayload.source,
+          description: deployPayload.description ?? null,
+          runCmd: deployPayload.run_cmd ?? null,
+          buildCmd: deployPayload.build_cmd ?? null,
+          port: deployPayload.port ?? null,
+          workingDir: deployPayload.working_dir ?? null,
+          staticDir: deployPayload.static_dir ?? null,
+          image: deployPayload.image ?? null,
+          domain: deployPayload.domain ?? null,
+          runtimeType: deployPayload.runtime ?? null,
+          runtimeVersion: deployPayload.version ?? null,
+          remoteUrl: deployPayload.remote?.url ?? null,
+          remoteBranch: deployPayload.remote?.branch ?? null,
+          remoteCommitHash: deployPayload.remote?.commit_hash ?? null,
+          healthCheck: deployPayload.health_check ?? null,
+          status: "pending",
+        }).catch((err) => log.warn(`Failed to pre-create deployment record ${taskId}:`, err));
+      }
+      ws.clientNotifier.notifyRefresh(clusterId, "deployments");
+    };
+
     if (deployPayload.source === "image") {
       const taskId = ulid();
       const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
       const task = dployrdService.createDeployTask(taskId, deployPayload, token);
       await kv.payloads.saveDeploymentPayload({ clusterId, instanceName, taskId, payload: deployPayload });
-      const dispatched = getWS(c).sendTask(instanceName, task);
+      const dispatched = ws.sendTask(instanceName, task);
       if (!dispatched) {
         log.warn(`No node connected for deploy task ${taskId}, cluster ${clusterId}`);
         throw new InstanceNotConnectedError(instanceName);
       }
+      ws.subscribeToNodeLogs(instanceName, deployPayload.name, { serviceId: deployPayload.name, deploymentId: taskId, clusterId, source: "deploy" }, `logs:${deployPayload.name}`).catch((err: unknown) => log.warn("subscribeToNodeLogs failed", { error: String(err) }));
       log.info(`Dispatched image deploy task ${taskId} to ${instanceName} for cluster ${clusterId}`);
+      await notifyPending(taskId);
       return { taskId };
     }
 
@@ -292,17 +377,21 @@ export class DeploymentService {
         const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
         const task = dployrdService.createDeployTask(taskId, cachedPayload, token);
         await kv.payloads.saveDeploymentPayload({ clusterId, instanceName, taskId, payload: cachedPayload });
-        const dispatched = getWS(c).sendTask(instanceName, task);
+        const dispatched = ws.sendTask(instanceName, task);
         if (!dispatched) {
           log.warn(`No node connected for cached deploy task ${taskId}, cluster ${clusterId}`);
           throw new InstanceNotConnectedError(instanceName);
         }
+        ws.subscribeToNodeLogs(instanceName, deployPayload.name, { serviceId: deployPayload.name, deploymentId: taskId, clusterId, source: "deploy" }, `logs:${deployPayload.name}`).catch((err: unknown) => log.warn("subscribeToNodeLogs failed", { error: String(err) }));
         log.info(`Dispatched cached deploy task ${taskId} to ${instanceName} (skipped build)`);
+        await notifyPending(taskId);
         return { taskId, cached: true };
       }
     }
 
-    return await enqueueBuild({ db, kv, clusterId, deployPayload, fingerprint, instanceName, jwtService, ws, issuer: this.env.BASE_URL });
+    const result = await enqueueBuild({ db, kv, clusterId, deployPayload, fingerprint, instanceName, jwtService, ws, issuer: this.env.BASE_URL });
+    await notifyPending(result.taskId);
+    return result;
   }
 
   async list(c: Context, { clusterId, serviceId, status, pageSize, offset }: { clusterId: string; serviceId?: string; status?: string; pageSize: number; offset: number }) {
@@ -384,6 +473,7 @@ export async function enqueueBuild({
     return { taskId, queued: true };
   }
 
+  await ws.subscribeToNodeLogs?.(buildNode.tag, deployPayload.name, { serviceId: deployPayload.name, deploymentId: taskId, clusterId, source: "build" }, `logs:${deployPayload.name}`).catch((err: unknown) => log.warn("subscribeToNodeLogs failed", { error: String(err) }));
   await kv.instanceCache.incrementBuildSlots(buildNode.tag);
   await kv.instanceCache.trackInFlightBuild(buildNode.tag, { taskId, clusterId, callbackInstanceTag: instanceName, payload: deployPayload, fingerprint, tier: plan, enqueuedAt: Date.now() });
   await kv.payloads.saveBuildCallback(taskId, { callbackInstanceTag: instanceName, buildNodeTag: buildNode.tag, clusterId, payload: deployPayload, fingerprint });

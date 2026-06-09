@@ -3,7 +3,7 @@
 
 import { createErrorResponse, createPaginatedResponse, createSuccessResponse, parsePaginationParams } from "@/types/index.js";
 import { ERROR, EVENTS, SUCCESS } from "@/lib/constants/index.js";
-import { getDbStore, getInstancePoolService, getInstanceService, getKVStore, getTraefikRouterService, getVMService, getWS } from "@/lib/config/context.js";
+import { getDbStore, getInstancePoolService, getInstanceService, getKVStore, getTraefikRouterService, getWS } from "@/lib/config/context.js";
 import { worker } from "@/services/background/index.js";
 import { notify } from "@/services/background/jobs/notify.js";
 import { Bindings, Variables } from "@/types/index.js";
@@ -273,7 +273,7 @@ export function attachInstallDployr(app: Hono<{ Bindings: Bindings; Variables: V
   app.post("/:instanceId/system/install", async (c) => {
     try {
       const instanceId = c.req.param("instanceId");
-      const clusterId = c.req.query("clusterId")!;
+      const clusterId = c.req.query("clusterId");
       const body = await c.req.json();
       const validation = installDployrSchema.safeParse(body);
       if (!validation.success) {
@@ -303,7 +303,7 @@ export function attachInstallDployr(app: Hono<{ Bindings: Bindings; Variables: V
         createSuccessResponse({
           status: "accepted",
           taskId,
-          message: version ? `Install task sent for version ${version}` : "Install task sent for latest version",
+          message: `Install task sent for version ${version}`,
         }),
         SUCCESS.ACCEPTED.status,
       );
@@ -318,7 +318,7 @@ export function attachRebootInstance(app: Hono<{ Bindings: Bindings; Variables: 
     try {
       const instanceId = c.req.param("instanceId");
       const clusterId = c.req.query("clusterId")!;
-      const body = await c.req.json();
+      const body = await c.req.json().catch(() => ({}));
       const validation = rebootInstanceSchema.safeParse(body);
       if (!validation.success) {
         const errors = validation.error.issues.map((err) => ({
@@ -339,7 +339,7 @@ export function attachRebootInstance(app: Hono<{ Bindings: Bindings; Variables: 
       const taskId = await getInstanceService(c).rebootInstance({
         c,
         clusterId,
-        instanceId,
+        tag: instanceId,
         force,
       });
 
@@ -405,7 +405,7 @@ export function attachRestartDaemon(app: Hono<{ Bindings: Bindings; Variables: V
     try {
       const instanceId = c.req.param("instanceId");
       const clusterId = c.req.query("clusterId")!;
-      const body = await c.req.json();
+      const body = await c.req.json().catch(() => ({}));
       const validation = restartDaemonSchema.safeParse(body);
       if (!validation.success) {
         const errors = validation.error.issues.map((err) => ({
@@ -426,7 +426,7 @@ export function attachRestartDaemon(app: Hono<{ Bindings: Bindings; Variables: V
       const taskId = await getInstanceService(c).restartDaemon({
         c,
         clusterId,
-        instanceId,
+        tag: instanceId,
         force,
       });
 

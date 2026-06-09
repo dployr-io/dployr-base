@@ -3,7 +3,7 @@
 
 import { ulid } from "ulid";
 import type { WebSocket } from "ws";
-import type { ClusterConnection, ConnectionRole, LogStreamSubscription, PendingRequest } from "@/types/websocket-message.js";
+import type { ActiveLogStream, ClusterConnection, ConnectionRole, LokiStreamMeta, PendingRequest } from "@/types/websocket-message.js";
 import { createWSError } from "@/types/websocket-message.js";
 import type { ConnectionManagerConfig, Session } from "@/types/index.js";
 import type { NodeTask } from "@/lib/tasks/types.js";
@@ -16,7 +16,12 @@ import { Logger } from "@/lib/logger.js";
  */
 export class ConnectionManager {
   private connections = new Map<string, Set<ClusterConnection>>();
-  private logStreams = new Map<string, LogStreamSubscription>();
+  /** path → ActiveLogStream */
+  private logStreams = new Map<string, ActiveLogStream>();
+  /** nodeStreamId → path — reverse index for O(1) lookup in handleLogChunk */
+  private nodeStreamIndex = new Map<string, string>();
+  /** nodeStreamIds evicted by handoff — chunks are silently dropped to avoid 24h of log spam */
+  private evictedStreamIds = new Map<string, number>();
   private pendingRequests = new Map<string, PendingRequest>();
   private requestsByClient = new Map<WebSocket, Set<string>>();
   private unackedMessages = new Map<string, { message: unknown; timestamp: number; retries: number }>();
@@ -398,83 +403,110 @@ export class ConnectionManager {
   }
 
   /**
-   * Add a log stream subscription
+   * Register a new background log stream (base-initiated).
+   * If a stream for this path already exists, returns false — caller should not send a new node task.
    */
-  addLogStream(subscription: LogStreamSubscription): void {
-    this.logStreams.set(subscription.streamId, subscription);
-    this.log.info(`Created log stream ${subscription.streamId}`);
+  addLogStream(stream: ActiveLogStream): boolean {
+    if (this.logStreams.has(stream.key)) return false;
+    this.logStreams.set(stream.key, stream);
+    this.nodeStreamIndex.set(stream.nodeStreamId, stream.key);
+    this.log.info(`Created log stream ${stream.nodeStreamId} for key "${stream.key}" path="${stream.path}"`);
+    return true;
   }
 
   /**
-   * Get a log stream subscription by ID
+   * Lookup a stream by the nodeStreamId carried in log_chunk messages.
    */
-  getLogStream(streamId: string): LogStreamSubscription | undefined {
-    return this.logStreams.get(streamId);
+  getLogStreamByNodeId(nodeStreamId: string): ActiveLogStream | undefined {
+    const path = this.nodeStreamIndex.get(nodeStreamId);
+    return path ? this.logStreams.get(path) : undefined;
   }
 
   /**
-   * Update an existing log stream's client WebSocket
+   * Lookup a stream by its logical path.
    */
-  updateLogStreamClient(streamId: string, clientWs: WebSocket): boolean {
-    const existing = this.logStreams.get(streamId);
-    if (existing) {
-      existing.ws = clientWs;
-      this.log.info(`Reusing existing log stream ${streamId}`);
-      return true;
-    }
-    return false;
+  getLogStreamByPath(path: string): ActiveLogStream | undefined {
+    return this.logStreams.get(path);
   }
 
   /**
-   * Remove a log stream subscription
+   * Add a client WebSocket to an existing stream's fanout set.
+   * Returns false if no stream exists for this path.
    */
-  removeLogStream(streamId: string): void {
-    this.logStreams.delete(streamId);
-    this.log.info(`Removed log stream ${streamId}`);
+  addClientToLogStream(path: string, clientWs: WebSocket): boolean {
+    const stream = this.logStreams.get(path);
+    if (!stream) return false;
+    stream.clients.add(clientWs);
+    return true;
   }
 
   /**
-   * Remove all log streams for a specific client WebSocket
+   * Remove a client from a stream's fanout set.
+   * The background stream itself stays alive.
+   */
+  removeClientFromLogStream(path: string, clientWs: WebSocket): void {
+    this.logStreams.get(path)?.clients.delete(clientWs);
+  }
+
+  /**
+   * Remove a client WebSocket from all streams (called on client disconnect).
    */
   removeLogStreamsForClient(clientWs: WebSocket): void {
-    for (const [streamId, subscription] of this.logStreams.entries()) {
-      if (subscription.ws === clientWs) {
-        this.logStreams.delete(streamId);
-        this.log.info(`Cleaned up log stream ${streamId}`);
-      }
+    for (const stream of this.logStreams.values()) {
+      stream.clients.delete(clientWs);
     }
   }
 
   /**
-   * Cleanup orphaned log streams (where client is disconnected)
-   */
-  private cleanupOrphanedLogStreams(): void {
-    const orphaned: string[] = [];
-
-    for (const [streamId, subscription] of this.logStreams) {
-      if (subscription.ws.readyState !== 1) {
-        orphaned.push(streamId);
-      }
-    }
-
-    for (const streamId of orphaned) {
-      this.logStreams.delete(streamId);
-    }
-
-    if (orphaned.length > 0) {
-      this.log.info(`Cleaned up ${orphaned.length} orphaned log streams`);
-    }
-  }
-
-  /**
-   * Remove log streams matching a path for a specific client
+   * Remove log streams matching a path for a specific client (unsubscribe).
    */
   removeLogStreamsByPath(path: string, clientWs: WebSocket): void {
-    for (const [streamId, subscription] of this.logStreams.entries()) {
-      if (subscription.path === path && subscription.ws === clientWs) {
-        this.logStreams.delete(streamId);
-        this.log.info(`Removed log stream ${streamId}`);
+    this.removeClientFromLogStream(path, clientWs);
+  }
+
+  /**
+   * Hand off a stream from one node to another (build → deploy phase transition).
+   * Keeps the stream entry and all subscribed clients intact; only the node stream ID changes.
+   * Returns false if no stream exists for this key.
+   */
+  handoffLogStream(key: string, newNodeStreamId: string, meta?: LokiStreamMeta): boolean {
+    const stream = this.logStreams.get(key);
+    if (!stream) return false;
+    this.nodeStreamIndex.delete(stream.nodeStreamId);
+    stream.nodeStreamId = newNodeStreamId;
+    this.nodeStreamIndex.set(newNodeStreamId, key);
+    if (meta) stream.meta = meta;
+    this.log.info(`Handed off log stream "${key}" to nodeStreamId=${newNodeStreamId}`);
+    return true;
+  }
+
+  /**
+   * Fully tear down a background stream (e.g. service deleted or node disconnected).
+   */
+  removeLogStream(path: string): void {
+    const stream = this.logStreams.get(path);
+    if (!stream) return;
+    this.nodeStreamIndex.delete(stream.nodeStreamId);
+    this.logStreams.delete(path);
+    this.log.info(`Removed log stream for path "${path}"`);
+  }
+
+  /**
+   * Purge dead clients from all stream fanout sets each cleanup cycle.
+   * Background streams (no clients) are intentionally kept alive.
+   */
+  private cleanupOrphanedLogStreams(): void {
+    let cleaned = 0;
+    for (const stream of this.logStreams.values()) {
+      for (const ws of stream.clients) {
+        if (ws.readyState !== 1) {
+          stream.clients.delete(ws);
+          cleaned++;
+        }
       }
+    }
+    if (cleaned > 0) {
+      this.log.info(`Cleaned up ${cleaned} dead client(s) from log stream fanout sets`);
     }
   }
 

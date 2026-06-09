@@ -133,7 +133,6 @@ export class UpdateProcessor {
               remoteUrl: d.remote_url || d.remote.url || payload?.remote?.url,
               remoteBranch: d.remote_branch || d.remote.branch || payload?.remote?.branch,
               remoteCommitHash: d.remote_commit_hash || d.remote.commit_hash || payload?.remote?.commit_hash,
-              logs: d.logs ?? null,
               createdAt: createdAtMs,
               finishedAt: finishedAtMs,
             });

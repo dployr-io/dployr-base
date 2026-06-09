@@ -141,6 +141,17 @@ export const CONFIG_SCHEMA = z.object({
      */
     encryption_key: z.string().length(64).optional(),
     /**
+     * Active key version used when signing new API tokens (dpat_).
+     * Bump to a new version when rotating — old tokens remain valid under their version.
+     */
+    token_hmac_key_version: z.string().default("v1"),
+    /**
+     * Map of all HMAC-SHA256 key versions. Keep old versions here until their tokens expire.
+     * Generate each key with: openssl rand -hex 32
+     * To hard-revoke a version: DELETE /admin/auth/tokens/key-version/:version
+     */
+    token_hmac_keys: z.record(z.string(), z.string()).optional(),
+    /**
      * Cloudflare Turnstile secret key for bot protection on the email login endpoint.
      * Obtain from the Cloudflare dashboard → Turnstile → your site → Secret Key.
      * When unset, Turnstile verification is skipped (useful for local dev).
@@ -216,6 +227,19 @@ export const CONFIG_SCHEMA = z.object({
   logging: z.object({
     level: z.enum(["debug", "info", "warn", "error"]).default("info"),
   }).optional(),
+  loki: z
+    .object({
+      enabled: z.boolean().default(false),
+      url: z.string().default("http://localhost:3100"),
+      viewer_token: z.string().optional(),
+      api_domain: z.string().optional(),
+      logs_origin: z.string().optional(),
+      r2_account_id: z.string().optional(),
+      r2_bucket: z.string().optional(),
+      r2_access_key: z.string().optional(),
+      r2_secret_key: z.string().optional(),
+    })
+    .optional(),
 }).superRefine((val, ctx) => {
   const isTest = process.env.NODE_ENV === "test";
 

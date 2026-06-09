@@ -21,6 +21,7 @@ import { buildSlotsFromMemory } from "@/lib/constants/instances.js";
 import { VM_SIZES } from "@/lib/constants/vm.js";
 import type { VMSize } from "@/types/vm.js";
 import { ulid } from "ulid";
+import { LokiClient, toNanoseconds, type LokiEntry } from "@/services/loki.js";
 
 /**
  * Handles messages from dployrd connections.
@@ -39,6 +40,7 @@ export class NodeMessageHandler {
     private db: DatabaseStore,
     private kv: KVStore,
     private jwtService: JWTService,
+    private loki?: LokiClient,
   ) {}
 
   /**
@@ -184,6 +186,17 @@ export class NodeMessageHandler {
       this.log.warn(`Build complete for ${taskId} but instance ${callback.callbackInstanceTag} not connected`);
     } else {
       this.log.info(`Dispatched builds/publish task ${publishTaskId} to ${callback.callbackInstanceTag} with image ${image}`);
+      const serviceName = callback.payload.name;
+      const deployStreamId = ulid();
+      const streamKey = `logs:${serviceName}`;
+      const handed = this.connectionManager.handoffLogStream(streamKey, deployStreamId, { serviceId: serviceName, source: "deploy", clusterId: callback.clusterId, deploymentId: taskId });
+      if (handed) {
+        const token = await this.jwtService.createNodeAccessToken(callback.callbackInstanceTag).catch(() => undefined);
+        const logTask = new DployrdService().createLogStreamTask({ streamId: deployStreamId, path: serviceName, duration: "24h", token });
+        if (!this.connectionManager.sendTask(callback.callbackInstanceTag, logTask)) {
+          this.connectionManager.removeLogStream(streamKey);
+        }
+      }
     }
 
     await this.releaseSlotAndDrainQueue(taskId, callback);
@@ -225,6 +238,24 @@ export class NodeMessageHandler {
     if (!dispatched) {
       this.log.warn(`Build node ${buildNodeTag} disconnected during drain — entry ${entry.taskId} stays queued`);
       return;
+    }
+
+    const streamKey = `logs:${entry.payload.name}`;
+    const nodeStreamId = ulid();
+    const added = this.connectionManager.addLogStream({
+      nodeStreamId,
+      key: streamKey,
+      path: entry.payload.name,
+      meta: { serviceId: entry.payload.name, deploymentId: entry.taskId, clusterId: entry.clusterId, source: "build" },
+      clients: new Set(),
+      duration: "24h",
+    });
+    if (added) {
+      const logToken = await this.jwtService.createNodeAccessToken(buildNodeTag).catch(() => undefined);
+      const logTask = dployrdService.createLogStreamTask({ streamId: nodeStreamId, path: entry.payload.name, duration: "24h", token: logToken });
+      if (!this.connectionManager.sendTask(buildNodeTag, logTask)) {
+        this.connectionManager.removeLogStream(streamKey);
+      }
     }
 
     await this.kv.instanceCache.incrementBuildSlots(buildNodeTag);
@@ -278,26 +309,38 @@ export class NodeMessageHandler {
   }
 
   /**
-   * Handle log chunk messages from dployrd
+   * Handle log chunk messages from dployrd.
+   * Writes entries to Loki (non-blocking, ring-buffered) then fans out to subscribed clients.
    */
   private handleLogChunk(message: { streamId?: string; [key: string]: unknown }): void {
-    const streamId = message.streamId;
-    if (!streamId) {
+    const nodeStreamId = message.streamId;
+    if (!nodeStreamId) {
       this.log.warn("Received log_chunk without streamId");
       return;
     }
 
-    const subscription = this.connectionManager.getLogStream(streamId);
-    if (!subscription) {
+    const stream = this.connectionManager.getLogStreamByNodeId(nodeStreamId);
+    if (!stream) {
+      this.log.warn(`log_chunk dropped — no stream for nodeStreamId="${nodeStreamId}"`);
       return;
     }
 
-    try {
-      subscription.ws.send(JSON.stringify(message));
-    } catch (err) {
-      this.log.error("Failed to send log chunk to client", { error: String(err) });
-      // Clean up dead subscription
-      this.connectionManager.removeLogStream(streamId);
+    // Write to Loki ring buffer — sync, never awaited
+    if (this.loki?.isEnabled) {
+      const lokiEntries = extractLokiEntries(message);
+      if (lokiEntries.length > 0) {
+        this.loki.push(stream.path, stream.meta, lokiEntries);
+      }
+    }
+
+    // Fan out to all subscribed clients
+    const payload = JSON.stringify(message);
+    for (const clientWs of stream.clients) {
+      try {
+        clientWs.send(payload);
+      } catch {
+        stream.clients.delete(clientWs);
+      }
     }
   }
 
@@ -499,4 +542,35 @@ export class NodeMessageHandler {
       }),
     );
   }
+}
+
+/**
+ * Extract LokiEntry records from a raw log_chunk message.
+ * Handles both structured entries arrays and raw newline-delimited data strings.
+ */
+function extractLokiEntries(message: { data?: unknown; entries?: unknown; [key: string]: unknown }): LokiEntry[] {
+  const nowNs = (Date.now() * 1_000_000).toString();
+
+  if (Array.isArray(message.entries)) {
+    return message.entries.map((e: any) => ({
+      timestampNs: e?.time ? toNanoseconds(String(e.time)) : nowNs,
+      line: typeof e === "string" ? e : JSON.stringify(e),
+    }));
+  }
+
+  if (typeof message.data === "string" && message.data) {
+    return message.data
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        let timestampNs = nowNs;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed?.time) timestampNs = toNanoseconds(String(parsed.time));
+        } catch {}
+        return { timestampNs, line };
+      });
+  }
+
+  return [];
 }

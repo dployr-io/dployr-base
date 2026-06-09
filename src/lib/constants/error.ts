@@ -16,6 +16,10 @@ export const ERROR = {
     BAD_TOKEN: { code: "auth.bad_token", status: 401, message: "Invalid token" },
     INVALID_OAUTH_PROVIDER: { code: "auth.invalid_oauth_provider", status: 401, message: "OAuth provider not supported" },
     BAD_OAUTH_STATE: { code: "auth.bad_oauth_state", status: 401, message: "Invalid OAuth state" },
+    OIDC_INVALID_TOKEN: { code: "auth.oidc_invalid_token", status: 401, message: "OIDC token invalid or expired" },
+    OIDC_INVALID_ISSUER: { code: "auth.oidc_invalid_issuer", status: 401, message: "OIDC issuer not supported" },
+    OIDC_BINDING_NOT_FOUND: { code: "auth.oidc_binding_not_found", status: 401, message: "No OIDC binding found for this token" },
+    OIDC_FORBIDDEN_EVENT: { code: "auth.oidc_forbidden_event", status: 403, message: "OIDC token event type is not permitted" },
   },
   PERMISSION: {
     FORBIDDEN: { code: "permission.forbidden", status: 403, message: "Forbidden" },

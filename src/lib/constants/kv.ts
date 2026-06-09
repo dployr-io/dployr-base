@@ -83,6 +83,9 @@ export const KV_KEYS = {
   BILLING: {
     NOTIFICATION: (clusterId: string) => `billing_notification:${clusterId}`,
   },
+  OIDC: {
+    JWKS: (issuer: string) => `oidc_jwks:${issuer.replace(/[^a-zA-Z0-9]/g, "_")}`,
+  },
   FREE_INSTANCE: {
     POOL: "free_instance:pool",
     CLUSTER: (clusterId: string) => `free_instance:cluster:${clusterId}`,

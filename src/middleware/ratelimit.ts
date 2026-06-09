@@ -5,6 +5,7 @@ import type { Context, Next } from "hono";
 import type { Bindings, Variables } from "@/types/index.js";
 import { createErrorResponse } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
+import { MS_1_MINUTE } from "@/lib/constants/duration.js";
 import { getKV } from "@/lib/config/context.js";
 import { Logger } from "@/lib/logger.js";
 
@@ -78,8 +79,8 @@ export function rateLimit(config: RateLimitConfig) {
  * 100 requests per minute per user/IP. Uses key prefix "ratelimit:global".
  */
 export const globalRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  maxRequests: 100, // 100 requests per minute per user
+  windowMs: MS_1_MINUTE,
+  maxRequests: 100,
   keyPrefix: "ratelimit:global",
 });
 
@@ -88,8 +89,8 @@ export const globalRateLimit = rateLimit({
  * 10 requests per minute per user/IP. Uses key prefix "ratelimit:strict".
  */
 export const strictRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  maxRequests: 10, // 10 requests per minute
+  windowMs: MS_1_MINUTE,
+  maxRequests: 10,
   keyPrefix: "ratelimit:strict",
 });
 
@@ -98,7 +99,7 @@ export const strictRateLimit = rateLimit({
  * 200 requests per minute per user/IP. Uses key prefix "ratelimit:lenient".
  */
 export const lenientRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  maxRequests: 200, // 200 requests per minute
+  windowMs: MS_1_MINUTE,
+  maxRequests: 200,
   keyPrefix: "ratelimit:lenient",
 });

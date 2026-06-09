@@ -6,7 +6,7 @@ import type { Bindings, Variables } from "@/types/index.js";
 import { initializeDatabase } from "@/lib/db/migrate.js";
 import { loadConfig, type Config } from "@/lib/config/loader.js";
 import { initializeFromConfig } from "@/lib/config/adapters.js";
-import { setLogLevel, Logger } from "@/lib/logger.js";
+import { setLogLevel, initFileLogging, Logger } from "@/lib/logger.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
@@ -16,6 +16,7 @@ import { VmProvider } from "@/services/vm/index.js";
 import { EmailProvider } from "@/services/notifications/email/index.js";
 import { TraefikService } from "@/services/traefik-router.js";
 import { DomainStore } from "@/lib/db/store/db/domains.js";
+import { LokiClient } from "@/services/loki.js";
 
 export interface Adapters {
   kv: IKVAdapter;
@@ -28,6 +29,7 @@ export interface Adapters {
   vmProvider: VmProvider | null;
   traefikRedis: any | null;
   traefik: TraefikService | null;
+  loki: LokiClient;
 }
 
 let adapters: Adapters | null = null;
@@ -80,6 +82,9 @@ export async function initializeAdapters(): Promise<Adapters> {
 
   const config = loadConfig();
   setLogLevel(config.logging?.level ?? "info");
+  if (process.env.NODE_ENV === "development") {
+    initFileLogging("logs/dployr-base.log");
+  }
 
   const initialized = await initializeFromConfig(config);
   adapters = initialized;
@@ -164,6 +169,7 @@ export async function bootstrapMiddleware(c: Context<{ Bindings: Bindings; Varia
   c.set("vmProvider", adapters!.vmProvider);
   c.set("emailProvider", adapters!.email);
   c.set("traefikRedisClient", adapters!.traefikRedis ?? undefined);
+  c.set("lokiClient", adapters!.loki);
 
   c.env = buildBindings(adapters!) as unknown as Bindings;
 

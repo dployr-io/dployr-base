@@ -100,15 +100,19 @@ export class ServiceStore extends BaseStore {
    * @returns Object containing array of services and total count (before pagination)
    */
   async list(filter?: ServiceFilter & Pagination): Promise<{ services: Service[]; total: number }> {
-    const { clause, bindings } = this.buildWhere({ cluster_id: filter?.clusterId, type: filter?.type });
+    const conditions: string[] = [];
+    const bindings: unknown[] = [];
+    if (filter?.clusterId) { conditions.push(`s.cluster_id = $${bindings.push(filter.clusterId)}`); }
+    if (filter?.type)      { conditions.push(`s.type = $${bindings.push(filter.type)}`); }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const countResult = bindings.length
-      ? await this.db.prepare(`SELECT COUNT(*) as count FROM services ${clause}`).bind(...bindings).first()
+      ? await this.db.prepare(`SELECT COUNT(*) as count FROM services s ${whereClause}`).bind(...bindings).first()
       : await this.db.prepare(`SELECT COUNT(*) as count FROM services`).first();
 
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT id, cluster_id, name, label, type, deployment_id, iced_at, created_at, updated_at FROM services ${clause} ORDER BY name ASC`;
+    let sql = `SELECT s.id, s.cluster_id, s.name, s.label, s.type, s.deployment_id, d.name AS deployment_name, s.iced_at, s.created_at, s.updated_at FROM services s LEFT JOIN deployments d ON s.deployment_id = d.id ${whereClause} ORDER BY s.name ASC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -124,7 +128,13 @@ export class ServiceStore extends BaseStore {
       ? await this.db.prepare(sql).bind(...dataBindings).all()
       : await this.db.prepare(sql).all();
 
-    return { services: results.results.map((r) => this.toService(r)), total };
+    return {
+      services: results.results.map((r) => ({
+        ...this.toService(r),
+        deploymentName: (r.deployment_name as string) ?? null,
+      })),
+      total,
+    };
   }
 
   async delete(filter: Pick<ServiceFilter, "id" | "name">): Promise<void> {
@@ -150,9 +160,9 @@ export class ServiceStore extends BaseStore {
       label: (row.label as string) ?? null,
       type: row.type as ServiceType,
       deploymentId: (row.deployment_id as string) ?? null,
-      icedAt: (row.iced_at as number) ?? null,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
+      icedAt: row.iced_at != null ? Number(row.iced_at) : null,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     };
   }
 }

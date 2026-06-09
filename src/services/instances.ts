@@ -9,9 +9,6 @@ import { getKVStore, getJWTService, getWS, getDbStore, getVMService } from "@/li
 import { InstanceConnectionFailureError, InstanceNotConnectedError, PermissionError, ResourceNotFoundError } from "@/lib/errors/errors.js";
 import { DployrdService } from "./dployrd.js";
 import { InstancePayload } from "@/lib/db/store/db/instances.js";
-import { DatabaseStore } from "@/lib/db/store/db/index.js";
-import { KVStore } from "@/lib/db/store/kv/index.js";
-import { KV_KEYS } from "@/lib/constants/kv.js";
 
 /**
  * Service for managing dployr instances.
@@ -366,9 +363,9 @@ export class InstanceService {
    * @param params.c - Hono context with request bindings
    * @returns Task ID for the install operation
    */
-  async installDployr({ tag, clusterId, version, c }: { tag: string; clusterId: string; version: string; c: Context }): Promise<string> {
+  async installDployr({ tag, clusterId, version, c }: { tag: string; clusterId?: string; version: string; c: Context }): Promise<string> {
     const db = getDbStore(c);
-    const session = c.get("session")!;
+    const session = c.get("session");
     const jwtService = getJWTService(c);
 
     const instance = await db.instances.find({ tag });
@@ -376,9 +373,12 @@ export class InstanceService {
       throw new ResourceNotFoundError("instance");
     }
 
-    if (instance.clusterId !== clusterId) {
+    if (clusterId && instance.clusterId !== clusterId) {
       throw new PermissionError("owner");
     }
+
+    const resolvedClusterId = clusterId ?? instance.clusterId ?? "";
+
     const ws = getWS(c);
     const routingKey = instance.tag;
     if (!ws.hasNodeConnection(routingKey)) {
@@ -386,7 +386,7 @@ export class InstanceService {
     }
 
     const dployrd = new DployrdService();
-    const token = await jwtService.createInstanceAccessToken(session, tag, clusterId, {
+    const token = await jwtService.createInstanceAccessToken(session, tag, resolvedClusterId, {
       issuer: c.env.BASE_URL,
       audience: "dployr-instance",
     });
@@ -415,12 +415,12 @@ export class InstanceService {
    * @param params.c - Hono context with request bindings
    * @returns Task ID for the reboot operation
    */
-  async rebootInstance({ instanceId, clusterId, force, c }: { instanceId: string; clusterId: string; force: boolean; c: Context }): Promise<string> {
+  async rebootInstance({ tag, clusterId, force, c }: { tag: string; clusterId: string; force: boolean; c: Context }): Promise<string> {
     const db = getDbStore(c);
     const session = c.get("session")!;
     const jwtService = getJWTService(c);
 
-    const instance = await db.instances.find({ id: instanceId });
+    const instance = await db.instances.find({ tag });
     if (!instance) {
       throw new ResourceNotFoundError("instance");
     }
@@ -431,7 +431,7 @@ export class InstanceService {
     const ws = getWS(c);
     const routingKey = instance.tag;
     if (!ws.hasNodeConnection(routingKey)) {
-      throw new InstanceNotConnectedError(instanceId);
+      throw new InstanceNotConnectedError(tag);
     }
 
     const dployrd = new DployrdService();
@@ -445,7 +445,7 @@ export class InstanceService {
 
     const sent = ws.sendTask(routingKey, task);
     if (!sent) {
-      throw new InstanceConnectionFailureError(instanceId);
+      throw new InstanceConnectionFailureError(tag);
     }
 
     return task.ID;
@@ -463,12 +463,12 @@ export class InstanceService {
    * @param params.c - Hono context with request bindings
    * @returns Task ID for the restart operation
    */
-  async restartDaemon({ instanceId, clusterId, force, c }: { instanceId: string; clusterId: string; force: boolean; c: Context }): Promise<string> {
+  async restartDaemon({ tag, clusterId, force, c }: { tag: string; clusterId: string; force: boolean; c: Context }): Promise<string> {
     const db = getDbStore(c);
     const session = c.get("session")!;
     const jwtService = getJWTService(c);
 
-    const instance = await db.instances.find({ id: instanceId });
+    const instance = await db.instances.find({ tag });
     if (!instance) {
       throw new ResourceNotFoundError("instance");
     }
@@ -479,7 +479,7 @@ export class InstanceService {
     const ws = getWS(c);
     const routingKey = instance.tag;
     if (!ws.hasNodeConnection(routingKey)) {
-      throw new InstanceNotConnectedError(instanceId);
+      throw new InstanceNotConnectedError(tag);
     }
 
     const dployrd = new DployrdService();
@@ -493,98 +493,10 @@ export class InstanceService {
 
     const sent = ws.sendTask(routingKey, task);
     if (!sent) {
-      throw new InstanceConnectionFailureError(instanceId);
+      throw new InstanceConnectionFailureError(tag);
     }
 
     return task.ID;
   }
 
-  /**
-   * Resolve a deployment or service to the instance managing it.
-   *
-   * Handles two cases:
-   * - Deployment logs (failed or succeeded): returns the pool or dedicated instance for the cluster
-   * - Service logs: searches which node currently has it running
-   *
-   * @param path Deployment ID, service ID, or "service:NAME" to look up
-   * @param clusterId Cluster to search in (required for service lookups)
-   * @param db Database for fetching deployment/service/cluster info
-   * @param kv KV for checking which nodes have services running
-   * @returns The instance to stream logs from, or null if not found
-   */
-  static async findInstanceWithWorkload({
-    path,
-    clusterId: initialClusterId,
-    db,
-    kv,
-  }: {
-    path: string;
-    clusterId?: string;
-    db: DatabaseStore;
-    kv: KVStore;
-  }): Promise<{ instance: Instance; resolvedPath: string } | null> {
-    const isService = path.startsWith("service:");
-    const isSystemLog = path === "app" || path === "";
-    let clusterId = initialClusterId;
-    let deployment: any = null;
-
-    if (isSystemLog) {
-      // System log ("app") — no workload to match, just need a cluster instance
-      if (!clusterId) return null;
-    } else if (isService) {
-      const service = await db.services.find({ name: path.slice(8), clusterId });
-      if (!service) return null;
-      clusterId = service.clusterId;
-    } else {
-      deployment = await db.deployments.get(path);
-      if (!deployment) return null;
-      clusterId = deployment.clusterId;
-    }
-
-    if (!clusterId) return null;
-
-    const { instances: dedicated } = await db.instances.list({ clusterId });
-    const poolInstanceId = await db.instances.getClusterPoolInstance(clusterId);
-    const pool = poolInstanceId ? await db.instances.find({ id: poolInstanceId }) : null;
-    const instances = [...dedicated, ...(pool ? [pool] : [])];
-    if (instances.length === 0) return null;
-
-    // Resolve to a stable name-based path so the node never receives a UUID.
-    // System logs use "app"; services use "service:NAME"; deployments use the canonical name.
-    const resolvedPath = isSystemLog ? "app" : isService ? path : deployment.name;
-
-    const connected: Instance[] = [];
-    const disconnected: Instance[] = [];
-    for (const instance of instances) {
-      if (await kv.instanceCache.isNodeConnected(instance.tag)) connected.push(instance);
-      else disconnected.push(instance);
-    }
-
-    // System logs — route to any connected instance (no workload matching needed)
-    if (isSystemLog) {
-      const instance = connected[0] ?? disconnected[0] ?? null;
-      return instance ? { instance, resolvedPath } : null;
-    }
-
-    const matches = async (instance: Instance): Promise<boolean> => {
-      const workloads = await kv.entities.getEntity<{ services?: Record<string, any>[]; deployments?: Record<string, any>[] }>(
-        KV_KEYS.INSTANCE.ENTITY(instance.tag, "workloads"),
-      );
-      if (isService) return workloads?.data?.services?.some((s: any) => s.name === path.slice(8)) ?? false;
-      return workloads?.data?.deployments?.some((d: any) => d.name === deployment.name) ?? false;
-    };
-
-    for (const instance of [...connected, ...disconnected]) {
-      if (await matches(instance)) return { instance, resolvedPath };
-    }
-
-    // No workload match — route to any available instance.
-    // Completed/failed deployments are no longer in the live workloads list but their log files remain on disk.
-    if (deployment) {
-      const instance = connected[0] ?? disconnected[0] ?? null;
-      return instance ? { instance, resolvedPath } : null;
-    }
-
-    return null;
-  }
 }

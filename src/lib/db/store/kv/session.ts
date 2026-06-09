@@ -24,17 +24,16 @@ export class SessionStore {
    * @param clusters - The list of clusters the user belongs to with their roles.
    * @returns The created `Session` object.
    */
-  async createSession(sessionId: string, user: Omit<User, "createdAt" | "updatedAt">, clusters: { id: string; name: string; owner: string; role: string }[]): Promise<Session> {
+  async createSession(sessionId: string, user: Omit<User, "createdAt" | "updatedAt">, clusters: { id: string; name: string; owner: string; role: string }[], ttlOverride?: number): Promise<Session> {
+    const ttl = ttlOverride ?? SESSION_TTL;
     const session: Session = {
       userId: user.id,
       email: user.email,
       provider: user.provider,
       clusters,
       createdAt: Date.now(),
-      expiresAt: Date.now() + SESSION_TTL * 1000,
+      expiresAt: Date.now() + ttl * 1000,
     };
-
-    const ttl = SESSION_TTL;
 
     await Promise.all([this.kv.put(KV_KEYS.SESSION.BY_ID(sessionId), JSON.stringify(session), { ttl }), this.kv.put(KV_KEYS.SESSION.BY_USER(user.id), sessionId, { ttl })]);
 

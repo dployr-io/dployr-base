@@ -269,8 +269,10 @@ export class NodeDoctor extends EventEmittable {
 
     for (const clusterId of clusterIds) {
       try {
+        const cluster = await this.db.clusters.find({ id: clusterId });
         const plan = await this.db.billing.getEffectivePlan(clusterId);
-        await this.pool.allocateSharedPool(clusterId, plan);
+        await this.db.instances.releasePoolInstance(clusterId);
+        await this.allocateForPlan(clusterId, cluster?.name ?? clusterId, plan);
         await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId);
         await this.nudgePoolNode(clusterId);
       } catch (err) {
@@ -566,6 +568,7 @@ export class NodeDoctor extends EventEmittable {
         await this.pool.allocateSharedPool(clusterId, plan);
         break;
       case "pro":
+        await this.db.instances.releasePoolInstance(clusterId);
         await this.pool.spawnDedicatedInstance({ clusterId, clusterName });
         break;
     }

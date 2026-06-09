@@ -4,6 +4,7 @@ import { InstanceStatus } from "@/types/index.js";
 export const EVENTS = {
   AUTH: {
     SESSION_CREATED: { code: "auth.session_created", message: "Sign-in successful" },
+    API_TOKEN_KEY_REVOKED: { code: "auth.api_token_key_revoked", message: "API token key version revoked" },
   },
   CLUSTER: {
     MODIFIED: { code: "cluster.modified", message: "Cluster modified successfully" },
@@ -148,6 +149,12 @@ export const EVENT_METADATA: EventMetadataMap = {
   },
 
   // Auth events
+  [EVENTS.AUTH.API_TOKEN_KEY_REVOKED.code]: {
+    title: "🔑 API Token Key Revoked",
+    description: (data: any) => `API token key version **${data.keyVersion}** has been revoked. Any CI/CD tokens using this version are now invalid — regenerate them immediately.`,
+    color: 0xff0000,
+    category: "auth",
+  },
   [EVENTS.AUTH.SESSION_CREATED.code]: {
     title: "🔐 Sign-in Detected",
     description: (data: any) => `**${data.userEmail}** signed in from **${data.ipAddress || "unknown location"}**.`,

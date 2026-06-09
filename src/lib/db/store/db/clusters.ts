@@ -185,7 +185,12 @@ export class ClusterStore extends BaseStore {
       .first();
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT c.id, c.name, c.metadata, c.pool_instance_id, c.created_at, c.updated_at ${baseSql} ORDER BY c.created_at DESC`;
+    // When filtering by userId, include the user's role and cluster owner name.
+    const userRoleSelect = filter?.userId !== undefined
+      ? `, uc.role AS user_role, (SELECT u.name FROM users u JOIN user_clusters ouc ON u.id = ouc.user_id WHERE ouc.cluster_id = c.id AND ouc.role = 'owner' LIMIT 1) AS owner_name`
+      : "";
+
+    let sql = `SELECT c.id, c.name, c.metadata, c.pool_instance_id, c.created_at, c.updated_at${userRoleSelect} ${baseSql} ORDER BY c.created_at DESC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -238,6 +243,10 @@ export class ClusterStore extends BaseStore {
         metadata: (cluster as any).metadata || {},
         createdAt: cluster.created_at as number,
         updatedAt: cluster.updated_at as number,
+        ...(filter?.userId !== undefined && {
+          role: (cluster as any).user_role as string,
+          owner: (cluster as any).owner_name as string ?? undefined,
+        }),
       });
     }
 
@@ -649,34 +658,6 @@ export class ClusterStore extends BaseStore {
   async listUnassigned(): Promise<{ id: string }[]> {
     const result = await this.db.prepare(`SELECT id FROM clusters WHERE pool_instance_id IS NULL`).all();
     return result.results.map((r) => ({ id: r.id as string }));
-  }
-
-  /**
-   * Gets a list of clusters that belongs to a user (excludes invited).
-   *
-   * @param userId - The user ID
-   * @returns A list of cluster IDs
-   */
-  async listUserClusters(userId: string): Promise<{ id: string; name: string; owner: string; role: string }[]> {
-    const stmt = this.db.prepare(`
-      SELECT 
-        c.id,
-        c.name,
-        owner_u.name as owner,
-        uc.role
-      FROM user_clusters uc
-      JOIN clusters c ON uc.cluster_id = c.id
-      JOIN user_clusters owner_uc ON owner_uc.cluster_id = c.id AND owner_uc.role = 'owner'
-      JOIN users owner_u ON owner_uc.user_id = owner_u.id
-      WHERE uc.user_id = $1 AND uc.role != 'invited'
-    `);
-    const results = await stmt.bind(userId).all();
-    return results.results.map((r) => ({
-      id: r.id as string,
-      name: r.name as string,
-      owner: r.owner as string,
-      role: r.role as string,
-    }));
   }
 
   async listUsers(

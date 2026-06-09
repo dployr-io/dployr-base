@@ -1289,6 +1289,12 @@
           </svg>
           Auth / Token
         </button>
+        <button class="nav-item" data-view="api-token-keys">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+          </svg>
+          API Token Keys
+        </button>
       </aside>
 
       <div id="content">
@@ -1346,6 +1352,7 @@
                 <table id="instances-table">
                   <thead>
                     <tr>
+                      <th style="width:32px;"><input type="checkbox" id="instances-select-all" title="Select all"></th>
                       <th>Kind</th>
                       <th>Role</th>
                       <th>Tag</th>
@@ -1361,6 +1368,15 @@
                   <tbody id="instances-tbody"></tbody>
                 </table>
               </div>
+            </div>
+            <!-- batch update toolbar -->
+            <div id="batch-update-bar" style="display:none;align-items:center;gap:8px;padding:8px 16px;background:var(--bg-2);border-top:1px solid var(--border);">
+              <span id="batch-selected-count" style="font-size:12px;color:var(--text-muted);min-width:80px;"></span>
+              <select id="batch-version-select" style="font-size:12px;padding:4px 8px;background:var(--bg-3);border:1px solid var(--border);border-radius:4px;color:var(--text);min-width:160px;">
+                <option value="">Loading versions…</option>
+              </select>
+              <button class="btn btn-sm" id="batch-install-btn" disabled style="background:var(--accent);color:#fff;">Install</button>
+              <button class="btn btn-ghost btn-sm" id="batch-cancel-btn">Cancel</button>
             </div>
           </div>
         </div>
@@ -1640,6 +1656,45 @@
                 <button class="btn btn-ghost btn-sm" id="copy-token">Copy token</button>
                 <button class="btn btn-ghost btn-sm" id="revoke-logout">Revoke &amp; logout</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- api token keys view -->
+        <div id="view-api-token-keys" class="hidden">
+          <div class="page-header">
+            <div>
+              <div class="page-title">API Token Keys</div>
+              <div class="page-subtitle">Hard-revoke all tokens signed with a specific key version</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><span class="panel-title">Key Version Rotation</span></div>
+            <div class="panel-body">
+              <p style="color:var(--text-dim);margin-bottom:16px;line-height:1.7;">
+                When you rotate <code style="color:var(--accent)">token_hmac_keys</code> after a suspected compromise,
+                use this to hard-revoke all tokens still signed under the old version.
+                Every user or CI job relying on those tokens will need to regenerate them.
+              </p>
+              <div class="form-group">
+                <label class="form-label">Key Version to Revoke</label>
+                <input type="text" class="form-input" id="revoke-key-version-input" placeholder="e.g. v1" style="max-width:200px;" />
+              </div>
+              <div id="revoke-key-version-confirm" class="hidden" style="margin-top:12px;padding:12px;background:var(--red-dim);border:1px solid var(--red);border-radius:var(--radius);">
+                <p style="color:var(--red);margin-bottom:10px;">
+                  This will immediately invalidate <strong>all</strong> API tokens signed with version
+                  <strong id="revoke-key-version-label"></strong>.
+                  This cannot be undone. Confirm?
+                </p>
+                <div class="flex gap-8">
+                  <button class="btn btn-sm" id="revoke-key-version-execute" style="background:var(--red);color:#fff;border-color:var(--red);">Yes, revoke all</button>
+                  <button class="btn btn-ghost btn-sm" id="revoke-key-version-cancel">Cancel</button>
+                </div>
+              </div>
+              <div class="flex gap-8 mt-12">
+                <button class="btn btn-ghost btn-sm" id="revoke-key-version-btn">Revoke key version…</button>
+              </div>
+              <div id="revoke-key-version-result" class="hidden" style="margin-top:12px;padding:10px 12px;border-radius:var(--radius);font-size:12px;"></div>
             </div>
           </div>
         </div>
@@ -2076,7 +2131,7 @@
         $$('.nav-item').forEach(n => n.classList.remove('active'));
         const activeNav = document.querySelector(`.nav-item[data-view="${name}"]`);
         if (activeNav) activeNav.classList.add('active');
-        if (name === 'instances') loadInstances();
+        if (name === 'instances') { loadInstances(); loadVersionsIntoSelect(); }
         if (name === 'events') loadEvents();
         if (name === 'deployments') loadDeployments();
         if (name === 'services') loadServices();
@@ -2246,9 +2301,12 @@
 
       function renderInstances(instances) {
         const tbody = $('#instances-tbody');
-        // remember which tags were expanded before wiping the DOM
+        // remember which tags were expanded/checked before wiping the DOM
         const expandedTags = new Set(
           Array.from(tbody.querySelectorAll('.cell-tag-btn.expanded')).map(btn => btn.closest('tr').dataset.tag)
+        );
+        const checkedIds = new Set(
+          Array.from(tbody.querySelectorAll('.instance-checkbox:checked')).map(cb => cb.dataset.id)
         );
         tbody.innerHTML = '';
 
@@ -2284,7 +2342,9 @@
 
           const tr = document.createElement('tr');
           tr.dataset.tag = inst.tag || '';
+          tr.dataset.instanceId = inst.id || '';
           tr.innerHTML = `
+            <td style="width:32px;"><input type="checkbox" class="instance-checkbox" data-tag="${escAttr(inst.tag || '')}" data-id="${escAttr(inst.id || '')}"></td>
             <td style="width:76px;">${kindBadge}</td>
             <td style="width:76px;">${roleBadge}</td>
             <td class="cell-tag"><button class="cell-tag-btn" title="Toggle health dashboard">${escHtml(inst.tag || '—')}</button> <button class="copy-btn" title="Copy tag">⎘</button></td>
@@ -2317,13 +2377,13 @@
             tagBtn.classList.add('expanded');
             const detailTr = document.createElement('tr');
             detailTr.className = 'instance-detail';
-            detailTr.innerHTML = `<td colspan="10"><div class="health-panel"><div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);display:inline-block;"></div></div></td>`;
+            detailTr.innerHTML = `<td colspan="11"><div class="health-panel"><div class="spinner" style="border-top-color:var(--accent);border-color:rgba(79,156,249,0.2);display:inline-block;"></div></div></td>`;
             tr.after(detailTr);
             try {
               const health = await fetchInstanceHealth(inst.tag);
               renderHealthDetail(detailTr, health);
             } catch (err) {
-              detailTr.innerHTML = `<td colspan="10"><div class="health-panel"><span style="color:var(--red);font-size:11px;">Failed to load health data: ${escHtml(err.message)}</span></div></td>`;
+              detailTr.innerHTML = `<td colspan="11"><div class="health-panel"><span style="color:var(--red);font-size:11px;">Failed to load health data: ${escHtml(err.message)}</span></div></td>`;
             }
           });
 
@@ -2333,11 +2393,113 @@
             prefillRemove(inst.id, inst.tag || inst.id);
           });
 
+          // checkbox → update toolbar
+          tr.querySelector('.instance-checkbox').addEventListener('change', updateBatchBar);
+
           tbody.appendChild(tr);
 
-          // re-open panel if this tag was expanded before the refresh
+          // restore checked state and re-open panel if they were set before the refresh
+          const cb = tr.querySelector('.instance-checkbox');
+          if (checkedIds.has(inst.id)) { cb.checked = true; }
           if (expandedTags.has(inst.tag)) tagBtn.click();
         });
+
+        // select-all
+        const selectAll = $('#instances-select-all');
+        if (selectAll) {
+          const allChecked = $$('.instance-checkbox').length > 0 &&
+            Array.from($$('.instance-checkbox')).every(cb => cb.checked);
+          selectAll.checked = allChecked;
+          selectAll.onchange = () => {
+            $$('.instance-checkbox').forEach(cb => cb.checked = selectAll.checked);
+            updateBatchBar();
+          };
+        }
+        updateBatchBar();
+      }
+
+      function updateBatchBar() {
+        const checked = Array.from($$('.instance-checkbox')).filter(cb => cb.checked);
+        const bar = $('#batch-update-bar');
+        const count = $('#batch-selected-count');
+        const installBtn = $('#batch-install-btn');
+        if (checked.length === 0) {
+          bar.style.display = 'none';
+        } else {
+          bar.style.display = 'flex';
+          count.textContent = `${checked.length} selected`;
+          installBtn.disabled = !$('#batch-version-select').value;
+        }
+      }
+
+      function parseSemver(v) {
+        const m = String(v).replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)/);
+        return m ? [+m[1], +m[2], +m[3]] : [0, 0, 0];
+      }
+      function semverLt(a, b) {
+        const [ma, mi, pa] = parseSemver(a);
+        const [mb, mi2, pb] = parseSemver(b);
+        if (ma !== mb) return ma < mb;
+        if (mi !== mi2) return mi < mi2;
+        return pa < pb;
+      }
+
+      async function loadVersionsIntoSelect() {
+        const sel = $('#batch-version-select');
+        if (!sel || sel.dataset.loaded === '1') return;
+        try {
+          const body = await apiRequest(`${API_BASE}/v1/runtime/versions`, { headers: apiHeaders() });
+          const { versions = [], latest, oldestSupportedVersion } = body.data || {};
+          sel.innerHTML = '<option value="">— select version —</option>';
+          versions.forEach(v => {
+            const isDeprecated = oldestSupportedVersion && semverLt(v, oldestSupportedVersion);
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = v === latest
+              ? `${v} (latest)`
+              : isDeprecated ? `${v} ⚠ deprecated` : v;
+            if (isDeprecated) opt.style.color = 'var(--yellow)';
+            sel.appendChild(opt);
+          });
+          sel.dataset.loaded = '1';
+        } catch (err) {
+          sel.innerHTML = '<option value="">Failed to load versions</option>';
+          toast(`Could not load versions: ${err.message}`, 'error');
+        }
+      }
+
+      async function runBatchInstall() {
+        const checked = Array.from($$('.instance-checkbox')).filter(cb => cb.checked);
+        const version = $('#batch-version-select').value;
+        if (!checked.length || !version) return;
+
+        const installBtn = $('#batch-install-btn');
+        setLoading('batch-install-btn', true);
+
+        const results = await Promise.allSettled(checked.map(async cb => {
+          const tag = cb.dataset.tag;
+          const url = new URL(`${API_BASE}/v1/admin/instances/${encodeURIComponent(tag)}/system/install`);
+          url.searchParams.set('sessionId', state.sessionId);
+          await apiRequest(url, {
+            method: 'POST',
+            headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version }),
+          });
+          return tag;
+        }));
+
+        const ok = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+        const fail = results.filter(r => r.status === 'rejected');
+
+        if (ok.length) toast(`Install queued on ${ok.length} node${ok.length > 1 ? 's' : ''} → ${version}`, 'success');
+        fail.forEach((r, i) => toast(`Failed on ${checked[i]?.dataset?.tag}: ${r.reason?.message}`, 'error'));
+
+        setLoading('batch-install-btn', false);
+        // clear selections
+        $$('.instance-checkbox').forEach(cb => cb.checked = false);
+        const sa = $('#instances-select-all');
+        if (sa) sa.checked = false;
+        updateBatchBar();
       }
 
       function updateStats(instances) {
@@ -2797,7 +2959,7 @@
       // ── Monitor ────────────────────────────────────────────────────────────
 
       let _monitorTab = 'jobs';
-      let _monitorData = { nodes: [], jobs: [] };
+      let _monitorData = { nodes: [], jobs: [], infraHealth: null };
 
       async function fetchTopology() {
         const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
@@ -2811,7 +2973,29 @@
         return body.data?.runs || [];
       }
 
-      function renderMonitorTabs(body) {
+      async function fetchInfraHealth() {
+        const sessionParam = state.sessionId ? `?sessionId=${encodeURIComponent(state.sessionId)}` : '';
+        const body = await apiRequest(`${API_BASE}/v1/admin/infra-health${sessionParam}`, { headers: apiHeaders() });
+        return body.data?.services || {};
+      }
+
+      function renderInfraHealthHtml(services) {
+        if (!services || !Object.keys(services).length) return '';
+        const labels = { postgres: 'PostgreSQL', redis: 'Redis', caddy: 'Caddy', traefik: 'Traefik', listmonk: 'Listmonk', loki: 'Loki', vector: 'Vector' };
+        const items = Object.entries(services).map(([key, info]) => {
+          const label = labels[key] || key;
+          const dotClass = info.status === 'ok' ? 'ok' : info.status === 'degraded' ? 'degraded' : 'down';
+          const latency = info.latencyMs != null ? `<span style="color:var(--text-muted);font-size:10px;margin-left:4px;">${info.latencyMs}ms</span>` : '';
+          const errTip = info.error ? ` title="${escAttr(info.error)}"` : '';
+          return `<span class="health-dot ${dotClass}" style="margin-right:20px;"${errTip}>${escHtml(label)}${latency}</span>`;
+        }).join('');
+        return `<div class="panel" style="margin-bottom:16px;">
+          <div class="panel-header"><span class="panel-title">Infrastructure Health</span></div>
+          <div class="panel-body" style="padding:14px 18px;"><div class="health-row" style="margin:0;">${items}</div></div>
+        </div>`;
+      }
+
+      function renderMonitorTabs(body, infraHealth) {
         const tabs = [
           { id: 'services', label: 'Services' },
           { id: 'jobs',     label: 'Jobs' },
@@ -2822,7 +3006,8 @@
             style="padding:6px 16px;font-size:13px;border:none;cursor:pointer;border-bottom:2px solid ${active ? 'var(--accent,#60a5fa)' : 'transparent'};background:transparent;color:${active ? 'var(--text)' : 'var(--text-dim)'};font-weight:${active ? '600' : '400'};">${t.label}</button>`;
         }).join('');
 
-        body.innerHTML = `<div style="border-bottom:1px solid var(--border);margin-bottom:14px;">${tabBar}</div><div id="monitor-tab-content"></div>`;
+        const savedInfra = infraHealth ?? _monitorData.infraHealth ?? null;
+        body.innerHTML = `${renderInfraHealthHtml(savedInfra)}<div style="border-bottom:1px solid var(--border);margin-bottom:14px;">${tabBar}</div><div id="monitor-tab-content"></div>`;
 
         body.querySelectorAll('.monitor-tab').forEach(btn => {
           btn.addEventListener('click', () => {
@@ -2989,12 +3174,15 @@
         const loading = $('#monitor-loading');
         const empty = $('#monitor-empty');
         const body = $('#monitor-body');
-        loading.classList.remove('hidden');
+        const firstLoad = !_monitorData.nodes.length && !_monitorData.infraHealth;
+        if (firstLoad) loading.classList.remove('hidden');
         empty.classList.add('hidden');
         try {
           const [nodes, jobs] = await Promise.all([fetchTopology(), fetchJobs()]);
-          _monitorData = { nodes, jobs };
-          renderMonitorTabs(body);
+          let infraHealth = null;
+          try { infraHealth = await fetchInfraHealth(); } catch {}
+          _monitorData = { nodes, jobs, infraHealth };
+          renderMonitorTabs(body, infraHealth);
           renderMonitorTabContent();
           $('#monitor-timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
         } catch (err) {
@@ -3082,6 +3270,7 @@
 
           startExpiryTimer(expiresIn);
           loadInstances();
+          loadVersionsIntoSelect();
           startAutoRefresh('instances');
           toast('Authenticated successfully', 'success');
         } catch (err) {
@@ -3135,8 +3324,23 @@
           });
         });
 
+        // batch update bar
+        $('#batch-install-btn').addEventListener('click', runBatchInstall);
+        $('#batch-version-select').addEventListener('change', updateBatchBar);
+        $('#batch-cancel-btn').addEventListener('click', () => {
+          $$('.instance-checkbox').forEach(cb => cb.checked = false);
+          const sa = $('#instances-select-all');
+          if (sa) sa.checked = false;
+          updateBatchBar();
+        });
+
         // refresh buttons
-        $('#refresh-instances').addEventListener('click', loadInstances);
+        $('#refresh-instances').addEventListener('click', () => {
+          const sel = $('#batch-version-select');
+          if (sel) delete sel.dataset.loaded;
+          loadInstances();
+          loadVersionsIntoSelect();
+        });
         $('#refresh-events').addEventListener('click', loadEvents);
         $('#refresh-deployments').addEventListener('click', loadDeployments);
         $('#refresh-services').addEventListener('click', loadServices);
@@ -3162,6 +3366,54 @@
         // token actions
         $('#copy-token').addEventListener('click', copyToken);
         $('#revoke-logout').addEventListener('click', () => logout());
+
+        // api token keys — hard revoke by version
+        $('#revoke-key-version-btn').addEventListener('click', () => {
+          const v = $('#revoke-key-version-input').value.trim();
+          if (!v) { $('#revoke-key-version-input').focus(); return; }
+          $('#revoke-key-version-label').textContent = v;
+          $('#revoke-key-version-confirm').classList.remove('hidden');
+          $('#revoke-key-version-btn').classList.add('hidden');
+          $('#revoke-key-version-result').classList.add('hidden');
+        });
+
+        $('#revoke-key-version-cancel').addEventListener('click', () => {
+          $('#revoke-key-version-confirm').classList.add('hidden');
+          $('#revoke-key-version-btn').classList.remove('hidden');
+        });
+
+        $('#revoke-key-version-execute').addEventListener('click', async () => {
+          const v = $('#revoke-key-version-input').value.trim();
+          const btn = $('#revoke-key-version-execute');
+          const result = $('#revoke-key-version-result');
+          btn.disabled = true;
+          btn.textContent = 'Revoking…';
+          try {
+            const body = await apiRequest(
+              `${API_BASE}/v1/admin/auth/tokens/key-version/${encodeURIComponent(v)}`,
+              { method: 'DELETE', headers: apiHeaders() }
+            );
+            result.style.background = 'var(--green-dim)';
+            result.style.border = '1px solid var(--green)';
+            result.style.color = 'var(--green)';
+            const revoked = body.data?.revoked ?? 0;
+            const notified = body.data?.notified ?? 0;
+            result.textContent = `Revoked ${revoked} token(s) signed with key version "${v}". Notifications sent to ${notified} affected cluster owner(s).`;
+            result.classList.remove('hidden');
+            $('#revoke-key-version-confirm').classList.add('hidden');
+            $('#revoke-key-version-btn').classList.remove('hidden');
+            $('#revoke-key-version-input').value = '';
+          } catch (e) {
+            result.style.background = 'var(--red-dim)';
+            result.style.border = '1px solid var(--red)';
+            result.style.color = 'var(--red)';
+            result.textContent = `Error: ${e.message}`;
+            result.classList.remove('hidden');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Yes, revoke all';
+          }
+        });
       }
 
       // init
@@ -3176,6 +3428,7 @@
         $('#session-id-display').textContent = state.sessionId;
         startExpiryTimer(remainingSecs);
         loadInstances();
+        loadVersionsIntoSelect();
         startAutoRefresh('instances');
       }
     })();

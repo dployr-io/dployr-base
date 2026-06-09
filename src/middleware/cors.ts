@@ -73,8 +73,6 @@ export function createCorsMiddleware(getConfig: () => { allowed_origins?: string
       
       if (!raw) {
         log.error("CORS allowed origins are not configured; refusing cross-origin requests.");
-        log.error("Debug: corsConfig =", JSON.stringify(corsConfig));
-        log.error("Debug: process.env.CORS_ALLOWED_ORIGINS =", process.env.CORS_ALLOWED_ORIGINS);
         return null;
       }
 

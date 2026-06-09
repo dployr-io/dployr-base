@@ -11,7 +11,6 @@ import {
   attachDeleteInstance,
   attachPingInstance,
   attachAddInstanceDomain,
-  attachInstallDployr,
   attachRebootInstance,
   attachRestartDaemon,
   attachRotateInstanceToken,
@@ -40,9 +39,6 @@ attachAddInstanceDomain(instances);
 
 instances.on(["POST"], "/:instanceId/tokens/rotate", resolveCluster("instance", { path: "instanceId" }), requireClusterAdmin);
 attachRotateInstanceToken(instances);
-
-instances.on(["POST"], "/:instanceId/system/install", requireClusterAdmin);
-attachInstallDployr(instances);
 
 instances.on(["POST"], "/:instanceId/system/reboot", requireClusterAdmin);
 attachRebootInstance(instances);

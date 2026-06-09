@@ -43,9 +43,18 @@ function recentEmailChanges(metadata: Record<string, any> | undefined): number[]
 
 // Get current user
 users.get("/me", async (c) => {
-  const sessionId = getCookie(c, "session");
+  // authMiddleware already authenticated the request and stored the session
+  // (works for both cookie sessions and dpat_ Bearer tokens).
+  let session = c.get("session");
 
-  if (!sessionId) {
+  // Refresh from KV only for cookie-based sessions so we get the latest state.
+  const sessionId = getCookie(c, "session");
+  if (!session && sessionId) {
+    const kv = getKVStore(c);
+    session = (await kv.getSession(sessionId)) ?? undefined;
+  }
+
+  if (!session) {
     return c.json(
       createErrorResponse({
         message: "Not authenticated",
@@ -55,22 +64,8 @@ users.get("/me", async (c) => {
     );
   }
 
-  const kv = getKVStore(c);
   const db = getDbStore(c);
-
-  const session = await kv.getSession(sessionId);
-
-  if (!session) {
-    return c.json(
-      createErrorResponse({
-        message: "Invalid or expired session",
-        code: ERROR.AUTH.BAD_SESSION.code,
-      }),
-      ERROR.AUTH.BAD_SESSION.status,
-    );
-  }
-
-  const user = await db.users.find({ email: session.email });
+  const user = await db.users.find({ id: session.userId }) ?? await db.users.find({ email: session.email });
 
   if (!user) {
     return c.json(
@@ -83,7 +78,7 @@ users.get("/me", async (c) => {
   }
 
   try {
-    const clusters = await db.clusters.listUserClusters(user.id);
+    const { clusters } = await db.clusters.list({ userId: user.id });
 
     return c.json(createSuccessResponse({ user, clusters }));
   } catch (error) {

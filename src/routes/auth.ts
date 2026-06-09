@@ -8,9 +8,11 @@ import z from "zod";
 import { sanitizeReturnTo } from "@/lib/utils.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { getKVStore, getOAuthService, getDbStore, getJWTService, getEmailService, getAuthService, getInstancePoolService } from "@/lib/config/context.js";
+import { authMiddleware } from "@/middleware/auth.js";
 import { worker } from "@/services/background/index.js";
 import { notify } from "@/services/background/jobs/notify.js";
 import { Logger } from "@/lib/logger.js";
+import { isDisposableEmail } from "@/lib/email/blocklist.js";
 
 const log = new Logger("Auth");
 
@@ -153,11 +155,21 @@ auth.post("/login/email", async (c) => {
   }
 
   const { email } = validation.data;
+
+  if (process.env.NODE_ENV !== "test" && await isDisposableEmail(email)) {
+    return c.json(
+      createErrorResponse({ message: "Email domain not allowed. Use a permanent email address or sign in with OAuth.", code: ERROR.REQUEST.BAD_REQUEST.code }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
+  }
+
   const turnstileToken = validation.data["cf-turnstile-response"];
   const turnstileSecret = c.env.TURNSTILE_SECRET_KEY;
   const isTestEnv = process.env.NODE_ENV === "test";
 
-  if (!isTestEnv && turnstileSecret) {
+  const isCli = c.req.query("client") === "cli";
+
+  if (!isTestEnv && !isCli && turnstileSecret) {
     if (!turnstileToken) {
       return c.json(
         createErrorResponse({ message: "Bot verification required", code: ERROR.REQUEST.BAD_REQUEST.code }),
@@ -246,6 +258,18 @@ auth.post("/login/email/verify", async (c) => {
   }
 
   return c.json(createSuccessResponse({ email }, "Login successful"));
+});
+
+// Current session info (createdAt, expiresAt, provider)
+auth.get("/session", authMiddleware, async (c) => {
+  const session = c.get("session")!;
+  return c.json(
+    createSuccessResponse({
+      provider: session.provider,
+      createdAt: session.createdAt,
+      expiresAt: session.expiresAt,
+    }),
+  );
 });
 
 // Logout

@@ -87,6 +87,10 @@ export class AuthService {
 
     if (!cluster || cluster.poolInstanceId || process.env.NODE_ENV === "test") return cluster;
 
+    // Skip pool assignment if the cluster already has a dedicated instance (pro tier).
+    const dedicated = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
+    if (dedicated) return cluster;
+
     try {
       await this.db.instances.assignPool(cluster.id, "hobby");
     } catch (error) {
@@ -106,7 +110,8 @@ export class AuthService {
    */
   async createSession({ user }: { user: User }): Promise<{ sessionId: string; clusters: { id: string; name: string; owner: string; role: string }[] }> {
     const sessionId = crypto.randomUUID();
-    const clusters = await this.db.clusters.listUserClusters(user.id);
+    const { clusters: userClusters } = await this.db.clusters.list({ userId: user.id });
+    const clusters = userClusters.map((cl) => ({ id: cl.id, name: cl.name, owner: cl.owner ?? "", role: cl.role ?? "" }));
     await this.kv.createSession(sessionId, user, clusters);
     return { sessionId, clusters };
   }

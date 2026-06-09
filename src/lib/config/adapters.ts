@@ -12,6 +12,7 @@ import { PolarService } from "@/services/billing/polar.js";
 import { DigitalOceanVMService } from "@/services/vm/index.js";
 import { EmailProvider, ZeptoProvider } from "@/services/notifications/email/index.js";
 import { Logger } from "@/lib/logger.js";
+import { LokiClient } from "@/services/loki.js";
 
 const log = new Logger("adapters");
 
@@ -318,6 +319,15 @@ export async function initializeFromConfig(config: Config) {
     process.env.ENCRYPTION_KEY = encryptionKey;
   }
 
+  const tokenHmacKeys = config.security?.token_hmac_keys;
+  if (tokenHmacKeys && Object.keys(tokenHmacKeys).length > 0) {
+    process.env.TOKEN_HMAC_KEYS = JSON.stringify(tokenHmacKeys);
+  }
+  const tokenHmacKeyVersion = config.security?.token_hmac_key_version;
+  if (tokenHmacKeyVersion) {
+    process.env.TOKEN_HMAC_KEY_VERSION = tokenHmacKeyVersion;
+  }
+
   const kv = await createKVFromConfig(config);
   const db = await createDatabaseFromConfig(config);
   const storage = await createStorageFromConfig(config);
@@ -328,7 +338,8 @@ export async function initializeFromConfig(config: Config) {
   const traefik = traefikRedis && config.traefik?.enabled
     ? new TraefikService(config.traefik.tld ?? "dployr.run", traefikRedis)
     : undefined;
-  const wsHandler = new WebSocketHandler(kv, db, traefik);
+  const loki = new LokiClient(config.loki);
+  const wsHandler = new WebSocketHandler(kv, db, traefik, undefined, loki);
 
-  return { kv, db, storage, ws: wsHandler, email, config, billingProvider, vmProvider, traefikRedis, traefik: traefik ?? null };
+  return { kv, db, storage, ws: wsHandler, email, config, billingProvider, vmProvider, traefikRedis, traefik: traefik ?? null, loki };
 }

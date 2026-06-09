@@ -368,6 +368,16 @@ export class InstanceStore extends BaseStore {
            AND id NOT IN (
              SELECT cluster_id FROM instances
              WHERE kind = 'dedicated' AND cluster_id IS NOT NULL
+           )
+         UNION
+         SELECT c.id, c.name FROM clusters c
+         JOIN billing b ON b.cluster_id = c.id
+         WHERE b.plan = 'pro'
+           AND b.status = 'active'
+           AND c.pool_instance_id IS NOT NULL
+           AND c.id NOT IN (
+             SELECT cluster_id FROM instances
+             WHERE kind = 'dedicated' AND cluster_id IS NOT NULL
            )`,
       )
       .all();
