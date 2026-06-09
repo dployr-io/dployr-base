@@ -85,7 +85,7 @@ export class AuthService {
       return null;
     }
 
-    if (!cluster || cluster.poolInstanceId || process.env.NODE_ENV === "test") return cluster;
+    if (!cluster || cluster.poolInstanceId) return cluster;
 
     // Skip pool assignment if the cluster already has a dedicated instance (pro tier).
     const dedicated = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
