@@ -34,6 +34,7 @@ async function authenticateApiToken(c: AppContext, token: string): Promise<Sessi
 
   const { clusters: userClusters } = await db.clusters.list({ userId: user.id });
   const session: Session = {
+    id: crypto.randomUUID(),
     userId: user.id,
     email: user.email,
     provider: user.provider as Session["provider"],
@@ -65,6 +66,7 @@ async function authenticateReprovisionToken(c: AppContext, token: string): Promi
   if (!user || !cluster) return null;
 
   return {
+    id: crypto.randomUUID(),
     userId: user.id,
     email: user.email,
     provider: user.provider as Session["provider"],
