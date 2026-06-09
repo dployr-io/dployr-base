@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Hono } from "hono";
-import { Bindings, Variables, OAuthProvider, createSuccessResponse, createErrorResponse } from "@/types/index.js";
+import { Bindings, Variables, OAuthProvider, Session, createSuccessResponse, createErrorResponse } from "@/types/index.js";
+import type { ApiToken } from "@/lib/db/store/db/api-tokens.js";
 import { setCookie, getCookie } from "hono/cookie";
 import z from "zod";
 import { sanitizeReturnTo } from "@/lib/utils.js";
@@ -17,6 +18,14 @@ import { isDisposableEmail } from "@/lib/email/blocklist.js";
 const log = new Logger("Auth");
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+function extractRequestMeta(req: Request) {
+  const headers = req.headers;
+  const ip = headers.get("cf-connecting-ip") ?? headers.get("x-forwarded-for")?.split(",")[0].trim() ?? undefined;
+  const userAgent = headers.get("user-agent") ?? undefined;
+  const country = headers.get("cf-ipcountry") ?? undefined;
+  return { ip, userAgent, country };
+}
 
 const loginSchema = z.object({
   email: z.email(),
@@ -120,7 +129,7 @@ auth.get("/callback/:provider", async (c) => {
 
     const vmService = c.get("vmProvider") ?? undefined;
     await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c), pool: getInstancePoolService(c) });
-    const { sessionId, clusters } = await authService.createSession({ user });
+    const { sessionId, clusters } = await authService.createSession({ user, meta: extractRequestMeta(c.req.raw) });
 
     await kv.logEvent({
       actor: { id: user.id, type: "user" },
@@ -242,7 +251,7 @@ auth.post("/login/email/verify", async (c) => {
   const vmService = c.get("vmProvider") ?? undefined;
   await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c), pool: getInstancePoolService(c) });
 
-  const { sessionId, clusters } = await authService.createSession({ user });
+  const { sessionId, clusters } = await authService.createSession({ user, meta: extractRequestMeta(c.req.raw) });
 
   await kv.logEvent({
     actor: { id: user.id, type: "user" },
@@ -261,24 +270,65 @@ auth.post("/login/email/verify", async (c) => {
 });
 
 // Current session info (createdAt, expiresAt, provider)
-auth.get("/session", authMiddleware, async (c) => {
+auth.get("/sessions", authMiddleware, async (c) => {
   const session = c.get("session")!;
-  return c.json(
-    createSuccessResponse({
-      provider: session.provider,
-      createdAt: session.createdAt,
-      expiresAt: session.expiresAt,
-    }),
-  );
+  const kv = getKVStore(c);
+  const db = getDbStore(c);
+  const currentSessionId = getCookie(c, "session");
+
+  const [sessions, { tokens }] = await Promise.all([
+    kv.listUserSessions(session.userId),
+    db.apiTokens.list({ userId: session.userId }),
+  ]);
+
+  return c.json(createSuccessResponse({
+    sessions: sessions.map((s: Session) => ({
+      id: s.id,
+      provider: s.provider,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+      ip: s.ip,
+      country: s.country,
+      device: s.device,
+      current: s.id === currentSessionId,
+    })),
+    tokens: tokens.map((t: ApiToken) => ({
+      id: t.id,
+      name: t.name,
+      scopes: t.scopes,
+      createdAt: t.createdAt,
+      expiresAt: t.expiresAt,
+      lastUsedAt: t.lastUsedAt,
+    })),
+  }));
 });
 
-// Logout
+auth.delete("/sessions/:id", authMiddleware, async (c) => {
+  const session = c.get("session")!;
+  const kv = getKVStore(c);
+  const targetId = c.req.param("id");
+
+  const target = await kv.getSession(targetId);
+  if (!target || target.userId !== session.userId) {
+    return c.json(createErrorResponse({ message: "Session not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  }
+
+  await kv.deleteSession(targetId);
+  return c.json(createSuccessResponse({ revoked: true }));
+});
+
+// Logout — revokes all sessions and all API tokens for the user
 auth.get("/logout", async (c) => {
   const sessionId = getCookie(c, "session");
 
   if (sessionId) {
     const kv = getKVStore(c);
-    await kv.deleteSession(sessionId);
+    const session = await kv.getSession(sessionId);
+    if (session) {
+      await kv.deleteAllUserSessions(session.userId);
+    } else {
+      await kv.deleteSession(sessionId);
+    }
   }
 
   const url = new URL(c.req.url);

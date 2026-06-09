@@ -131,8 +131,8 @@ export class UserStore extends BaseStore {
       picture: row.picture || "",
       provider: row.provider as OAuthProvider,
       metadata: row.metadata || {},
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     };
   }
 }

@@ -47,6 +47,8 @@ export class KVStore {
   getSessionIdByUserId = (...args: Parameters<SessionStore["getSessionIdByUserId"]>) => this.sessions.getSessionIdByUserId(...args);
   refreshSession = (...args: Parameters<SessionStore["refreshSession"]>) => this.sessions.refreshSession(...args);
   deleteSession = (...args: Parameters<SessionStore["deleteSession"]>) => this.sessions.deleteSession(...args);
+  listUserSessions = (...args: Parameters<SessionStore["listUserSessions"]>) => this.sessions.listUserSessions(...args);
+  deleteAllUserSessions = (...args: Parameters<SessionStore["deleteAllUserSessions"]>) => this.sessions.deleteAllUserSessions(...args);
   createState = (...args: Parameters<SessionStore["createState"]>) => this.sessions.createState(...args);
   validateState = (...args: Parameters<SessionStore["validateState"]>) => this.sessions.validateState(...args);
   createOTP = (...args: Parameters<SessionStore["createOTP"]>) => this.sessions.createOTP(...args);

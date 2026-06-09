@@ -397,8 +397,8 @@ export class InstanceStore extends BaseStore {
       clusterId: row.cluster_id != null ? (row.cluster_id as string) : null,
       managed: row.managed ?? true,
       metadata: row.metadata ?? {},
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     };
   }
 }

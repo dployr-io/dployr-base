@@ -32,9 +32,9 @@ function toToken(row: ApiTokenRow): ApiToken {
     userId: row.user_id,
     name: row.name,
     scopes: row.scopes ?? [],
-    createdAt: row.created_at,
-    expiresAt: row.expires_at,
-    lastUsedAt: row.last_used_at,
+    createdAt: Number(row.created_at),
+    expiresAt: row.expires_at != null ? Number(row.expires_at) : null,
+    lastUsedAt: row.last_used_at != null ? Number(row.last_used_at) : null,
   };
 }
 

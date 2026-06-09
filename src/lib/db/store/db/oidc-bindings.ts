@@ -127,6 +127,6 @@ function toBinding(row: OidcBindingRow): OidcBinding {
     issuer: row.issuer,
     subject: row.subject,
     name: row.name,
-    createdAt: row.created_at,
+    createdAt: Number(row.created_at),
   };
 }

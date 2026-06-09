@@ -7,6 +7,8 @@ import { initializeDatabase } from "@/lib/db/migrate.js";
 import { loadConfig, type Config } from "@/lib/config/loader.js";
 import { initializeFromConfig } from "@/lib/config/adapters.js";
 import { setLogLevel, initFileLogging, Logger } from "@/lib/logger.js";
+import { fileURLToPath } from "url";
+import { join } from "path";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import { IKVAdapter } from "@/lib/storage/kv.interface.js";
 import { PostgresAdapter } from "@/lib/db/pg-adapter.js";
@@ -83,7 +85,8 @@ export async function initializeAdapters(): Promise<Adapters> {
   const config = loadConfig();
   setLogLevel(config.logging?.level ?? "info");
   if (process.env.NODE_ENV === "development") {
-    initFileLogging("logs/dployr-base.log");
+    const root = join(fileURLToPath(import.meta.url), "../../../..");
+    initFileLogging(join(root, "logs/dployr-base.log"));
   }
 
   const initialized = await initializeFromConfig(config);

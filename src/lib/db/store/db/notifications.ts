@@ -78,8 +78,8 @@ export class NotificationsStore extends BaseStore {
       enabled: row.enabled as boolean,
       slackWebhookUrl: row.slack_webhook_url as string | null,
       discordWebhookUrl: row.discord_webhook_url as string | null,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     };
   }
 }

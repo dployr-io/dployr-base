@@ -115,7 +115,16 @@ export interface ClusterSubscription {
   updatedAt: number;
 }
 
+export interface SessionDevice {
+  browser: string;
+  browserVersion: string;
+  os: string;
+  osVersion: string;
+  type: "desktop" | "mobile" | "tablet" | "unknown";
+}
+
 export interface Session {
+  id: string;
   userId: string;
   email: string;
   provider: OAuthProvider;
@@ -123,6 +132,9 @@ export interface Session {
   createdAt: number;
   expiresAt: number;
   scopes?: string[];
+  ip?: string;
+  country?: string;
+  device?: SessionDevice;
 }
 
 export type Variables = {

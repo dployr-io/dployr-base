@@ -112,8 +112,8 @@ export class DomainStore extends BaseStore {
       status: row.status as "pending" | "active",
       verificationToken: row.verification_token as string,
       provider: row.provider as DNSProvider | null,
-      createdAt: row.created_at as number,
-      activatedAt: row.activated_at as number | null,
+      createdAt: Number(row.created_at),
+      activatedAt: row.activated_at != null ? Number(row.activated_at) : null,
     };
   }
 }

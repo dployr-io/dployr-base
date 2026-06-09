@@ -26,6 +26,7 @@
     "redis": "^5.10.0",
     "smol-toml": "^1.5.2",
     "tsx": "^4.19.2",
+    "ua-parser-js": "^2.0.10",
     "ulid": "^3.0.1",
     "ws": "^8.18.0",
     "zod": "^4.0.5"
@@ -42,6 +43,7 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
+    "@types/ua-parser-js": "^0.7.39",
     "@types/ws": "^8.5.13",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",

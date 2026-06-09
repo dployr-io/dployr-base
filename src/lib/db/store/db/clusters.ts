@@ -118,8 +118,8 @@ export class ClusterStore extends BaseStore {
       roles,
       poolInstanceId: (cluster.pool_instance_id as string) ?? null,
       metadata: (cluster as any).metadata || {},
-      createdAt: cluster.created_at as number,
-      updatedAt: cluster.updated_at as number,
+      createdAt: Number(cluster.created_at),
+      updatedAt: Number(cluster.updated_at),
     };
   }
 
@@ -241,8 +241,8 @@ export class ClusterStore extends BaseStore {
         roles,
         poolInstanceId: (cluster.pool_instance_id as string) ?? null,
         metadata: (cluster as any).metadata || {},
-        createdAt: cluster.created_at as number,
-        updatedAt: cluster.updated_at as number,
+        createdAt: Number(cluster.created_at),
+        updatedAt: Number(cluster.updated_at),
         ...(filter?.userId !== undefined && {
           role: (cluster as any).user_role as string,
           owner: (cluster as any).owner_name as string ?? undefined,
@@ -297,8 +297,8 @@ export class ClusterStore extends BaseStore {
       roles,
       poolInstanceId: (cluster.pool_instance_id as string) ?? null,
       metadata: (cluster as any).metadata || {},
-      createdAt: cluster.created_at as number,
-      updatedAt: cluster.updated_at as number,
+      createdAt: Number(cluster.created_at),
+      updatedAt: Number(cluster.updated_at),
     };
   }
 
@@ -321,8 +321,8 @@ export class ClusterStore extends BaseStore {
           roles: { owner: [userId], admin: [], developer: [], viewer: [], invited: [] },
           poolInstanceId: (r.pool_instance_id as string) ?? null,
           metadata: r.metadata || {},
-          createdAt: r.created_at as number,
-          updatedAt: r.updated_at as number,
+          createdAt: Number(r.created_at),
+          updatedAt: Number(r.updated_at),
         };
       }
 
@@ -354,8 +354,8 @@ export class ClusterStore extends BaseStore {
         roles: { owner: [userId], admin: [], developer: [], viewer: [], invited: [] },
         poolInstanceId: (clusterRow.pool_instance_id as string) ?? null,
         metadata: clusterRow.metadata || {},
-        createdAt: clusterRow.created_at as number,
-        updatedAt: clusterRow.updated_at as number,
+        createdAt: Number(clusterRow.created_at),
+        updatedAt: Number(clusterRow.updated_at),
       };
     });
   }
@@ -697,8 +697,8 @@ export class ClusterStore extends BaseStore {
       picture: row.picture as string,
       provider: row.provider as OAuthProvider,
       role: row.role as UserRole,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     }));
 
     return { users, total };
@@ -850,8 +850,8 @@ export class ClusterStore extends BaseStore {
       roles,
       poolInstanceId: result.pool_instance_id ?? null,
       metadata: result.metadata ? JSON.parse(result.metadata) : undefined,
-      createdAt: result.created_at,
-      updatedAt: result.updated_at,
+      createdAt: Number(result.created_at),
+      updatedAt: Number(result.updated_at),
     };
   }
 

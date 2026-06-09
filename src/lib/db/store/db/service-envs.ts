@@ -114,8 +114,8 @@ export class ServiceEnvStore extends BaseStore {
       serviceId: row.service_id as string,
       key: row.key as string,
       value: row.value as string,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     };
   }
 }

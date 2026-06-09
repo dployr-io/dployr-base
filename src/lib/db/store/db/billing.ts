@@ -24,10 +24,10 @@ export class BillingStore extends BaseStore {
       polarCustomerId: row.polar_customer_id as string | null,
       polarSubscriptionId: row.polar_subscription_id as string | null,
       status: row.status as SubscriptionStatus,
-      canceledAt: row.canceled_at as number | null,
-      periodEnd: row.period_end as number | null,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
+      canceledAt: row.canceled_at != null ? Number(row.canceled_at) : null,
+      periodEnd: row.period_end != null ? Number(row.period_end) : null,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     };
   }
 
@@ -48,10 +48,10 @@ export class BillingStore extends BaseStore {
       polarCustomerId: row.polar_customer_id as string | null,
       polarSubscriptionId: row.polar_subscription_id as string | null,
       status: row.status as SubscriptionStatus,
-      canceledAt: row.canceled_at as number | null,
-      periodEnd: row.period_end as number | null,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
+      canceledAt: row.canceled_at != null ? Number(row.canceled_at) : null,
+      periodEnd: row.period_end != null ? Number(row.period_end) : null,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     };
   }
 
@@ -72,10 +72,10 @@ export class BillingStore extends BaseStore {
       polarCustomerId: row.polar_customer_id as string | null,
       polarSubscriptionId: row.polar_subscription_id as string | null,
       status: row.status as SubscriptionStatus,
-      canceledAt: row.canceled_at as number | null,
-      periodEnd: row.period_end as number | null,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
+      canceledAt: row.canceled_at != null ? Number(row.canceled_at) : null,
+      periodEnd: row.period_end != null ? Number(row.period_end) : null,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     };
   }
 

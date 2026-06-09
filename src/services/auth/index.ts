@@ -108,11 +108,11 @@ export class AuthService {
    * Creates a new session for the user and returns the session ID alongside
    * the user's cluster list.
    */
-  async createSession({ user }: { user: User }): Promise<{ sessionId: string; clusters: { id: string; name: string; owner: string; role: string }[] }> {
+  async createSession({ user, meta }: { user: User; meta?: { ip?: string; userAgent?: string; country?: string } }): Promise<{ sessionId: string; clusters: { id: string; name: string; owner: string; role: string }[] }> {
     const sessionId = crypto.randomUUID();
     const { clusters: userClusters } = await this.db.clusters.list({ userId: user.id });
     const clusters = userClusters.map((cl) => ({ id: cl.id, name: cl.name, owner: cl.owner ?? "", role: cl.role ?? "" }));
-    await this.kv.createSession(sessionId, user, clusters);
+    await this.kv.createSession(sessionId, user, clusters, undefined, meta);
     return { sessionId, clusters };
   }
 }

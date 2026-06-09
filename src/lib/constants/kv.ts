@@ -14,6 +14,8 @@ export const KV_KEYS = {
   SESSION: {
     BY_ID: (id: string) => `session:${id}`,
     BY_USER: (userId: string) => `session:user:${userId}`,
+    LIST_PREFIX: (userId: string) => `session:list:${userId}:`,
+    LIST_ENTRY: (userId: string, sessionId: string) => `session:list:${userId}:${sessionId}`,
   },
   EVENT: {
     IDEM: (type: string, actorId: string, ray: string, targetScope: string) =>

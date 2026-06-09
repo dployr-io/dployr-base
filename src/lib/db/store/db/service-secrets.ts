@@ -201,8 +201,8 @@ export class ServiceSecretStore extends BaseStore {
       id: row.id as string,
       serviceId: row.service_id as string,
       key: row.key as string,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
     };
   }
 }
