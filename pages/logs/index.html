@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dployr / logs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0a0b0d;
+      --bg-1:       #0f1114;
+      --bg-2:       #161920;
+      --bg-3:       #1d2129;
+      --border:     #252932;
+      --border-hi:  #333a47;
+      --text:       #e2e6ef;
+      --text-dim:   #6b7280;
+      --text-muted: #3d4451;
+      --accent:     #4f9cf9;
+      --green:      #22c55e;
+      --red:        #ef4444;
+      --yellow:     #f59e0b;
+      --mono:       'IBM Plex Mono', monospace;
+      --radius:     4px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #setup-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      z-index: 100;
+    }
+
+    .setup-card {
+      width: 380px;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+    }
+
+    .setup-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+    .setup-sub   { font-size: 12px; color: var(--text-dim); margin-bottom: 24px; }
+
+    .form-group   { margin-bottom: 14px; }
+    .form-label   { display: block; font-size: 11px; letter-spacing: .06em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 5px; }
+    .form-input   { width: 100%; background: var(--bg-2); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 12px; padding: 9px 12px; border-radius: var(--radius); outline: none; }
+    .form-input:focus { border-color: var(--accent); }
+    .form-input::placeholder { color: var(--text-muted); }
+
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-family: var(--mono); font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid transparent; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; width: 100%; justify-content: center; margin-top: 8px; }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-ghost { background: none; border-color: var(--border); color: var(--text-dim); }
+    .btn-ghost:hover { border-color: var(--border-hi); color: var(--text); }
+    .btn-sm { padding: 5px 10px; font-size: 11px; }
+
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      height: 48px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-1);
+      flex-shrink: 0;
+    }
+
+    .logo { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+    .logo-sep { color: var(--text-muted); }
+    .logo-sub { color: var(--text-dim); font-weight: 300; font-size: 12px; }
+
+    #settings-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; padding: 4px; line-height: 1; }
+    #settings-btn:hover { color: var(--text); }
+
+    #settings-panel {
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+
+    #settings-panel .form-group { margin: 0; min-width: 260px; }
+    #settings-panel .form-input { font-size: 11px; padding: 7px 10px; }
+
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-1);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    #container-select {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: var(--radius);
+      outline: none;
+      min-width: 180px;
+    }
+
+    .range-group { display: flex; gap: 2px; }
+    .range-btn {
+      padding: 5px 10px;
+      font-size: 11px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+    .range-btn.active { background: rgba(79,156,249,.12); border-color: var(--accent); color: var(--accent); }
+    .range-btn:hover:not(.active) { border-color: var(--border-hi); color: var(--text); }
+
+    #search-input {
+      flex: 1;
+      min-width: 160px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: var(--radius);
+      outline: none;
+    }
+    #search-input:focus { border-color: var(--accent); }
+    #search-input::placeholder { color: var(--text-muted); }
+
+    #log-wrap {
+      flex: 1;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+
+    .log-row {
+      display: grid;
+      grid-template-columns: 100px 140px 1fr;
+      gap: 0;
+      padding: 3px 20px;
+      border-bottom: 1px solid transparent;
+      line-height: 1.6;
+    }
+
+    .log-row:hover { background: var(--bg-1); }
+
+    .log-row.is-error { background: rgba(239,68,68,.04); }
+    .log-row.is-error:hover { background: rgba(239,68,68,.08); }
+    .log-row.is-warn  { background: rgba(245,158,11,.04); }
+    .log-row.is-warn:hover  { background: rgba(245,158,11,.08); }
+
+    .log-time      { color: var(--text-muted); white-space: nowrap; user-select: none; }
+    .log-container { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 12px; }
+    .log-line      { color: var(--text); white-space: pre-wrap; word-break: break-all; }
+
+    .log-row.is-error .log-line { color: #fca5a5; }
+    .log-row.is-warn  .log-line { color: #fcd34d; }
+
+    #status-bar {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin: 0 auto;
+    }
+
+    #load-more-btn {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      background: var(--bg-3);
+      border-color: var(--border-hi);
+      color: var(--text);
+      padding: 8px 20px;
+      font-size: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.6);
+    }
+    #load-more-btn:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+
+    .hidden { display: none !important; }
+
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #error-banner {
+      margin: 0 20px 0;
+      padding: 10px 14px;
+      background: rgba(239,68,68,.08);
+      border: 1px solid var(--red);
+      border-radius: var(--radius);
+      color: var(--red);
+      font-size: 12px;
+      margin: 12px 20px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="setup-screen">
+  <div class="setup-card">
+    <div class="setup-title">dployr / logs</div>
+    <div class="setup-sub">Configure your Loki endpoint to continue.</div>
+    <div class="form-group">
+      <label class="form-label">Loki endpoint</label>
+      <input class="form-input" id="setup-endpoint" placeholder="https://loki.dployr.io" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Bearer token</label>
+      <input class="form-input" id="setup-token" type="password" placeholder="••••••••••••••••" />
+    </div>
+    <button class="btn btn-primary" id="setup-save">Connect</button>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div class="logo">
+      <span>dployr</span>
+      <span class="logo-sep">/</span>
+      <span class="logo-sub">logs</span>
+    </div>
+    <button id="settings-btn" title="Settings">⚙</button>
+  </header>
+
+  <div id="settings-panel" class="hidden">
+    <div class="form-group">
+      <label class="form-label">Loki endpoint</label>
+      <input class="form-input" id="cfg-endpoint" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Bearer token</label>
+      <input class="form-input" id="cfg-token" type="password" />
+    </div>
+    <button class="btn btn-ghost btn-sm" id="cfg-save">Save</button>
+    <button class="btn btn-ghost btn-sm" id="cfg-cancel">Cancel</button>
+  </div>
+
+  <div id="toolbar">
+    <select id="container-select">
+      <option value="">all containers</option>
+    </select>
+    <div class="range-group">
+      <button class="range-btn" data-range="15m">15m</button>
+      <button class="range-btn active" data-range="1h">1h</button>
+      <button class="range-btn" data-range="6h">6h</button>
+      <button class="range-btn" data-range="24h">24h</button>
+    </div>
+    <input id="search-input" placeholder="filter logs…" autocomplete="off" />
+    <span id="status-bar"></span>
+    <button class="btn btn-ghost btn-sm" id="refresh-btn">Refresh</button>
+  </div>
+
+  <div id="error-banner" class="hidden"></div>
+  <div id="log-wrap"></div>
+  <button class="btn btn-ghost btn-sm hidden" id="load-more-btn">Load more</button>
+</div>
+
+<script>
+(function () {
+  const cfg = {
+    get endpoint() { return localStorage.getItem('loki_endpoint') || ''; },
+    get token()    { return localStorage.getItem('loki_token') || ''; },
+    set endpoint(v) { localStorage.setItem('loki_endpoint', v.replace(/\/$/, '')); },
+    set token(v)    { localStorage.setItem('loki_token', v); },
+  };
+
+  const state = {
+    range: '1h',
+    container: '',
+    search: '',
+    entries: [],
+    loading: false,
+    oldestNs: null,
+    hasMore: false,
+  };
+
+  const $ = id => document.getElementById(id);
+
+  const escHtml = s => String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  function nsToMs(ns) {
+    return Math.floor(Number(BigInt(ns) / 1000000n));
+  }
+
+  function fmtTime(ms) {
+    return new Date(ms).toISOString().slice(11, 23);
+  }
+
+  function rangeStartMs() {
+    const offsets = { '15m': 15*60e3, '1h': 3600e3, '6h': 6*3600e3, '24h': 24*3600e3 };
+    return Date.now() - (offsets[state.range] || 3600e3);
+  }
+
+  function buildQuery() {
+    let q = state.container
+      ? `{container="${state.container}"}`
+      : `{source="docker"}`;
+    if (state.search.trim()) {
+      q += ` |= ${JSON.stringify(state.search.trim())}`;
+    }
+    return q;
+  }
+
+  async function lokiFetch(path, params) {
+    const url = `${cfg.endpoint}${path}?${new URLSearchParams(params)}`;
+    const res = await fetch(url, {
+      headers: cfg.token ? { Authorization: `Bearer ${cfg.token}` } : {},
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`${res.status} — ${text.slice(0, 120) || res.statusText}`);
+    }
+    return res.json();
+  }
+
+  function parseStreams(streams) {
+    const rows = [];
+    for (const stream of streams) {
+      const container = stream.stream?.container
+        || stream.stream?.source
+        || Object.values(stream.stream || {})[0]
+        || '—';
+      for (const [tsNs, line] of stream.values || []) {
+        rows.push({ tsNs, tsMs: nsToMs(tsNs), container, line });
+      }
+    }
+    rows.sort((a, b) => (BigInt(b.tsNs) > BigInt(a.tsNs) ? 1 : -1));
+    return rows;
+  }
+
+  function renderRows(rows) {
+    return rows.map(r => {
+      const isError = /error|exception|fatal/i.test(r.line);
+      const isWarn  = !isError && /warn|warning/i.test(r.line);
+      const cls = isError ? 'is-error' : isWarn ? 'is-warn' : '';
+      return `<div class="log-row ${cls}">
+        <span class="log-time">${escHtml(fmtTime(r.tsMs))}</span>
+        <span class="log-container" title="${escHtml(r.container)}">${escHtml(r.container)}</span>
+        <span class="log-line">${escHtml(r.line)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function isNearBottom() {
+    const el = $('log-wrap');
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
+
+  function updateLoadMore() {
+    $('load-more-btn').classList.toggle('hidden', !(state.hasMore && isNearBottom()));
+  }
+
+  function setStatus(msg) { $('status-bar').textContent = msg; }
+  function setError(msg) {
+    const el = $('error-banner');
+    if (msg) { el.textContent = msg; el.classList.remove('hidden'); }
+    else { el.classList.add('hidden'); }
+  }
+
+  async function load(append = false) {
+    if (state.loading) return;
+    state.loading = true;
+    $('refresh-btn').disabled = true;
+    setError('');
+
+    const endMs   = append && state.oldestNs
+      ? nsToMs(state.oldestNs) - 1
+      : Date.now();
+    const startMs = rangeStartMs();
+
+    try {
+      const body = await lokiFetch('/loki/api/v1/query_range', {
+        query:     buildQuery(),
+        start:     String(startMs * 1e6),
+        end:       String(endMs * 1e6),
+        limit:     '200',
+        direction: 'backward',
+      });
+
+      const rows = parseStreams(body.data?.result || []);
+
+      if (append) {
+        state.entries = [...state.entries, ...rows];
+      } else {
+        state.entries = rows;
+        $('log-wrap').scrollTop = 0;
+      }
+
+      if (rows.length) {
+        state.oldestNs = rows[rows.length - 1].tsNs;
+      }
+
+      if (!append) {
+        $('log-wrap').innerHTML = state.entries.length
+          ? renderRows(state.entries)
+          : '<div style="padding:40px 20px;text-align:center;color:var(--text-muted);">No logs in this range.</div>';
+      } else {
+        $('log-wrap').insertAdjacentHTML('beforeend', renderRows(rows));
+      }
+
+      state.hasMore = rows.length >= 200;
+      updateLoadMore();
+      setStatus(`${state.entries.length} lines · ${new Date().toLocaleTimeString()}`);
+    } catch (err) {
+      setError(err.message);
+      setStatus('');
+    } finally {
+      state.loading = false;
+      $('refresh-btn').disabled = false;
+    }
+  }
+
+  async function loadContainers() {
+    try {
+      const body = await lokiFetch('/loki/api/v1/label/container/values', {});
+      const sel = $('container-select');
+      sel.innerHTML = '<option value="">all containers</option>';
+      for (const name of (body.data || [])) {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = name;
+        sel.appendChild(opt);
+      }
+    } catch {}
+  }
+
+  function boot() {
+    if (!cfg.endpoint) {
+      $('setup-screen').classList.remove('hidden');
+      $('app').classList.add('hidden');
+      return;
+    }
+    $('setup-screen').classList.add('hidden');
+    $('app').classList.remove('hidden');
+    loadContainers();
+    load();
+  }
+
+  $('setup-save').addEventListener('click', () => {
+    const ep = $('setup-endpoint').value.trim();
+    const tk = $('setup-token').value.trim();
+    if (!ep) return;
+    cfg.endpoint = ep;
+    cfg.token = tk;
+    boot();
+  });
+
+  $('setup-endpoint').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('setup-token').focus();
+  });
+  $('setup-token').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('setup-save').click();
+  });
+
+  $('settings-btn').addEventListener('click', () => {
+    const panel = $('settings-panel');
+    const hidden = panel.classList.toggle('hidden');
+    if (!hidden) {
+      $('cfg-endpoint').value = cfg.endpoint;
+      $('cfg-token').value = cfg.token;
+    }
+  });
+
+  $('cfg-save').addEventListener('click', () => {
+    const ep = $('cfg-endpoint').value.trim();
+    const tk = $('cfg-token').value.trim();
+    if (ep) cfg.endpoint = ep;
+    if (tk) cfg.token = tk;
+    $('settings-panel').classList.add('hidden');
+    load();
+  });
+
+  $('cfg-cancel').addEventListener('click', () => {
+    $('settings-panel').classList.add('hidden');
+  });
+
+  $('container-select').addEventListener('change', e => {
+    state.container = e.target.value;
+    state.oldestNs = null;
+    load();
+  });
+
+  document.querySelectorAll('.range-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.range = btn.dataset.range;
+      state.oldestNs = null;
+      load();
+    });
+  });
+
+  let searchTimer;
+  $('search-input').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.search = e.target.value;
+      state.oldestNs = null;
+      load();
+    }, 400);
+  });
+
+  $('refresh-btn').addEventListener('click', () => {
+    state.oldestNs = null;
+    load();
+  });
+
+  $('log-wrap').addEventListener('scroll', updateLoadMore);
+  $('load-more-btn').addEventListener('click', () => load(true));
+
+  boot();
+})();
+</script>
+</body>
+</html>
