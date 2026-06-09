@@ -26,6 +26,12 @@ LISTMONK_CONFIG_DIR="/etc/listmonk"
 LISTMONK_CONFIG="$LISTMONK_CONFIG_DIR/config.toml"
 LISTMONK_USER="listmonk"
 
+LOKI_VERSION="${LOKI_VERSION:-3.7.2}"
+LOKI_DIR="/var/lib/loki"
+LOKI_CONFIG_DIR="/etc/loki"
+LOKI_CONFIG="$LOKI_CONFIG_DIR/config.yaml"
+LOKI_USER="loki"
+
 SKIP_PROMPTS=false
 
 set +u; _self="${BASH_SOURCE[0]:-}"; set -u
@@ -263,8 +269,6 @@ configure() {
   prompt "security.turnstile_secret_key" "Cloudflare Turnstile secret key"          true
 
   prompt "logging.level"                 "Log level (debug|info|warn|error)"
-  prompt "logging.betterstack_endpoint"  "Better Stack ingestion endpoint (leave blank to skip)"
-  prompt "logging.betterstack_token"     "Better Stack source token"                              true
 
   prompt "cors.allowed_origins"          "CORS allowed origins"
 
@@ -327,7 +331,7 @@ read_pem() {
 }
 
 render_vector_config() {
-  local endpoint="$1" token="$2" with_listmonk="${3:-false}"
+  local loki_url="$1" with_listmonk="${2:-false}"
   local listmonk_source="" inputs='"dployr_base"'
   if $with_listmonk; then
     listmonk_source='
@@ -338,19 +342,23 @@ include = ["/var/log/listmonk/output.log"]
     inputs='"dployr_base", "listmonk"'
   fi
   cat <<EOF
+[api]
+enabled = true
+address = "127.0.0.1:8686"
+
 [sources.dployr_base]
 type    = "file"
 include = ["/var/log/dployr-base/output.log"]
 ${listmonk_source}
-[sinks.better_stack]
-type   = "http"
-inputs = [${inputs}]
-uri    = "${endpoint}"
-encoding.codec = "json"
+[sinks.loki]
+type     = "loki"
+inputs   = [${inputs}]
+endpoint = "${loki_url}"
+encoding.codec = "text"
 
-[sinks.better_stack.auth]
-strategy = "bearer"
-token    = "${token}"
+[sinks.loki.labels]
+host   = "{{ host }}"
+source = "dployr-base"
 EOF
 }
 
@@ -367,10 +375,10 @@ install_vector() {
 }
 
 setup_vector() {
-  local endpoint; endpoint="$(tget 'logging.betterstack_endpoint')"
-  local token;    token="$(tget 'logging.betterstack_token')"
+  local loki_url; loki_url="$(tget 'loki.url')"
+  local loki_enabled; loki_enabled="$(tget 'loki.enabled')"
 
-  [ -z "$endpoint" ] || [ -z "$token" ] && return
+  [ "$loki_enabled" != "true" ] || [ -z "$loki_url" ] && return
 
   install_vector
 
@@ -378,7 +386,7 @@ setup_vector() {
   command -v listmonk >/dev/null 2>&1 && with_listmonk=true
 
   mkdir -p /etc/vector
-  render_vector_config "$endpoint" "$token" "$with_listmonk" > /etc/vector/vector.toml
+  render_vector_config "$loki_url" "$with_listmonk" > /etc/vector/vector.toml
 
   mkdir -p /etc/systemd/system/vector.service.d
   cat > /etc/systemd/system/vector.service.d/override.conf <<EOF
@@ -395,7 +403,7 @@ EOF
   systemctl daemon-reload
   systemctl enable vector >/dev/null 2>&1
   systemctl restart vector
-  info "Vector configured → Better Stack"
+  info "Vector configured → Loki"
 }
 
 install_listmonk_binary() {
@@ -806,6 +814,255 @@ EOF
   echo ""
 }
 
+install_loki_binary() {
+  if command -v loki >/dev/null 2>&1; then
+    local installed; installed="$(loki --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "")"
+    if [ "$installed" = "$LOKI_VERSION" ]; then
+      info "Loki already at v${LOKI_VERSION}, skipping download"
+      return
+    fi
+    info "Upgrading Loki v${installed} → v${LOKI_VERSION}..."
+  else
+    info "Downloading Loki v${LOKI_VERSION}..."
+  fi
+
+  command -v unzip >/dev/null 2>&1 || apt-get install -y unzip >/dev/null 2>&1
+
+  local url="https://github.com/grafana/loki/releases/download/v${LOKI_VERSION}/loki-linux-amd64.zip"
+  local tmp; tmp="$(mktemp -d)"
+  curl -fsSL "$url" -o "$tmp/loki.zip"          || { rm -rf "$tmp"; error "Failed to download Loki"; }
+  unzip -q "$tmp/loki.zip" -d "$tmp"             || { rm -rf "$tmp"; error "Failed to extract Loki"; }
+  systemctl stop loki 2>/dev/null || true
+  mv "$tmp/loki-linux-amd64" /usr/local/bin/loki
+  chmod +x /usr/local/bin/loki
+  rm -rf "$tmp"
+  info "Loki v${LOKI_VERSION} installed"
+}
+
+render_loki_config() {
+  local account_id="$1" access_key="$2" secret_key="$3" bucket="$4"
+  cat <<EOF
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: ${LOKI_DIR}
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-04-01
+      store: tsdb
+      object_store: s3
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  aws:
+    s3: s3://${bucket}
+    endpoint: https://${account_id}.r2.cloudflarestorage.com
+    access_key_id: ${access_key}
+    secret_access_key: ${secret_key}
+    s3forcepathstyle: true
+    region: auto
+  tsdb_shipper:
+    active_index_directory: ${LOKI_DIR}/index
+    cache_location: ${LOKI_DIR}/index_cache
+
+limits_config:
+  retention_period: 26280h
+  allow_delete_request: true
+
+compactor:
+  working_directory: ${LOKI_DIR}/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+  delete_request_store: s3
+EOF
+}
+
+render_loki_unit() {
+  local loki_user="$1" loki_config="$2"
+  cat <<EOF
+[Unit]
+Description=Loki — log aggregation system
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${loki_user}
+ExecStart=/usr/local/bin/loki -config.file=${loki_config}
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/loki/output.log
+StandardError=append:/var/log/loki/output.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+prompt_loki() {
+  $SKIP_PROMPTS && return
+
+  echo ""
+  printf "Install Loki (centralised log aggregation → Cloudflare R2)? (y/n): "
+  local choice; read -r choice
+  [[ "$choice" != "y" && "$choice" != "Y" ]] && return
+
+  prompt "loki.r2_account_id" "Cloudflare account ID"
+  prompt "loki.r2_bucket"     "R2 bucket name (e.g. dployr-logs)"
+  prompt "loki.r2_access_key" "R2 access key ID"      true
+  prompt "loki.r2_secret_key" "R2 secret access key"  true
+
+  local account_id bucket access_key secret_key
+  account_id="$(tget 'loki.r2_account_id')"
+  bucket="$(tget 'loki.r2_bucket')"
+  access_key="$(tget 'loki.r2_access_key')"
+  secret_key="$(tget 'loki.r2_secret_key')"
+
+  [ -z "$account_id" ] && { warn "Cloudflare account ID required — skipping Loki"; return; }
+  [ -z "$bucket" ]     && { warn "R2 bucket name required — skipping Loki"; return; }
+  [ -z "$access_key" ] && { warn "R2 access key required — skipping Loki"; return; }
+  [ -z "$secret_key" ] && { warn "R2 secret key required — skipping Loki"; return; }
+
+  install_loki_binary
+
+  id "$LOKI_USER" &>/dev/null || useradd --system --no-create-home --shell /bin/false "$LOKI_USER"
+  mkdir -p "${LOKI_DIR}"/{index,index_cache,compactor} "$LOKI_CONFIG_DIR" /var/log/loki
+
+  render_loki_config "$account_id" "$access_key" "$secret_key" "$bucket" > "$LOKI_CONFIG"
+  chmod 600 "$LOKI_CONFIG"
+  chown -R "$LOKI_USER:$LOKI_USER" "$LOKI_DIR" "$LOKI_CONFIG_DIR" /var/log/loki
+
+  render_loki_unit "$LOKI_USER" "$LOKI_CONFIG" > /etc/systemd/system/loki.service
+
+  cat > /etc/logrotate.d/loki <<EOF
+/var/log/loki/output.log {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+
+  systemctl daemon-reload
+  systemctl enable loki >/dev/null 2>&1
+  systemctl restart loki 2>/dev/null || systemctl start loki
+
+  tset "loki.enabled" "true"
+  tset "loki.url"     "http://localhost:3100"
+
+  sleep 2
+  if systemctl is-active --quiet loki; then
+    info "Loki is running → http://localhost:3100"
+  else
+    warn "Loki failed to start — check: journalctl -u loki -n 50"
+  fi
+
+  local viewer_token
+  viewer_token="$(openssl rand -hex 32)"
+  tset "loki.viewer_token" "$viewer_token"
+
+  if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
+    printf "Loki API domain (e.g. loki.dployr.io): "
+    local loki_api_domain; read -r loki_api_domain
+    printf "Logs viewer origin for CORS (e.g. https://logs.dployr.io): "
+    local logs_origin; read -r logs_origin
+
+    if [ -n "$loki_api_domain" ]; then
+      tset "loki.api_domain" "$loki_api_domain"
+      [ -n "$logs_origin" ] && tset "loki.logs_origin" "$logs_origin"
+
+      cat >> /etc/caddy/Caddyfile <<EOF
+
+${loki_api_domain} {
+    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+
+    @unauth not header Authorization "Bearer ${viewer_token}"
+    respond @unauth 401
+
+    @write method POST PUT DELETE PATCH
+    respond @write 405
+
+    header Access-Control-Allow-Origin "${logs_origin:-*}"
+    header Access-Control-Allow-Headers "Authorization, Content-Type"
+    header Access-Control-Allow-Methods "GET, OPTIONS"
+
+    reverse_proxy localhost:3100
+}
+EOF
+      systemctl reload caddy 2>/dev/null || true
+      info "Caddy: https://${loki_api_domain} → localhost:3100"
+    fi
+  fi
+
+  echo ""
+  echo "  Loki viewer token : ${viewer_token}"
+  echo "  (save this — used to authenticate the log viewer)"
+  echo ""
+}
+
+setup_redis_aof() {
+  local kv_url; kv_url="$(tget 'kv.url')"
+  [ -z "$kv_url" ] && return
+
+  if [[ "$kv_url" != *"127.0.0.1"* && "$kv_url" != *"localhost"* ]]; then
+    info "Redis appears to be remote — enable AOF persistence on the remote host to prevent data loss"
+    return
+  fi
+
+  local redis_conf=""
+  for f in /etc/redis/redis.conf /etc/redis.conf /usr/local/etc/redis/redis.conf; do
+    [ -f "$f" ] && { redis_conf="$f"; break; }
+  done
+
+  if [ -z "$redis_conf" ]; then
+    warn "Redis config file not found — configure AOF persistence manually to prevent data loss on restart"
+    return
+  fi
+
+  if grep -q "^appendonly yes" "$redis_conf" 2>/dev/null; then
+    info "Redis AOF persistence already enabled"
+    return
+  fi
+
+  info "Enabling Redis AOF persistence (everysec — max 1 second data loss on crash)..."
+
+  if command -v redis-cli >/dev/null 2>&1; then
+    redis-cli CONFIG SET appendonly yes >/dev/null 2>&1 || true
+    redis-cli CONFIG SET appendfsync everysec >/dev/null 2>&1 || true
+    redis-cli CONFIG REWRITE >/dev/null 2>&1 || true
+  fi
+
+  {
+    printf '\n# AOF persistence — added by dployr installer\n'
+    printf 'appendonly yes\n'
+    printf 'appendfsync everysec\n'
+    printf 'auto-aof-rewrite-percentage 100\n'
+    printf 'auto-aof-rewrite-min-size 64mb\n'
+  } >> "$redis_conf"
+
+  systemctl restart redis 2>/dev/null || systemctl restart redis-server 2>/dev/null || true
+  info "Redis AOF persistence enabled"
+}
+
 prompt_caddy() {
   $SKIP_PROMPTS && return
 
@@ -911,6 +1168,8 @@ main() {
   configure
   prompt_caddy
   prompt_listmonk
+  setup_redis_aof
+  prompt_loki
   setup_vector
 
   info "Creating systemd service..."
@@ -955,6 +1214,11 @@ EOF
   if command -v listmonk >/dev/null 2>&1; then
   echo "  Listmonk logs : journalctl -u listmonk -f"
   echo "  Listmonk cfg  : $LISTMONK_CONFIG"
+  fi
+  if command -v loki >/dev/null 2>&1; then
+  echo "  Loki logs     : journalctl -u loki -f"
+  echo "  Loki endpoint : http://localhost:3100"
+  echo "  Loki cfg      : $LOKI_CONFIG"
   fi
   echo ""
   echo "To reconfigure: sudo bash $0"

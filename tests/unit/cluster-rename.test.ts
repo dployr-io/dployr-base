@@ -99,7 +99,7 @@ describe("cluster rename: session refresh", () => {
             { id: "user-c" }, // no active session
           ],
         }),
-        listUserClusters: async (userId: string) => [{ id: "c1", name: "new-name", owner: "user-a", role: "owner" }],
+        list: async (userId: string) => [{ id: "c1", name: "new-name", owner: "user-a", role: "owner" }],
       },
     };
 
@@ -122,7 +122,7 @@ describe("cluster rename: session refresh", () => {
       users.map(async (user: any) => {
         const sessionId = await kv.getSessionIdByUserId(user.id);
         if (sessionId) {
-          const clusters = await db.clusters.listUserClusters(user.id);
+          const clusters = await db.clusters.list(user.id);
           await kv.refreshSession({ sessionId, updates: { clusters } });
         }
       }),

@@ -8,11 +8,11 @@ import { registerNodeAuthTests } from "./node-auth.test.js";
 import { registerDeploymentLifecycleTests } from "./deployment-lifecycle.test.js";
 import { registerServiceEnvTests, registerServiceSecretTests } from "./service-envs.test.js";
 import "./hobby-ice-supervisor.test.js";
-import { registerRateLimitTests } from "./rate-limit.test.js";
 import { registerClusterIsolationTests } from "./cluster-isolation.test.js";
 import { registerServiceLimitTests } from "./service-limits.test.js";
 import { registerServicePatchTests } from "./service-patch.test.js";
 import { registerDomainLimitTests } from "./domain-limits.test.js";
+import { registerApiTokenTests } from "./api-tokens.test.js";
 
 const TIMEOUT_FIXTURE_SETUP = 180_000;
 const TIMEOUT_CLEANUP = 60_000;
@@ -697,6 +697,7 @@ describe("Deployments", () => {
 // Pass a lazy getter so each it() callback reads the live fx set by before().
 const getFx = () => fx;
 registerNodeAuthTests(getFx);
+registerApiTokenTests(getFx);
 registerDeploymentLifecycleTests(getFx);
 
 registerClusterIsolationTests(getFx);
@@ -705,4 +706,3 @@ registerServiceSecretTests(getFx);
 registerServiceLimitTests(getFx);
 registerServicePatchTests(getFx);
 registerDomainLimitTests(getFx);
-registerRateLimitTests(getFx);

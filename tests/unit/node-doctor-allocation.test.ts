@@ -58,6 +58,7 @@ describe("NodeDoctor.allocateUnassignedCapacity — unassigned cluster routing",
         addPool: async () => ({ id: "inst-1" }),
         update: async () => {},
         removePool: async () => {},
+        releasePoolInstance: async () => {},
         listOrphanedDedicated: async () => [],
       },
       billing: {
@@ -159,6 +160,7 @@ describe("NodeDoctor.migrateClusters — tier routing", () => {
       instances: {
         list: async () => ({ instances: [] }),
         listOrphanedDedicated: async () => [],
+        releasePoolInstance: async () => {},
       },
       clusters: { find: async () => null },
     } as any;
@@ -189,7 +191,7 @@ describe("NodeDoctor.migrateClusters — tier routing", () => {
 
     const db = {
       billing: { getEffectivePlan: async () => "hobby" },
-      instances: { list: async () => ({ instances: [] }), listOrphanedDedicated: async () => [] },
+      instances: { list: async () => ({ instances: [] }), listOrphanedDedicated: async () => [], releasePoolInstance: async () => {} },
       clusters: { find: async () => null },
     } as any;
 

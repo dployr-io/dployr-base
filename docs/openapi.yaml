@@ -261,14 +261,36 @@ components:
       properties:
         id:
           type: string
+        kind:
+          type: string
+          enum: [dedicated, pool]
+          description: dedicated = user-managed, belongs to one cluster; pool = platform-managed, shared
         clusterId:
           type: string
+          nullable: true
+          description: Owning cluster ID — null for pool instances
         address:
           type: string
-          description: IPv4 address
+          nullable: true
+          description: IPv4 address — null for pool instances before provisioning
         tag:
           type: string
           description: Unique instance name
+        status:
+          type: string
+          enum: [healthy, degraded, offline, unreachable, maintenance, provisioning]
+        role:
+          type: string
+          enum: [instance, build]
+        managed:
+          type: boolean
+          description: Whether this is a platform-managed instance
+        capacity:
+          type: integer
+          description: Build slot capacity (pool instances only)
+        region:
+          type: string
+          description: Deployment region (pool instances only)
         metadata:
           type: object
           additionalProperties: true
@@ -708,12 +730,20 @@ components:
           type: string
         name:
           type: string
+        label:
+          type: string
+          nullable: true
         type:
           type: string
-          enum: [docker, nixpacks, static]
+          enum: [static, web, worker, job]
         deploymentId:
           type: string
           nullable: true
+        icedAt:
+          type: integer
+          format: int64
+          nullable: true
+          description: Unix timestamp when the service was put to sleep (null if running)
         createdAt:
           type: integer
           format: int64
@@ -731,24 +761,74 @@ components:
         serviceId:
           type: string
           nullable: true
+        userId:
+          type: string
         name:
           type: string
         type:
           type: string
-          enum: [docker, nixpacks, static]
+          enum: [static, web, worker, job]
         source:
           type: string
           enum: [remote, image]
         status:
           type: string
           enum: [pending, running, success, failed]
-        blueprint:
-          type: object
-          additionalProperties: true
+        description:
+          type: string
+          nullable: true
+        runCmd:
+          type: string
+          nullable: true
+        buildCmd:
+          type: string
+          nullable: true
+        port:
+          type: integer
+          nullable: true
+        workingDir:
+          type: string
+          nullable: true
+        staticDir:
+          type: string
+          nullable: true
+        image:
+          type: string
+          nullable: true
+          description: Docker image reference (set after a successful build)
+        domain:
+          type: string
+          nullable: true
+        runtimeType:
+          type: string
+          nullable: true
+        runtimeVersion:
+          type: string
+          nullable: true
+        remoteUrl:
+          type: string
+          nullable: true
+        remoteBranch:
+          type: string
+          nullable: true
+        remoteCommitHash:
+          type: string
+          nullable: true
+        healthCheck:
+          type: string
+          nullable: true
+          description: Health check path, e.g. /health
         logs:
           type: string
           nullable: true
+        buildFingerprint:
+          type: string
+          nullable: true
+          description: SHA-256 of build inputs used for cache hits
         createdAt:
+          type: integer
+          format: int64
+        updatedAt:
           type: integer
           format: int64
         finishedAt:
@@ -2077,6 +2157,167 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/clusters/{id}:
+    patch:
+      operationId: renameCluster
+      tags: [Clusters]
+      summary: Rename a cluster
+      description: Requires **owner** role on the cluster.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Cluster ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+      responses:
+        '200':
+          description: Cluster renamed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Owner role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Cluster not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/clusters/{id}/notifications:
+    get:
+      operationId: getClusterNotifications
+      tags: [Clusters]
+      summary: Get cluster notification configuration
+      description: Requires **viewer** role or above.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Notification configuration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          notifications:
+                            type: object
+                            properties:
+                              enabled:
+                                type: boolean
+                              slackWebhookUrl:
+                                type: string
+                                nullable: true
+                              discordWebhookUrl:
+                                type: string
+                                nullable: true
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Cluster not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateClusterNotifications
+      tags: [Clusters]
+      summary: Update cluster notification configuration
+      description: Requires **admin** role or above.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+                slackWebhookUrl:
+                  type: string
+                  format: uri
+                  nullable: true
+                discordWebhookUrl:
+                  type: string
+                  format: uri
+                  nullable: true
+      responses:
+        '200':
+          description: Notification configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Cluster not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v1/clusters/{id}/remotes:
     get:
       operationId: listClusterRemotes
@@ -2180,7 +2421,7 @@ paths:
       operationId: createInstance
       tags: [Instances]
       summary: Create an instance
-      description: Requires **developer** role or above on the cluster.
+      description: Requires **admin** role or above on the cluster.
       security:
         - sessionCookie: []
       requestBody:
@@ -2778,6 +3019,76 @@ paths:
                 example: domain not registered
 
   /v1/domains:
+    get:
+      operationId: listClusterDomains
+      tags: [Domains]
+      summary: List custom domains for a cluster
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Domains
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          domains:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                domain:
+                                  type: string
+                                status:
+                                  type: string
+                                  enum: [pending, active]
+                                provider:
+                                  type: string
+                                  nullable: true
+                                createdAt:
+                                  type: integer
+                                  format: int64
+                                activatedAt:
+                                  type: integer
+                                  format: int64
+                                  nullable: true
+        '403':
+          description: Permission denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
     post:
       operationId: createCustomDomain
       tags: [Domains]
@@ -3024,67 +3335,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /v1/domains:
-    get:
-      operationId: listInstanceDomains
-      tags: [Domains]
-      summary: List domains for an instance
-      security:
-        - sessionCookie: []
-      parameters:
-        - in: query
-          name: clusterId
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Domains
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        properties:
-                          domains:
-                            type: array
-                            items:
-                              type: object
-                              properties:
-                                id:
-                                  type: string
-                                domain:
-                                  type: string
-                                status:
-                                  type: string
-                                  enum: [pending, active]
-                                provider:
-                                  type: string
-                                  nullable: true
-                                createdAt:
-                                  type: integer
-                                  format: int64
-                                activatedAt:
-                                  type: integer
-                                  format: int64
-                                  nullable: true
-        '403':
-          description: Permission denied
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Instance not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /v1/domains/callback/{provider}:
     get:
       operationId: domainOauthCallback
@@ -3124,8 +3374,8 @@ paths:
     get:
       operationId: listDeployments
       tags: [Deployments]
-      summary: List deployments
-      description: Deployment listing is not yet fully implemented. Returns empty list.
+      summary: List deployments for a cluster
+      description: Requires viewer role. Supports optional filtering by service or status.
       security:
         - sessionCookie: []
       parameters:
@@ -3134,13 +3384,51 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: serviceId
+          schema:
+            type: string
+          description: Filter by service ID
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, running, success, failed]
+          description: Filter by deployment status
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
-          description: Deployments
+          description: Paginated deployments
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaginatedResponse'
+        '400':
+          description: Missing clusterId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
     post:
       operationId: createDeployment
@@ -3148,15 +3436,24 @@ paths:
       summary: Create a new deployment (fire-and-return)
       description: |
         Creates a new deployment and dispatches it to the target node as a background task.
-        Returns immediately with the deployment record and a task ID — the client should
-        listen for a WS refresh signal to know when the deployment completes.
+        Returns immediately with a task ID — the client should listen for a WS refresh signal
+        to know when the deployment completes.
 
-        Returns `409` if a service with that name already exists (either with a different
-        type, suggesting a conflict, or the same type, suggesting a `PATCH` redeploy instead).
+        For `source: remote`, the deployment is routed through a build node that clones the
+        repo and builds a container image before deploying to the target instance.
+
+        If the build fingerprint matches a previous successful build, the cached image is
+        reused without rebuilding.
 
         > **Note:** The previous WebSocket `deploy` message is deprecated in favour of this endpoint.
       security:
         - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -3176,15 +3473,49 @@ paths:
                       type: string
                     type:
                       type: string
-                      enum: [docker, nixpacks, static]
+                      enum: [static, web, worker, job]
                     source:
                       type: string
                       enum: [remote, image]
+                    description:
+                      type: string
+                    run_cmd:
+                      type: string
+                    build_cmd:
+                      type: string
+                    port:
+                      type: integer
+                    working_dir:
+                      type: string
+                    static_dir:
+                      type: string
+                    image:
+                      type: string
+                    domain:
+                      type: string
+                    runtime:
+                      type: string
+                    version:
+                      type: string
+                    remote:
+                      $ref: '#/components/schemas/Remote'
+                    health_check:
+                      type: string
+                    env_vars:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    secrets:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    force_rebuild:
+                      type: boolean
+                      default: false
                   additionalProperties: true
-                  description: Full DeploymentSchema payload
       responses:
-        '201':
-          description: Deployment created and dispatched
+        '202':
+          description: Deployment accepted and dispatched
           content:
             application/json:
               schema:
@@ -3195,12 +3526,16 @@ paths:
                       data:
                         type: object
                         properties:
-                          deployment:
-                            $ref: '#/components/schemas/Deployment'
                           taskId:
                             type: string
+                          queued:
+                            type: boolean
+                            description: True if the build was queued (build node at capacity)
+                          cached:
+                            type: boolean
+                            description: True if a cached image was reused
         '400':
-          description: Validation error
+          description: Validation error or service limit reached
           content:
             application/json:
               schema:
@@ -3217,17 +3552,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '409':
-          description: Service already exists — use PATCH /v1/services/{serviceId} to redeploy
+        '404':
+          description: Instance not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              example:
-                success: false
-                error:
-                  message: Service already exists
-                  code: resource.conflict
         '503':
           description: Node not connected
           content:
@@ -3264,6 +3594,10 @@ paths:
                 logs:
                   type: string
                   description: Deployment execution logs
+                blueprint:
+                  type: object
+                  additionalProperties: true
+                  description: Build output metadata (runtime, image, commit hash, etc.)
       responses:
         '200':
           description: Deployment logs updated
@@ -3304,6 +3638,98 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/deployments/{id}:
+    get:
+      operationId: getDeployment
+      tags: [Deployments]
+      summary: Get a deployment by ID
+      description: Requires viewer role on the cluster.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Deployment ULID
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deployment
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deployment:
+                            $ref: '#/components/schemas/Deployment'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Deployment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      operationId: deleteDeployment
+      tags: [Deployments]
+      summary: Delete a deployment record
+      description: Requires developer role. Cannot delete a deployment in `running` status.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deployment deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Cannot delete a running deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Deployment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   # ─── Services ──────────────────────────────────────────────────────────────
 
   /v1/services:
@@ -3320,9 +3746,19 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
-          description: Services retrieved
+          description: Paginated services
           content:
             application/json:
               schema:
@@ -3331,12 +3767,7 @@ paths:
                   - type: object
                     properties:
                       data:
-                        type: object
-                        properties:
-                          services:
-                            type: array
-                            items:
-                              $ref: '#/components/schemas/Service'
+                        $ref: '#/components/schemas/PaginatedResponse'
         '400':
           description: Missing or invalid clusterId
           content:
@@ -3408,10 +3839,13 @@ paths:
       tags: [Services]
       summary: Redeploy an existing service (fire-and-return)
       description: |
-        Triggers a redeployment of the service with a new payload. Dispatched as a
-        background node task — returns immediately with the updated service, a new
-        deployment record, and a task ID. The client should listen for a WS refresh
-        signal to track completion. Requires developer role on the cluster.
+        Triggers a redeployment of the service with updated configuration. Merges the
+        incoming fields with the existing deployment record, then dispatches to the node
+        as a background task. Returns immediately with the updated service, deployment,
+        and a task ID. Listen for a WS refresh signal to track completion.
+
+        Env vars and secrets can be updated in the same request — they are atomically
+        replaced. Requires developer role.
       security:
         - sessionCookie: []
       parameters:
@@ -3426,15 +3860,65 @@ paths:
           application/json:
             schema:
               type: object
-              required: [instanceName, payload]
+              required: [instanceName]
               properties:
                 instanceName:
                   type: string
                   description: Target instance tag/name
-                payload:
+                env_vars:
                   type: object
-                  description: DeploymentPayload — same shape as POST /v1/deployments body payload
-                  additionalProperties: true
+                  additionalProperties:
+                    type: string
+                  description: Replaces all current env vars when provided
+                secrets:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: New/updated secrets (merged with keep_secret_keys)
+                keep_secret_keys:
+                  type: array
+                  items:
+                    type: string
+                  description: Secret keys to preserve from the current set
+                description:
+                  type: string
+                  nullable: true
+                run_cmd:
+                  type: string
+                  nullable: true
+                build_cmd:
+                  type: string
+                  nullable: true
+                port:
+                  type: integer
+                  nullable: true
+                working_dir:
+                  type: string
+                  nullable: true
+                static_dir:
+                  type: string
+                  nullable: true
+                image:
+                  type: string
+                  nullable: true
+                domain:
+                  type: string
+                  nullable: true
+                runtime:
+                  type: string
+                  nullable: true
+                version:
+                  type: string
+                  nullable: true
+                remote_url:
+                  type: string
+                  nullable: true
+                remote_branch:
+                  type: string
+                  nullable: true
+                health_check:
+                  type: string
+                  nullable: true
       responses:
         '200':
           description: Redeploy dispatched
@@ -3524,6 +4008,166 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/services/{serviceId}/stop:
+    post:
+      operationId: stopService
+      tags: [Services]
+      summary: Stop (sleep) a running service
+      description: |
+        Sends a sleep task to the node daemon. The service container is stopped but
+        the service record is retained. While sleeping, traffic triggers a wake task
+        automatically via `GET /v1/status`. Requires developer role.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stop task dispatched
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          taskId:
+                            type: string
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: No node connected to cluster
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/services/{serviceId}/start:
+    post:
+      operationId: startService
+      tags: [Services]
+      summary: Start (wake) a sleeping service
+      description: |
+        Sends a wake task to the node daemon. Transitions the service from SLEEPING
+        to WAKING state — the Traefik route is restored once the container is healthy.
+        Requires developer role.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: serviceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Start task dispatched
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          taskId:
+                            type: string
+        '403':
+          description: Insufficient permissions (developer role required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: No node connected to cluster
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/services/metrics/{name}:
+    get:
+      operationId: getServiceMetrics
+      tags: [Services]
+      summary: Get request metrics for a service
+      description: Requires viewer role on the cluster.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+          description: Service name
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: integer
+            format: int64
+          description: Start time (Unix ms). Defaults to 24 hours ago.
+        - in: query
+          name: to
+          schema:
+            type: integer
+            format: int64
+          description: End time (Unix ms). Defaults to now.
+      responses:
+        '200':
+          description: Metrics buckets and totals
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          buckets:
+                            type: array
+                            items:
+                              type: object
+                          totals:
+                            type: object
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v1/services/{serviceId}/envs:
     get:
       operationId: listServiceEnvs
@@ -3568,106 +4212,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Service not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-    put:
-      operationId: setServiceEnvs
-      tags: [Services]
-      summary: Set environment variables for a service
-      security:
-        - sessionCookie: []
-      parameters:
-        - in: path
-          name: serviceId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [envs]
-              properties:
-                envs:
-                  type: object
-                  additionalProperties:
-                    type: string
-      responses:
-        '200':
-          description: Environment variables updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-        '400':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Insufficient permissions
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Service not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /v1/services/{serviceId}/envs/{key}:
-    delete:
-      operationId: deleteServiceEnv
-      tags: [Services]
-      summary: Delete a single environment variable
-      security:
-        - sessionCookie: []
-      parameters:
-        - in: path
-          name: serviceId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: key
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Environment variable deleted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Insufficient permissions
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Service or key not found
           content:
             application/json:
               schema:
@@ -3724,116 +4268,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-    put:
-      operationId: setServiceSecrets
-      tags: [Services]
-      summary: Set secrets for a service
-      description: Requires developer role.
-      security:
-        - sessionCookie: []
-      parameters:
-        - in: path
-          name: serviceId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [secrets]
-              properties:
-                secrets:
-                  type: object
-                  additionalProperties:
-                    type: string
-      responses:
-        '200':
-          description: Secrets updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-        '400':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Insufficient permissions (developer role required)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Service not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /v1/services/{serviceId}/secrets/{key}:
-    delete:
-      operationId: deleteServiceSecret
-      tags: [Services]
-      summary: Delete a single secret key
-      description: Requires developer role.
-      security:
-        - sessionCookie: []
-      parameters:
-        - in: path
-          name: serviceId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: key
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Secret deleted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Insufficient permissions (developer role required)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Service or key not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   # ─── Integrations ──────────────────────────────────────────────────────────
 
-  /v1/integrations/github/webhook:
+  /webhooks/github:
     post:
       operationId: handleGitHubWebhook
       tags: [Integrations]
       summary: GitHub App webhook receiver
-      description: Handles `installation`, `meta`, `workflow_run`, and `push` events.
+      description: |
+        Handles `installation`, `meta`, `workflow_run`, and `push` events.
+        Signature verified via `x-hub-signature-256`.
       security: []
       parameters:
         - in: header
@@ -4432,6 +4876,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/billing/portal:
+    get:
+      operationId: getBillingPortal
+      tags: [Billing]
+      summary: Redirect to subscription management portal
+      description: Requires owner role on the cluster. Redirects to the Polar customer portal.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to customer portal
+        '500':
+          description: Billing not configured or portal creation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v1/billing/webhook:
     post:
       operationId: billingWebhook
@@ -4578,7 +5046,7 @@ paths:
                       latestVersion: v0.4.8
                       upgradeLevel: major
                       requiredCompatibilityDate: "2025-12-28"
-                      message: dployrd requires compatibility_date 2025-12-28 (received: 2025-10-01)
+                      message: "dployrd requires compatibility_date 2025-12-28 (received: 2025-10-01)"
         '400':
           description: Invalid date format
           content:
@@ -4676,6 +5144,11 @@ paths:
             type: string
             enum: [all, 24h, 7d, 30d]
           description: Time window filter. Default is all.
+        - in: query
+          name: actor
+          schema:
+            type: string
+          description: Filter by actor (user ID or 'headless')
       responses:
         '200':
           description: Paginated events
@@ -5136,7 +5609,7 @@ paths:
       operationId: invalidateProxyCache
       tags: [Proxy]
       summary: Invalidate proxy route cache
-      description: Requires viewer role. Pass `all: true` to clear all, or `serviceName + clusterName` for a specific route.
+      description: "Requires viewer role. Pass `all: true` to clear all, or `serviceName + clusterName` for a specific route."
       security:
         - sessionCookie: []
       requestBody:
@@ -5462,3 +5935,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── Status (Wake-on-demand) ────────────────────────────────────────────────
+
+  /v1/status:
+    get:
+      operationId: getServiceStatus
+      tags: [Services]
+      summary: Check service wake status (public)
+      description: |
+        Polled by the loading page while a service is starting up. On the first request
+        while the service is sleeping, fires a wake task to the node daemon and transitions
+        to `starting`. No authentication required — this endpoint is CORS-open.
+
+        Returns:
+        - `ready` — service is running normally
+        - `starting` — wake task dispatched, container starting
+        - `not_found` — domain or service not found
+      security: []
+      parameters:
+        - in: query
+          name: domain
+          required: true
+          schema:
+            type: string
+          description: Full domain name of the service
+      responses:
+        '200':
+          description: Wake status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ready, starting, not_found]
+        '400':
+          description: Missing domain parameter
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: not_found
+
+  /webhooks/zepto/bounce:
+    post:
+      operationId: handleZeptoBounce
+      tags: [Notifications]
+      summary: ZeptoMail email bounce webhook
+      description: |
+        Receives bounce/complaint notifications from ZeptoMail. Authenticated via
+        a secret header. Used internally to track delivery failures.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Bounce event processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'

@@ -34,13 +34,12 @@ export function registerServiceLimitTests(getFx: () => TestFixtures) {
       if (!node?.connected) return;
       const { baseUrl, limitSession, limitClusterId } = getFx();
 
-      const taskPromise = node.waitForTask(8_000);
+      const taskPromise = node.waitForTask(8_000, (t) => t.Type === "deployments:post");
       const dispatchRes = await fetch(`${baseUrl}/v1/deployments?clusterId=${limitClusterId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: limitSession },
         body: JSON.stringify({
-          instanceName: tag,
-          payload: { name: svc1, user_id: "ci-user", type: "web", source: "image", image: "node:20-alpine", port: 3000 },
+          name: svc1, type: "web", source: "image", image: "node:20-alpine", port: 3000,
         }),
       });
       const dispatchBody = (await dispatchRes.json()) as any;
@@ -50,7 +49,7 @@ export function registerServiceLimitTests(getFx: () => TestFixtures) {
       const finishRes = await node!.callFinish({
         token: task.Payload.token,
         id: dispatchBody.data.taskId,
-        logs: "[ci] started",
+
         blueprint: { name: svc1, user_id: "ci-user", type: "web", source: "image", image: "node:20-alpine", port: 3000 },
       });
       assert.equal(finishRes.status, 200, `/finish failed: ${await finishRes.text()}`);
@@ -64,8 +63,7 @@ export function registerServiceLimitTests(getFx: () => TestFixtures) {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: limitSession },
         body: JSON.stringify({
-          instanceName: tag,
-          payload: { name: svc2, user_id: "ci-user", type: "web", source: "image", image: "node:20-alpine", port: 3000 },
+          name: svc2, type: "web", source: "image", image: "node:20-alpine", port: 3000,
         }),
       });
       const dispatchBody = (await dispatchRes.json()) as any;
@@ -80,13 +78,12 @@ export function registerServiceLimitTests(getFx: () => TestFixtures) {
 
       await setClusterPlan(limitClusterId, "indie");
 
-      const taskPromise = node.waitForTask(8_000);
+      const taskPromise = node.waitForTask(8_000, (t) => t.Type === "deployments:post");
       const dispatchRes = await fetch(`${baseUrl}/v1/deployments?clusterId=${limitClusterId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: limitSession },
         body: JSON.stringify({
-          instanceName: tag,
-          payload: { name: svc2, user_id: "ci-user", type: "web", source: "image", image: "node:20-alpine", port: 3000 },
+          name: svc2, type: "web", source: "image", image: "node:20-alpine", port: 3000,
         }),
       });
       const dispatchBody = (await dispatchRes.json()) as any;
@@ -96,7 +93,7 @@ export function registerServiceLimitTests(getFx: () => TestFixtures) {
       await node!.callFinish({
         token: task.Payload.token,
         id: dispatchBody.data.taskId,
-        logs: "[ci] started",
+
         blueprint: { name: svc2, user_id: "ci-user", type: "web", source: "image", image: "node:20-alpine", port: 3000 },
       });
     });
@@ -111,8 +108,7 @@ export function registerServiceLimitTests(getFx: () => TestFixtures) {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: limitSession },
         body: JSON.stringify({
-          instanceName: tag,
-          payload: { name: `ci-lim3-${ts}`, user_id: "ci-user", type: "web", source: "image", image: "node:20-alpine", port: 3000 },
+          name: `ci-lim3-${ts}`, type: "web", source: "image", image: "node:20-alpine", port: 3000,
         }),
       });
       const dispatchBody = (await dispatchRes.json()) as any;
@@ -130,8 +126,7 @@ export function registerServiceLimitTests(getFx: () => TestFixtures) {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: limitSession },
         body: JSON.stringify({
-          instanceName: tag,
-          payload: { name: `ci-lim3-${ts}`, user_id: "ci-user", type: "web", source: "image", image: "node:20-alpine", port: 3000 },
+          name: `ci-lim3-${ts}`, type: "web", source: "image", image: "node:20-alpine", port: 3000,
         }),
       });
       const dispatchBody = (await dispatchRes.json()) as any;

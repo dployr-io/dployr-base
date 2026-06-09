@@ -37,21 +37,17 @@ export function registerServicePatchTests(getFx: () => TestFixtures) {
       buildNodeInstanceId = bn.instanceId;
       assert.ok(buildNode.connected, "Build node must be connected");
 
-      const taskPromise = node.waitForTask(8_000);
+      const taskPromise = node.waitForTask(8_000, (t) => t.Type === "deployments:post");
 
       const dispatchRes = await fetch(`${baseUrl}/v1/deployments?clusterId=${otherClusterId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: otherSession },
         body: JSON.stringify({
-          instanceName: tag,
-          payload: {
-            name: svcName,
-            user_id: "ci-user",
-            type: "web",
-            source: "image",
-            image: "node:20-alpine",
-            port: 3000,
-          },
+          name: svcName,
+          type: "web",
+          source: "image",
+          image: "node:20-alpine",
+          port: 3000,
         }),
       });
       const dispatchBody = (await dispatchRes.json()) as any;
@@ -62,7 +58,7 @@ export function registerServicePatchTests(getFx: () => TestFixtures) {
       const finishRes = await node!.callFinish({
         token: task.Payload.token,
         id: deploymentId,
-        logs: "[ci] started",
+
         blueprint: {
           name: svcName,
           user_id: "ci-user",
@@ -112,7 +108,7 @@ export function registerServicePatchTests(getFx: () => TestFixtures) {
       if (!node?.connected || !serviceId) return;
       const { baseUrl, otherSession } = getFx();
 
-      const taskPromise = node.waitForTask(8_000);
+      const taskPromise = node.waitForTask(8_000, (t) => t.Type === "deployments:post");
 
       const res = await fetch(`${baseUrl}/v1/services/${serviceId}`, {
         method: "PATCH",
@@ -137,7 +133,7 @@ export function registerServicePatchTests(getFx: () => TestFixtures) {
       if (!node?.connected || !serviceId) return;
       const { baseUrl, otherSession } = getFx();
 
-      const taskPromise = node.waitForTask(8_000);
+      const taskPromise = node.waitForTask(8_000, (t) => t.Type === "deployments:post");
 
       const res = await fetch(`${baseUrl}/v1/services/${serviceId}`, {
         method: "PATCH",
@@ -159,7 +155,7 @@ export function registerServicePatchTests(getFx: () => TestFixtures) {
       if (!buildNode?.connected || !serviceId) return;
       const { baseUrl, otherSession } = getFx();
 
-      const taskPromise = buildNode.waitForTask(8_000);
+      const taskPromise = buildNode.waitForTask(8_000, (t) => t.Type === "builds:post");
 
       const res = await fetch(`${baseUrl}/v1/services/${serviceId}`, {
         method: "PATCH",
@@ -191,7 +187,7 @@ export function registerServicePatchTests(getFx: () => TestFixtures) {
       if (!buildNode?.connected || !serviceId) return;
       const { baseUrl, otherSession } = getFx();
 
-      const taskPromise = buildNode.waitForTask(8_000);
+      const taskPromise = buildNode.waitForTask(8_000, (t) => t.Type === "builds:post");
 
       const res = await fetch(`${baseUrl}/v1/services/${serviceId}`, {
         method: "PATCH",

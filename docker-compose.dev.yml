@@ -1,0 +1,30 @@
+services:
+  vector:
+    image: timberio/vector:latest-alpine
+    container_name: dployr-vector-dev
+    restart: unless-stopped
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+          cat > /tmp/vector.toml <<'VCFG'
+          [api]
+          enabled = true
+          address  = "0.0.0.0:8686"
+
+          [sources.app]
+          type    = "file"
+          include = ["/logs/dployr-base.log"]
+
+          [sinks.loki]
+          type     = "loki"
+          inputs   = ["app"]
+          endpoint = "http://192.168.100.20:3100"
+          encoding.codec = "text"
+
+          [sinks.loki.labels]
+          container = "dployr-base"
+          source    = "dev"
+          VCFG
+          exec vector --config /tmp/vector.toml
+    volumes:
+      - ./logs:/logs:ro

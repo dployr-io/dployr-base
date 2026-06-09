@@ -84,7 +84,7 @@ export class FakeNode {
    * Wait for the next task message from base.
    * Resolves with the first NodeTask in the items array.
    */
-  waitForTask(timeoutMs = 8_000): Promise<NodeTask> {
+  waitForTask(timeoutMs = 8_000, filter?: (task: NodeTask) => boolean): Promise<NodeTask> {
     if (!this.ws) throw new Error("Call connect() first");
 
     return new Promise((resolve, reject) => {
@@ -94,9 +94,11 @@ export class FakeNode {
         try {
           const msg = JSON.parse(raw.toString());
           if (msg.kind === "task" && Array.isArray(msg.items) && msg.items.length > 0) {
+            const task = msg.items[0] as NodeTask;
+            if (filter && !filter(task)) return; // skip non-matching tasks
             clearTimeout(timer);
             this.ws?.off("message", onMessage);
-            resolve(msg.items[0] as NodeTask);
+            resolve(task);
           }
         } catch {
           // ignore parse errors, keep waiting
@@ -111,14 +113,13 @@ export class FakeNode {
    * Call POST /v1/deployments/finish as the node would after completing a deployment.
    * `token` is taken from the task payload (the short-lived access JWT dispatched with the task).
    */
-  async callFinish(opts: { token: string; id: string; logs: string; blueprint?: Record<string, any> }): Promise<Response> {
+  async callFinish(opts: { token: string; id: string; blueprint?: Record<string, any> }): Promise<Response> {
     return fetch(`${this.baseUrl}/v1/deployments/finish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         token: opts.token,
         id: opts.id,
-        logs: opts.logs,
         blueprint: opts.blueprint ?? {},
       }),
     });

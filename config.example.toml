@@ -91,6 +91,14 @@ strict_rate_limit = 10
 # Keep this secret and back it up. Losing it makes all service secrets unrecoverable.
 # To rotate: generate a new key, run the rewrap migration, then update this value.
 encryption_key = "bdd5f30db77378b48093ea7a54057060b5c2408851535d9f31e085fbad0a5800"
+# Active key version for new API tokens. Bump (e.g. "v2") when rotating.
+token_hmac_key_version = "v1"
+
+[security.token_hmac_keys]
+# Generate each value with: openssl rand -hex 32
+# Keep old versions here until all tokens signed with them expire (max 36 months).
+# To hard-revoke a version: DELETE /admin/auth/tokens/key-version/v1
+v1 = ""
 # Cloudflare Turnstile secret key — protects the email login endpoint from bots.
 # Get it from: Cloudflare dashboard → Turnstile → your site → Secret Key
 # Leave unset to disable verification (local development).
@@ -167,3 +175,14 @@ list_uuid      = ""
 #   Webhook URL: https://base.dployr.io/webhooks/zepto/bounce
 #   Events: Hard bounces, Feedback loop
 bounce_webhook_secret = ""
+
+[loki]
+# Loki log aggregation, backup stored in Cloudflare R2.
+enabled            = false
+url                = "http://localhost:3100"
+# Cloudflare R2 credentials — create an API token with Object Read & Write on your bucket.
+# Dashboard → R2 → Manage R2 API tokens → Create API token
+r2_account_id      = ""
+r2_bucket          = "dployr-logs"
+r2_access_key      = ""
+r2_secret_key      = ""

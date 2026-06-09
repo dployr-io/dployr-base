@@ -88,35 +88,60 @@ services:
     networks:
       - dployr-network
 
+  vector:
+    image: timberio/vector:latest-alpine
+    container_name: dployr-vector
+    restart: unless-stopped
+    ports:
+      - "8686:8686"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /mnt/dployr-logs:/mnt/dployr-logs:ro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+          cat > /tmp/vector.toml <<'EOF'
+          [api]
+          enabled = true
+          address  = "0.0.0.0:8686"
+
+          [sources.containers]
+          type    = "docker_logs"
+          exclude_containers = ["dployr-vector"]
+
+          [sources.dployr_base]
+          type    = "file"
+          include = ["/mnt/dployr-logs/dployr-base.log"]
+
+          [sinks.loki]
+          type     = "loki"
+          inputs   = ["containers"]
+          endpoint = "http://loki:3100"
+          encoding.codec = "text"
+
+          [sinks.loki.labels]
+          container = "{{ container_name }}"
+          source    = "docker"
+
+          [sinks.loki_base]
+          type     = "loki"
+          inputs   = ["dployr_base"]
+          endpoint = "http://loki:3100"
+          encoding.codec = "text"
+
+          [sinks.loki_base.labels]
+          container = "dployr-base"
+          source    = "dev"
+          EOF
+          exec vector --config /tmp/vector.toml
+    depends_on:
+      - loki
+    networks:
+      - dployr-network
+
 volumes:
   redis-data:
 
 networks:
   dployr-network:
     driver: bridge
-
-# ============================================================
-# ALTERNATIVE CONFIGURATIONS (uncomment to use)
-# ============================================================
-
-# --- Option 1: Use Upstash Redis (serverless) ---
-# Replace redis service and update dployr-base env:
-#   KV_TYPE: "upstash"
-#   KV_REST_URL: "https://your-upstash-url.upstash.io"
-#   KV_REST_TOKEN: "your-upstash-token"
-# Then remove the redis service entirely
-
-# --- Option 2: Use S3-compatible storage ---
-# Update dployr-base env:
-#   STORAGE_TYPE: "s3"
-#   STORAGE_BUCKET: "your-bucket"
-#   STORAGE_REGION: "us-east-1"
-#   STORAGE_ACCESS_KEY: "your-access-key"
-#   STORAGE_SECRET_KEY: "your-secret-key"
-
-# --- Option 3: Use Azure Blob Storage ---
-# Update dployr-base env:
-#   STORAGE_TYPE: "azure"
-#   STORAGE_ACCOUNT: "your-account"
-#   STORAGE_KEY: "your-key"
-#   STORAGE_CONTAINER: "dployr-logs"

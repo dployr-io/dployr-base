@@ -32,22 +32,18 @@ export function registerServiceSecretTests(getFx: () => TestFixtures) {
       if (!node?.connected) return;
       const { baseUrl, session, clusterId } = getFx();
 
-      const taskPromise = node.waitForTask(8_000);
+      const taskPromise = node.waitForTask(8_000, (t) => t.Type === "deployments:post");
 
       const dispatchRes = await fetch(`${baseUrl}/v1/deployments?clusterId=${clusterId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: session },
         body: JSON.stringify({
-          instanceName: tag,
-          payload: {
-            name: svcName,
-            user_id: "ci-user",
-            type: "web",
-            source: "image",
-            image: "node:20-alpine",
-            port: 3000,
-            secrets: { DB_PASSWORD: "supersecret", API_KEY: "abc123" },
-          },
+          name: svcName,
+          type: "web",
+          source: "image",
+          image: "node:20-alpine",
+          port: 3000,
+          secrets: { DB_PASSWORD: "supersecret", API_KEY: "abc123" },
         }),
       });
 
@@ -60,7 +56,7 @@ export function registerServiceSecretTests(getFx: () => TestFixtures) {
       const finishRes = await node!.callFinish({
         token: task.Payload.token,
         id: taskId,
-        logs: "[ci] started",
+
         blueprint: {
           name: svcName,
           user_id: "ci-user",
@@ -153,22 +149,18 @@ export function registerServiceEnvTests(getFx: () => TestFixtures) {
       if (!node?.connected) return;
       const { baseUrl, session, clusterId } = getFx();
 
-      const taskPromise = node.waitForTask(8_000);
+      const taskPromise = node.waitForTask(8_000, (t) => t.Type === "deployments:post");
 
       const dispatchRes = await fetch(`${baseUrl}/v1/deployments?clusterId=${clusterId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: session },
         body: JSON.stringify({
-          instanceName: tag,
-          payload: {
-            name: svcName,
-            user_id: "ci-user",
-            type: "web",
-            source: "image",
-            image: "node:20-alpine",
-            port: 3000,
-            env_vars: { NODE_ENV: "production", PORT: "3000" },
-          },
+          name: svcName,
+          type: "web",
+          source: "image",
+          image: "node:20-alpine",
+          port: 3000,
+          env_vars: { NODE_ENV: "production", PORT: "3000" },
         }),
       });
 
@@ -181,7 +173,7 @@ export function registerServiceEnvTests(getFx: () => TestFixtures) {
       const finishRes = await node!.callFinish({
         token: task.Payload.token,
         id: taskId,
-        logs: "[ci] started",
+
         blueprint: {
           name: svcName,
           user_id: "ci-user",

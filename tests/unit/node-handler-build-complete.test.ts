@@ -38,13 +38,15 @@ function makeConnectionManager(opts: {
     updateActivity: () => {},
     getPendingRequest: (_taskId: string) => opts.pendingRequest ?? null,
     routeResponseToClient: () => {},
-    getLogStream: () => null,
     getFileWatchSubscribers: () => null,
     getConnections: () => [],
     sendTask: (tag: string, task: any) => {
       sent.push({ tag, task });
       return true;
     },
+    handoffLogStream: (_key: string, _newNodeStreamId: string) => true,
+    removeLogStream: (_key: string) => {},
+    addLogStream: (_stream: any) => true,
   } as any;
 }
 
