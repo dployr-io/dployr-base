@@ -47,7 +47,7 @@ const layout = (title: string, content: string): string => `<!DOCTYPE html>
               <span style="color:#2d3748;margin:0 8px;">&middot;</span>
               <a href="https://dployr.io/legal/terms-of-service" style="color:#9ca3af;text-decoration:none;">Terms</a>
             </p>
-            <p style="margin:0;color:#374151;font-size:11px;">Copyright &copy; 2026 Dployr</p>
+            <p style="margin:0;color:#374151;font-size:11px;">Copyright &copy; 2026 dployr</p>
           </td>
         </tr>
 

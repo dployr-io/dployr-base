@@ -7,6 +7,7 @@ import type { ApiToken } from "@/lib/db/store/db/api-tokens.js";
 import { setCookie, getCookie } from "hono/cookie";
 import z from "zod";
 import { sanitizeReturnTo } from "@/lib/utils.js";
+import { extractRequestMeta, setSessionCookie } from "@/lib/http.js";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { getKVStore, getOAuthService, getDbStore, getJWTService, getEmailService, getAuthService, getInstancePoolService } from "@/lib/config/context.js";
 import { authMiddleware } from "@/middleware/auth.js";
@@ -19,53 +20,18 @@ const log = new Logger("Auth");
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-function extractRequestMeta(req: Request) {
-  const headers = req.headers;
-  const ip = headers.get("cf-connecting-ip") ?? headers.get("x-forwarded-for")?.split(",")[0].trim() ?? undefined;
-  const userAgent = headers.get("user-agent") ?? undefined;
-  const country = headers.get("cf-ipcountry") ?? undefined;
-  return { ip, userAgent, country };
-}
 
 const loginSchema = z.object({
   email: z.email(),
   "cf-turnstile-response": z.string().optional(),
 });
 
-async function verifyTurnstile(token: string, secret: string, ip?: string): Promise<boolean> {
-  try {
-    const body = new URLSearchParams({ secret, response: token });
-    if (ip) body.set("remoteip", ip);
-    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      body,
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    });
-    const data = (await res.json()) as { success: boolean };
-    return data.success === true;
-  } catch (err) {
-    log.error("Turnstile verification error:", err);
-    return false;
-  }
-}
 
 const otpSchema = z.object({
   email: z.email(),
-  code: z.string().min(6).max(6),
+  code: z.string().min(6).max(15),
 });
 
-function setSessionCookie(c: any, sessionId: string) {
-  const url = new URL(c.req.url);
-  const isDployrHost = url.hostname === "dployr.io" || url.hostname.endsWith(".dployr.io");
-  setCookie(c, "session", sessionId, {
-    httpOnly: true,
-    secure: url.protocol === "https:",
-    sameSite: "Lax",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/",
-    ...(isDployrHost ? { domain: ".dployr.io" } : {}),
-  });
-}
 
 // Initiate OAuth flow
 auth.get("/login/:provider", async (c) => {
@@ -175,8 +141,8 @@ auth.post("/login/email", async (c) => {
   const turnstileToken = validation.data["cf-turnstile-response"];
   const turnstileSecret = c.env.TURNSTILE_SECRET_KEY;
   const isTestEnv = process.env.NODE_ENV === "test";
-
   const isCli = c.req.query("client") === "cli";
+  const authService = getAuthService(c);
 
   if (!isTestEnv && !isCli && turnstileSecret) {
     if (!turnstileToken) {
@@ -186,7 +152,7 @@ auth.post("/login/email", async (c) => {
       );
     }
     const ip = c.req.header("CF-Connecting-IP") ?? c.req.header("X-Forwarded-For")?.split(",")[0].trim();
-    const valid = await verifyTurnstile(turnstileToken, turnstileSecret, ip);
+    const valid = await authService.verifyTurnstile(turnstileToken, turnstileSecret, ip);
     if (!valid) {
       return c.json(
         createErrorResponse({ message: "Bot verification failed. Please try again.", code: ERROR.REQUEST.BAD_REQUEST.code }),
@@ -195,9 +161,11 @@ auth.post("/login/email", async (c) => {
     }
   }
 
-  const authService = getAuthService(c);
+  const user = await authService.findOrCreateEmailUser({ email });
 
-  await authService.findOrCreateEmailUser({ email });
+  if (await authService.hasTotpEnabled(user.id)) {
+    return c.json(createSuccessResponse({ email, requireTotp: true }, "Enter your authenticator code"));
+  }
 
   if (!isTestEnv) {
     try {
@@ -211,7 +179,7 @@ auth.post("/login/email", async (c) => {
     }
   }
 
-  return c.json(createSuccessResponse({ email }, "OTP sent to your email"));
+  return c.json(createSuccessResponse({ email, requireTotp: false }, "OTP sent to your email"));
 });
 
 // Email authentication - Verify OTP
@@ -232,13 +200,6 @@ auth.post("/login/email/verify", async (c) => {
   const kv = getKVStore(c);
 
   const isTestEnv = process.env.NODE_ENV === "test";
-  const isValid = isTestEnv || await authService.verifyOTP({ email, code });
-  if (!isValid) {
-    return c.json(
-      createErrorResponse({ message: "Invalid or expired code", code: ERROR.REQUEST.INVALID_OTP.code }),
-      ERROR.REQUEST.INVALID_OTP.status,
-    );
-  }
 
   const user = await db.users.find({ email });
   if (!user) {
@@ -246,6 +207,17 @@ auth.post("/login/email/verify", async (c) => {
       createErrorResponse({ message: "User not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }),
       ERROR.RESOURCE.MISSING_RESOURCE.status,
     );
+  }
+
+  // Validate code — TOTP/backup-code path or email OTP path (skipped in test env)
+  if (!isTestEnv) {
+    const isValid = await authService.verifyLoginCode({ userId: user.id, email, code });
+    if (!isValid) {
+      return c.json(
+        createErrorResponse({ message: "Invalid or expired code", code: ERROR.REQUEST.INVALID_OTP.code }),
+        ERROR.REQUEST.INVALID_OTP.status,
+      );
+    }
   }
 
   const vmService = c.get("vmProvider") ?? undefined;

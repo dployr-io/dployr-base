@@ -20,6 +20,7 @@ import billing from "./billing.js";
 import webhooks from "./webhooks.js";
 import oidc from "./oidc.js";
 import authTokens from "./auth-tokens.js";
+import twofa from "./twofa.js";
 import { getWS } from "@/lib/config/context.js";
 
 const VERSION = process.env.BASE_VERSION || "unknown";
@@ -30,6 +31,7 @@ const VERSION = process.env.BASE_VERSION || "unknown";
 export function registerRoutes(app: Hono<{ Bindings: Bindings; Variables: Variables }>): void {
   // API routes
   app.route("/v1/auth", auth);
+  app.route("/v1/auth/2fa", twofa);
   app.route("/v1/auth/oidc", oidc);
   app.route("/v1/auth/tokens", authTokens);
   app.route("/v1/users", users);

@@ -139,3 +139,6 @@ export const REPROVISION_COOLDOWN_MS = MS_8_MINUTES;
 
 /** User email change quota window: 7 days */
 export const EMAIL_CHANGE_WINDOW_MS = MS_7_DAYS;
+
+/** 2FA verification window: session must have been verified within this period to pass require2FA */
+export const TWO_FA_WINDOW_MS = MS_5_MINUTES;

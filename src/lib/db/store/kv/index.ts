@@ -53,6 +53,11 @@ export class KVStore {
   validateState = (...args: Parameters<SessionStore["validateState"]>) => this.sessions.validateState(...args);
   createOTP = (...args: Parameters<SessionStore["createOTP"]>) => this.sessions.createOTP(...args);
   validateOTP = (...args: Parameters<SessionStore["validateOTP"]>) => this.sessions.validateOTP(...args);
+  create2FAOTP = (...args: Parameters<SessionStore["create2FAOTP"]>) => this.sessions.create2FAOTP(...args);
+  validate2FAOTP = (...args: Parameters<SessionStore["validate2FAOTP"]>) => this.sessions.validate2FAOTP(...args);
+  saveTOTPSetupSecret = (...args: Parameters<SessionStore["saveTOTPSetupSecret"]>) => this.sessions.saveTOTPSetupSecret(...args);
+  getTOTPSetupSecret = (...args: Parameters<SessionStore["getTOTPSetupSecret"]>) => this.sessions.getTOTPSetupSecret(...args);
+  deleteTOTPSetupSecret = (...args: Parameters<SessionStore["deleteTOTPSetupSecret"]>) => this.sessions.deleteTOTPSetupSecret(...args);
 
   // KeyStore delegation
   getOrCreateKeys = (...args: Parameters<KeyStore["getOrCreateKeys"]>) => this.keys.getOrCreateKeys(...args);

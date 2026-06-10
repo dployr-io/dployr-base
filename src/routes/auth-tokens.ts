@@ -6,7 +6,7 @@ import z from "zod";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getDbStore } from "@/lib/config/context.js";
-import { authMiddleware } from "@/middleware/auth.js";
+import { authMiddleware, require2FA } from "@/middleware/auth.js";
 
 const VALID_SCOPES = ["oidc:bind"] as const;
 
@@ -38,7 +38,7 @@ function generateToken(): string {
  * create a new personal access token.
  * Returns the plaintext token only once; only the hash is stored.
  */
-authTokens.post("/", authMiddleware, async (c) => {
+authTokens.post("/", authMiddleware, require2FA, async (c) => {
   const session = c.get("session")!;
 
   // Scoped tokens cannot create other tokens.
@@ -98,7 +98,7 @@ authTokens.get("/", authMiddleware, async (c) => {
 /**
  * revoke a token by ID.
  */
-authTokens.delete("/:id", authMiddleware, async (c) => {
+authTokens.delete("/:id", authMiddleware, require2FA, async (c) => {
   const session = c.get("session")!;
 
   if (session.scopes && session.scopes.length > 0) {

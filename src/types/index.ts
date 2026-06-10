@@ -135,6 +135,7 @@ export interface Session {
   ip?: string;
   country?: string;
   device?: SessionDevice;
+  twoFaVerifiedAt?: number;
 }
 
 export type Variables = {

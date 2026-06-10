@@ -34,6 +34,10 @@ export const KV_KEYS = {
   OTP: {
     BY_EMAIL: (email: string) => `otp:${email}`,
   },
+  TWO_FA: {
+    OTP_BY_USER: (userId: string) => `2fa:otp:${userId}`,
+    TOTP_SETUP: (userId: string) => `2fa:setup:${userId}`,
+  },
   DOMAIN: {
     BY_NAME: (domain: string) => `domain:${domain}`,
   },

@@ -90,7 +90,7 @@ export class SessionStore {
     return sessions.filter((s): s is Session => s !== null);
   }
 
-  async refreshSession({ sessionId, updates }: { sessionId: string; updates: Partial<Pick<Session, "email" | "provider" | "clusters">> }): Promise<void> {
+  async refreshSession({ sessionId, updates }: { sessionId: string; updates: Partial<Pick<Session, "email" | "provider" | "clusters" | "twoFaVerifiedAt">> }): Promise<void> {
     const existing = await this.getSession(sessionId);
     if (!existing) return;
 
@@ -178,6 +178,50 @@ export class SessionStore {
     }
 
     return false;
+  }
+
+  async create2FAOTP(userId: string): Promise<string> {
+    const code = this.generateOTP();
+    await this.kv.put(
+      KV_KEYS.TWO_FA.OTP_BY_USER(userId),
+      JSON.stringify({ code, createdAt: Date.now(), attempts: 0 }),
+      { ttl: OTP_TTL },
+    );
+    return code;
+  }
+
+  async validate2FAOTP({ userId, code }: { userId: string; code: string }): Promise<boolean> {
+    const data = await this.kv.get(KV_KEYS.TWO_FA.OTP_BY_USER(userId));
+    if (!data) return false;
+
+    const otpData = JSON.parse(data) as { code: string; createdAt: number; attempts: number };
+
+    if (otpData.attempts >= 3) {
+      await this.kv.delete(KV_KEYS.TWO_FA.OTP_BY_USER(userId));
+      return false;
+    }
+
+    otpData.attempts++;
+    await this.kv.put(KV_KEYS.TWO_FA.OTP_BY_USER(userId), JSON.stringify(otpData), { ttl: OTP_TTL });
+
+    if (otpData.code === code.toUpperCase()) {
+      await this.kv.delete(KV_KEYS.TWO_FA.OTP_BY_USER(userId));
+      return true;
+    }
+
+    return false;
+  }
+
+  async saveTOTPSetupSecret(userId: string, secret: string): Promise<void> {
+    await this.kv.put(KV_KEYS.TWO_FA.TOTP_SETUP(userId), secret, { ttl: 600 });
+  }
+
+  async getTOTPSetupSecret(userId: string): Promise<string | null> {
+    return this.kv.get(KV_KEYS.TWO_FA.TOTP_SETUP(userId));
+  }
+
+  async deleteTOTPSetupSecret(userId: string): Promise<void> {
+    await this.kv.delete(KV_KEYS.TWO_FA.TOTP_SETUP(userId));
   }
 
   private generateOTP(): string {

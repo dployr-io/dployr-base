@@ -142,6 +142,41 @@
     .range-btn.active { background: rgba(79,156,249,.12); border-color: var(--accent); color: var(--accent); }
     .range-btn:hover:not(.active) { border-color: var(--border-hi); color: var(--text); }
 
+    .level-btn {
+      padding: 5px 10px;
+      font-size: 11px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+    .level-btn.active            { background: rgba(79,156,249,.12); border-color: var(--accent); color: var(--accent); }
+    .level-btn.level-error.active{ background: rgba(239,68,68,.12);  border-color: var(--red);    color: var(--red); }
+    .level-btn.level-warn.active { background: rgba(245,158,11,.12); border-color: var(--yellow); color: var(--yellow); }
+    .level-btn:hover:not(.active){ border-color: var(--border-hi); color: var(--text); }
+
+    #custom-range { display: flex; align-items: center; gap: 6px; }
+    #custom-range input[type="datetime-local"] {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 5px 8px;
+      border-radius: var(--radius);
+      outline: none;
+      color-scheme: dark;
+    }
+    #custom-range input[type="datetime-local"]:focus { border-color: var(--accent); }
+
+    #live-btn { display: inline-flex; align-items: center; gap: 5px; }
+    #live-btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+    #live-btn.live { border-color: var(--green); color: var(--green); }
+    #live-btn.live .dot { background: var(--green); animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
     #search-input {
       flex: 1;
       min-width: 160px;
@@ -283,22 +318,35 @@
 
   <div id="toolbar">
     <select id="container-select">
-      <option value="">all containers</option>
+      <option value="">all hosts</option>
     </select>
     <div class="range-group">
+      <button class="range-btn" data-range="5m">5m</button>
       <button class="range-btn" data-range="15m">15m</button>
       <button class="range-btn active" data-range="1h">1h</button>
       <button class="range-btn" data-range="6h">6h</button>
       <button class="range-btn" data-range="24h">24h</button>
+      <button class="range-btn" id="custom-btn" data-range="custom">custom</button>
+    </div>
+    <div id="custom-range" class="hidden">
+      <input type="datetime-local" id="range-from" />
+      <span style="color:var(--text-muted);font-size:11px">→</span>
+      <input type="datetime-local" id="range-to" />
+    </div>
+    <div class="range-group">
+      <button class="level-btn active" data-level="">all</button>
+      <button class="level-btn level-error" data-level="error">error</button>
+      <button class="level-btn level-warn"  data-level="warn">warn</button>
     </div>
     <input id="search-input" placeholder="filter logs…" autocomplete="off" />
     <span id="status-bar"></span>
     <button class="btn btn-ghost btn-sm" id="refresh-btn">Refresh</button>
+    <button class="btn btn-ghost btn-sm" id="live-btn"><span class="dot"></span>Live</button>
   </div>
 
   <div id="error-banner" class="hidden"></div>
   <div id="log-wrap"></div>
-  <button class="btn btn-ghost btn-sm hidden" id="load-more-btn">Load more</button>
+  <button class="btn btn-ghost btn-sm hidden" id="load-more-btn">Load older</button>
 </div>
 
 <script>
@@ -310,14 +358,48 @@
     set token(v)    { localStorage.setItem('loki_token', v); },
   };
 
+  function readUrl() {
+    const p = new URLSearchParams(location.search);
+    return {
+      range:     p.get('range')  || '1h',
+      level:     p.get('level')  || '',
+      host:      p.get('host')   || '',
+      search:    p.get('q')      || '',
+      fromTs:    p.get('from')   || '',
+      toTs:      p.get('to')     || '',
+    };
+  }
+
+  function pushUrl() {
+    const p = new URLSearchParams();
+    if (state.range !== '1h')  p.set('range', state.range);
+    if (state.level)            p.set('level', state.level);
+    if (state.container)        p.set('host',  state.container);
+    if (state.search)           p.set('q',     state.search);
+    if (state.range === 'custom') {
+      if (state.fromTs) p.set('from', state.fromTs);
+      if (state.toTs)   p.set('to',   state.toTs);
+    }
+    const qs = p.toString();
+    history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
+  }
+
+  const urlState = readUrl();
+
   const state = {
-    range: '1h',
-    container: '',
-    search: '',
+    range:     urlState.range,
+    container: urlState.host,
+    search:    urlState.search,
+    level:     urlState.level,
+    fromTs:    urlState.fromTs,
+    toTs:      urlState.toTs,
     entries: [],
     loading: false,
     oldestNs: null,
     hasMore: false,
+    live: false,
+    liveTimer: null,
+    newestNs: null,
   };
 
   const $ = id => document.getElementById(id);
@@ -330,21 +412,27 @@
   }
 
   function fmtTime(ms) {
-    return new Date(ms).toISOString().slice(11, 23);
+    const d = new Date(ms);
+    return d.toLocaleTimeString('en-GB', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
   }
 
-  function rangeStartMs() {
-    const offsets = { '15m': 15*60e3, '1h': 3600e3, '6h': 6*3600e3, '24h': 24*3600e3 };
-    return Date.now() - (offsets[state.range] || 3600e3);
+  function rangeMs() {
+    if (state.range === 'custom') {
+      const from = state.fromTs ? new Date(state.fromTs).getTime() : Date.now() - 3600e3;
+      const to   = state.toTs   ? new Date(state.toTs).getTime()   : Date.now();
+      return { startMs: from, endMs: to };
+    }
+    const offsets = { '5m': 5*60e3, '15m': 15*60e3, '1h': 3600e3, '6h': 6*3600e3, '24h': 24*3600e3 };
+    return { startMs: Date.now() - (offsets[state.range] || 3600e3), endMs: Date.now() };
   }
 
   function buildQuery() {
     let q = state.container
-      ? `{container="${state.container}"}`
-      : `{source="docker"}`;
-    if (state.search.trim()) {
-      q += ` |= ${JSON.stringify(state.search.trim())}`;
-    }
+      ? `{host="${state.container}"}`
+      : `{source="dployr-base"}`;
+    if (state.level === 'error') q += ' |~ "(?i)error|exception|fatal"';
+    if (state.level === 'warn')  q += ' |~ "(?i)warn"';
+    if (state.search.trim())     q += ` |= ${JSON.stringify(state.search.trim())}`;
     return q;
   }
 
@@ -394,6 +482,7 @@
   }
 
   function updateLoadMore() {
+    if (state.live) return;
     $('load-more-btn').classList.toggle('hidden', !(state.hasMore && isNearBottom()));
   }
 
@@ -410,10 +499,8 @@
     $('refresh-btn').disabled = true;
     setError('');
 
-    const endMs   = append && state.oldestNs
-      ? nsToMs(state.oldestNs) - 1
-      : Date.now();
-    const startMs = rangeStartMs();
+    const { startMs, endMs: rangeEnd } = rangeMs();
+    const endMs = append && state.oldestNs ? nsToMs(state.oldestNs) - 1 : rangeEnd;
 
     try {
       const body = await lokiFetch('/loki/api/v1/query_range', {
@@ -435,6 +522,9 @@
 
       if (rows.length) {
         state.oldestNs = rows[rows.length - 1].tsNs;
+        if (!state.newestNs || BigInt(rows[0].tsNs) > BigInt(state.newestNs)) {
+          state.newestNs = rows[0].tsNs;
+        }
       }
 
       if (!append) {
@@ -457,17 +547,59 @@
     }
   }
 
-  async function loadContainers() {
+  async function loadHosts() {
     try {
-      const body = await lokiFetch('/loki/api/v1/label/container/values', {});
+      const body = await lokiFetch('/loki/api/v1/label/host/values', {});
       const sel = $('container-select');
-      sel.innerHTML = '<option value="">all containers</option>';
+      sel.innerHTML = '<option value="">all hosts</option>';
       for (const name of (body.data || [])) {
         const opt = document.createElement('option');
         opt.value = opt.textContent = name;
         sel.appendChild(opt);
       }
     } catch {}
+  }
+
+  async function tail() {
+    if (state.loading) return;
+    const sinceNs = state.newestNs
+      ? String(BigInt(state.newestNs) + 1n)
+      : String(Date.now() * 1e6);
+    try {
+      const body = await lokiFetch('/loki/api/v1/query_range', {
+        query:     buildQuery(),
+        start:     sinceNs,
+        end:       String(Date.now() * 1e6),
+        limit:     '200',
+        direction: 'forward',
+      });
+      const rows = parseStreams(body.data?.result || []);
+      if (rows.length) {
+        state.newestNs = rows[rows.length - 1].tsNs;
+        state.entries = [...rows, ...state.entries];
+        $('log-wrap').insertAdjacentHTML('afterbegin', renderRows(rows));
+        setStatus(`${state.entries.length} lines · ${new Date().toLocaleTimeString()}`);
+      }
+      $('log-wrap').scrollTop = 0;
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  function toggleLive() {
+    state.live = !state.live;
+    const btn = $('live-btn');
+    if (state.live) {
+      btn.classList.add('live');
+      $('load-more-btn').classList.add('hidden');
+      $('log-wrap').scrollTop = 0;
+      state.liveTimer = setInterval(tail, 3000);
+    } else {
+      btn.classList.remove('live');
+      clearInterval(state.liveTimer);
+      state.liveTimer = null;
+      updateLoadMore();
+    }
   }
 
   function boot() {
@@ -478,7 +610,23 @@
     }
     $('setup-screen').classList.add('hidden');
     $('app').classList.remove('hidden');
-    loadContainers();
+
+    // Restore UI from URL state
+    document.querySelectorAll('.range-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.range === state.range);
+    });
+    document.querySelectorAll('.level-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.level === state.level);
+    });
+    if (state.search)    $('search-input').value = state.search;
+    if (state.container) $('container-select').value = state.container;
+    if (state.range === 'custom') {
+      $('custom-range').classList.remove('hidden');
+      if (state.fromTs) $('range-from').value = state.fromTs;
+      if (state.toTs)   $('range-to').value   = state.toTs;
+    }
+
+    loadHosts();
     load();
   }
 
@@ -523,6 +671,7 @@
   $('container-select').addEventListener('change', e => {
     state.container = e.target.value;
     state.oldestNs = null;
+    pushUrl();
     load();
   });
 
@@ -532,6 +681,33 @@
       btn.classList.add('active');
       state.range = btn.dataset.range;
       state.oldestNs = null;
+      $('custom-range').classList.toggle('hidden', state.range !== 'custom');
+      pushUrl();
+      if (state.range !== 'custom') load();
+    });
+  });
+
+  $('range-from').addEventListener('change', e => {
+    state.fromTs = e.target.value;
+    state.oldestNs = null;
+    pushUrl();
+    if (state.toTs) load();
+  });
+
+  $('range-to').addEventListener('change', e => {
+    state.toTs = e.target.value;
+    state.oldestNs = null;
+    pushUrl();
+    load();
+  });
+
+  document.querySelectorAll('.level-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.level = btn.dataset.level;
+      state.oldestNs = null;
+      pushUrl();
       load();
     });
   });
@@ -542,6 +718,7 @@
     searchTimer = setTimeout(() => {
       state.search = e.target.value;
       state.oldestNs = null;
+      pushUrl();
       load();
     }, 400);
   });
@@ -551,6 +728,7 @@
     load();
   });
 
+  $('live-btn').addEventListener('click', toggleLive);
   $('log-wrap').addEventListener('scroll', updateLoadMore);
   $('load-more-btn').addEventListener('click', () => load(true));
 

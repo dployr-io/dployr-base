@@ -14,6 +14,7 @@ export const ALLOWED_TABLES = [
   "notifications",
   "api_tokens",
   "oidc_bindings",
+  "user_2fa",
 ] as const
 
 export type AllowedTable = typeof ALLOWED_TABLES[number]
@@ -34,6 +35,7 @@ export const TABLE_ID_COLUMNS: Record<AllowedTable, string> = {
   notifications: "cluster_id",
   api_tokens: "id",
   oidc_bindings: "id",
+  user_2fa: "user_id",
 }
 
 export const ALLOWED_JSON_FIELDS = [

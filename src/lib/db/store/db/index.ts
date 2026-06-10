@@ -16,6 +16,7 @@ import { ServiceMetricsStore } from "./service-metrics.js";
 import { NotificationsStore } from "./notifications.js";
 import { OidcBindingStore } from "./oidc-bindings.js";
 import { ApiTokenStore } from "./api-tokens.js";
+import { UserTwoFaStore } from "./user-2fa.js";
 import { EncryptionService } from "@/lib/crypto/encryption.js";
 
 export class DatabaseStore {
@@ -33,6 +34,7 @@ export class DatabaseStore {
   public notifications: NotificationsStore;
   public oidcBindings: OidcBindingStore;
   public apiTokens: ApiTokenStore;
+  public twoFa: UserTwoFaStore | null;
 
   constructor(db: PostgresAdapter, encryptionKey: string | undefined = process.env.ENCRYPTION_KEY) {
     this.users = new UserStore(db);
@@ -45,6 +47,7 @@ export class DatabaseStore {
     this.billing = new BillingStore(db);
     this.serviceEnvs = new ServiceEnvStore(db);
     this.serviceSecrets = encryptionKey ? new ServiceSecretStore(db, new EncryptionService(encryptionKey)) : null;
+    this.twoFa = encryptionKey ? new UserTwoFaStore(db, new EncryptionService(encryptionKey)) : null;
     this.serviceMetrics = new ServiceMetricsStore(db);
     this.notifications = new NotificationsStore(db);
     this.oidcBindings = new OidcBindingStore(db);

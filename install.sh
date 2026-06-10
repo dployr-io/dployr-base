@@ -102,6 +102,17 @@ detect_node() {
   NODE_BIN="/usr/local/bin/node"
 }
 
+caddy_upsert_block() {
+  local domain="$1" block="$2" file="/etc/caddy/Caddyfile"
+  # Remove existing block for domain (tracks brace depth so nested {} are safe)
+  awk -v d="$domain {" '
+    !found && $0 == d { found=1; depth=0 }
+    found { for(i=1;i<=length($0);i++) { c=substr($0,i,1); if(c=="{") depth++; if(c=="}") { depth--; if(depth==0){ found=0; next } } }; next }
+    { print }
+  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+  printf '\n%s\n' "$block" >> "$file"
+}
+
 render_caddyfile() {
   local domain="$1" app_port="$2"
   cat <<EOF
@@ -376,9 +387,8 @@ install_vector() {
 
 setup_vector() {
   local loki_url; loki_url="$(tget 'loki.url')"
-  local loki_enabled; loki_enabled="$(tget 'loki.enabled')"
 
-  [ "$loki_enabled" != "true" ] || [ -z "$loki_url" ] && return
+  [ -z "$loki_url" ] && return
 
   install_vector
 
@@ -387,15 +397,6 @@ setup_vector() {
 
   mkdir -p /etc/vector
   render_vector_config "$loki_url" "$with_listmonk" > /etc/vector/vector.toml
-
-  mkdir -p /etc/systemd/system/vector.service.d
-  cat > /etc/systemd/system/vector.service.d/override.conf <<EOF
-[Service]
-ExecStartPre=
-ExecStart=
-ExecStartPre=/usr/bin/vector validate /etc/vector/vector.toml
-ExecStart=/usr/bin/vector --config-dir /etc/vector
-EOF
 
   usermod -aG "$SERVICE_USER" vector >/dev/null 2>&1 || true
   chmod g+rX /var/log/dployr-base >/dev/null 2>&1 || true
@@ -723,21 +724,16 @@ prompt_listmonk() {
 }
 EOF
 
-  # Caddy vhost (appended if Caddy is already configured) 
+  # Caddy vhost (appended if Caddy is already configured)
   if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
-    if ! grep -qF "$domain" /etc/caddy/Caddyfile 2>/dev/null; then
-      cat >> /etc/caddy/Caddyfile <<EOF
-
-${domain} {
+    caddy_upsert_block "$domain" "${domain} {
     tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
     reverse_proxy localhost:9000 {
       header_up Host {http.request.host}
     }
-}
-EOF
-      systemctl reload caddy 2>/dev/null || true
-      info "Caddy: https://${domain} -> localhost:9000"
-    fi
+}"
+    systemctl reload caddy 2>/dev/null || true
+    info "Caddy: https://${domain} -> localhost:9000"
   fi
 
   # Start service 
@@ -869,7 +865,7 @@ schema_config:
 
 storage_config:
   aws:
-    s3: s3://${bucket}
+    bucketnames: ${bucket}
     endpoint: https://${account_id}.r2.cloudflarestorage.com
     access_key_id: ${access_key}
     secret_access_key: ${secret_key}
@@ -881,7 +877,6 @@ storage_config:
 
 limits_config:
   retention_period: 26280h
-  allow_delete_request: true
 
 compactor:
   working_directory: ${LOKI_DIR}/compactor
@@ -977,37 +972,37 @@ EOF
   fi
 
   local viewer_token
-  viewer_token="$(openssl rand -hex 32)"
+  viewer_token="$(tget 'loki.viewer_token')"
+  [ -z "$viewer_token" ] && viewer_token="$(openssl rand -hex 32)"
   tset "loki.viewer_token" "$viewer_token"
 
   if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
-    printf "Loki API domain (e.g. loki.dployr.io): "
-    local loki_api_domain; read -r loki_api_domain
-    printf "Logs viewer origin for CORS (e.g. https://logs.dployr.io): "
-    local logs_origin; read -r logs_origin
+    prompt "loki.api_domain"  "Loki API domain (e.g. loki.dployr.io)"
+    prompt "loki.logs_origin" "Logs viewer origin for CORS (e.g. https://logs.dployr.io)"
+
+    local loki_api_domain; loki_api_domain="$(tget 'loki.api_domain')"
+    local logs_origin; logs_origin="$(tget 'loki.logs_origin')"
 
     if [ -n "$loki_api_domain" ]; then
-      tset "loki.api_domain" "$loki_api_domain"
-      [ -n "$logs_origin" ] && tset "loki.logs_origin" "$logs_origin"
 
-      cat >> /etc/caddy/Caddyfile <<EOF
-
-${loki_api_domain} {
+      caddy_upsert_block "$loki_api_domain" "${loki_api_domain} {
     tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
 
-    @unauth not header Authorization "Bearer ${viewer_token}"
+    header Access-Control-Allow-Origin \"${logs_origin:-*}\"
+    header Access-Control-Allow-Headers \"Authorization, Content-Type\"
+    header Access-Control-Allow-Methods \"GET, OPTIONS\"
+
+    @preflight method OPTIONS
+    respond @preflight 204
+
+    @unauth not header Authorization \"Bearer ${viewer_token}\"
     respond @unauth 401
 
     @write method POST PUT DELETE PATCH
     respond @write 405
 
-    header Access-Control-Allow-Origin "${logs_origin:-*}"
-    header Access-Control-Allow-Headers "Authorization, Content-Type"
-    header Access-Control-Allow-Methods "GET, OPTIONS"
-
     reverse_proxy localhost:3100
-}
-EOF
+}"
       systemctl reload caddy 2>/dev/null || true
       info "Caddy: https://${loki_api_domain} → localhost:3100"
     fi
@@ -1089,7 +1084,7 @@ render_dployr_unit() {
   local install_dir="$1" config_dir="$2" service_user="$3" node_bin="$4" version="$5"
   cat <<EOF
 [Unit]
-Description=Dployr Base
+Description=dployr Base
 After=network-online.target
 Wants=network-online.target
 
@@ -1113,7 +1108,7 @@ EOF
 
 main() {
   echo ""
-  echo "Dployr Base Installer"
+  echo "dployr Base Installer"
   echo ""
 
   [ "$EUID" -ne 0 ] && error "Run as root"

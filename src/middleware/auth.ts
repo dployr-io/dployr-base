@@ -5,6 +5,7 @@ import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
 import { Bindings, Variables, Session } from "@/types/index.js";
 import { ERROR } from "@/lib/constants/index.js";
+import { TWO_FA_WINDOW_MS } from "@/lib/constants/duration.js";
 import { getDbStore, getKVStore } from "@/lib/config/context.js";
 import type { DatabaseStore } from "@/lib/db/store/db/index.js";
 import { jwtVerify } from "jose";
@@ -251,6 +252,39 @@ export const requireClusterOwner = requireClusterPermission((db, userId, cluster
   code: ERROR.PERMISSION.OWNER_ROLE_REQUIRED.code,
   status: ERROR.PERMISSION.OWNER_ROLE_REQUIRED.status,
 });
+
+
+/**
+ * Requires that the current session has completed 2FA verification within the last 5 minutes.
+ * Apply after `authMiddleware` on any route that guards sensitive operations.
+ *
+ * Skips the check for:
+ *   - API token sessions (scopes present) — tokens are already scoped credentials
+ *   - Users who have not configured TOTP — 2FA is opt-in
+ */
+export async function require2FA(c: AppContext, next: Next) {
+  const session = await authenticate(c);
+  if (!session) return c.json({ error: "Not authenticated", code: ERROR.AUTH.BAD_SESSION.code }, ERROR.AUTH.BAD_SESSION.status);
+
+  if (session.scopes !== undefined) {
+    await next();
+    return;
+  }
+
+  const db = getDbStore(c);
+  const twoFaRecord = await db.twoFa?.find(session.userId);
+  if (!twoFaRecord?.totpEnabled) {
+    await next();
+    return;
+  }
+
+  const age = session.twoFaVerifiedAt ? Date.now() - session.twoFaVerifiedAt : Infinity;
+  if (age > TWO_FA_WINDOW_MS) {
+    return c.json({ error: "2FA verification required", code: ERROR.AUTH.TWO_FA_REQUIRED.code }, ERROR.AUTH.TWO_FA_REQUIRED.status as any);
+  }
+
+  await next();
+}
 
 /**
  * Requires a valid dployr administrator JWT (`type: "admin"` claim).

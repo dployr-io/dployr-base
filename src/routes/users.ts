@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { Bindings, Variables, User, createSuccessResponse, createErrorResponse } from "@/types/index.js";
 import { getCookie } from "hono/cookie";
 import z from "zod";
-import { authMiddleware } from "@/middleware/auth.js";
+import { authMiddleware, require2FA } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getAuthService, getBillingProvider, getDbStore, getEmailService, getKVStore } from "@/lib/config/context.js";
 import { Logger } from "@/lib/logger.js";
@@ -95,7 +95,7 @@ users.get("/me", async (c) => {
   }
 });
 
-users.patch("/me", async (c) => {
+users.patch("/me", require2FA, async (c) => {
   const sessionId = getCookie(c, "session");
 
   if (!sessionId) {
