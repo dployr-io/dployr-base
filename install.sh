@@ -387,9 +387,8 @@ install_vector() {
 
 setup_vector() {
   local loki_url; loki_url="$(tget 'loki.url')"
-  local loki_enabled; loki_enabled="$(tget 'loki.enabled')"
 
-  [ "$loki_enabled" != "true" ] || [ -z "$loki_url" ] && return
+  [ -z "$loki_url" ] && return
 
   install_vector
 
@@ -875,7 +874,7 @@ schema_config:
 
 storage_config:
   aws:
-    s3: s3://${bucket}
+    bucketnames: ${bucket}
     endpoint: https://${account_id}.r2.cloudflarestorage.com
     access_key_id: ${access_key}
     secret_access_key: ${secret_key}
@@ -987,21 +986,13 @@ EOF
   tset "loki.viewer_token" "$viewer_token"
 
   if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
+    prompt "loki.api_domain"  "Loki API domain (e.g. loki.dployr.io)"
+    prompt "loki.logs_origin" "Logs viewer origin for CORS (e.g. https://logs.dployr.io)"
+
     local loki_api_domain; loki_api_domain="$(tget 'loki.api_domain')"
     local logs_origin; logs_origin="$(tget 'loki.logs_origin')"
 
-    if [ -z "$loki_api_domain" ]; then
-      printf "Loki API domain (e.g. loki.dployr.io): "
-      read -r loki_api_domain
-    fi
-    if [ -z "$logs_origin" ]; then
-      printf "Logs viewer origin for CORS (e.g. https://logs.dployr.io): "
-      read -r logs_origin
-    fi
-
     if [ -n "$loki_api_domain" ]; then
-      tset "loki.api_domain" "$loki_api_domain"
-      [ -n "$logs_origin" ] && tset "loki.logs_origin" "$logs_origin"
 
       caddy_upsert_block "$loki_api_domain" "${loki_api_domain} {
     tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
