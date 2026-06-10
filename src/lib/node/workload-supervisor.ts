@@ -359,7 +359,7 @@ export class WorkloadSupervisor {
         });
         this.log.info(`${deployment ? "Updated" : "Created"} service ${svc.name} for cluster ${cluster.name}`);
 
-        await this.registerTraefikRoute({ activeNodeIds, serviceName: svc.name, fallbackPort: deployment?.port });
+        await this.registerTraefikRoute({ activeNodeIds, serviceName: svc.name });
         changed = true;
       } catch (error) {
         if (error instanceof DatabaseConflictError) continue;
@@ -370,7 +370,7 @@ export class WorkloadSupervisor {
     return changed;
   }
 
-  private async registerTraefikRoute({ activeNodeIds, serviceName, fallbackPort }: { activeNodeIds: string[]; serviceName: string; fallbackPort?: number | null }): Promise<void> {
+  private async registerTraefikRoute({ activeNodeIds, serviceName }: { activeNodeIds: string[]; serviceName: string }): Promise<void> {
     if (!this.traefik) return;
 
     try {
@@ -384,11 +384,11 @@ export class WorkloadSupervisor {
           continue;
         }
 
-        const port = Number(workloadService.port ?? fallbackPort);
-        if (!Number.isInteger(port) || port <= 0) {
-          this.log.error("Port is not set. Unable to register route.", { service: serviceName });
-          continue;
-        }
+        const hostPort = workloadService.host_port ?? workloadService.hostPort;
+        if (!hostPort) continue;
+
+        const port = Number(hostPort);
+        if (!Number.isInteger(port) || port <= 0) continue;
 
         await this.traefik.registerRoute({ serviceName, instanceAddress: instance.address, instancePort: port });
         this.log.info(`Registered Traefik route for service ${serviceName}`);
