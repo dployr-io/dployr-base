@@ -725,8 +725,8 @@ EOF
 
   # Caddy vhost (appended if Caddy is already configured) 
   if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
-    if ! grep -qF "$domain" /etc/caddy/Caddyfile 2>/dev/null; then
-      cat >> /etc/caddy/Caddyfile <<EOF
+    sed -i "/^${domain} {/,/^}/d" /etc/caddy/Caddyfile 2>/dev/null || true
+    cat >> /etc/caddy/Caddyfile <<EOF
 
 ${domain} {
     tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
@@ -735,9 +735,8 @@ ${domain} {
     }
 }
 EOF
-      systemctl reload caddy 2>/dev/null || true
-      info "Caddy: https://${domain} -> localhost:9000"
-    fi
+    systemctl reload caddy 2>/dev/null || true
+    info "Caddy: https://${domain} -> localhost:9000"
   fi
 
   # Start service 
@@ -989,6 +988,8 @@ EOF
     if [ -n "$loki_api_domain" ]; then
       tset "loki.api_domain" "$loki_api_domain"
       [ -n "$logs_origin" ] && tset "loki.logs_origin" "$logs_origin"
+
+      sed -i "/^${loki_api_domain} {/,/^}/d" /etc/caddy/Caddyfile 2>/dev/null || true
 
       cat >> /etc/caddy/Caddyfile <<EOF
 
