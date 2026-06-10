@@ -18,7 +18,6 @@ export class AuthService {
   constructor(
     private db: DatabaseStore,
     private kv: KVStore,
-    private env: Bindings,
   ) {}
 
   /**
@@ -68,6 +67,56 @@ export class AuthService {
   async verifyOTP({ email, code }: { email: string; code: string }): Promise<boolean> {
     if (process.env.NODE_ENV === "test") return true;
     return this.kv.validateOTP({ email, code: code.toUpperCase() });
+  }
+
+  /**
+   * Validates a login code for a user.
+   * If the user has TOTP enabled, accepts a TOTP token or backup code.
+   * Otherwise falls back to email OTP verification.
+   */
+  async verifyLoginCode({ userId, email, code }: { userId: string; email: string; code: string }): Promise<boolean> {
+    const twoFaRecord = await this.db.twoFa?.find(userId);
+    if (!twoFaRecord?.totpEnabled) {
+      return this.verifyOTP({ email, code });
+    }
+
+    const totpSecret = await this.db.twoFa!.getDecryptedTOTPSecret(userId);
+    if (totpSecret) {
+      const OTPAuth = await import("otpauth");
+      const totp = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(totpSecret) });
+      if (totp.validate({ token: code, window: 1 }) !== null) return true;
+    }
+
+    return this.db.twoFa!.consumeBackupCode(userId, code);
+  }
+
+  /**
+   * Returns true if the user has TOTP enabled.
+   */
+  async hasTotpEnabled(userId: string): Promise<boolean> {
+    const record = await this.db.twoFa?.find(userId);
+    return record?.totpEnabled ?? false;
+  }
+
+  /**
+   * Verifies a Cloudflare Turnstile challenge token.
+   * Returns true when the challenge passes or when no secret is configured.
+   */
+  async verifyTurnstile(token: string, secret: string, ip?: string): Promise<boolean> {
+    try {
+      const body = new URLSearchParams({ secret, response: token });
+      if (ip) body.set("remoteip", ip);
+      const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+        method: "POST",
+        body,
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+      const data = (await res.json()) as { success: boolean };
+      return data.success === true;
+    } catch (err) {
+      log.error("Turnstile verification error:", err);
+      return false;
+    }
   }
 
   /**

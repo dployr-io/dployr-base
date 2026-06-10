@@ -1089,7 +1089,7 @@ render_dployr_unit() {
   local install_dir="$1" config_dir="$2" service_user="$3" node_bin="$4" version="$5"
   cat <<EOF
 [Unit]
-Description=Dployr Base
+Description=dployr Base
 After=network-online.target
 Wants=network-online.target
 
@@ -1113,7 +1113,7 @@ EOF
 
 main() {
   echo ""
-  echo "Dployr Base Installer"
+  echo "dployr Base Installer"
   echo ""
 
   [ "$EUID" -ne 0 ] && error "Run as root"

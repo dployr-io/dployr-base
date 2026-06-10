@@ -13,6 +13,7 @@ import { registerServiceLimitTests } from "./service-limits.test.js";
 import { registerServicePatchTests } from "./service-patch.test.js";
 import { registerDomainLimitTests } from "./domain-limits.test.js";
 import { registerApiTokenTests } from "./api-tokens.test.js";
+import { registerTwoFaTests } from "./twofa.test.js";
 
 const TIMEOUT_FIXTURE_SETUP = 180_000;
 const TIMEOUT_CLEANUP = 60_000;
@@ -698,6 +699,7 @@ describe("Deployments", () => {
 const getFx = () => fx;
 registerNodeAuthTests(getFx);
 registerApiTokenTests(getFx);
+registerTwoFaTests(getFx);
 registerDeploymentLifecycleTests(getFx);
 
 registerClusterIsolationTests(getFx);

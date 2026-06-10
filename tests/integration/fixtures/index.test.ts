@@ -90,6 +90,7 @@ async function spawnServer(connectionString: string, redisConnectionString: stri
        DATABASE_URL: connectionString,
        REDIS_URL: redisConnectionString,
        PORT: String(port),
+       ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? "a".repeat(64),
      },
      stdio: ["ignore", "pipe", "pipe"],
      cwd: process.cwd(),

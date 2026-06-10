@@ -103,7 +103,7 @@ jobs:
           touch release-update.json
           cat <<EOF > release-update.json
           {
-            "content": "Dployr Base ${{ github.ref_name }} has been released!",
+            "content": "dployr Base ${{ github.ref_name }} has been released!",
             "embeds": [
               {
                 "title": "Release ${{ github.ref_name }} is Live!",

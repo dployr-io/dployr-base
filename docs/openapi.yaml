@@ -3,7 +3,7 @@
 
 openapi: 3.0.4
 info:
-  title: Dployr Base API
+  title: dployr Base API
   version: 1.0.0
   description: |
     Your app, your server, your rules!

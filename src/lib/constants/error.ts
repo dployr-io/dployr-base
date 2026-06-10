@@ -20,6 +20,9 @@ export const ERROR = {
     OIDC_INVALID_ISSUER: { code: "auth.oidc_invalid_issuer", status: 401, message: "OIDC issuer not supported" },
     OIDC_BINDING_NOT_FOUND: { code: "auth.oidc_binding_not_found", status: 401, message: "No OIDC binding found for this token" },
     OIDC_FORBIDDEN_EVENT: { code: "auth.oidc_forbidden_event", status: 403, message: "OIDC token event type is not permitted" },
+    TWO_FA_REQUIRED: { code: "auth.two_fa_required", status: 403, message: "2FA verification required" },
+    TWO_FA_INVALID: { code: "auth.two_fa_invalid", status: 400, message: "Invalid or expired 2FA code" },
+    TWO_FA_NOT_CONFIGURED: { code: "auth.two_fa_not_configured", status: 400, message: "TOTP not configured" },
   },
   PERMISSION: {
     FORBIDDEN: { code: "permission.forbidden", status: 403, message: "Forbidden" },

@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
-import { authMiddleware, requireClusterViewer, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth.js";
+import { authMiddleware, require2FA, requireClusterViewer, requireClusterAdmin, requireClusterOwner } from "@/middleware/auth.js";
 import z from "zod";
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { getKVStore, getGitHubService, getDbStore } from "@/lib/config/context.js";
@@ -277,7 +277,7 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
 /**
  * Remove users from cluster
  */
-clusters.post("/:id/users/remove", requireClusterAdmin, async (c) => {
+clusters.post("/:id/users/remove", requireClusterAdmin, require2FA, async (c) => {
   const session = c.get("session")!;
   const db = getDbStore(c);
   const kv = getKVStore(c);
@@ -465,7 +465,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
 /**
  * Transfer ownership of cluster to a new user
  */
-clusters.post("/:id/users/owner", requireClusterOwner, async (c) => {
+clusters.post("/:id/users/owner", requireClusterOwner, require2FA, async (c) => {
   const session = c.get("session")!;
   const db = getDbStore(c);
   const kv = getKVStore(c);
