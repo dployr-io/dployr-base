@@ -482,6 +482,7 @@
   }
 
   function updateLoadMore() {
+    if (state.live) return;
     $('load-more-btn').classList.toggle('hidden', !(state.hasMore && isNearBottom()));
   }
 
@@ -579,6 +580,7 @@
         $('log-wrap').insertAdjacentHTML('afterbegin', renderRows(rows));
         setStatus(`${state.entries.length} lines · ${new Date().toLocaleTimeString()}`);
       }
+      $('log-wrap').scrollTop = 0;
     } catch (err) {
       setError(err.message);
     }
@@ -589,11 +591,14 @@
     const btn = $('live-btn');
     if (state.live) {
       btn.classList.add('live');
+      $('load-more-btn').classList.add('hidden');
+      $('log-wrap').scrollTop = 0;
       state.liveTimer = setInterval(tail, 3000);
     } else {
       btn.classList.remove('live');
       clearInterval(state.liveTimer);
       state.liveTimer = null;
+      updateLoadMore();
     }
   }
 
