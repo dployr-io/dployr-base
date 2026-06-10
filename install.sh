@@ -102,6 +102,17 @@ detect_node() {
   NODE_BIN="/usr/local/bin/node"
 }
 
+caddy_upsert_block() {
+  local domain="$1" block="$2" file="/etc/caddy/Caddyfile"
+  # Remove existing block for domain (tracks brace depth so nested {} are safe)
+  awk -v d="$domain {" '
+    !found && $0 == d { found=1; depth=0 }
+    found { for(i=1;i<=length($0);i++) { c=substr($0,i,1); if(c=="{") depth++; if(c=="}") { depth--; if(depth==0){ found=0; next } } }; next }
+    { print }
+  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+  printf '\n%s\n' "$block" >> "$file"
+}
+
 render_caddyfile() {
   local domain="$1" app_port="$2"
   cat <<EOF
@@ -723,18 +734,14 @@ prompt_listmonk() {
 }
 EOF
 
-  # Caddy vhost (appended if Caddy is already configured) 
+  # Caddy vhost (appended if Caddy is already configured)
   if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
-    sed -i "/^${domain} {/,/^}/d" /etc/caddy/Caddyfile 2>/dev/null || true
-    cat >> /etc/caddy/Caddyfile <<EOF
-
-${domain} {
+    caddy_upsert_block "$domain" "${domain} {
     tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
     reverse_proxy localhost:9000 {
       header_up Host {http.request.host}
     }
-}
-EOF
+}"
     systemctl reload caddy 2>/dev/null || true
     info "Caddy: https://${domain} -> localhost:9000"
   fi
@@ -976,42 +983,45 @@ EOF
   fi
 
   local viewer_token
-  viewer_token="$(openssl rand -hex 32)"
+  viewer_token="$(tget 'loki.viewer_token')"
+  [ -z "$viewer_token" ] && viewer_token="$(openssl rand -hex 32)"
   tset "loki.viewer_token" "$viewer_token"
 
   if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
-    printf "Loki API domain (e.g. loki.dployr.io): "
-    local loki_api_domain; read -r loki_api_domain
-    printf "Logs viewer origin for CORS (e.g. https://logs.dployr.io): "
-    local logs_origin; read -r logs_origin
+    local loki_api_domain; loki_api_domain="$(tget 'loki.api_domain')"
+    local logs_origin; logs_origin="$(tget 'loki.logs_origin')"
+
+    if [ -z "$loki_api_domain" ]; then
+      printf "Loki API domain (e.g. loki.dployr.io): "
+      read -r loki_api_domain
+    fi
+    if [ -z "$logs_origin" ]; then
+      printf "Logs viewer origin for CORS (e.g. https://logs.dployr.io): "
+      read -r logs_origin
+    fi
 
     if [ -n "$loki_api_domain" ]; then
       tset "loki.api_domain" "$loki_api_domain"
       [ -n "$logs_origin" ] && tset "loki.logs_origin" "$logs_origin"
 
-      sed -i "/^${loki_api_domain} {/,/^}/d" /etc/caddy/Caddyfile 2>/dev/null || true
-
-      cat >> /etc/caddy/Caddyfile <<EOF
-
-${loki_api_domain} {
+      caddy_upsert_block "$loki_api_domain" "${loki_api_domain} {
     tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
 
-    header Access-Control-Allow-Origin "${logs_origin:-*}"
-    header Access-Control-Allow-Headers "Authorization, Content-Type"
-    header Access-Control-Allow-Methods "GET, OPTIONS"
+    header Access-Control-Allow-Origin \"${logs_origin:-*}\"
+    header Access-Control-Allow-Headers \"Authorization, Content-Type\"
+    header Access-Control-Allow-Methods \"GET, OPTIONS\"
 
     @preflight method OPTIONS
     respond @preflight 204
 
-    @unauth not header Authorization "Bearer ${viewer_token}"
+    @unauth not header Authorization \"Bearer ${viewer_token}\"
     respond @unauth 401
 
     @write method POST PUT DELETE PATCH
     respond @write 405
 
     reverse_proxy localhost:3100
-}
-EOF
+}"
       systemctl reload caddy 2>/dev/null || true
       info "Caddy: https://${loki_api_domain} → localhost:3100"
     fi
