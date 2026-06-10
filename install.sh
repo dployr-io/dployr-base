@@ -887,7 +887,6 @@ storage_config:
 
 limits_config:
   retention_period: 26280h
-  allow_delete_request: true
 
 compactor:
   working_directory: ${LOKI_DIR}/compactor
