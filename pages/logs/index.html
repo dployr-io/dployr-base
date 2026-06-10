@@ -283,7 +283,7 @@
 
   <div id="toolbar">
     <select id="container-select">
-      <option value="">all containers</option>
+      <option value="">all hosts</option>
     </select>
     <div class="range-group">
       <button class="range-btn" data-range="15m">15m</button>
@@ -340,8 +340,8 @@
 
   function buildQuery() {
     let q = state.container
-      ? `{container="${state.container}"}`
-      : `{source="docker"}`;
+      ? `{host="${state.container}"}`
+      : `{source="dployr-base"}`;
     if (state.search.trim()) {
       q += ` |= ${JSON.stringify(state.search.trim())}`;
     }
@@ -457,11 +457,11 @@
     }
   }
 
-  async function loadContainers() {
+  async function loadHosts() {
     try {
-      const body = await lokiFetch('/loki/api/v1/label/container/values', {});
+      const body = await lokiFetch('/loki/api/v1/label/host/values', {});
       const sel = $('container-select');
-      sel.innerHTML = '<option value="">all containers</option>';
+      sel.innerHTML = '<option value="">all hosts</option>';
       for (const name of (body.data || [])) {
         const opt = document.createElement('option');
         opt.value = opt.textContent = name;
@@ -478,7 +478,7 @@
     }
     $('setup-screen').classList.add('hidden');
     $('app').classList.remove('hidden');
-    loadContainers();
+    loadHosts();
     load();
   }
 
