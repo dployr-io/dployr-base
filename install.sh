@@ -398,15 +398,6 @@ setup_vector() {
   mkdir -p /etc/vector
   render_vector_config "$loki_url" "$with_listmonk" > /etc/vector/vector.toml
 
-  mkdir -p /etc/systemd/system/vector.service.d
-  cat > /etc/systemd/system/vector.service.d/override.conf <<EOF
-[Service]
-ExecStartPre=
-ExecStart=
-ExecStartPre=/usr/bin/vector validate /etc/vector/vector.toml
-ExecStart=/usr/bin/vector --config-dir /etc/vector
-EOF
-
   usermod -aG "$SERVICE_USER" vector >/dev/null 2>&1 || true
   chmod g+rX /var/log/dployr-base >/dev/null 2>&1 || true
 
