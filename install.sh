@@ -995,15 +995,18 @@ EOF
 ${loki_api_domain} {
     tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
 
+    header Access-Control-Allow-Origin "${logs_origin:-*}"
+    header Access-Control-Allow-Headers "Authorization, Content-Type"
+    header Access-Control-Allow-Methods "GET, OPTIONS"
+
+    @preflight method OPTIONS
+    respond @preflight 204
+
     @unauth not header Authorization "Bearer ${viewer_token}"
     respond @unauth 401
 
     @write method POST PUT DELETE PATCH
     respond @write 405
-
-    header Access-Control-Allow-Origin "${logs_origin:-*}"
-    header Access-Control-Allow-Headers "Authorization, Content-Type"
-    header Access-Control-Allow-Methods "GET, OPTIONS"
 
     reverse_proxy localhost:3100
 }
