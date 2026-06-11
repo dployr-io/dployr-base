@@ -549,7 +549,12 @@
 
   async function loadHosts() {
     try {
-      const body = await lokiFetch('/loki/api/v1/label/host/values', {});
+      const nowMs  = Date.now();
+      const MAX_RETENTION_MS = 26280 * 3600e3; // 36 months 
+      const body = await lokiFetch('/loki/api/v1/label/host/values', {
+        start: String((nowMs - MAX_RETENTION_MS) * 1e6),
+        end:   String(nowMs * 1e6),
+      });
       const sel = $('container-select');
       sel.innerHTML = '<option value="">all hosts</option>';
       for (const name of (body.data || [])) {
