@@ -877,6 +877,7 @@ storage_config:
 
 limits_config:
   retention_period: 26280h
+  max_query_length: 26280h
 
 compactor:
   working_directory: ${LOKI_DIR}/compactor
