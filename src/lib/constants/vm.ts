@@ -66,6 +66,8 @@ export interface InstallScriptOptions {
   containerMemory?: number;
   containerCpu?: number;
   containerStorage?: number;
+  lokiUrl?: string;
+  lokiPushToken?: string;
 }
 
 /** Bootstrap install script injected as user_data at droplet creation */
@@ -78,6 +80,8 @@ export function buildInstallScript(token: string, instanceTag: string, opts: Ins
     containerMemory = 0,
     containerCpu = 0,
     containerStorage = 0,
+    lokiUrl = "",
+    lokiPushToken = "",
   } = opts;
 
   // Env vars are exported so that install.sh picks them up regardless of which
@@ -91,6 +95,8 @@ export REGISTRY_AUTH="${registryAuth}"
 export CONTAINER_MEMORY="${containerMemory}"
 export CONTAINER_CPU="${containerCpu}"
 export CONTAINER_STORAGE="${containerStorage}"
+export LOKI_URL="${lokiUrl}"
+export LOKI_PUSH_TOKEN="${lokiPushToken}"
 curl -sSL https://raw.githubusercontent.com/dployr-io/dployr/master/install.sh -o /tmp/dployr-install.sh
 bash /tmp/dployr-install.sh --token ${token} --instance ${instanceTag} --env ${env}
 `;

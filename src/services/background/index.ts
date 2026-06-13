@@ -123,6 +123,7 @@ export class BackgroundWorker {
       jwt,
       sshKey: this.adapters.config.virtual_machines?.ssh_key,
       registry: this.adapters.config.registry,
+      loki: { url: this.adapters.config.loki?.api_domain ? `https://${this.adapters.config.loki.api_domain}` : undefined, pushToken: this.adapters.config.loki?.push_token },
     });
     let output: Record<string, unknown> = {};
     // TTL = 3× the interval (in seconds); falls back to 24h for triggered jobs

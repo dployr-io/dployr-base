@@ -174,6 +174,7 @@ export function getInstancePoolService(c: AppContext): InstancePool {
     jwt: getJWTService(c),
     sshKey: c.env.SSH_KEY,
     registry: { url: c.env.REGISTRY_URL, auth: c.env.REGISTRY_AUTH },
+    loki: { url: c.env.LOKI_API_DOMAIN ? `https://${c.env.LOKI_API_DOMAIN}` : undefined, pushToken: c.env.LOKI_PUSH_TOKEN },
   });
   c.set("_instancePoolService", service);
   return service;

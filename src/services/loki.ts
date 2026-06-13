@@ -7,8 +7,10 @@ import type { Config } from "@/lib/config/loader.js";
 export type LogSource = "runtime" | "build" | "deploy";
 
 export interface LokiLabels {
-  serviceId: string;
-  source: LogSource;
+  serviceId?: string;
+  container?: string;
+  host?: string;
+  source?: LogSource | "dployrd";
   deploymentId?: string;
   clusterId?: string;
 }
@@ -269,10 +271,11 @@ export class LokiClient {
   }
 
   private labelsToRecord(labels: LokiLabels): Record<string, string> {
-    const record: Record<string, string> = {
-      serviceId: labels.serviceId,
-      source: labels.source,
-    };
+    const record: Record<string, string> = {};
+    if (labels.serviceId) { record.serviceId = labels.serviceId; record.service_name = labels.serviceId; }
+    if (labels.container) record.container = labels.container;
+    if (labels.host) record.host = labels.host;
+    if (labels.source) record.source = labels.source;
     if (labels.deploymentId) record.deploymentId = labels.deploymentId;
     if (labels.clusterId) record.clusterId = labels.clusterId;
     return record;

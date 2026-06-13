@@ -232,6 +232,7 @@ export const CONFIG_SCHEMA = z.object({
       enabled: z.boolean().default(false),
       url: z.string().default("http://localhost:3100"),
       viewer_token: z.string().optional(),
+      push_token: z.string().optional(),
       api_domain: z.string().optional(),
       logs_origin: z.string().optional(),
       r2_account_id: z.string().optional(),

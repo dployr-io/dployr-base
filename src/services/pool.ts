@@ -31,15 +31,19 @@ export class InstancePool extends EventEmittable {
   private readonly jwt?: JWTService;
   private readonly sshKey?: number;
   private readonly registry: InstallScriptOptions;
+  private readonly lokiUrl?: string;
+  private readonly lokiPushToken?: string;
   private readonly log: Logger;
 
-  constructor({ db, kv, vm, jwt, sshKey, registry }: { db: DatabaseStore; kv: KVStore; vm?: VmProvider; jwt?: JWTService; sshKey?: number; registry?: { url?: string; auth?: string } }) {
+  constructor({ db, kv, vm, jwt, sshKey, registry, loki }: { db: DatabaseStore; kv: KVStore; vm?: VmProvider; jwt?: JWTService; sshKey?: number; registry?: { url?: string; auth?: string }; loki?: { url?: string; pushToken?: string } }) {
     super(kv);
     this.db = db;
     this.vm = vm;
     this.jwt = jwt;
     this.sshKey = sshKey;
     this.registry = { registryUrl: registry?.url, registryAuth: registry?.auth };
+    this.lokiUrl = loki?.url;
+    this.lokiPushToken = loki?.pushToken;
     this.log = new Logger("pool");
   }
 
@@ -94,7 +98,7 @@ export class InstancePool extends EventEmittable {
       size: DEFAULT_INSTANCE_SIZE,
       tags: buildInstanceTags(tier),
       sshKey: this.sshKey,
-      userData: buildInstallScript(token, tag, { ...this.registry, ...limits }),
+      userData: buildInstallScript(token, tag, { ...this.registry, ...limits, lokiUrl: this.lokiUrl, lokiPushToken: this.lokiPushToken }),
     });
 
     // Create instance row before bootstrap token so the FK is satisfied.
@@ -135,7 +139,7 @@ export class InstancePool extends EventEmittable {
         size: DEFAULT_INSTANCE_SIZE,
         tags: buildInstanceTags("pro"),
         sshKey: this.sshKey,
-        userData: buildInstallScript(token, tag, this.registry),
+        userData: buildInstallScript(token, tag, { ...this.registry, lokiUrl: this.lokiUrl, lokiPushToken: this.lokiPushToken }),
       });
 
       const instance = await this.db.instances.create({
@@ -176,7 +180,7 @@ export class InstancePool extends EventEmittable {
       size: DEFAULT_BUILD_NODE_SIZE,
       tags: buildInstanceTags("build"),
       sshKey: this.sshKey,
-      userData: buildInstallScript(token, tag, { role: "build", ...this.registry }),
+      userData: buildInstallScript(token, tag, { role: "build", ...this.registry, lokiUrl: this.lokiUrl, lokiPushToken: this.lokiPushToken }),
     });
 
     const instance = await this.db.instances.addPool({

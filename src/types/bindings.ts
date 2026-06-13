@@ -38,6 +38,8 @@ export type Bindings = {
   SSH_KEY?: number;
   REGISTRY_URL?: string;
   REGISTRY_AUTH?: string;
+  LOKI_API_DOMAIN?: string;
+  LOKI_PUSH_TOKEN?: string;
 
   TRAEFIK_ENABLED?: boolean;
   TRAEFIK_TLD?: string;

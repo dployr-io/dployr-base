@@ -977,6 +977,11 @@ EOF
   [ -z "$viewer_token" ] && viewer_token="$(openssl rand -hex 32)"
   tset "loki.viewer_token" "$viewer_token"
 
+  local push_token
+  push_token="$(tget 'loki.push_token')"
+  [ -z "$push_token" ] && push_token="$(openssl rand -hex 32)"
+  tset "loki.push_token" "$push_token"
+
   if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
     prompt "loki.api_domain"  "Loki API domain (e.g. loki.dployr.io)"
     prompt "loki.logs_origin" "Logs viewer origin for CORS (e.g. https://logs.dployr.io)"
@@ -991,10 +996,20 @@ EOF
 
     header Access-Control-Allow-Origin \"${logs_origin:-*}\"
     header Access-Control-Allow-Headers \"Authorization, Content-Type\"
-    header Access-Control-Allow-Methods \"GET, OPTIONS\"
+    header Access-Control-Allow-Methods \"GET, POST, OPTIONS\"
 
     @preflight method OPTIONS
     respond @preflight 204
+
+    # Allow Vector on nodes to push logs
+    @push {
+        path /loki/api/v1/push
+        method POST
+        header Authorization \"Bearer ${push_token}\"
+    }
+    handle @push {
+        reverse_proxy localhost:3100
+    }
 
     @unauth not header Authorization \"Bearer ${viewer_token}\"
     respond @unauth 401
@@ -1011,7 +1026,8 @@ EOF
 
   echo ""
   echo "  Loki viewer token : ${viewer_token}"
-  echo "  (save this — used to authenticate the log viewer)"
+  echo "  Loki push token   : ${push_token}"
+  echo "  (save these — viewer token for log viewer, push token for node Vector agents)"
   echo ""
 }
 

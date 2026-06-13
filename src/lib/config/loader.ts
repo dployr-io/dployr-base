@@ -165,6 +165,8 @@ function loadConfigFromEnv(): Config {
     loki: {
       enabled: process.env.LOKI_ENABLED === "true",
       url: process.env.LOKI_URL || "http://localhost:3100",
+      api_domain: process.env.LOKI_API_DOMAIN,
+      push_token: process.env.LOKI_PUSH_TOKEN,
       r2_account_id: process.env.LOKI_R2_ACCOUNT_ID,
       r2_bucket: process.env.LOKI_R2_BUCKET,
       r2_access_key: process.env.LOKI_R2_ACCESS_KEY,
