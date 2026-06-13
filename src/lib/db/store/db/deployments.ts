@@ -159,7 +159,7 @@ export class DeploymentStore extends BaseStore {
         ?? await this.db.prepare(`${sel} name = $1`).bind(id).first();
       return row ? this.toDeployment(row) : null;
     }
-    const row = await this.db.prepare(`${sel} name = $1`).bind(name!).first();
+    const row = await this.db.prepare(`${sel} name = $1 ORDER BY created_at DESC LIMIT 1`).bind(name!).first();
     return row ? this.toDeployment(row) : null;
   }
 

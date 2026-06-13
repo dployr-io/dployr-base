@@ -466,22 +466,30 @@ export class ClientMessageHandler {
         return;
       }
       const serviceName = deployment.name;
-      const streamKey = `logs:${serviceName}`;
-
-      if (this.connectionManager.getLogStreamByPath(streamKey)) {
-        this.connectionManager.addClientToLogStream(streamKey, conn.ws);
-        this.log.info(`Client joined log stream "${streamKey}" for deployment "${path}"`);
+      const buildStreamKey = `build:${path}`;
+      const deployStreamKey = `deploy:${path}`;
+      const activeStreamKey = this.connectionManager.getLogStreamByPath(buildStreamKey)
+        ? buildStreamKey
+        : this.connectionManager.getLogStreamByPath(deployStreamKey)
+          ? deployStreamKey
+          : null;
+      if (activeStreamKey) {
+        this.connectionManager.addClientToLogStream(activeStreamKey, conn.ws);
+        this.log.info(`Client joined log stream "${activeStreamKey}" for deployment "${path}"`);
       }
 
+      try { conn.ws.send(JSON.stringify({ kind: "log_subscribed", streamId, path })); } catch {}
+
       if (this.loki?.isEnabled && startFrom !== -1) {
-        await this.replayLokiHistory(conn, streamId, serviceName, duration, deployment.id, "", source);
+        // Don't filter by deploymentId: on redeployments the taskId used for Loki labels
+        // differs from deployment.id (patchConfig keeps the old PK). Scope by source instead.
+        await this.replayLokiHistory(conn, streamId, serviceName, duration, undefined, "", "build|deploy");
       }
 
       this.log.info(`Client subscribed to deployment logs for "${path}" (streamId=${streamId})`);
       return;
     }
 
-    const resolvedPath = path; // "service:my-app" or "app" — used as the backend stream key
     const serviceName = path.startsWith("service:") ? path.slice(8) : path;
 
     const instance = await this.findInstanceForCluster(conn.clusterId);
@@ -491,6 +499,7 @@ export class ClientMessageHandler {
       return;
     }
 
+    const resolvedPath = path;
     const existingStream = this.connectionManager.getLogStreamByPath(resolvedPath);
     if (!existingStream) {
       const nodeStreamId = ulid();
@@ -516,6 +525,14 @@ export class ClientMessageHandler {
     }
 
     this.connectionManager.addClientToLogStream(resolvedPath, conn.ws);
+
+    // Also fan into any active build/deploy streams for this service (e.g. ghost-row deploys)
+    const buildDeployStreams = this.connectionManager.findBuildDeployStreamsForService(serviceName);
+    for (const s of buildDeployStreams) {
+      this.connectionManager.addClientToLogStream(s.key, conn.ws);
+    }
+
+    try { conn.ws.send(JSON.stringify({ kind: "log_subscribed", streamId, path })); } catch {}
 
     if (this.loki?.isEnabled && startFrom !== -1) {
       await this.replayLokiHistory(conn, streamId, serviceName, duration, undefined, "", source);
@@ -556,17 +573,18 @@ export class ClientMessageHandler {
     deploymentId: string | undefined,
     cursor = "",
     source?: string,
+    logSource?: "build" | "deploy" | "runtime",
   ): Promise<void> {
     const durationMs = parseDurationMs(duration);
     const endNs = (Date.now() * 1_000_000).toString();
     const startNs = cursor || ((Date.now() - durationMs) * 1_000_000).toString();
 
-    // System/daemon log streams have an empty serviceName — Loki rejects empty-string matchers.
     if (!serviceName) return;
 
     const labels: Partial<LokiLabels> = { serviceId: serviceName };
     if (deploymentId) labels.deploymentId = deploymentId;
-    if (source) labels.source = source as LokiLabels["source"];
+    if (source === "runtime") labels.source = "runtime" as LokiLabels["source"];
+    else if (source) labels.source = source as LokiLabels["source"];
 
     try {
       const history = await this.loki!.query(labels, startNs, endNs, 500);
@@ -580,6 +598,7 @@ export class ClientMessageHandler {
           nextCursor: history.nextCursor,
           deploymentId,
           source,
+          logSource,
           path: serviceName,
         });
         try { conn.ws.send(payload); } catch {}
@@ -1085,14 +1104,16 @@ export class ClientMessageHandler {
 }
 
 function parseDurationMs(duration: string): number {
-  const match = duration.match(/^(\d+)(s|m|h|d)$/);
-  if (!match) return 60 * 60 * 1000;
+  if (duration === "live") return 24 * 60 * 60 * 1000;
+  const match = duration.match(/^(\d+)(s|m|h|d|mo)$/);
+  if (!match) return 24 * 60 * 60 * 1000;
   const value = parseInt(match[1]);
   switch (match[2]) {
-    case "s": return value * 1_000;
-    case "m": return value * 60 * 1_000;
-    case "h": return value * 60 * 60 * 1_000;
-    case "d": return value * 24 * 60 * 60 * 1_000;
-    default:  return 60 * 60 * 1_000;
+    case "s":  return value * 1_000;
+    case "m":  return value * 60 * 1_000;
+    case "h":  return value * 60 * 60 * 1_000;
+    case "d":  return value * 24 * 60 * 60 * 1_000;
+    case "mo": return value * 30 * 24 * 60 * 60 * 1_000;
+    default:   return 24 * 60 * 60 * 1_000;
   }
 }

@@ -360,7 +360,7 @@ export class DeploymentService {
         log.warn(`No node connected for deploy task ${taskId}, cluster ${clusterId}`);
         throw new InstanceNotConnectedError(instanceName);
       }
-      ws.subscribeToNodeLogs(instanceName, deployPayload.name, { serviceId: deployPayload.name, deploymentId: taskId, clusterId, source: "deploy" }, `logs:${deployPayload.name}`).catch((err: unknown) => log.warn("subscribeToNodeLogs failed", { error: String(err) }));
+      ws.subscribeToNodeLogs(instanceName, deployPayload.name, { serviceId: deployPayload.name, deploymentId: taskId, clusterId, source: "deploy" }, `deploy:${taskId}`).catch((err: unknown) => log.warn("subscribeToNodeLogs failed", { error: String(err) }));
       log.info(`Dispatched image deploy task ${taskId} to ${instanceName} for cluster ${clusterId}`);
       await notifyPending(taskId);
       return { taskId };
@@ -382,7 +382,7 @@ export class DeploymentService {
           log.warn(`No node connected for cached deploy task ${taskId}, cluster ${clusterId}`);
           throw new InstanceNotConnectedError(instanceName);
         }
-        ws.subscribeToNodeLogs(instanceName, deployPayload.name, { serviceId: deployPayload.name, deploymentId: taskId, clusterId, source: "deploy" }, `logs:${deployPayload.name}`).catch((err: unknown) => log.warn("subscribeToNodeLogs failed", { error: String(err) }));
+        ws.subscribeToNodeLogs(instanceName, deployPayload.name, { serviceId: deployPayload.name, deploymentId: taskId, clusterId, source: "deploy" }, `deploy:${taskId}`).catch((err: unknown) => log.warn("subscribeToNodeLogs failed", { error: String(err) }));
         log.info(`Dispatched cached deploy task ${taskId} to ${instanceName} (skipped build)`);
         await notifyPending(taskId);
         return { taskId, cached: true };
@@ -473,7 +473,7 @@ export async function enqueueBuild({
     return { taskId, queued: true };
   }
 
-  await ws.subscribeToNodeLogs?.(buildNode.tag, deployPayload.name, { serviceId: deployPayload.name, deploymentId: taskId, clusterId, source: "build" }, `logs:${deployPayload.name}`).catch((err: unknown) => log.warn("subscribeToNodeLogs failed", { error: String(err) }));
+  await ws.subscribeToNodeLogs?.(buildNode.tag, deployPayload.name, { serviceId: deployPayload.name, deploymentId: taskId, clusterId, source: "build" }, `build:${taskId}`).catch((err: unknown) => log.warn("subscribeToNodeLogs failed", { error: String(err) }));
   await kv.instanceCache.incrementBuildSlots(buildNode.tag);
   await kv.instanceCache.trackInFlightBuild(buildNode.tag, { taskId, clusterId, callbackInstanceTag: instanceName, payload: deployPayload, fingerprint, tier: plan, enqueuedAt: Date.now() });
   await kv.payloads.saveBuildCallback(taskId, { callbackInstanceTag: instanceName, buildNodeTag: buildNode.tag, clusterId, payload: deployPayload, fingerprint });

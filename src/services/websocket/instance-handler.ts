@@ -232,8 +232,6 @@ export class WebSocketHandler {
       clients: new Set(),
       duration: "24h",
     });
-    if (!added) this.connectionManager.handoffLogStream(streamKey, nodeStreamId, meta);
-    
     const token = await this.jwtService.createNodeAccessToken(nodeTag).catch(() => undefined);
     const task = this.dployrdService.createLogStreamTask({ streamId: nodeStreamId, path, duration: "24h", token });
     const sent = this.connectionManager.sendTask(nodeTag, task);

@@ -441,6 +441,23 @@ export class ConnectionManager {
   }
 
   /**
+   * Find active build or deploy streams for a service by name.
+   * Used to fan clients into in-flight build/deploy streams without knowing the taskId.
+   */
+  findBuildDeployStreamsForService(serviceId: string): ActiveLogStream[] {
+    const results: ActiveLogStream[] = [];
+    for (const stream of this.logStreams.values()) {
+      if (
+        stream.meta?.serviceId === serviceId &&
+        (stream.key.startsWith("build:") || stream.key.startsWith("deploy:"))
+      ) {
+        results.push(stream);
+      }
+    }
+    return results;
+  }
+
+  /**
    * Remove a client from a stream's fanout set.
    * The background stream itself stays alive.
    */
@@ -462,22 +479,6 @@ export class ConnectionManager {
    */
   removeLogStreamsByPath(path: string, clientWs: WebSocket): void {
     this.removeClientFromLogStream(path, clientWs);
-  }
-
-  /**
-   * Hand off a stream from one node to another (build → deploy phase transition).
-   * Keeps the stream entry and all subscribed clients intact; only the node stream ID changes.
-   * Returns false if no stream exists for this key.
-   */
-  handoffLogStream(key: string, newNodeStreamId: string, meta?: LokiStreamMeta): boolean {
-    const stream = this.logStreams.get(key);
-    if (!stream) return false;
-    this.nodeStreamIndex.delete(stream.nodeStreamId);
-    stream.nodeStreamId = newNodeStreamId;
-    this.nodeStreamIndex.set(newNodeStreamId, key);
-    if (meta) stream.meta = meta;
-    this.log.info(`Handed off log stream "${key}" to nodeStreamId=${newNodeStreamId}`);
-    return true;
   }
 
   /**

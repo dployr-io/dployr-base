@@ -44,7 +44,6 @@ function makeConnectionManager(opts: {
       sent.push({ tag, task });
       return true;
     },
-    handoffLogStream: (_key: string, _newNodeStreamId: string) => true,
     removeLogStream: (_key: string) => {},
     addLogStream: (_stream: any) => true,
   } as any;

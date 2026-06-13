@@ -434,15 +434,27 @@ services.get("/:id/logs", async (c) => {
 
   const idOrName = c.req.param("id");
 
-  // Resolve service by name (CLI passes name) with fallback to ID
+  // Resolve service by name/id, fall back to deployment when service doesn't exist yet
   let service = await db.services.find({ name: idOrName });
   if (!service) service = await db.services.find({ id: idOrName });
-  if (!service) {
-    return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+
+  let resolvedName: string;
+  let resolvedClusterId: string;
+
+  if (service) {
+    resolvedName = service.name;
+    resolvedClusterId = service.clusterId;
+  } else {
+    const deployment = await db.deployments.get({ name: idOrName }).catch(() => null);
+    if (!deployment) {
+      return c.json(createErrorResponse({ message: "Service not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+    }
+    resolvedName = deployment.name;
+    resolvedClusterId = deployment.clusterId;
   }
 
   // Verify cluster access
-  const canRead = await db.clusters.canRead(session.userId, service.clusterId).catch(() => false);
+  const canRead = await db.clusters.canRead(session.userId, resolvedClusterId).catch(() => false);
   if (!canRead) {
     return c.json(createErrorResponse({ message: "Not a member of this cluster", code: ERROR.PERMISSION.FORBIDDEN.code }), ERROR.PERMISSION.FORBIDDEN.status);
   }
@@ -463,9 +475,9 @@ services.get("/:id/logs", async (c) => {
   const startNs = (BigInt(sinceMs) * 1_000_000n).toString();
   const endNs = (BigInt(untilMs) * 1_000_000n).toString();
 
-  const sourceLabel: Partial<{ serviceId: string; source: string }> = { serviceId: service.name };
+  const sourceLabel: Partial<{ serviceId: string; source: string }> = { serviceId: resolvedName };
   if (rawSource === "build") sourceLabel.source = "build|deploy";
-  else if (rawSource === "runtime") sourceLabel.source = "runtime";
+  else if (rawSource === "runtime") sourceLabel.source = "dployrd";
   // "all" or anything else: no source filter
 
   function entryToChunk(entry: { timestampNs: string; line: string; streamLabels?: Record<string, string> }) {
@@ -490,8 +502,7 @@ services.get("/:id/logs", async (c) => {
 
   if (!follow) {
     const result = await loki.query(sourceLabel as any, startNs, endNs, limit);
-    const chunks = result.entries.map(entryToChunk);
-    return c.json(chunks);
+    return c.json(result.entries.map(entryToChunk));
   }
 
   // Streaming: replay history then poll for new entries

@@ -14,6 +14,7 @@ import { registerServicePatchTests } from "./service-patch.test.js";
 import { registerDomainLimitTests } from "./domain-limits.test.js";
 import { registerApiTokenTests } from "./api-tokens.test.js";
 import { registerTwoFaTests } from "./twofa.test.js";
+import { registerServiceLogsTests } from "./service-logs.test.js";
 
 const TIMEOUT_FIXTURE_SETUP = 180_000;
 const TIMEOUT_CLEANUP = 60_000;
@@ -708,3 +709,4 @@ registerServiceSecretTests(getFx);
 registerServiceLimitTests(getFx);
 registerServicePatchTests(getFx);
 registerDomainLimitTests(getFx);
+registerServiceLogsTests(getFx);

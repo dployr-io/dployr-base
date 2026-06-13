@@ -187,14 +187,42 @@ export class NodeMessageHandler {
     } else {
       this.log.info(`Dispatched builds/publish task ${publishTaskId} to ${callback.callbackInstanceTag} with image ${image}`);
       const serviceName = callback.payload.name;
+      const deployStreamKey = `deploy:${taskId}`;
       const deployStreamId = ulid();
-      const streamKey = `logs:${serviceName}`;
-      const handed = this.connectionManager.handoffLogStream(streamKey, deployStreamId, { serviceId: serviceName, source: "deploy", clusterId: callback.clusterId, deploymentId: taskId });
-      if (handed) {
-        const token = await this.jwtService.createNodeAccessToken(callback.callbackInstanceTag).catch(() => undefined);
-        const logTask = new DployrdService().createLogStreamTask({ streamId: deployStreamId, path: serviceName, duration: "24h", token });
+      const added = this.connectionManager.addLogStream({
+        nodeStreamId: deployStreamId,
+        key: deployStreamKey,
+        path: serviceName,
+        meta: { serviceId: serviceName, source: "deploy", clusterId: callback.clusterId, deploymentId: taskId },
+        clients: new Set(),
+        duration: "24h",
+      });
+      if (added) {
+        const deployLogToken = await this.jwtService.createNodeAccessToken(callback.callbackInstanceTag).catch(() => undefined);
+        const logTask = new DployrdService().createLogStreamTask({ streamId: deployStreamId, path: serviceName, duration: "24h", token: deployLogToken });
         if (!this.connectionManager.sendTask(callback.callbackInstanceTag, logTask)) {
-          this.connectionManager.removeLogStream(streamKey);
+          this.connectionManager.removeLogStream(deployStreamKey);
+        }
+      }
+
+      // Start persistent runtime stream for Loki ingestion — idempotent if already running.
+      const runtimeStreamKey = `service:${serviceName}`;
+      const runtimeStreamId = ulid();
+      const runtimeAdded = this.connectionManager.addLogStream({
+        nodeStreamId: runtimeStreamId,
+        key: runtimeStreamKey,
+        path: serviceName,
+        meta: { serviceId: serviceName, source: "runtime", clusterId: callback.clusterId },
+        clients: new Set(),
+        duration: "live",
+      });
+      if (runtimeAdded) {
+        const runtimeLogToken = await this.jwtService.createNodeAccessToken(callback.callbackInstanceTag).catch(() => undefined);
+        const runtimeLogTask = new DployrdService().createLogStreamTask({ streamId: runtimeStreamId, path: `service:${serviceName}`, duration: "live", token: runtimeLogToken });
+        if (!this.connectionManager.sendTask(callback.callbackInstanceTag, runtimeLogTask)) {
+          this.connectionManager.removeLogStream(runtimeStreamKey);
+        } else {
+          this.log.info(`Started persistent runtime log stream "${runtimeStreamKey}" on ${callback.callbackInstanceTag}`);
         }
       }
     }
@@ -240,11 +268,11 @@ export class NodeMessageHandler {
       return;
     }
 
-    const streamKey = `logs:${entry.payload.name}`;
+    const buildStreamKey = `build:${entry.taskId}`;
     const nodeStreamId = ulid();
     const added = this.connectionManager.addLogStream({
       nodeStreamId,
-      key: streamKey,
+      key: buildStreamKey,
       path: entry.payload.name,
       meta: { serviceId: entry.payload.name, deploymentId: entry.taskId, clusterId: entry.clusterId, source: "build" },
       clients: new Set(),
@@ -254,7 +282,7 @@ export class NodeMessageHandler {
       const logToken = await this.jwtService.createNodeAccessToken(buildNodeTag).catch(() => undefined);
       const logTask = dployrdService.createLogStreamTask({ streamId: nodeStreamId, path: entry.payload.name, duration: "24h", token: logToken });
       if (!this.connectionManager.sendTask(buildNodeTag, logTask)) {
-        this.connectionManager.removeLogStream(streamKey);
+        this.connectionManager.removeLogStream(buildStreamKey);
       }
     }
 
@@ -325,16 +353,22 @@ export class NodeMessageHandler {
       return;
     }
 
-    // Write to Loki ring buffer — sync, never awaited
-    if (this.loki?.isEnabled) {
+    // Write to Loki ring buffer for build/deploy only — runtime logs are handled by Vector
+    const isRuntimeStream = !stream.key.startsWith("build:") && !stream.key.startsWith("deploy:");
+    if (this.loki?.isEnabled && !isRuntimeStream) {
       const lokiEntries = extractLokiEntries(message);
       if (lokiEntries.length > 0) {
-        this.loki.push(stream.path, stream.meta, lokiEntries);
+        this.loki.push(stream.key, stream.meta, lokiEntries);
       }
     }
 
+    // Derive source from stream key prefix so the client can distinguish log types
+    const source = stream.key.startsWith("build:") ? "build"
+      : stream.key.startsWith("deploy:") ? "deploy"
+      : "runtime";
+
     // Fan out to all subscribed clients
-    const payload = JSON.stringify(message);
+    const payload = JSON.stringify({ ...message, source });
     for (const clientWs of stream.clients) {
       try {
         clientWs.send(payload);
