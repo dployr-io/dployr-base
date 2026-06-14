@@ -123,8 +123,27 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     return c.json(createErrorResponse({ message: "Cluster has no assigned instance", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
   }
 
+  const deployPayload = { ...validation.data };
+
+  if (
+    deployPayload.runtime === "ruby" &&
+    !deployPayload.secrets?.SECRET_KEY_BASE &&
+    !deployPayload.env_vars?.SECRET_KEY_BASE &&
+    db.serviceSecrets
+  ) {
+    let secretKeyBase: string | undefined;
+    const existingService = await db.services.find({ name: deployPayload.name, clusterId }).catch(() => null);
+    if (existingService) {
+      const existing = await db.serviceSecrets.get({ serviceId: existingService.id, key: "SECRET_KEY_BASE" }).catch(() => null);
+      if (existing) secretKeyBase = existing.value;
+    }
+    if (!secretKeyBase) secretKeyBase = randomBytes(64).toString("hex");
+    deployPayload.secrets = { ...deployPayload.secrets, SECRET_KEY_BASE: secretKeyBase };
+  }
+
   try {
-    const result = await service.create(c, { clusterId, instanceName, payload: validation.data, session });
+    const result = await service.create(c, { clusterId, instanceName, payload: deployPayload, session });
+    worker.dispatch(notify(EVENTS.DEPLOYMENT.CREATED.code, { clusterId, serviceName: deployPayload.name, actorId: session.userId, actorType: "user" }));
     return c.json(createSuccessResponse(result), SUCCESS.ACCEPTED.status);
   } catch (error) {
     if (error instanceof InstanceNotConnectedError && deployPayload.source === "remote") {
