@@ -271,7 +271,7 @@ export class DeploymentService {
 
     // Always use the authenticated session user as the authoritative user_id.
     // Client-supplied user_id cannot be trusted — it may be stale or spoofed.
-    deployPayload = { ...deployPayload, user_id: session.userId };
+    deployPayload = { ...deployPayload, user_id: session.userId, cluster_id: clusterId };
 
     if (deployPayload.source !== "image" && deployPayload.remote?.url) {
       const authUrl = await this.resolveAuthUrl(deployPayload.remote.url, clusterId, db);

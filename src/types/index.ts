@@ -350,6 +350,9 @@ export interface NotificationData {
   userEmail?: string;
   /** Explicit email recipient. If omitted, falls back to the cluster owner. */
   to?: string;
+  /** Actor who triggered the event. Defaults to headless system actor when absent. */
+  actorId?: string;
+  actorType?: ActorType;
   [key: string]: any;
 }
 

@@ -35,6 +35,7 @@ export const DeploymentSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   user_id: z.string().min(1, "User ID is required"),
+  cluster_id: z.string().optional(),
   type: z.enum(["static", "web", "worker", "job"], { message: "Type must be either 'static', 'web', 'worker' or 'job'" }),
   source: z.enum(["remote", "image"], { message: "Source must be either 'remote' or 'image'" }),
   runtime: z.enum(["golang", "php", "python", "nodejs", "ruby", "dotnet", "java"], { message: "Type must be either 'golang', 'php', 'python', 'nodejs', 'ruby', 'dotnet' or 'java'" }).optional(),
