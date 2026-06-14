@@ -41,6 +41,7 @@ export const MS_5_MINUTES = 5 * MS_MINUTE;
 export const MS_6_MINUTES = 6 * MS_MINUTE;
 export const MS_8_MINUTES = 8 * MS_MINUTE;
 export const MS_12_MINUTES = 12 * MS_MINUTE;
+export const MS_15_MINUTES = 15 * MS_MINUTE;
 export const MS_30_MINUTES = 30 * MS_MINUTE;
 export const MS_12_HOURS = 12 * MS_HOUR;
 export const MS_24_HOURS = 24 * MS_HOUR;
@@ -142,3 +143,6 @@ export const EMAIL_CHANGE_WINDOW_MS = MS_7_DAYS;
 
 /** 2FA verification window: session must have been verified within this period to pass require2FA */
 export const TWO_FA_WINDOW_MS = MS_5_MINUTES;
+
+/** Terminal session idle timeout: 15 minutes fallback on base (node enforces 10 min) */
+export const TERMINAL_SESSION_IDLE_MS = MS_15_MINUTES;

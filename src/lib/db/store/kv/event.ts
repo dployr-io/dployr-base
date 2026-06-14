@@ -173,21 +173,15 @@ export class EventStore {
    * Used by background jobs where no ray ID or timezone is available.
    * Deduplication is skipped — each call produces a distinct event entry.
    */
-  async logSystemEvent({ type, targets }: { type: string; targets?: { id: string; name?: string }[] }): Promise<void> {
-    const actor = { id: "system", type: "headless" as ActorType };
-    const base = { type, actor, timestamp: Date.now(), timezone: "UTC" };
+  async logSystemEvent({ type, clusterId, targets, actorId, actorType }: { type: string; clusterId: string; targets?: { id: string; name?: string }[]; actorId?: string; actorType?: ActorType }): Promise<void> {
+    const actor = { id: actorId ?? "system", type: actorType ?? ("headless" as ActorType) };
+    const id = ulid();
+    const event = { type, actor, timestamp: Date.now(), timezone: "UTC", id, targets: targets ?? [] };
 
-    if (targets && targets.length > 0) {
-      const id = ulid();
-      const writes: Promise<any>[] = [this.kv.put(KV_KEYS.EVENT.ACTOR(actor.id, id), JSON.stringify({ ...base, id, targets }), { ttl: EVENT_TTL })];
-      for (const target of targets) {
-        writes.push(this.kv.put(KV_KEYS.EVENT.TARGET(target.id, id), JSON.stringify({ ...base, id, targets: [target] }), { ttl: EVENT_TTL }));
-      }
-      await Promise.all(writes);
-    } else {
-      const id = ulid();
-      await this.kv.put(KV_KEYS.EVENT.ACTOR(actor.id, id), JSON.stringify({ ...base, id }), { ttl: EVENT_TTL });
-    }
+    await Promise.all([
+      this.kv.put(KV_KEYS.EVENT.ACTOR(actor.id, id), JSON.stringify(event), { ttl: EVENT_TTL }),
+      this.kv.put(KV_KEYS.EVENT.TARGET(clusterId, id), JSON.stringify(event), { ttl: EVENT_TTL }),
+    ]);
   }
 
   // Workflow failure tracking

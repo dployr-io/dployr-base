@@ -3,14 +3,18 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
+import { randomBytes } from "node:crypto";
 import type { Bindings, Variables } from "@/types/index.js";
 import { requireClusterViewer, requireClusterDeveloper, authMiddleware } from "@/middleware/auth.js";
-import { ERROR, SUCCESS } from "@/lib/constants/index.js";
+import { ERROR, SUCCESS, EVENTS } from "@/lib/constants/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
 import { getJWTService, getDbStore } from "@/lib/config/context.js";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DeploymentSchema } from "@/lib/tasks/types.js";
-import { DatabaseConflictError, handleInstanceError } from "@/lib/errors/errors.js";
+import { DatabaseConflictError, handleInstanceError, InstanceNotConnectedError } from "@/lib/errors/errors.js";
 import { DeploymentService } from "@/services/deployments.js";
+import { worker } from "@/services/background/index.js";
+import { BUILD_NODE_SUPERVISOR_JOB } from "@/lib/constants/nodes.js";
 
 const deployments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -56,6 +60,10 @@ deployments.post("/finish", async (c) => {
     const updated = await service.finish(c, { id, blueprint, isNodeToken, instanceId, userId });
     if (!updated) {
       return c.json(createErrorResponse({ message: "Failed to update deployment logs", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
+    }
+
+    if (updated.clusterId) {
+      worker.dispatch(notify(EVENTS.DEPLOYMENT.FINISHED.code, { clusterId: updated.clusterId, serviceName: updated.name, actorId: userId || undefined, actorType: userId ? "user" : undefined }));
     }
 
     return c.json(createSuccessResponse({ deployment: updated }));
@@ -119,6 +127,9 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     const result = await service.create(c, { clusterId, instanceName, payload: validation.data, session });
     return c.json(createSuccessResponse(result), SUCCESS.ACCEPTED.status);
   } catch (error) {
+    if (error instanceof InstanceNotConnectedError && deployPayload.source === "remote") {
+      worker.emit(BUILD_NODE_SUPERVISOR_JOB, 0);
+    }
     return handleInstanceError(c, error, "Failed to create deployment");
   }
 });
@@ -147,12 +158,14 @@ deployments.get("/:id", requireClusterViewer, async (c) => {
 });
 
 deployments.delete("/:id", requireClusterDeveloper, async (c) => {
+  const session = c.get("session")!;
   const service = new DeploymentService(c.env);
   const clusterId = c.req.query("clusterId")!;
   const id = c.req.param("id");
 
   try {
     await service.delete(c, { clusterId, id });
+    worker.dispatch(notify(EVENTS.DEPLOYMENT.DELETED.code, { clusterId, deploymentId: id, actorId: session.userId, actorType: "user" }));
     return c.json(createSuccessResponse({}));
   } catch (error) {
     return handleInstanceError(c, error, "Failed to delete deployment");

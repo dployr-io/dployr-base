@@ -119,7 +119,7 @@ components:
             helpLink:
               type: string
               format: uri
-              example: https://monitoring.dployr.io
+              example: https://status.dployr.io
             details:
               type: array
               items:

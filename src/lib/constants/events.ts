@@ -4,7 +4,16 @@ import { InstanceStatus } from "@/types/index.js";
 export const EVENTS = {
   AUTH: {
     SESSION_CREATED: { code: "auth.session_created", message: "Sign-in successful" },
+    SESSION_REVOKED: { code: "auth.session_revoked", message: "Session revoked" },
+    API_TOKEN_CREATED: { code: "auth.api_token_created", message: "API token created" },
+    API_TOKEN_REVOKED: { code: "auth.api_token_revoked", message: "API token revoked" },
     API_TOKEN_KEY_REVOKED: { code: "auth.api_token_key_revoked", message: "API token key version revoked" },
+    TOTP_ENABLED: { code: "auth.totp_enabled", message: "Authenticator app enabled" },
+    TOTP_DISABLED: { code: "auth.totp_disabled", message: "Authenticator app disabled" },
+    BACKUP_CODES_REGENERATED: { code: "auth.backup_codes_regenerated", message: "Backup codes regenerated" },
+  },
+  USER: {
+    UPDATED: { code: "user.updated", message: "Profile updated" },
   },
   CLUSTER: {
     MODIFIED: { code: "cluster.modified", message: "Cluster modified successfully" },
@@ -28,14 +37,25 @@ export const EVENTS = {
     UPDATED: { code: "instance.updated", message: "Instance updated successfully" },
     DELETED: { code: "instance.deleted", message: "Instance deleted successfully" },
   },
+  DEPLOYMENT: {
+    CREATED: { code: "deployment.created", message: "Deployment started" },
+    FINISHED: { code: "deployment.finished", message: "Deployment completed" },
+    DELETED: { code: "deployment.deleted", message: "Deployment deleted" },
+  },
   DOMAIN: {
+    CREATED: { code: "domain.created", message: "Custom domain added" },
     VERIFIED: { code: "domain.verified", message: "Domain verified successfully" },
+    DELETED: { code: "domain.deleted", message: "Domain removed" },
   },
   SERVICE: {
     UNHEALTHY: { code: "service.unhealthy", message: "Service is unhealthy" },
     RECOVERED: { code: "service.recovered", message: "Service has recovered" },
     ICING_WARNING: { code: "service.icing_warning", message: "Service will be iced in 5 days" },
     ICED: { code: "service.iced", message: "Service has been iced due to inactivity" },
+    UPDATED: { code: "service.updated", message: "Service settings updated" },
+    DELETED: { code: "service.deleted", message: "Service deleted" },
+    STOPPED: { code: "service.stopped", message: "Service stopped" },
+    STARTED: { code: "service.started", message: "Service started" },
   },
   PERMISSION: {
     OWNER_ACCESS_GRANTED: { code: "permission.owner_access_granted", message: "Owner access granted" },
@@ -59,6 +79,8 @@ export const EVENTS = {
   },
   INTEGRATIONS: {
     GITHUB_INSTALLED: { code: "integrations.github_installed", message: "GitHub integration setup successfully" },
+    GITLAB_CONFIGURED: { code: "integrations.gitlab_configured", message: "GitLab integration configured" },
+    BITBUCKET_CONFIGURED: { code: "integrations.bitbucket_configured", message: "Bitbucket integration configured" },
   },
   READ: {
     BOOTSTRAP_LOGS: { code: "read.bootstrap_logs", message: "Bootstrap logs read" },
@@ -117,100 +139,28 @@ export const EVENT_METADATA: EventMetadataMap = {
     color: 0xff0000,
     category: "instance",
   },
-  [EVENTS.CLUSTER.MODIFIED.code]: {
-    title: "⚙️ Cluster Modified",
-    description: (data: any) => `Cluster **${data.clusterName || data.clusterId}** has been modified.`,
-    color: 0xffa500,
-    category: "cluster",
-  },
-  [EVENTS.CLUSTER.INVITE_ACCEPTED.code]: {
-    title: "👥 User Joined Cluster",
-    description: (data: any) => `**${data.userEmail}** joined the cluster.`,
-    color: 0x0099ff,
-    category: "cluster",
-  },
-  [EVENTS.CLUSTER.REMOVED_USER.code]: {
-    title: "👋 User Left Cluster",
-    description: (data: any) => `**${data.userEmail}** left the cluster.`,
-    color: 0xff9900,
-    category: "cluster",
-  },
-  [EVENTS.CLUSTER.USER_ROLE_CHANGED.code]: {
-    title: "🔄 User Role Changed",
-    description: (data: any) => `**${data.userEmail}**'s role changed from **${data.oldRole}** to **${data.newRole}**.`,
-    color: 0x9b59b6,
-    category: "user",
-  },
-  [EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code]: {
-    title: "👑 Ownership Transferred",
-    description: (data: any) => `Cluster ownership transferred from **${data.previousOwner}** to **${data.newOwner}**.`,
-    color: 0xffd700,
-    category: "user",
-  },
 
-  // Auth events
-  [EVENTS.AUTH.API_TOKEN_KEY_REVOKED.code]: {
-    title: "🔑 API Token Key Revoked",
-    description: (data: any) => `API token key version **${data.keyVersion}** has been revoked. Any CI/CD tokens using this version are now invalid — regenerate them immediately.`,
-    color: 0xff0000,
-    category: "auth",
-  },
-  [EVENTS.AUTH.SESSION_CREATED.code]: {
-    title: "🔐 Sign-in Detected",
-    description: (data: any) => `**${data.userEmail}** signed in from **${data.ipAddress || "unknown location"}**.`,
+  // Deployment events
+  [EVENTS.DEPLOYMENT.CREATED.code]: {
+    title: "🚀 Deployment Started",
+    description: (data: any) => `A new deployment for **${data.serviceName}** was initiated.`,
     color: 0x3498db,
-    category: "auth",
+    category: "instance",
   },
-  [EVENTS.CLUSTER.USER_INVITED.code]: {
-    title: "✉️ User Invited",
-    description: (data: any) => `**${data.userEmail}** was invited to join the cluster.`,
-    color: 0x2980b9,
-    category: "cluster",
+  [EVENTS.DEPLOYMENT.FINISHED.code]: {
+    title: "✅ Deployment Complete",
+    description: (data: any) => `Deployment for **${data.serviceName}** completed successfully.`,
+    color: 0x00ff00,
+    category: "instance",
   },
-  [EVENTS.CLUSTER.INVITE_REVOKED.code]: {
-    title: "🛑 Invite Revoked",
-    description: (data: any) => `Invite for **${data.userEmail}** was revoked.`,
-    color: 0x7f8c8d,
-    category: "cluster",
-  },
-  [EVENTS.CLUSTER.INVITE_DECLINED.code]: {
-    title: "🙅 Invite Declined",
-    description: (data: any) => `**${data.userEmail}** declined the cluster invite.`,
-    color: 0xe67e22,
-    category: "cluster",
+  [EVENTS.DEPLOYMENT.DELETED.code]: {
+    title: "🗑️ Deployment Deleted",
+    description: (data: any) => `Deployment **${data.deploymentId}** was deleted.`,
+    color: 0xff6600,
+    category: "instance",
   },
 
-  // Billing envents
-  [EVENTS.BILLING.PAYMENT_SUCCESSFUL.code]: {
-    title: "💳 Payment Successful",
-    description: (data: any) => `Your **${data.plan}** subscription payment was processed successfully.`,
-    color: 0x00ff00,
-    category: "billing",
-  },
-  [EVENTS.BILLING.PAYMENT_FAILED.code]: {
-    title: "💳 Payment Failed",
-    description: (data: any) => `Your **${data.plan}** subscription payment failed. Please update your payment method within 7 days to avoid service interruption.`,
-    color: 0xff0000,
-    category: "billing",
-  },
-  [EVENTS.BILLING.SUBSCRIPTION_CANCELLED.code]: {
-    title: "⚠️ Subscription Canceled",
-    description: (data: any) => `Your **${data.plan}** subscription has been canceled. You'll have access until **${new Date(data.periodEnd).toLocaleDateString()}**.`,
-    color: 0xffa500,
-    category: "billing",
-  },
-  [EVENTS.BILLING.SUBSCRIPTION_EXPIRED.code]: {
-    title: "❌ Subscription Expired",
-    description: (data: any) => `Your subscription has expired. You've been moved to the free **hobby** plan.`,
-    color: 0xff0000,
-    category: "billing",
-  },
-  [EVENTS.BILLING.SUBSCRIPTION_RESUMED.code]: {
-    title: "✅ Subscription Resumed",
-    description: (data: any) => `Your **${data.plan}** subscription has been resumed and is now active again.`,
-    color: 0x00ff00,
-    category: "billing",
-  },
+  // Service events
   [EVENTS.SERVICE.UNHEALTHY.code]: {
     title: "Service Unhealthy",
     description: (data: any) => `Service **${data.serviceName}** is failing its health check.`,
@@ -234,5 +184,209 @@ export const EVENT_METADATA: EventMetadataMap = {
     description: (data: any) => `Service **${data.serviceName}** has been frozen due to 30 days of inactivity.`,
     color: 0x6b7280,
     category: "instance",
+  },
+  [EVENTS.SERVICE.UPDATED.code]: {
+    title: "🔧 Service Updated",
+    description: (data: any) => `Service **${data.serviceName}** configuration was updated.`,
+    color: 0xffa500,
+    category: "instance",
+  },
+  [EVENTS.SERVICE.DELETED.code]: {
+    title: "🗑️ Service Deleted",
+    description: (data: any) => `Service **${data.serviceName}** was deleted.`,
+    color: 0xff0000,
+    category: "instance",
+  },
+  [EVENTS.SERVICE.STOPPED.code]: {
+    title: "⏸️ Service Stopped",
+    description: (data: any) => `Service **${data.serviceName}** was stopped.`,
+    color: 0xff6600,
+    category: "instance",
+  },
+  [EVENTS.SERVICE.STARTED.code]: {
+    title: "▶️ Service Started",
+    description: (data: any) => `Service **${data.serviceName}** was started.`,
+    color: 0x00ff00,
+    category: "instance",
+  },
+
+  // Domain events
+  [EVENTS.DOMAIN.CREATED.code]: {
+    title: "🌐 Domain Added",
+    description: (data: any) => `Custom domain **${data.domain}** was added.`,
+    color: 0x3498db,
+    category: "instance",
+  },
+  [EVENTS.DOMAIN.VERIFIED.code]: {
+    title: "✅ Domain Verified",
+    description: (data: any) => `Domain **${data.domain}** was successfully verified.`,
+    color: 0x00ff00,
+    category: "instance",
+  },
+  [EVENTS.DOMAIN.DELETED.code]: {
+    title: "🗑️ Domain Removed",
+    description: (data: any) => `Domain **${data.domain}** was removed.`,
+    color: 0xff6600,
+    category: "instance",
+  },
+
+  // Cluster events
+  [EVENTS.CLUSTER.MODIFIED.code]: {
+    title: "⚙️ Cluster Modified",
+    description: (data: any) => `Cluster **${data.clusterName || data.clusterId}** has been modified.`,
+    color: 0xffa500,
+    category: "cluster",
+  },
+  [EVENTS.CLUSTER.INVITE_ACCEPTED.code]: {
+    title: "👥 User Joined Cluster",
+    description: (data: any) => `**${data.userEmail}** joined the cluster.`,
+    color: 0x0099ff,
+    category: "cluster",
+  },
+  [EVENTS.CLUSTER.INVITE_DECLINED.code]: {
+    title: "🙅 Invite Declined",
+    description: (data: any) => `**${data.userEmail}** declined the cluster invite.`,
+    color: 0xe67e22,
+    category: "cluster",
+  },
+  [EVENTS.CLUSTER.REMOVED_USER.code]: {
+    title: "👋 User Left Cluster",
+    description: (data: any) => `**${data.userEmail}** left the cluster.`,
+    color: 0xff9900,
+    category: "cluster",
+  },
+  [EVENTS.CLUSTER.USER_ROLE_CHANGED.code]: {
+    title: "🔄 User Role Changed",
+    description: (data: any) => `**${data.userEmail}**'s role changed from **${data.oldRole}** to **${data.newRole}**.`,
+    color: 0x9b59b6,
+    category: "user",
+  },
+  [EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code]: {
+    title: "👑 Ownership Transferred",
+    description: (data: any) => `Cluster ownership transferred from **${data.previousOwner}** to **${data.newOwner}**.`,
+    color: 0xffd700,
+    category: "user",
+  },
+  [EVENTS.CLUSTER.USER_INVITED.code]: {
+    title: "✉️ User Invited",
+    description: (data: any) => `**${data.userEmail}** was invited to join the cluster.`,
+    color: 0x2980b9,
+    category: "cluster",
+  },
+  [EVENTS.CLUSTER.INVITE_REVOKED.code]: {
+    title: "🛑 Invite Revoked",
+    description: (data: any) => `Invite for **${data.userEmail}** was revoked.`,
+    color: 0x7f8c8d,
+    category: "cluster",
+  },
+
+  // Auth events
+  [EVENTS.AUTH.SESSION_CREATED.code]: {
+    title: "🔐 Sign-in Detected",
+    description: (data: any) => `**${data.userEmail}** signed in from **${data.ipAddress || "unknown location"}**.`,
+    color: 0x3498db,
+    category: "auth",
+  },
+  [EVENTS.AUTH.SESSION_REVOKED.code]: {
+    title: "🔒 Session Revoked",
+    description: (data: any) => `A session was revoked for **${data.userEmail}**.`,
+    color: 0xff6600,
+    category: "auth",
+  },
+  [EVENTS.AUTH.API_TOKEN_CREATED.code]: {
+    title: "🔑 API Token Created",
+    description: (data: any) => `API token **${data.tokenName}** was created.`,
+    color: 0x3498db,
+    category: "auth",
+  },
+  [EVENTS.AUTH.API_TOKEN_REVOKED.code]: {
+    title: "🗑️ API Token Revoked",
+    description: (data: any) => `API token **${data.tokenName}** was revoked.`,
+    color: 0xff0000,
+    category: "auth",
+  },
+  [EVENTS.AUTH.API_TOKEN_KEY_REVOKED.code]: {
+    title: "🔑 API Token Key Revoked",
+    description: (data: any) => `API token key version **${data.keyVersion}** has been revoked. Any CI/CD tokens using this version are now invalid — regenerate them immediately.`,
+    color: 0xff0000,
+    category: "auth",
+  },
+  [EVENTS.AUTH.TOTP_ENABLED.code]: {
+    title: "🔐 Authenticator App Enabled",
+    description: (data: any) => `Two-factor authentication was enabled for **${data.userEmail}**.`,
+    color: 0x00ff00,
+    category: "auth",
+  },
+  [EVENTS.AUTH.TOTP_DISABLED.code]: {
+    title: "⚠️ Authenticator App Disabled",
+    description: (data: any) => `Two-factor authentication was disabled for **${data.userEmail}**.`,
+    color: 0xff6600,
+    category: "auth",
+  },
+  [EVENTS.AUTH.BACKUP_CODES_REGENERATED.code]: {
+    title: "🔄 Backup Codes Regenerated",
+    description: (data: any) => `Backup codes were regenerated for **${data.userEmail}**.`,
+    color: 0xffa500,
+    category: "auth",
+  },
+
+  // User events
+  [EVENTS.USER.UPDATED.code]: {
+    title: "👤 Profile Updated",
+    description: (data: any) => `User profile was updated for **${data.userEmail}**.`,
+    color: 0x3498db,
+    category: "user",
+  },
+
+  // Integration events
+  [EVENTS.INTEGRATIONS.GITHUB_INSTALLED.code]: {
+    title: "🐙 GitHub Connected",
+    description: (_data: any) => `GitHub integration was installed for the cluster.`,
+    color: 0x24292e,
+    category: "cluster",
+  },
+  [EVENTS.INTEGRATIONS.GITLAB_CONFIGURED.code]: {
+    title: "🦊 GitLab Connected",
+    description: (_data: any) => `GitLab integration was configured for the cluster.`,
+    color: 0xfc6d26,
+    category: "cluster",
+  },
+  [EVENTS.INTEGRATIONS.BITBUCKET_CONFIGURED.code]: {
+    title: "🔵 Bitbucket Connected",
+    description: (_data: any) => `Bitbucket integration was configured for the cluster.`,
+    color: 0x0052cc,
+    category: "cluster",
+  },
+
+  // Billing events
+  [EVENTS.BILLING.PAYMENT_SUCCESSFUL.code]: {
+    title: "💳 Payment Successful",
+    description: (data: any) => `Your **${data.plan}** subscription payment was processed successfully.`,
+    color: 0x00ff00,
+    category: "billing",
+  },
+  [EVENTS.BILLING.PAYMENT_FAILED.code]: {
+    title: "💳 Payment Failed",
+    description: (data: any) => `Your **${data.plan}** subscription payment failed. Please update your payment method within 7 days to avoid service interruption.`,
+    color: 0xff0000,
+    category: "billing",
+  },
+  [EVENTS.BILLING.SUBSCRIPTION_CANCELLED.code]: {
+    title: "⚠️ Subscription Canceled",
+    description: (data: any) => `Your **${data.plan}** subscription has been canceled. You'll have access until **${new Date(data.periodEnd).toLocaleDateString()}**.`,
+    color: 0xffa500,
+    category: "billing",
+  },
+  [EVENTS.BILLING.SUBSCRIPTION_EXPIRED.code]: {
+    title: "❌ Subscription Expired",
+    description: (_data: any) => `Your subscription has expired. You've been moved to the free **hobby** plan.`,
+    color: 0xff0000,
+    category: "billing",
+  },
+  [EVENTS.BILLING.SUBSCRIPTION_RESUMED.code]: {
+    title: "✅ Subscription Resumed",
+    description: (data: any) => `Your **${data.plan}** subscription has been resumed and is now active again.`,
+    color: 0x00ff00,
+    category: "billing",
   },
 };

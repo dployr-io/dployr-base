@@ -114,7 +114,7 @@ clusters.get("/:id/users/invites/accept", async (c) => {
     const cluster = await db.clusters.get(clusterId);
 
     // Trigger notifications
-    worker.dispatch(notify(EVENTS.CLUSTER.INVITE_ACCEPTED.code, { clusterId, clusterName: cluster?.name, userEmail: session.email }));
+    worker.dispatch(notify(EVENTS.CLUSTER.INVITE_ACCEPTED.code, { clusterId, clusterName: cluster?.name, userEmail: session.email, actorId: session.userId, actorType: "user" }));
 
     return c.json(createSuccessResponse({ clusterId }, "Invite accepted"));
   } catch (error) {
@@ -165,6 +165,8 @@ clusters.get("/:id/users/invites/decline", async (c) => {
       const { clusters: userClusters } = await db.clusters.list({ userId: session.userId });
       await kv.refreshSession({ sessionId, updates: { clusters: userClusters.map((cl) => ({ id: cl.id, name: cl.name, owner: cl.owner ?? "", role: cl.role ?? "" })) } });
     }
+
+    worker.dispatch(notify(EVENTS.CLUSTER.INVITE_DECLINED.code, { clusterId, userEmail: session.email, actorId: session.userId, actorType: "user" }));
 
     return c.json(createSuccessResponse({ clusterId }, "Invite declined"));
   } catch (error) {
@@ -254,14 +256,14 @@ clusters.post("/:id/users", requireClusterAdmin, async (c) => {
     });
 
     for (const userEmail of users) {
-      worker.dispatch(notify(EVENTS.CLUSTER.USER_INVITED.code, { clusterId: id, clusterName: cluster?.name, userEmail, to: userEmail }));
+      worker.dispatch(notify(EVENTS.CLUSTER.USER_INVITED.code, { clusterId: id, clusterName: cluster?.name, userEmail, to: userEmail, actorId: session.userId, actorType: "user" }));
     }
 
     return c.json(createSuccessResponse({ users }, "Invites sent successfully"));
   } catch (error) {
     log.error("Add users error:", error);
 
-    const helpLink = "https://monitoring.dployr.io";
+    const helpLink = "https://status.dployr.io";
 
     return c.json(
       createErrorResponse({
@@ -333,7 +335,7 @@ clusters.post("/:id/users/remove", requireClusterAdmin, require2FA, async (c) =>
 
     for (const user of removedUserRecords) {
       if (user?.email) {
-        worker.dispatch(notify(EVENTS.CLUSTER.REMOVED_USER.code, { clusterId: id, clusterName: cluster?.name, userEmail: user.email, to: user.email }));
+        worker.dispatch(notify(EVENTS.CLUSTER.REMOVED_USER.code, { clusterId: id, clusterName: cluster?.name, userEmail: user.email, to: user.email, actorId: session.userId, actorType: "user" }));
       }
     }
 
@@ -349,7 +351,7 @@ clusters.post("/:id/users/remove", requireClusterAdmin, require2FA, async (c) =>
         ERROR.REQUEST.BAD_REQUEST.status,
       );
     }
-    const helpLink = "https://monitoring.dployr.io";
+    const helpLink = "https://status.dployr.io";
     return c.json(
       createErrorResponse({
         message: "Failed to remove users",
@@ -433,7 +435,9 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
       for (const email of emails ?? []) {
         const oldRole = emailToOldRole.get(email);
         if (oldRole && oldRole !== newRole) {
-          worker.dispatch(notify(EVENTS.CLUSTER.USER_ROLE_CHANGED.code, { clusterId: id, clusterName: cluster?.name, userEmail: email, oldRole, newRole, to: email }));
+          worker.dispatch(
+            notify(EVENTS.CLUSTER.USER_ROLE_CHANGED.code, { clusterId: id, clusterName: cluster?.name, userEmail: email, oldRole, newRole, to: email, actorId: session.userId, actorType: "user" }),
+          );
         }
       }
     }
@@ -450,7 +454,7 @@ clusters.patch("/:id/users", requireClusterAdmin, async (c) => {
         ERROR.REQUEST.BAD_REQUEST.status,
       );
     }
-    const helpLink = "https://monitoring.dployr.io";
+    const helpLink = "https://status.dployr.io";
     return c.json(
       createErrorResponse({
         message: "Failed to update roles",
@@ -529,16 +533,16 @@ clusters.post("/:id/users/owner", requireClusterOwner, require2FA, async (c) => 
         newOwner: newOwnerUser.email,
         previousOwner: previousOwnerUser?.email ?? session.email,
       };
-      worker.dispatch(notify(EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code, { ...payload, userEmail: newOwnerUser.email, to: newOwnerUser.email }));
+      worker.dispatch(notify(EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code, { ...payload, userEmail: newOwnerUser.email, to: newOwnerUser.email, actorId: session.userId, actorType: "user" }));
       if (previousOwnerUser?.email) {
-        worker.dispatch(notify(EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code, { ...payload, userEmail: previousOwnerUser.email, to: previousOwnerUser.email }));
+        worker.dispatch(notify(EVENTS.CLUSTER.OWNERSHIP_TRANSFERRED.code, { ...payload, userEmail: previousOwnerUser.email, to: previousOwnerUser.email, actorId: session.userId, actorType: "user" }));
       }
     }
 
     return c.json(createSuccessResponse({ newOwnerId, previousOwnerRole }, "Ownership transferred successfully"));
   } catch (error) {
     log.error("Transfer ownership error:", error);
-    const helpLink = "https://monitoring.dployr.io";
+    const helpLink = "https://status.dployr.io";
     return c.json(
       createErrorResponse({
         message: "Failed to transfer ownership",
@@ -575,7 +579,7 @@ clusters.get("/:id/integrations", requireClusterViewer, async (c) => {
     return c.json(createSuccessResponse(integrations));
   } catch (error) {
     log.error("List remotes error:", error);
-    const helpLink = "https://monitoring.dployr.io";
+    const helpLink = "https://status.dployr.io";
     return c.json(
       createErrorResponse({
         message: "Failed to list remotes",
@@ -608,7 +612,7 @@ clusters.get("/:id/remotes", requireClusterViewer, async (c) => {
     return c.json(createSuccessResponse(paginatedData));
   } catch (error) {
     log.error("List remotes error:", error);
-    const helpLink = "https://monitoring.dployr.io";
+    const helpLink = "https://status.dployr.io";
     return c.json(
       createErrorResponse({
         message: "Failed to list remotes",
@@ -626,6 +630,7 @@ clusters.get("/:id/remotes", requireClusterViewer, async (c) => {
  * Admins can unlock a cluster by calling kv.clearRenameHistory(clusterId).
  */
 clusters.patch("/:id", requireClusterOwner, async (c) => {
+  const session = c.get("session")!;
   const db = getDbStore(c);
   const kv = getKVStore(c);
   const clusterId = c.req.param("id");
@@ -634,10 +639,7 @@ clusters.patch("/:id", requireClusterOwner, async (c) => {
   const validation = renameClusterSchema.safeParse(data);
 
   if (!validation.success) {
-    return c.json(
-      createErrorResponse({ message: "Validation failed: name must be a non-empty string (max 64 chars)", code: ERROR.REQUEST.BAD_REQUEST.code }),
-      ERROR.REQUEST.BAD_REQUEST.status,
-    );
+    return c.json(createErrorResponse({ message: "Validation failed: name must be a non-empty string (max 64 chars)", code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
   }
 
   const { name } = validation.data;
@@ -645,18 +647,14 @@ clusters.patch("/:id", requireClusterOwner, async (c) => {
   const block = await kv.recordRename(clusterId);
   if (block) {
     const { oldestAt, lastRenameAt } = await kv.getRenameQuota(clusterId);
-    const fmt = (ts: number, offsetMs: number) =>
-      new Date(ts + offsetMs).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    const fmt = (ts: number, offsetMs: number) => new Date(ts + offsetMs).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
     const message =
       block === "monthly_cooldown"
         ? `You can only rename once per month. Try again after ${lastRenameAt ? fmt(lastRenameAt, 30 * 24 * 60 * 60 * 1000) : "30 days"}.`
         : `You've used all 3 renames for this year. Try again after ${oldestAt ? fmt(oldestAt, 365 * 24 * 60 * 60 * 1000) : "12 months"}.`;
 
-    return c.json(
-      createErrorResponse({ message, code: ERROR.REQUEST.TOO_MANY_REQUESTS.code }),
-      ERROR.REQUEST.TOO_MANY_REQUESTS.status,
-    );
+    return c.json(createErrorResponse({ message, code: ERROR.REQUEST.TOO_MANY_REQUESTS.code }), ERROR.REQUEST.TOO_MANY_REQUESTS.status);
   }
 
   try {
@@ -675,13 +673,12 @@ clusters.patch("/:id", requireClusterOwner, async (c) => {
       }),
     );
 
+    worker.dispatch(notify(EVENTS.CLUSTER.MODIFIED.code, { clusterId, clusterName: cluster?.name, actorId: session.userId, actorType: "user" }));
+
     return c.json(createSuccessResponse({ cluster }, "Cluster renamed successfully"));
   } catch (error) {
     log.error("Rename cluster error:", error);
-    return c.json(
-      createErrorResponse({ message: "Failed to rename cluster", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
+    return c.json(createErrorResponse({ message: "Failed to rename cluster", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
 
@@ -727,10 +724,7 @@ clusters.put("/:id/notifications", requireClusterAdmin, async (c) => {
     return c.json(createSuccessResponse({ notifications: config }));
   } catch (error) {
     log.error("Upsert notifications error:", error);
-    return c.json(
-      createErrorResponse({ message: "Failed to save notification config", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }),
-      ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
-    );
+    return c.json(createErrorResponse({ message: "Failed to save notification config", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
 });
 

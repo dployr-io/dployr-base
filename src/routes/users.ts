@@ -8,6 +8,9 @@ import z from "zod";
 import { authMiddleware, require2FA } from "@/middleware/auth.js";
 import { ERROR } from "@/lib/constants/index.js";
 import { getAuthService, getBillingProvider, getDbStore, getEmailService, getKVStore } from "@/lib/config/context.js";
+import { worker } from "@/services/background/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
+import { EVENTS } from "@/lib/constants/index.js";
 import { Logger } from "@/lib/logger.js";
 import { EMAIL_CHANGE_WINDOW_MS } from "@/lib/constants/duration.js";
 import { DatabaseConflictError } from "@/lib/errors/errors.js";
@@ -65,7 +68,7 @@ users.get("/me", async (c) => {
   }
 
   const db = getDbStore(c);
-  const user = await db.users.find({ id: session.userId }) ?? await db.users.find({ email: session.email });
+  const user = (await db.users.find({ id: session.userId })) ?? (await db.users.find({ email: session.email }));
 
   if (!user) {
     return c.json(
@@ -82,7 +85,7 @@ users.get("/me", async (c) => {
 
     return c.json(createSuccessResponse({ user, clusters }));
   } catch (error) {
-    const helpLink = "https://monitoring.dployr.io";
+    const helpLink = "https://status.dployr.io";
     log.error(`Failed to save cluster for user" ${user.id}`, error);
     return c.json(
       createErrorResponse({
@@ -252,6 +255,11 @@ users.patch("/me", require2FA, async (c) => {
       sessionId,
       updates: { email: user.email },
     });
+  }
+
+  const { clusters } = await db.clusters.list({ userId: currentUser.id });
+  if (clusters.length > 0) {
+    worker.dispatch(notify(EVENTS.USER.UPDATED.code, { clusterId: clusters[0].id, userEmail: user.email, actorId: session.userId, actorType: "user" }));
   }
 
   return c.json(createSuccessResponse({ user }));

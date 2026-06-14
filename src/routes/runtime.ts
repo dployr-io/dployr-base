@@ -251,7 +251,7 @@ runtime.get("/events", authMiddleware, requireClusterViewer, async (c) => {
     return c.json(createSuccessResponse(paginatedData));
   } catch (error) {
     log.error("Failed to retrieve events", error);
-    const helpLink = "https://monitoring.dployr.io";
+    const helpLink = "https://status.dployr.io";
     return c.json(
       createErrorResponse({
         message: "Failed to retrieve events",

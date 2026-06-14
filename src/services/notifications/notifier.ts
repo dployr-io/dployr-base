@@ -11,8 +11,12 @@ type ClusterEvent = (typeof EVENTS)["CLUSTER"][keyof (typeof EVENTS)["CLUSTER"]]
 type InstanceEvent = (typeof EVENTS)["INSTANCE"][keyof (typeof EVENTS)["INSTANCE"]]["code"];
 type BillingEvent = (typeof EVENTS)["BILLING"][keyof (typeof EVENTS)["BILLING"]]["code"];
 type ServiceEvent = (typeof EVENTS)["SERVICE"][keyof (typeof EVENTS)["SERVICE"]]["code"];
+type DeploymentEvent = (typeof EVENTS)["DEPLOYMENT"][keyof (typeof EVENTS)["DEPLOYMENT"]]["code"];
+type DomainEvent = (typeof EVENTS)["DOMAIN"][keyof (typeof EVENTS)["DOMAIN"]]["code"];
+type IntegrationsEvent = (typeof EVENTS)["INTEGRATIONS"][keyof (typeof EVENTS)["INTEGRATIONS"]]["code"];
+type UserEvent = (typeof EVENTS)["USER"][keyof (typeof EVENTS)["USER"]]["code"];
 
-export type NotificationEvent = AuthEvent | ClusterEvent | InstanceEvent | BillingEvent | ServiceEvent;
+export type NotificationEvent = AuthEvent | ClusterEvent | InstanceEvent | BillingEvent | ServiceEvent | DeploymentEvent | DomainEvent | IntegrationsEvent | UserEvent;
 
 export type EventSubscriptions = Record<NotificationEvent, boolean>;
 

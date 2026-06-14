@@ -40,14 +40,10 @@ webhooks.post("/zepto/bounce", async (c) => {
 
   const isHard = eventName === "hardbounce";
   const isFeedback = eventName === "feedbackloop";
-  const bounceType: "hard" | "soft" | "complaint" =
-    isFeedback ? "complaint" : isHard ? "hard" : "soft";
+  const bounceType: "hard" | "soft" | "complaint" = isFeedback ? "complaint" : isHard ? "hard" : "soft";
 
   // Prefer bounce_info.bounce_address; fall back to email_info.to[0]
-  const email: string | undefined =
-    msg.bounce_info?.bounce_address ||
-    msg.email_info?.to?.[0]?.email_address?.address ||
-    msg.email_info?.to?.[0]?.address;
+  const email: string | undefined = msg.bounce_info?.bounce_address || msg.email_info?.to?.[0]?.email_address?.address || msg.email_info?.to?.[0]?.address;
 
   if (!email) {
     log.warn("Bounce webhook: could not extract email from payload", { body });
@@ -108,18 +104,12 @@ webhooks.post("/github", async (c) => {
     const body = JSON.parse(payload);
 
     if (!signature) {
-      return c.json(
-        createErrorResponse({ message: "Missing signature", code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code }),
-        ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status,
-      );
+      return c.json(createErrorResponse({ message: "Missing signature", code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
     }
 
     const isValid = await verifyGitHubWebhook({ payload, signature, secret: c.env.GITHUB_WEBHOOK_SECRET });
     if (!isValid) {
-      return c.json(
-        createErrorResponse({ message: "Invalid signature", code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code }),
-        ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status,
-      );
+      return c.json(createErrorResponse({ message: "Invalid signature", code: ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.code }), ERROR.RUNTIME.BAD_WEBHOOK_SIGNATURE.status);
     }
 
     const integrationsService = getIntegrationsService(c);
@@ -141,7 +131,7 @@ webhooks.post("/github", async (c) => {
   } catch (error) {
     log.error("GitHub webhook error:", error);
     return c.json(
-      createErrorResponse({ message: "Internal server error", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code, helpLink: "https://monitoring.dployr.io" }),
+      createErrorResponse({ message: "Internal server error", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code, helpLink: "https://status.dployr.io" }),
       ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status,
     );
   }

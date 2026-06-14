@@ -107,7 +107,7 @@ auth.get("/callback/:provider", async (c) => {
     setSessionCookie(c, sessionId);
 
     if (clusters.length > 0) {
-      worker.dispatch(notify(EVENTS.AUTH.SESSION_CREATED.code, { clusterId: clusters[0].id, userEmail: user.email }));
+      worker.dispatch(notify(EVENTS.AUTH.SESSION_CREATED.code, { clusterId: clusters[0].id, userEmail: user.email, actorId: user.id, actorType: "user" }));
     }
 
     return c.redirect(c.env.APP_URL);
@@ -278,6 +278,7 @@ auth.get("/sessions", authMiddleware, async (c) => {
 auth.delete("/sessions/:id", authMiddleware, async (c) => {
   const session = c.get("session")!;
   const kv = getKVStore(c);
+  const db = getDbStore(c);
   const targetId = c.req.param("id");
 
   const target = await kv.getSession(targetId);
@@ -286,6 +287,12 @@ auth.delete("/sessions/:id", authMiddleware, async (c) => {
   }
 
   await kv.deleteSession(targetId);
+
+  const { clusters } = await db.clusters.list({ userId: session.userId });
+  if (clusters.length > 0) {
+    worker.dispatch(notify(EVENTS.AUTH.SESSION_REVOKED.code, { clusterId: clusters[0].id, userEmail: session.email, actorId: session.userId, actorType: "user" }));
+  }
+
   return c.json(createSuccessResponse({ revoked: true }));
 });
 

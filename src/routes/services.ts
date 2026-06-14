@@ -6,7 +6,9 @@ import { ulid } from "ulid";
 import z from "zod";
 import type { Bindings, Variables } from "@/types/index.js";
 import { resolveCluster, requireClusterViewer, requireClusterDeveloper, authMiddleware } from "@/middleware/auth.js";
-import { ERROR } from "@/lib/constants/index.js";
+import { ERROR, EVENTS } from "@/lib/constants/index.js";
+import { worker } from "@/services/background/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { RECENTLY_DELETED_SERVICE_TTL, SERVICE_WAKING_TTL } from "@/lib/constants/duration.js";
 import { getDbStore, getWS, getJWTService, getKVStore, getTraefikRouterService, getLokiClient } from "@/lib/config/context.js";
@@ -242,7 +244,7 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
       // source=image: deploy directly to the instance node.
       taskId = ulid();
       const token = await jwtService.createInstanceAccessToken(session, instanceName, clusterId);
-      const task = dployrdService.createDeployTask(taskId, deployPayload as any, token);
+      const task = dployrdService.createDeployTask(taskId, { ...deployPayload as any, cluster_id: clusterId }, token);
       const routingKey = await db.instances.getRoutingKey(clusterId);
       let dispatched = false;
       try {
@@ -256,6 +258,7 @@ services.patch("/:id", resolveCluster("service", { path: "id" }), requireCluster
     }
 
     log.info(`Dispatched update task ${taskId!} for service ${service.name} in cluster ${clusterId}`);
+    worker.dispatch(notify(EVENTS.SERVICE.UPDATED.code, { clusterId, serviceName: service.name, actorId: session.userId, actorType: "user" }));
     return c.json(createSuccessResponse({ service, deployment, taskId: taskId! }));
   } catch (error) {
     log.error("Failed to update service:", error);
@@ -317,6 +320,7 @@ services.delete("/:id", resolveCluster("service", { path: "id" }), requireCluste
       log.error(`Failed to delete deployment ${service.deploymentId} for service ${service.name}:`, err)
     );
   }
+  worker.dispatch(notify(EVENTS.SERVICE.DELETED.code, { clusterId, serviceName: service.name, actorId: session.userId, actorType: "user" }));
   return c.json(createSuccessResponse({}));
 });
 
@@ -352,6 +356,7 @@ services.post("/:id/stop", resolveCluster("service", { path: "id" }), requireClu
       traefik ? traefik.setLoadingMode(service.name) : Promise.resolve(),
     ]);
     log.info(`Dispatched stop task ${taskId} for service ${service.name}`);
+    worker.dispatch(notify(EVENTS.SERVICE.STOPPED.code, { clusterId, serviceName: service.name, actorId: session.userId, actorType: "user" }));
     return c.json(createSuccessResponse({ taskId }));
   } catch (error) {
     log.error("Failed to stop service:", error);
@@ -394,6 +399,7 @@ services.post("/:id/start", resolveCluster("service", { path: "id" }), requireCl
       kv.kv.put(KV_KEYS.SERVICE.WAKING(service.name), "1", { ttl: SERVICE_WAKING_TTL }),
     ]);
     log.info(`Dispatched start task ${taskId} for service ${service.name}`);
+    worker.dispatch(notify(EVENTS.SERVICE.STARTED.code, { clusterId, serviceName: service.name, actorId: session.userId, actorType: "user" }));
     return c.json(createSuccessResponse({ taskId }));
   } catch (error) {
     log.error("Failed to start service:", error);
@@ -469,7 +475,7 @@ services.get("/:id/logs", async (c) => {
   const limit = isNaN(limitParam) || limitParam < 1 ? 1000 : Math.min(limitParam, 5000);
   const follow = c.req.query("follow") === "true" || c.req.query("follow") === "1";
 
-  const sinceMs = parseInt(c.req.query("since") ?? "0", 10) || Date.now() - 24 * 60 * 60 * 1000;
+  const sinceMs = parseInt(c.req.query("since") ?? "0", 10) || Date.now() - (follow ? 15 * 60 * 1000 : 24 * 60 * 60 * 1000);
   const untilMs = parseInt(c.req.query("until") ?? "0", 10) || Date.now();
 
   const startNs = (BigInt(sinceMs) * 1_000_000n).toString();

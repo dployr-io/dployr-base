@@ -8,6 +8,9 @@ import { ERROR } from "@/lib/constants/index.js";
 import { requireClusterDeveloper } from "@/middleware/auth.js";
 import { GitLabAuthenticationError, GitLabPermissionError, GitLabNotFoundError, GitLabRateLimitError, GitLabAPIError } from "@/lib/errors/errors.js";
 import { getKVStore, getGitHubService, getGitLabService, getBitBucketService, getIntegrationsService, getDbStore } from "@/lib/config/context.js";
+import { worker } from "@/services/background/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
+import { EVENTS } from "@/lib/constants/index.js";
 import { Logger } from "@/lib/logger.js";
 
 const log = new Logger("Integrations");
@@ -80,6 +83,8 @@ integrations.get("/github/callback", async (c) => {
       installationId: installation.id,
     });
 
+    worker.dispatch(notify(EVENTS.INTEGRATIONS.GITHUB_INSTALLED.code, { clusterId, actorId: userId ?? undefined, actorType: userId ? "user" : undefined }));
+
     return c.redirect(`${appUrl}/clusters/${clusterId}/settings/integrations?success=github`, 302);
   } catch (error) {
     log.error("GitHub callback error:", error);
@@ -95,6 +100,7 @@ integrations.get("/github/callback", async (c) => {
 
 // GitLab integration setup
 integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
+  const session = c.get("session")!;
   try {
     const { accessToken, enabled } = await c.req.json();
     const clusterId = c.req.query("clusterId")!;
@@ -106,6 +112,8 @@ integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
     await db.clusters.update(clusterId, {
       metadata: { gitLab: { accessToken, enabled } },
     });
+
+    worker.dispatch(notify(EVENTS.INTEGRATIONS.GITLAB_CONFIGURED.code, { clusterId, actorId: session.userId, actorType: "user" }));
 
     return c.json(createSuccessResponse({ enabled }, "GitLab integration configured"));
   } catch (error) {
@@ -173,6 +181,7 @@ integrations.post("/gitlab/setup", requireClusterDeveloper, async (c) => {
 
 // BitBucket integration setup
 integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
+  const session = c.get("session")!;
   try {
     const { accessToken, enabled } = await c.req.json();
     const clusterId = c.req.query("clusterId")!;
@@ -185,6 +194,8 @@ integrations.post("/bitbucket/setup", requireClusterDeveloper, async (c) => {
     await db.clusters.update(clusterId, {
       metadata: { bitBucket: { accessToken, enabled } },
     });
+
+    worker.dispatch(notify(EVENTS.INTEGRATIONS.BITBUCKET_CONFIGURED.code, { clusterId, actorId: session.userId, actorType: "user" }));
 
     return c.json(createSuccessResponse({ enabled }, "BitBucket integration configured"));
   } catch (error) {

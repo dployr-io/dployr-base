@@ -7,6 +7,8 @@ import { Bindings, Variables, createErrorResponse, createSuccessResponse, parseP
 import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware, requireClusterViewer, requireClusterDeveloper, resolveCluster } from "@/middleware/auth.js";
 import { getDbStore, getKVStore, getDnsService, getInstanceService, getTraefikRouterService } from "@/lib/config/context.js";
+import { worker } from "@/services/background/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
 import { DOMAIN_LIMIT_BY_TIER } from "@/lib/constants/instances.js";
 import { Logger } from "@/lib/logger.js";
 
@@ -132,6 +134,7 @@ domains.post("/register", async (c) => {
 
 // Create custom domain
 domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
+  const session = c.get("session")!;
   const db = getDbStore(c);
   const dns = getDnsService(c);
   const body = await c.req.json();
@@ -187,6 +190,8 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
 
   const { records, verification } = dns.buildRecordsFromStored(normalizedDomain, domainRecord.serviceName, domainRecord.verificationToken);
 
+  worker.dispatch(notify(EVENTS.DOMAIN.CREATED.code, { clusterId, domain: normalizedDomain, actorId: session.userId, actorType: "user" }));
+
   return c.json(
     createSuccessResponse({
       domain: normalizedDomain,
@@ -200,6 +205,7 @@ domains.post("/", authMiddleware, requireClusterDeveloper, async (c) => {
 
 // Client-initiated domain verification check
 domains.post("/:domain/verify", authMiddleware, resolveCluster("domain", { path: "domain" }), requireClusterDeveloper, async (c) => {
+  const session = c.get("session")!;
   try {
     const domain = c.req.param("domain").toLowerCase();
     const db = getDbStore(c);
@@ -221,6 +227,8 @@ domains.post("/:domain/verify", authMiddleware, resolveCluster("domain", { path:
       const traefik = getTraefikRouterService(c);
       if (traefik) await traefik.registerCustomDomain(domain, record.serviceName);
     }
+
+    worker.dispatch(notify(EVENTS.DOMAIN.VERIFIED.code, { clusterId: record.clusterId, domain, actorId: session.userId, actorType: "user" }));
 
     return c.body(null, 204);
   } catch (err) {
@@ -325,6 +333,10 @@ domains.delete("/:domain", authMiddleware, resolveCluster("domain", { path: "dom
     type: EVENTS.RESOURCE.RESOURCE_DELETED.code,
     request: c.req.raw,
   });
+
+  if (domainRecord?.clusterId) {
+    worker.dispatch(notify(EVENTS.DOMAIN.DELETED.code, { clusterId: domainRecord.clusterId, domain, actorId: session.userId, actorType: "user" }));
+  }
 
   return c.body(null, 204);
 });

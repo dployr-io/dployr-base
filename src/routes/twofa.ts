@@ -6,11 +6,13 @@ import { getCookie } from "hono/cookie";
 import z from "zod";
 import * as OTPAuth from "otpauth";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse } from "@/types/index.js";
-import { ERROR } from "@/lib/constants/index.js";
+import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { authMiddleware } from "@/middleware/auth.js";
 import { getKVStore, getDbStore, getEmailService } from "@/lib/config/context.js";
 import { otpEmail } from "@/lib/templates/emails/index.js";
 import { Logger } from "@/lib/logger.js";
+import { worker } from "@/services/background/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
 
 const log = new Logger("2FA");
 
@@ -191,6 +193,11 @@ twofa.post("/totp/confirm", async (c) => {
     await kv.refreshSession({ sessionId, updates: { twoFaVerifiedAt: Date.now() } });
   }
 
+  const { clusters } = await db.clusters.list({ userId: session.userId });
+  if (clusters.length > 0) {
+    worker.dispatch(notify(EVENTS.AUTH.TOTP_ENABLED.code, { clusterId: clusters[0].id, userEmail: session.email, actorId: session.userId, actorType: "user" }));
+  }
+
   return c.json(createSuccessResponse({ backupCodes }, "Authenticator app enabled"));
 });
 
@@ -246,6 +253,12 @@ twofa.delete("/totp", async (c) => {
   }
 
   await db.twoFa.disableTOTP(session.userId);
+
+  const { clusters } = await db.clusters.list({ userId: session.userId });
+  if (clusters.length > 0) {
+    worker.dispatch(notify(EVENTS.AUTH.TOTP_DISABLED.code, { clusterId: clusters[0].id, userEmail: session.email, actorId: session.userId, actorType: "user" }));
+  }
+
   return c.json(createSuccessResponse({ disabled: true }, "Authenticator app removed"));
 });
 
@@ -296,6 +309,12 @@ twofa.post("/backup-codes/regenerate", async (c) => {
   }
 
   const backupCodes = await db.twoFa.regenerateBackupCodes(session.userId);
+
+  const { clusters } = await db.clusters.list({ userId: session.userId });
+  if (clusters.length > 0) {
+    worker.dispatch(notify(EVENTS.AUTH.BACKUP_CODES_REGENERATED.code, { clusterId: clusters[0].id, userEmail: session.email, actorId: session.userId, actorType: "user" }));
+  }
+
   return c.json(createSuccessResponse({ backupCodes }, "New backup codes generated"));
 });
 

@@ -14,6 +14,7 @@ export abstract class EventEmittable {
     try {
       await this.kv.logSystemEvent({
         type,
+        clusterId: tag,
         targets: [{ id: tag, name }],
       });
     } catch (err) {

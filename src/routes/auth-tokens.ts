@@ -4,9 +4,11 @@
 import { Hono } from "hono";
 import z from "zod";
 import { Bindings, Variables, createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
-import { ERROR } from "@/lib/constants/index.js";
+import { ERROR, EVENTS } from "@/lib/constants/index.js";
 import { getDbStore } from "@/lib/config/context.js";
 import { authMiddleware, require2FA } from "@/middleware/auth.js";
+import { worker } from "@/services/background/index.js";
+import { notify } from "@/services/background/jobs/notify.js";
 
 const VALID_SCOPES = ["oidc:bind"] as const;
 
@@ -66,6 +68,11 @@ authTokens.post("/", authMiddleware, require2FA, async (c) => {
     expiresAt,
   });
 
+  const { clusters } = await db.clusters.list({ userId: session.userId });
+  if (clusters.length > 0) {
+    worker.dispatch(notify(EVENTS.AUTH.API_TOKEN_CREATED.code, { clusterId: clusters[0].id, userEmail: session.email, tokenName: name, actorId: session.userId, actorType: "user" }));
+  }
+
   return c.json(
     createSuccessResponse(
       {
@@ -107,10 +114,17 @@ authTokens.delete("/:id", authMiddleware, require2FA, async (c) => {
 
   const id = c.req.param("id");
   const db = getDbStore(c);
+  const { tokens: userTokens } = await db.apiTokens.list({ userId: session.userId });
+  const existing = userTokens.find((t) => t.id === id);
   const deleted = await db.apiTokens.revoke(id, session.userId);
 
   if (!deleted) {
     return c.json(createErrorResponse({ message: "Token not found", code: ERROR.RESOURCE.MISSING_RESOURCE.code }), ERROR.RESOURCE.MISSING_RESOURCE.status);
+  }
+
+  const { clusters } = await db.clusters.list({ userId: session.userId });
+  if (clusters.length > 0) {
+    worker.dispatch(notify(EVENTS.AUTH.API_TOKEN_REVOKED.code, { clusterId: clusters[0].id, userEmail: session.email, tokenName: existing?.name ?? id, actorId: session.userId, actorType: "user" }));
   }
 
   return c.json(createSuccessResponse(null, "Token revoked"));
