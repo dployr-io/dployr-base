@@ -32,6 +32,7 @@ interface ScheduledEntry {
   fn: JobFn;
   runImmediately: boolean;
   timer?: ReturnType<typeof setInterval>;
+  running?: boolean;
 }
 
 interface TriggeredEntry {
@@ -83,9 +84,17 @@ export class BackgroundWorker {
 
     for (const entry of this.scheduled) {
       if (entry.runImmediately) {
-        this.run(entry.fn, entry.name, entry.intervalMs);
+        entry.running = true;
+        this.run(entry.fn, entry.name, entry.intervalMs).finally(() => { entry.running = false; });
       }
-      entry.timer = setInterval(() => this.run(entry.fn, entry.name, entry.intervalMs), entry.intervalMs);
+      entry.timer = setInterval(() => {
+        if (entry.running) {
+          log.warn(`Job "${entry.name}" still running — skipping tick`);
+          return;
+        }
+        entry.running = true;
+        this.run(entry.fn, entry.name, entry.intervalMs).finally(() => { entry.running = false; });
+      }, entry.intervalMs);
       entry.timer.unref();
     }
 

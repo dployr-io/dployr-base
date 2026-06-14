@@ -580,7 +580,7 @@ export class WorkloadSupervisor {
       if (blueprint.source === "image") {
         taskId = ulid();
         const token = await this.jwtService.createNodeAccessToken(routingKey, { issuer: this.tokenIssuer, audience: "dployr-instance" });
-        const task = new DployrdService().createDeployTask(taskId, blueprint, token);
+        const task = new DployrdService().createDeployTask(taskId, { ...blueprint, cluster_id: cluster.id }, token);
         const dispatched = this.connectionManager.sendTask(routingKey, task);
         if (!dispatched) {
           this.log.warn(`No connected node to reprovision ${service.name}`);
@@ -588,6 +588,17 @@ export class WorkloadSupervisor {
         }
       } else {
         // source=remote: clone + build on the build node, then publish to instance node.
+        // Guard against duplicate enqueue after restart (in-memory cooldown is empty,
+        // but KV still tracks in-flight builds from before the restart).
+        const { instances: buildNodes } = await this.db.instances.list({ role: "build" as any });
+        for (const node of buildNodes) {
+          const inFlight = await this.kv.instanceCache.getInFlightBuilds(node.tag);
+          if (inFlight.some((b) => b.payload.name === service.name)) {
+            this.log.info(`Service ${service.name} already has an in-flight build on ${node.tag} — skipping reprovision`);
+            return false;
+          }
+        }
+
         const result = await enqueueBuild({
           clusterId: cluster.id,
           db: this.db,
