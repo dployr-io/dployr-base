@@ -13,8 +13,7 @@ import { buildBindings } from "@/lib/config/bootstrap.js";
  * Resolves the primary target of a notification from its payload.
  *
  * Priority order: serviceName → domain → tokenName → deploymentId → instanceId →
- * userEmail → clusterName, falling back to `clusterId`. Returns a single-element array
- * so callers can treat all cases uniformly.
+ * userEmail → clusterName, falling back to clusterId.
  *
  * @param data - The notification payload; at least `clusterId` must be present.
  */
@@ -26,7 +25,7 @@ export function resolveTargets(data: NotificationData): { id: string; name?: str
   if (data.instanceId)    return [{ id: data.instanceId,    name: data.instanceId }];
   if (data.userEmail)     return [{ id: data.userEmail,     name: data.userEmail }];
   if (data.clusterName)   return [{ id: data.clusterId,     name: data.clusterName }];
-  return [{ id: data.clusterId,     name: data.clusterName }];
+  return [{ id: data.clusterId }];
 }
 
 

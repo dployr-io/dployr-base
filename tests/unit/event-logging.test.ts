@@ -154,9 +154,9 @@ describe("resolveTargets", () => {
     assert.deepEqual(targets, [{ id: "c1", name: "My Cluster" }]);
   });
 
-  it("returns empty array when no meaningful field is present", () => {
+  it("falls back to clusterId when no meaningful field is present", () => {
     const targets = resolveTargets({ clusterId: "c1" });
-    assert.deepEqual(targets, []);
+    assert.deepEqual(targets, [{ id: "c1" }]);
   });
 
   it("serviceName takes precedence over domain", () => {
