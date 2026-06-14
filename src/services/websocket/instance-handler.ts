@@ -18,6 +18,7 @@ import { TerminalManager } from "./terminal-manager.js";
 import { parseMessage, type ClusterConnection } from "@/types/websocket-message.js";
 import type { BillingProvider } from "@/services/billing/provider.js";
 import { MESSAGE_KIND } from "@/lib/constants/websocket.js";
+import { TERMINAL_SESSION_IDLE_MS } from "@/lib/constants/duration.js";
 import { KV_KEYS } from "@/lib/constants/kv.js";
 import { Logger } from "@/lib/logger.js";
 import { worker } from "@/services/background/index.js";
@@ -71,7 +72,7 @@ export class WebSocketHandler {
 
     this.dployrdHandler = new NodeMessageHandler(this.connectionManager, this.clientNotifier, this.dbStore, this.kvStore, this.jwtService, loki);
 
-    this.terminalManager = new TerminalManager(300000);
+    this.terminalManager = new TerminalManager(TERMINAL_SESSION_IDLE_MS);
     this.clientHandler = new ClientMessageHandler({
       connectionManager: this.connectionManager,
       kv: this.kvStore,
