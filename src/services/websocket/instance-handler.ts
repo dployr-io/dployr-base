@@ -232,6 +232,10 @@ export class WebSocketHandler {
       clients: new Set(),
       duration: "24h",
     });
+    if (!added) {
+      this.log.info(`Log stream already active for key="${streamKey}" — skipping duplicate task`);
+      return;
+    }
     const token = await this.jwtService.createNodeAccessToken(nodeTag).catch(() => undefined);
     const task = this.dployrdService.createLogStreamTask({ streamId: nodeStreamId, path, duration: "24h", token });
     const sent = this.connectionManager.sendTask(nodeTag, task);

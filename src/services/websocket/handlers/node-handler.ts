@@ -33,6 +33,7 @@ type ClusterMeta = { names: Set<string>; dbIdByName: Map<string, string>; dbDepl
 export class NodeMessageHandler {
   private log = new Logger("ws-node");
   private clusterMetaCache = new Map<string, ClusterMeta>();
+  private pendingBuildDispatches = new Set<string>();
 
   constructor(
     private connectionManager: ConnectionManager,
@@ -143,7 +144,13 @@ export class NodeMessageHandler {
     }
 
     if (success && !this.connectionManager.getPendingRequest(taskId)) {
+      if (this.pendingBuildDispatches.has(taskId)) {
+        this.log.warn(`Build ${taskId} already being dispatched — ignoring duplicate task_response`);
+        return;
+      }
+      this.pendingBuildDispatches.add(taskId);
       const callback = await this.kv.payloads.consumeBuildCallback(taskId);
+      this.pendingBuildDispatches.delete(taskId);
       if (callback) {
         await this.dispatchBuildComplete(taskId, data, callback);
         return;
