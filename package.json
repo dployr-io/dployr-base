@@ -2,9 +2,9 @@
   "name": "dployr-base",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:app\" \"npm run dev:docs\"",
+    "dev": "node scripts/sync-ip.mjs && concurrently \"npm run dev:app\" \"npm run dev:docs\"",
     "dev:vector": "docker compose -f docker-compose.dev.yml up",
-    "dev:app": "cross-env NODE_ENV=development node --import tsx src/index.ts",
+    "dev:app": "node scripts/sync-ip.mjs && cross-env NODE_ENV=development node --import tsx src/index.ts",
     "dev:app:test": "cross-env NODE_ENV=test node --import tsx src/index.ts",
     "dev:docs": "serve docs -l 9099",
     "dev:logs": "serve pages/logs -l 8787",
