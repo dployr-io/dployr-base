@@ -39,5 +39,6 @@ export function registerJobs(worker: BackgroundWorker): void {
     .schedule(DOCKER_PRUNE_JOB, MS_24_HOURS, dockerPrune)
     .schedule(DOMAIN_VERIFICATION_JOB, MS_12_SECONDS, domainVerification)
     .on(NODES_HEALTH_JOB, nodesHealth, { runImmediately: true })
-    .on(NODES_SYNC_JOB, nodesSync, { runImmediately: true });
+    .on(NODES_SYNC_JOB, nodesSync, { runImmediately: true })
+    .on(BUILD_NODE_SUPERVISOR_JOB, buildNodeSupervisor);
 }
