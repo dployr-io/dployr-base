@@ -28,9 +28,20 @@ export const DOMAIN_LIMIT_BY_TIER = {
  * Keys must match InstallScriptOptions (containerMemory / containerCpu / containerStorage).
  */
 export const CONTAINER_LIMITS_BY_TIER = {
-  hobby: { containerMemory: 128, containerCpu: 100,  containerStorage: 1 },
+  hobby: { containerMemory: 64,  containerCpu: 100,  containerStorage: 1 },
   indie: { containerMemory: 256, containerCpu: 250,  containerStorage: 2 },
   pro:   { containerMemory: 0,   containerCpu: 0,    containerStorage: 0 }, // unlimited — dedicated instance
+} as const;
+
+/**
+ * Cluster-level cgroup slice limits — the hard ceiling for all containers in a
+ * cluster combined. Enforced via a systemd slice on the host.
+ * clusterMemory: MB, clusterCpu: millicores (0 = unlimited / dedicated).
+ */
+export const CLUSTER_LIMITS_BY_TIER = {
+  hobby: { clusterMemory: 64,  clusterCpu: 100  },
+  indie: { clusterMemory: 512, clusterCpu: 250  },
+  pro:   { clusterMemory: 0,   clusterCpu: 0    },
 } as const;
 
 // Instance regions

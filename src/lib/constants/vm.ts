@@ -6,10 +6,16 @@ import type { SubscriptionPlan } from "@/types/index.js";
 import { INSTANCE_REGIONS } from "@/lib/constants/instances.js";
 
 export const DEFAULT_CAPACITY = 10;
-export const DEFAULT_INSTANCE_SIZE: VMSize = "s-1vcpu-512mb-10gb";
-export const DEFAULT_INSTANCE_IMAGE: VMImage = "debian-12-x64";
+export const DEFAULT_INSTANCE_SIZE: VMSize = "s-1vcpu-1gb";
+export const DEFAULT_INSTANCE_IMAGE: VMImage = "debian-13-x64";
 export const DEFAULT_INSTANCE_REGION: VMRegion = "nyc1";
 export const DEFAULT_BUILD_NODE_SIZE: VMSize = "s-2vcpu-4gb";
+
+export const INSTANCE_SIZE_BY_TIER: Record<string, VMSize> = {
+  hobby: "s-1vcpu-1gb",
+  indie: "s-1vcpu-2gb",
+  pro:   "s-1vcpu-2gb",
+};
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -39,6 +45,7 @@ export const VM_SIZES: Record<VMSize, { label: string; vcpu: number; memoryMb: n
 };
 
 export const VM_IMAGES: Record<VMImage, { label: string; distro: string }> = {
+  "debian-13-x64": { label: "Debian 13 (Trixie)", distro: "Debian" },
   "debian-12-x64": { label: "Debian 12 (Bookworm)", distro: "Debian" },
   "ubuntu-24-04-x64": { label: "Ubuntu 24.04 LTS", distro: "Ubuntu" },
   "ubuntu-22-04-x64": { label: "Ubuntu 22.04 LTS", distro: "Ubuntu" },
@@ -66,6 +73,8 @@ export interface InstallScriptOptions {
   containerMemory?: number;
   containerCpu?: number;
   containerStorage?: number;
+  clusterMemory?: number;
+  clusterCpu?: number;
   lokiUrl?: string;
   lokiPushToken?: string;
 }
@@ -80,6 +89,8 @@ export function buildInstallScript(token: string, instanceTag: string, opts: Ins
     containerMemory = 0,
     containerCpu = 0,
     containerStorage = 0,
+    clusterMemory = 0,
+    clusterCpu = 0,
     lokiUrl = "",
     lokiPushToken = "",
   } = opts;
@@ -95,6 +106,8 @@ export REGISTRY_AUTH="${registryAuth}"
 export CONTAINER_MEMORY="${containerMemory}"
 export CONTAINER_CPU="${containerCpu}"
 export CONTAINER_STORAGE="${containerStorage}"
+export CLUSTER_MEMORY="${clusterMemory}"
+export CLUSTER_CPU="${clusterCpu}"
 export LOKI_URL="${lokiUrl}"
 export LOKI_PUSH_TOKEN="${lokiPushToken}"
 curl -sSL https://raw.githubusercontent.com/dployr-io/dployr/master/install.sh -o /tmp/dployr-install.sh

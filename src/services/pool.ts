@@ -15,6 +15,7 @@ import {
   DEFAULT_INSTANCE_REGION,
   DEFAULT_INSTANCE_SIZE,
   DEFAULT_BUILD_NODE_SIZE,
+  INSTANCE_SIZE_BY_TIER,
   buildInstanceTags,
   buildInstallScript,
   PROVIDER_TO_INSTANCE_REGION,
@@ -22,7 +23,7 @@ import {
 } from "@/lib/constants/vm.js";
 import type { SubscriptionPlan } from "@/types/index.js";
 import { EventEmittable } from "./notifications/emittable.js";
-import { ADJECTIVES, NOUNS, POOL_CAPACITY_BY_TIER, CONTAINER_LIMITS_BY_TIER } from "@/lib/constants/instances.js";
+import { ADJECTIVES, NOUNS, POOL_CAPACITY_BY_TIER, CONTAINER_LIMITS_BY_TIER, CLUSTER_LIMITS_BY_TIER } from "@/lib/constants/instances.js";
 import { Logger } from "@/lib/logger.js";
 
 export class InstancePool extends EventEmittable {
@@ -91,14 +92,15 @@ export class InstancePool extends EventEmittable {
     const decoded = await this.jwt.verifyToken(token);
 
     const limits = CONTAINER_LIMITS_BY_TIER[tier];
+    const clusterLimits = CLUSTER_LIMITS_BY_TIER[tier];
     const droplet = await this.vm.create({
       image: DEFAULT_INSTANCE_IMAGE,
       name: tag,
       region: DEFAULT_INSTANCE_REGION,
-      size: DEFAULT_INSTANCE_SIZE,
+      size: INSTANCE_SIZE_BY_TIER[tier] ?? DEFAULT_INSTANCE_SIZE,
       tags: buildInstanceTags(tier),
       sshKey: this.sshKey,
-      userData: buildInstallScript(token, tag, { ...this.registry, ...limits, lokiUrl: this.lokiUrl, lokiPushToken: this.lokiPushToken }),
+      userData: buildInstallScript(token, tag, { ...this.registry, ...limits, ...clusterLimits, lokiUrl: this.lokiUrl, lokiPushToken: this.lokiPushToken }),
     });
 
     // Create instance row before bootstrap token so the FK is satisfied.
@@ -136,7 +138,7 @@ export class InstancePool extends EventEmittable {
         image: DEFAULT_INSTANCE_IMAGE,
         name: tag,
         region: DEFAULT_INSTANCE_REGION,
-        size: DEFAULT_INSTANCE_SIZE,
+        size: INSTANCE_SIZE_BY_TIER.pro,
         tags: buildInstanceTags("pro"),
         sshKey: this.sshKey,
         userData: buildInstallScript(token, tag, { ...this.registry, lokiUrl: this.lokiUrl, lokiPushToken: this.lokiPushToken }),

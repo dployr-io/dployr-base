@@ -25,6 +25,7 @@ export type VMSize =
   | "s-8vcpu-16gb";       // 16 GB / 8 vCPU / 320 GB
 
 export type VMImage =
+  | "debian-13-x64"
   | "debian-12-x64"
   | "ubuntu-24-04-x64"
   | "ubuntu-22-04-x64";
