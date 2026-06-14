@@ -310,6 +310,7 @@ admin.delete("/remove-instance/:id", async (c) => {
 admin.get("/build-queue", requireDployrAdministrator, async (c) => {
   const kv = getKVStore(c);
   const db = getDbStore(c);
+  const ws = getWS(c);
   const [queue, { instances: buildNodes }] = await Promise.all([
     kv.payloads.listBuildQueue(),
     db.instances.list({ role: "build" as any }),
@@ -320,6 +321,8 @@ admin.get("/build-queue", requireDployrAdministrator, async (c) => {
       tag: n.tag,
       status: n.status,
       address: n.address,
+      createdAt: n.createdAt,
+      connected: ws.hasNodeConnection(n.tag),
       slots: await kv.instanceCache.getBuildSlots(n.tag),
     })),
   );

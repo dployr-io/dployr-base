@@ -138,7 +138,7 @@ export class InstanceStore extends BaseStore {
 
     const total = Number(countResult?.count ?? 0);
 
-    let sql = `SELECT id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at FROM instances ${where} ORDER BY created_at DESC`;
+    let sql = `SELECT id, kind, cluster_id, address, tag, status, capacity, region, managed, role, metadata, created_at, updated_at, (SELECT COUNT(*) FROM clusters WHERE pool_instance_id = instances.id) AS cluster_count FROM instances ${where} ORDER BY created_at DESC`;
     const dataBindings = [...bindings];
 
     if (filter?.limit !== undefined) {
@@ -397,6 +397,7 @@ export class InstanceStore extends BaseStore {
       clusterId: row.cluster_id != null ? (row.cluster_id as string) : null,
       managed: row.managed ?? true,
       metadata: row.metadata ?? {},
+      clusterCount: row.cluster_count != null ? Number(row.cluster_count) : 0,
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
     };

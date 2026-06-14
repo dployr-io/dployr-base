@@ -1939,7 +1939,7 @@
                   </svg>
                   <span>Queue is empty</span>
                 </div>
-                <div class="table-wrap">
+                <div class="table-wrap" id="bq-table-wrap" style="display:none;">
                   <table id="bq-table">
                     <thead>
                       <tr><th>Task</th><th>Tier</th><th>Service</th><th>Queued</th></tr>
@@ -2335,9 +2335,9 @@
           const statusBadge = `<span class="badge ${STATUS_BADGE[inst.status] || 'stopped'}">${escHtml(inst.status || '—')}</span>`;
 
           const clusterCol = isPool
-            ? `<span style="font-size:11px;color:var(--text-dim);">${loadBarHtml(instances.length ?? 0, inst.capacity ?? 10)}<span style="font-size:11px;">${instances.length ?? 0}/${inst.capacity ?? 10}</span></span>`
+            ? `<span style="font-size:11px;color:var(--text-dim);white-space:nowrap;">${loadBarHtml(inst.clusterCount ?? 0, inst.capacity ?? 10)}<span style="font-size:11px;">${inst.clusterCount ?? 0}/${inst.capacity ?? 10}</span></span>`
             : (inst.clusterId
-              ? `<span class="cell-id">${escHtml(inst.clusterId.slice(0, 12))}… <button class="copy-btn" title="Copy cluster ID">⎘</button></span>`
+              ? `<span class="cell-id" style="white-space:nowrap;">${escHtml(inst.clusterName || inst.clusterId.slice(0, 14))} <button class="copy-btn" title="Copy cluster ID">⎘</button></span>`
               : `<span class="text-muted">—</span>`);
 
           const tr = document.createElement('tr');
@@ -2347,9 +2347,9 @@
             <td style="width:32px;"><input type="checkbox" class="instance-checkbox" data-tag="${escAttr(inst.tag || '')}" data-id="${escAttr(inst.id || '')}"></td>
             <td style="width:76px;">${kindBadge}</td>
             <td style="width:76px;">${roleBadge}</td>
-            <td class="cell-tag"><button class="cell-tag-btn" title="Toggle health dashboard">${escHtml(inst.tag || '—')}</button> <button class="copy-btn" title="Copy tag">⎘</button></td>
-            <td class="cell-id">${escHtml((inst.id || '—').slice(0, 8))}… <button class="copy-btn" title="Copy ID">⎘</button></td>
-            <td class="dim">${inst.address ? `${escHtml(inst.address)} <button class="copy-btn" title="Copy address">⎘</button>` : '—'}</td>
+            <td class="cell-tag" style="white-space:nowrap;"><button class="cell-tag-btn" title="Toggle health dashboard">${escHtml(inst.tag || '—')}</button> <button class="copy-btn" title="Copy tag">⎘</button></td>
+            <td class="cell-id" style="white-space:nowrap;">${escHtml((inst.id || '—').slice(0, 8))}… <button class="copy-btn" title="Copy ID">⎘</button></td>
+            <td class="dim" style="white-space:nowrap;">${inst.address ? `${escHtml(inst.address)} <button class="copy-btn" title="Copy address">⎘</button>` : '—'}</td>
             <td class="dim" style="white-space:nowrap;">${escHtml(regionLabel)}</td>
             <td>${statusBadge}</td>
             <td>${clusterCol}</td>
@@ -2922,10 +2922,10 @@
         qTbody.innerHTML = '';
         if (!queue.length) {
           $('#bq-empty').classList.remove('hidden');
-          $('#bq-table').style.display = 'none';
+          $('#bq-table-wrap').style.display = 'none';
         } else {
           $('#bq-empty').classList.add('hidden');
-          $('#bq-table').style.display = '';
+          $('#bq-table-wrap').style.display = '';
           queue.forEach(entry => {
             const tierColor = TIER_COLORS[entry.tier] || 'var(--text-dim)';
             const tr = document.createElement('tr');
@@ -2943,7 +2943,8 @@
       }
 
       async function loadBuildNodes() {
-        $('#bn-loading').classList.remove('hidden');
+        const hasContent = $('#bn-tbody').children.length > 0;
+        if (!hasContent) $('#bn-loading').classList.remove('hidden');
         try {
           const data = await fetchBuildQueue();
           renderBuildNodes(data);

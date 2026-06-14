@@ -107,8 +107,29 @@ export function attachListInstances(app: Hono<{ Bindings: Bindings; Variables: V
       instancePoolService.resolveInstancePool({ db: getDbStore(c), clusterId }),
     ]);
 
-    const finalInstances = instance ? [instance, ...instances] : instances;
+    const allInstances = instance ? [instance, ...instances] : instances;
     const finalTotal = instance ? total + 1 : total;
+
+    // Enrich dedicated instances with cluster name
+    const db = getDbStore(c);
+    const uniqueClusterIds = [...new Set(
+      allInstances.filter((i) => i.kind === "dedicated" && i.clusterId).map((i) => i.clusterId as string)
+    )];
+    const clusterNameById = new Map<string, string>();
+    if (uniqueClusterIds.length > 0) {
+      await Promise.all(
+        uniqueClusterIds.map(async (cid) => {
+          const cl = await db.clusters.find({ id: cid });
+          if (cl) clusterNameById.set(cid, cl.name);
+        })
+      );
+    }
+
+    const finalInstances = allInstances.map((i) => ({
+      ...i,
+      clusterName: i.clusterId ? (clusterNameById.get(i.clusterId) ?? null) : null,
+    }));
+
     const paginatedData = createPaginatedResponse(finalInstances, page, pageSize, finalTotal);
 
     return c.json(createSuccessResponse(paginatedData));

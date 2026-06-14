@@ -222,6 +222,10 @@ export interface Instance {
   region?: string;
   /** null for pool instances (no single owning cluster) */
   clusterId?: string | null;
+  /** name of the owning cluster, enriched at read time for dedicated instances */
+  clusterName?: string | null;
+  /** number of clusters assigned to this pool instance */
+  clusterCount?: number;
   /** whether the instance is a managed instance or BYO server setup */
   managed?: boolean;
   metadata?: Record<string, any>;
