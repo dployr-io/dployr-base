@@ -1104,7 +1104,7 @@ export class ClientMessageHandler {
 }
 
 function parseDurationMs(duration: string): number {
-  if (duration === "live") return 24 * 60 * 60 * 1000;
+  if (duration === "live") return 15 * 60 * 1000;
   const match = duration.match(/^(\d+)(s|m|h|d|mo)$/);
   if (!match) return 24 * 60 * 60 * 1000;
   const value = parseInt(match[1]);
