@@ -429,6 +429,7 @@ http {
         root ${html_dir};
         location / {
             add_header X-Dployr-Loading 1 always;
+            add_header Cache-Control "no-store, no-cache, must-revalidate" always;
             try_files /loading.html =503;
         }
     }
