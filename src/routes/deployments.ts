@@ -11,7 +11,7 @@ import { notify } from "@/services/background/jobs/notify.js";
 import { getJWTService, getDbStore } from "@/lib/config/context.js";
 import { createSuccessResponse, createErrorResponse, parsePaginationParams, createPaginatedResponse } from "@/types/index.js";
 import { DeploymentSchema } from "@/lib/tasks/types.js";
-import { DatabaseConflictError, handleInstanceError, InstanceNotConnectedError } from "@/lib/errors/errors.js";
+import { DatabaseConflictError, handleInstanceError, InstanceNotConnectedError, ServiceConflictError } from "@/lib/errors/errors.js";
 import { DeploymentService } from "@/services/deployments.js";
 import { worker } from "@/services/background/index.js";
 import { BUILD_NODE_SUPERVISOR_JOB } from "@/lib/constants/nodes.js";
@@ -69,7 +69,10 @@ deployments.post("/finish", async (c) => {
     return c.json(createSuccessResponse({ deployment: updated }));
   } catch (error) {
     if (error instanceof DatabaseConflictError && error.field === "name") {
-      return c.json(createErrorResponse({ message: "Service name is already in use by another cluster. Service names must be globally unique.", code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
+      return c.json(
+        createErrorResponse({ message: "Service name is already in use by another cluster. Service names must be globally unique.", code: ERROR.RESOURCE.CONFLICT.code }),
+        ERROR.RESOURCE.CONFLICT.status,
+      );
     }
     return c.json(createErrorResponse({ message: "Failed to finish deployment", code: ERROR.RUNTIME.INTERNAL_SERVER_ERROR.code }), ERROR.RUNTIME.INTERNAL_SERVER_ERROR.status);
   }
@@ -106,31 +109,27 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
     domain: body.domain,
     env_vars: body.envVars ?? body.env_vars,
     secrets: body.secrets,
-    remote: (body.remoteUrl ?? body.remote?.url)
-      ? { url: body.remoteUrl ?? body.remote?.url, branch: body.remoteBranch ?? body.remote?.branch, commit_hash: body.remoteCommitHash ?? body.remote?.commit_hash }
-      : undefined,
+    remote:
+      (body.remoteUrl ?? body.remote?.url)
+        ? { url: body.remoteUrl ?? body.remote?.url, branch: body.remoteBranch ?? body.remote?.branch, commit_hash: body.remoteCommitHash ?? body.remote?.commit_hash }
+        : undefined,
     force_rebuild: body.forceRebuild ?? body.force_rebuild ?? false,
   };
 
   const validation = DeploymentSchema.safeParse(payload);
   if (!validation.success) {
     const errors = validation.error.issues.map((e) => ({ field: e.path.join("."), message: e.message }));
-    return c.json(createErrorResponse({ message: "Validation failed: " + errors.map((e) => `${e.field}: ${e.message}`).join(", "), code: ERROR.REQUEST.BAD_REQUEST.code }), ERROR.REQUEST.BAD_REQUEST.status);
+    return c.json(
+      createErrorResponse({ message: "Validation failed: " + errors.map((e) => `${e.field}: ${e.message}`).join(", "), code: ERROR.REQUEST.BAD_REQUEST.code }),
+      ERROR.REQUEST.BAD_REQUEST.status,
+    );
   }
 
   const instanceName = await db.instances.getRoutingKey(clusterId);
-  if (!instanceName || instanceName === clusterId) {
-    return c.json(createErrorResponse({ message: "Cluster has no assigned instance", code: ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.code }), ERROR.RUNTIME.INSTANCE_NOT_CONNECTED.status);
-  }
 
   const deployPayload = { ...validation.data };
 
-  if (
-    deployPayload.runtime === "ruby" &&
-    !deployPayload.secrets?.SECRET_KEY_BASE &&
-    !deployPayload.env_vars?.SECRET_KEY_BASE &&
-    db.serviceSecrets
-  ) {
+  if (deployPayload.runtime === "ruby" && !deployPayload.secrets?.SECRET_KEY_BASE && !deployPayload.env_vars?.SECRET_KEY_BASE && db.serviceSecrets) {
     let secretKeyBase: string | undefined;
     const existingService = await db.services.find({ name: deployPayload.name, clusterId }).catch(() => null);
     if (existingService) {
@@ -142,7 +141,10 @@ deployments.post("/", requireClusterDeveloper, async (c) => {
   }
 
   try {
-    const result = await service.create(c, { clusterId, instanceName, payload: deployPayload, session });
+    let result;
+    result = await db.services.find({ name: deployPayload.name });
+    if (result && result.clusterId !== clusterId) return c.json(createErrorResponse({ message: `Service name ${deployPayload.name}, has been taken`, code: ERROR.RESOURCE.CONFLICT.code }), ERROR.RESOURCE.CONFLICT.status);
+    result = await service.create(c, { clusterId, instanceName: !instanceName || instanceName === clusterId ? null : instanceName, payload: deployPayload, session });
     worker.dispatch(notify(EVENTS.DEPLOYMENT.CREATED.code, { clusterId, serviceName: deployPayload.name, actorId: session.userId, actorType: "user" }));
     return c.json(createSuccessResponse(result), SUCCESS.ACCEPTED.status);
   } catch (error) {

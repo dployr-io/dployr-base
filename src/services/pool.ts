@@ -228,8 +228,16 @@ export class InstancePool extends EventEmittable {
       // were provisioning. Re-try only if this cluster is still unassigned.
       const alreadyAssigned = await this.db.instances.getClusterPoolInstance(clusterId);
       if (!alreadyAssigned) {
-        await this.db.instances.assignPool(clusterId, tier);
-        await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId, clusterName);
+        try {
+          await this.db.instances.assignPool(clusterId, tier);
+          await this.emit(EVENTS.NODE.ALLOCATED.code, clusterId, clusterName);
+        } catch (err) {
+          if (err instanceof PoolCapacityExceededError) {
+            this.log.info(`Cluster ${clusterName} will be assigned once the new instance is healthy`);
+          } else {
+            throw err;
+          }
+        }
       }
       this.log.info(`Provisioned and assigned new instance to cluster ${clusterName}`);
     }

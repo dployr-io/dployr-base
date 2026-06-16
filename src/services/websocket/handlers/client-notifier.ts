@@ -54,28 +54,37 @@ export class ClientNotifier {
     const clients = this.conn.getClientConnections(clusterId);
     if (!clients.length) return;
 
+    const fetched = new Map<string, { data: unknown; version: number }>();
+    for (const section of sections) {
+      const key = section === "workloads"
+        ? KV_KEYS.CLUSTER.WORKLOADS(clusterId, instanceId)
+        : section === "cluster_resources"
+        ? KV_KEYS.CLUSTER.CLUSTER_RESOURCES(clusterId, instanceId)
+        : KV_KEYS.INSTANCE.ENTITY(instanceId, section);
+
+      const entity = await this.kv.entities.getEntity(key);
+      if (!entity) continue;
+
+      if (section === "workloads") {
+        const d = entity.data as any;
+        const hasServices = Array.isArray(d?.services) && d.services.length > 0;
+        const hasDeployments = Array.isArray(d?.deployments) && d.deployments.length > 0;
+        if (!hasServices && !hasDeployments) continue;
+        entity.data = await addSleepingServices(this.kv, d);
+      }
+
+      fetched.set(section, { data: entity.data, version: entity.version });
+    }
+
+    if (fetched.size === 0) return;
+
     for (const client of clients) {
       const changed: Record<string, { data: unknown; version: number }> = {};
 
-      for (const section of sections) {
-        const key = section === "workloads" ? KV_KEYS.CLUSTER.WORKLOADS(clusterId, instanceId) : KV_KEYS.INSTANCE.ENTITY(instanceId, section);
-
-        const entity = await this.kv.entities.getEntity(key);
-        if (!entity) continue;
-
-        // Don't broadcast empty workloads — the heartbeat path covers that via DB fallback.
-        if (section === "workloads") {
-          const d = entity.data as any;
-          const hasServices = Array.isArray(d?.services) && d.services.length > 0;
-          const hasDeployments = Array.isArray(d?.deployments) && d.deployments.length > 0;
-          if (!hasServices && !hasDeployments) continue;
-
-          entity.data = await addSleepingServices(this.kv, d);
-        }
-
-        const clientVersion = this.conn.getClientVersion(client.connectionId, instanceId, section);
-        if (entity.version > clientVersion) {
-          changed[section] = { data: entity.data, version: entity.version };
+      for (const [section, entry] of fetched) {
+        const clientVersion = this.conn.getClientVersion(client.connectionId, instanceId, section as NodeStateEntity);
+        if (entry.version > clientVersion) {
+          changed[section] = entry;
         }
       }
 
@@ -97,10 +106,9 @@ export class ClientNotifier {
    * Send a message to a specific client (non-broadcast message)
    */
   async sendToClient(clusterId: string, connectionId: string, message: BaseMessage): Promise<boolean> {
-    const clients = this.conn.getClientConnections(clusterId);
-    const target = clients.find((c) => c.connectionId === connectionId);
+    const target = this.conn.getConnectionById(connectionId);
 
-    if (!target) {
+    if (!target || target.connectionKey !== clusterId) {
       this.log.warn(`Client ${connectionId} not found in cluster ${clusterId}`);
       return false;
     }

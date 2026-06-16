@@ -324,6 +324,7 @@ admin.get("/build-queue", requireDployrAdministrator, async (c) => {
       createdAt: n.createdAt,
       connected: ws.hasNodeConnection(n.tag),
       slots: await kv.instanceCache.getBuildSlots(n.tag),
+      inFlight: await kv.instanceCache.getInFlightBuilds(n.tag),
     })),
   );
 

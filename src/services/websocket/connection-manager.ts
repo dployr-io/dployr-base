@@ -16,16 +16,16 @@ import { Logger } from "@/lib/logger.js";
  */
 export class ConnectionManager {
   private connections = new Map<string, Set<ClusterConnection>>();
-  /** path → ActiveLogStream */
+  private connectionById = new Map<string, ClusterConnection>();
+  private nodesByClusterId = new Map<string, Set<ClusterConnection>>();
+  private connectionByWs = new Map<WebSocket, ClusterConnection>();
   private logStreams = new Map<string, ActiveLogStream>();
-  /** nodeStreamId → path — reverse index for O(1) lookup in handleLogChunk */
   private nodeStreamIndex = new Map<string, string>();
-  /** nodeStreamIds evicted by handoff — chunks are silently dropped to avoid 24h of log spam */
-  private evictedStreamIds = new Map<string, number>();
   private pendingRequests = new Map<string, PendingRequest>();
   private requestsByClient = new Map<WebSocket, Set<string>>();
   private unackedMessages = new Map<string, { message: unknown; timestamp: number; retries: number }>();
   private fileWatchSubscriptions = new Map<string, Set<string>>();
+  private connWatches = new Map<string, Set<string>>();
   private config: ConnectionManagerConfig;
   private cleanupTimer: NodeJS.Timeout | null = null;
   private lastActivityMap = new Map<WebSocket, number>();
@@ -87,6 +87,14 @@ export class ConnectionManager {
     };
 
     this.connections.get(connectionKey)!.add(conn);
+    this.connectionById.set(connectionId, conn);
+    this.connectionByWs.set(ws, conn);
+    if (role === "node" && clusterId) {
+      if (!this.nodesByClusterId.has(clusterId)) {
+        this.nodesByClusterId.set(clusterId, new Set());
+      }
+      this.nodesByClusterId.get(clusterId)!.add(conn);
+    }
     this.lastActivityMap.set(ws, Date.now());
     this.requestsByClient.set(ws, new Set());
 
@@ -103,6 +111,15 @@ export class ConnectionManager {
       conns.delete(conn);
       if (conns.size === 0) {
         this.connections.delete(conn.connectionKey);
+      }
+    }
+    this.connectionById.delete(conn.connectionId);
+    this.connectionByWs.delete(conn.ws);
+    if (conn.role === "node" && conn.clusterId) {
+      const nodeSet = this.nodesByClusterId.get(conn.clusterId);
+      if (nodeSet) {
+        nodeSet.delete(conn);
+        if (nodeSet.size === 0) this.nodesByClusterId.delete(conn.clusterId);
       }
     }
 
@@ -160,15 +177,18 @@ export class ConnectionManager {
   }
 
   /**
+   * Find all node connections whose conn.clusterId matches the given cluster ID.
+   * Used as a fallback when the DB-based instance lookup fails (e.g. instance.cluster_id is null).
+   */
+  getNodeConnectionsByClusterId(clusterId: string): ClusterConnection[] {
+    return Array.from(this.nodesByClusterId.get(clusterId) ?? []);
+  }
+
+  /**
    * Find a connection by its connectionId across all clusters.
    */
   getConnectionById(connectionId: string): ClusterConnection | undefined {
-    for (const conns of this.connections.values()) {
-      for (const conn of conns) {
-        if (conn.connectionId === connectionId) return conn;
-      }
-    }
-    return undefined;
+    return this.connectionById.get(connectionId);
   }
 
   /**
@@ -378,14 +398,10 @@ export class ConnectionManager {
     const now = Date.now();
     const dead: ClusterConnection[] = [];
 
-    for (const [, conns] of this.connections) {
-      for (const conn of conns) {
-        const lastActivity = this.lastActivityMap.get(conn.ws) ?? conn.connectedAt;
-        if (now - lastActivity > this.config.connectionTtlMs) {
-          if (conn.ws.readyState !== 1) {
-            dead.push(conn);
-          }
-        }
+    for (const [ws, lastActivity] of this.lastActivityMap) {
+      if (now - lastActivity > this.config.connectionTtlMs && ws.readyState !== 1) {
+        const conn = this.connectionByWs.get(ws);
+        if (conn) dead.push(conn);
       }
     }
 
@@ -447,10 +463,7 @@ export class ConnectionManager {
   findBuildDeployStreamsForService(serviceId: string): ActiveLogStream[] {
     const results: ActiveLogStream[] = [];
     for (const stream of this.logStreams.values()) {
-      if (
-        stream.meta?.serviceId === serviceId &&
-        (stream.key.startsWith("build:") || stream.key.startsWith("deploy:"))
-      ) {
+      if (stream.meta?.serviceId === serviceId && (stream.key.startsWith("build:") || stream.key.startsWith("deploy:"))) {
         results.push(stream);
       }
     }
@@ -519,6 +532,10 @@ export class ConnectionManager {
       this.fileWatchSubscriptions.set(watchKey, new Set());
     }
     this.fileWatchSubscriptions.get(watchKey)!.add(connectionId);
+    if (!this.connWatches.has(connectionId)) {
+      this.connWatches.set(connectionId, new Set());
+    }
+    this.connWatches.get(connectionId)!.add(watchKey);
     this.log.info(`Added file watch: ${watchKey} for connection ${connectionId}`);
   }
 
@@ -532,6 +549,12 @@ export class ConnectionManager {
     const removed = subscribers.delete(connectionId);
     if (subscribers.size === 0) {
       this.fileWatchSubscriptions.delete(watchKey);
+    }
+
+    const watched = this.connWatches.get(connectionId);
+    if (watched) {
+      watched.delete(watchKey);
+      if (watched.size === 0) this.connWatches.delete(connectionId);
     }
 
     if (removed) {
@@ -551,12 +574,16 @@ export class ConnectionManager {
    * Remove all file watches for a connection
    */
   removeFileWatchesForConnection(connectionId: string): void {
-    for (const [watchKey, subscribers] of this.fileWatchSubscriptions.entries()) {
-      subscribers.delete(connectionId);
-      if (subscribers.size === 0) {
-        this.fileWatchSubscriptions.delete(watchKey);
+    const watched = this.connWatches.get(connectionId);
+    if (!watched) return;
+    for (const watchKey of watched) {
+      const subscribers = this.fileWatchSubscriptions.get(watchKey);
+      if (subscribers) {
+        subscribers.delete(connectionId);
+        if (subscribers.size === 0) this.fileWatchSubscriptions.delete(watchKey);
       }
     }
+    this.connWatches.delete(connectionId);
   }
 
   /**

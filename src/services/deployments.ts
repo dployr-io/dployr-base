@@ -259,7 +259,7 @@ export class DeploymentService {
       session,
     }: {
       clusterId: string;
-      instanceName: string;
+      instanceName: string | null;
       payload: DeploymentPayload;
       session: Session;
     },
@@ -291,13 +291,8 @@ export class DeploymentService {
       if (serviceCount >= limit) {
         const cluster = await db.clusters.get(clusterId);
         log.warn(`Service limit reached for "${cluster?.name}" on plan "${plan}" (max ${limit})`);
-        throw new ValidationError(`Service limit reached for the ${plan} plan (${limit} service${limit === 1 ? "" : "s"} max). Remove an existing service to deploy a new one.`);
+        throw new ValidationError(`Service limit reached for ${plan} plan (${limit} service${limit === 1 ? "" : "s"} max). Remove an existing service to deploy a new one.`);
       }
-    }
-
-    const instance = await db.instances.find({ tag: instanceName });
-    if (!instance) {
-      throw new ResourceNotFoundError("Instance");
     }
 
     const notifyPending = async (taskId: string) => {
@@ -349,6 +344,14 @@ export class DeploymentService {
       }
       ws.clientNotifier.notifyRefresh(clusterId, "deployments");
     };
+
+    if (!instanceName) {
+      const taskId = ulid();
+      await db.services.upsert({ clusterId, name: deployPayload.name, type: deployPayload.type });
+      await notifyPending(taskId);
+      log.info(`No instance for cluster ${clusterId} — queued deployment ${taskId} for ${deployPayload.name}`);
+      return { taskId };
+    }
 
     if (deployPayload.source === "image") {
       const taskId = ulid();

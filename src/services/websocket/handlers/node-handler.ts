@@ -494,6 +494,14 @@ export class NodeMessageHandler {
         await this.kv.entities.setEntity(KV_KEYS.CLUSTER.WORKLOADS(clusterId, update.instance_id), workloads);
       }
 
+      const rawClusterResources = (update as any).cluster_resources;
+      if (rawClusterResources?.[clusterId]) {
+        await this.kv.entities.setEntity(
+          KV_KEYS.CLUSTER.CLUSTER_RESOURCES(clusterId, update.instance_id),
+          { [clusterId]: rawClusterResources[clusterId] },
+        );
+      }
+
       await this.clientNotifier.broadcast(clusterId, update.instance_id, presentSections);
 
       if (changedFlags.deploymentsChanged) {

@@ -246,14 +246,23 @@ export class ClientMessageHandler {
       const changed: Record<string, { data: unknown; version: number }> = {};
       const knownVersions = msg.versions?.[instanceId] ?? {};
 
-      // All sections except workloads use standard version-gating.
+      // All sections except workloads and cluster_resources use standard version-gating.
       for (const section of NODE_STATE_ENTITIES) {
-        if (section === "workloads") continue;
+        if (section === "workloads" || section === "cluster_resources") continue;
         const entity = await this.kv.entities.getEntity(KV_KEYS.INSTANCE.ENTITY(instanceId, section));
         if (!entity) continue;
         const clientVersion = knownVersions[section] ?? 0;
         if (entity.version > clientVersion) {
           changed[section] = { data: entity.data, version: entity.version };
+        }
+      }
+
+      // cluster_resources is stored per-cluster (not per-instance) to scope data correctly.
+      const crEntity = await this.kv.entities.getEntity(KV_KEYS.CLUSTER.CLUSTER_RESOURCES(clusterId, instanceId));
+      if (crEntity) {
+        const clientCrVersion = knownVersions["cluster_resources"] ?? 0;
+        if (crEntity.version > clientCrVersion) {
+          changed["cluster_resources"] = { data: crEntity.data, version: crEntity.version };
         }
       }
 
@@ -268,13 +277,13 @@ export class ClientMessageHandler {
         if (workloadsEntity!.version > clientWorkloadsVersion) {
           // The node doesn't know DB IDs — enrich live services with DB IDs by name
           const liveData = workloadsEntity!.data as any;
-          const dbIdByName = new Map(
-            ((savedWorkloads?.data.services ?? []) as any[]).map((s: any) => [s.name, s.id])
+          const dbByName = new Map(
+            ((savedWorkloads?.data.services ?? []) as any[]).map((s: any) => [s.name, s])
           );
-          const enrichedServices = ((liveData.services ?? []) as any[]).map((s: any) => ({
-            ...s,
-            id: dbIdByName.get(s.name) ?? s.id,
-          }));
+          const enrichedServices = ((liveData.services ?? []) as any[]).map((s: any) => {
+            const db = dbByName.get(s.name);
+            return { ...s, id: db?.id ?? s.id, created_at: db?.created_at ?? s.created_at };
+          });
           const enrichedData = await addSleepingServices(this.kv, { ...liveData, services: enrichedServices });
           const liveDeployments = (enrichedData.deployments ?? []) as any[];
           const liveNames = new Set(liveDeployments.map((d: any) => d.name));

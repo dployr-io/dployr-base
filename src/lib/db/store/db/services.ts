@@ -28,12 +28,14 @@ export class ServiceStore extends BaseStore {
     label,
     type,
     deploymentId,
+    createdAt,
   }: {
     clusterId: string;
     name: string;
     label?: string | null;
     type: ServiceType;
     deploymentId?: string;
+    createdAt?: number;
   }): Promise<Service | null> {
     const nameValidation = validateString(name, "name");
     if (!nameValidation.valid) {
@@ -51,7 +53,7 @@ export class ServiceStore extends BaseStore {
            ON CONFLICT (name) DO UPDATE SET label = COALESCE(EXCLUDED.label, services.label), deployment_id = COALESCE(EXCLUDED.deployment_id, services.deployment_id), updated_at = EXCLUDED.updated_at
            RETURNING id, cluster_id, name, label, type, deployment_id, iced_at, created_at, updated_at`,
         )
-        .bind(id, clusterId, name, label || null, type, deploymentId || null, now, now)
+        .bind(id, clusterId, name, label || null, type, deploymentId || null, createdAt ?? now, now)
         .first();
 
       return result ? this.toService(result) : null;

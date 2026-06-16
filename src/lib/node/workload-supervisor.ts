@@ -169,10 +169,17 @@ export class WorkloadSupervisor {
       }
     }
 
-    // Also check for a dedicated instance on the cluster
+    // Check for a dedicated instance on the cluster
     const dedicated = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
     if (dedicated?.tag && this.connectionManager.hasNodeConnection(dedicated.tag)) {
       tags.push(dedicated.tag);
+    }
+
+    if (tags.length > 0) return tags;
+
+    // Fallback: scan live connections  
+    for (const conn of this.connectionManager.getNodeConnectionsByClusterId(cluster.id)) {
+      if (conn.instanceTag) tags.push(conn.instanceTag);
     }
 
     return tags;
@@ -356,6 +363,7 @@ export class WorkloadSupervisor {
           name: svc.name,
           type: svc.type,
           deploymentId: deployment?.id,
+          createdAt: deployment?.createdAt,
         });
         this.log.info(`${deployment ? "Updated" : "Created"} service ${svc.name} for cluster ${cluster.name}`);
 
@@ -593,7 +601,7 @@ export class WorkloadSupervisor {
         const { instances: buildNodes } = await this.db.instances.list({ role: "build" as any });
         for (const node of buildNodes) {
           const inFlight = await this.kv.instanceCache.getInFlightBuilds(node.tag);
-          if (inFlight.some((b) => b.payload.name === service.name)) {
+          if (inFlight.some((b) => b.clusterId === cluster.id && b.payload.name === service.name)) {
             this.log.info(`Service ${service.name} already has an in-flight build on ${node.tag} — skipping reprovision`);
             return false;
           }
@@ -635,6 +643,12 @@ export class WorkloadSupervisor {
   private async reconcileSleepingSet(cluster: Cluster, dbServices: Service[], activeNames: Set<string>): Promise<boolean> {
     const flags = await Promise.all(dbServices.map((s) => this.kv.kv.get(KV_KEYS.SERVICE.SLEEPING(s.name))));
 
+    // Sleeping is only intentional for hobby-tier clusters (user-initiated pause/icing).
+    // For all other plans the flag is stale from a node disconnect and must be cleared
+    // so reprovision can proceed.
+    const anyFlagged = flags.some(Boolean);
+    const isHobby = anyFlagged && (await this.db.billing.getEffectivePlan(cluster.id)) === "hobby";
+
     const nowSleeping: string[] = [];
     for (let i = 0; i < dbServices.length; i++) {
       const svc = dbServices[i];
@@ -643,6 +657,9 @@ export class WorkloadSupervisor {
         if (activeNames.has(svc.name) && (health === null || health === "healthy")) {
           await this.kv.kv.delete(KV_KEYS.SERVICE.SLEEPING(svc.name));
           this.log.info(`Cleared stale SLEEPING flag for running service ${svc.name}`);
+        } else if (!isHobby) {
+          await this.kv.kv.delete(KV_KEYS.SERVICE.SLEEPING(svc.name));
+          this.log.info(`Cleared stale SLEEPING flag for ${svc.name} (non-hobby cluster)`);
         } else {
           nowSleeping.push(svc.name);
           if (this.traefik) {
@@ -679,13 +696,16 @@ export class WorkloadSupervisor {
 
     // Either not a pool cluster, pool instance is dead, or lookup failed — try dedicated
     const dedicatedInstance = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
-    if (!dedicatedInstance?.tag) return undefined;
-
-    if (!this.connectionManager.hasNodeConnection(dedicatedInstance.tag)) {
-      this.log.warn(`Dedicated instance ${dedicatedInstance.tag} has no active connection — skipping`, { cluster: cluster.name });
-      return undefined;
+    if (dedicatedInstance?.tag) {
+      if (!this.connectionManager.hasNodeConnection(dedicatedInstance.tag)) {
+        this.log.warn(`Dedicated instance ${dedicatedInstance.tag} has no active connection — skipping`, { cluster: cluster.name });
+        return undefined;
+      }
+      return dedicatedInstance.tag;
     }
 
-    return dedicatedInstance.tag;
+    // Fallback: scan live connections by clusterId (covers null instance.cluster_id in DB)
+    const [conn] = this.connectionManager.getNodeConnectionsByClusterId(cluster.id);
+    return conn?.instanceTag;
   }
 }
