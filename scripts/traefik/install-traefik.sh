@@ -20,7 +20,7 @@ SERVICE_USER="traefik"
 
 SKIP_PROMPTS=false
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]:-}" == "$0" ]]; then
   while [[ $# -gt 0 ]]; do
     case $1 in
       --non-interactive|-y) SKIP_PROMPTS=true; shift ;;
@@ -519,7 +519,7 @@ main() {
   echo "To reconfigure: sudo bash $0"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]:-}" == "$0" ]]; then
   main
   exit 0
 fi
