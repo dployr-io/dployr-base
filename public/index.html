@@ -1942,7 +1942,7 @@
                 <div class="table-wrap" id="bq-table-wrap" style="display:none;">
                   <table id="bq-table">
                     <thead>
-                      <tr><th>Task</th><th>Tier</th><th>Service</th><th>Queued</th></tr>
+                      <tr><th>Task</th><th>Tier</th><th>Service</th><th>Status</th><th>Queued</th></tr>
                     </thead>
                     <tbody id="bq-tbody"></tbody>
                   </table>
@@ -2917,22 +2917,28 @@
           });
         }
 
-        // queue table
+        // queue table — waiting + active (in-flight) builds
+        const inFlight = nodes.flatMap(n => (n.inFlight || []).map(e => ({ ...e, _node: n.tag, _active: true })));
+        const allEntries = [...inFlight, ...queue];
         const qTbody = $('#bq-tbody');
         qTbody.innerHTML = '';
-        if (!queue.length) {
+        if (!allEntries.length) {
           $('#bq-empty').classList.remove('hidden');
           $('#bq-table-wrap').style.display = 'none';
         } else {
           $('#bq-empty').classList.add('hidden');
           $('#bq-table-wrap').style.display = '';
-          queue.forEach(entry => {
+          allEntries.forEach(entry => {
             const tierColor = TIER_COLORS[entry.tier] || 'var(--text-dim)';
+            const statusBadge = entry._active
+              ? `<span style="font-size:10px;font-weight:600;color:var(--green);">● building</span>`
+              : `<span style="font-size:10px;color:var(--text-muted);">queued</span>`;
             const tr = document.createElement('tr');
             tr.innerHTML = `
               <td class="cell-id" style="font-size:11px;">${escHtml((entry.taskId || '—').slice(0, 14))}…</td>
               <td><span style="font-size:11px;font-weight:500;color:${tierColor};">${escHtml(entry.tier || '—')}</span></td>
               <td class="cell-tag" style="font-size:12px;">${escHtml(entry.payload?.name || '—')}</td>
+              <td>${statusBadge}</td>
               <td class="dim" style="white-space:nowrap;">${entry.enqueuedAt ? relTime(entry.enqueuedAt) : '—'}</td>
             `;
             qTbody.appendChild(tr);
@@ -2957,8 +2963,6 @@
 
       // auto-refresh: every 10s re-load whatever view is currently active
       let _autoRefreshTimer = null;
-      // ── Monitor ────────────────────────────────────────────────────────────
-
       let _monitorTab = 'jobs';
       let _monitorData = { nodes: [], jobs: [], infraHealth: null };
 
