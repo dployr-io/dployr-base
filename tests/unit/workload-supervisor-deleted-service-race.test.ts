@@ -72,6 +72,7 @@ function makeConnectionManager(connectedTags: string[]) {
   return {
     hasNodeConnection: (tag: string) => connectedTags.includes(tag),
     sendTask: () => false,
+    getNodeConnectionsByClusterId: (_id: string) => [],
   } as any;
 }
 

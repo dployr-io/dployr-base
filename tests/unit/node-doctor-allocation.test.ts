@@ -1,10 +1,25 @@
 // Copyright 2025 Emmanuel Madehin
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, it } from "node:test";
+import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import { NodeDoctor } from "@/lib/node/node-doctor.js";
 import type { Instance } from "@/types/index.js";
+
+let _privateKey: CryptoKey;
+let _publicKeyJwk: JsonWebKey & { kid: string };
+
+async function ensureKeyPair() {
+  if (_privateKey) return;
+  const pair = await crypto.subtle.generateKey(
+    { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+    true,
+    ["sign", "verify"],
+  );
+  _privateKey = pair.privateKey;
+  const pub = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  _publicKeyJwk = { ...pub, kid: "test-kid" } as JsonWebKey & { kid: string };
+}
 
 function makeKv() {
   return {
@@ -23,6 +38,8 @@ function makeKv() {
     },
     payloads: { async enqueueBuild() {} },
     entities: { async getEntity() { return null; } },
+    getPrivateKey: async () => _privateKey,
+    getPublicKey: async () => _publicKeyJwk,
   } as any;
 }
 
@@ -43,6 +60,8 @@ function makeDoctor({
 }
 
 describe("NodeDoctor.allocateUnassignedCapacity — unassigned cluster routing", () => {
+  before(ensureKeyPair);
+
   it("calls spawnDedicatedInstance for a pro cluster", async () => {
     const spawned: string[] = [];
     const allocated: string[] = [];
@@ -96,6 +115,7 @@ describe("NodeDoctor.allocateUnassignedCapacity — unassigned cluster routing",
         addPool: async () => ({ id: "inst-1" }),
         update: async () => {},
         removePool: async () => {},
+        getRoutingKey: async () => "test-node",
       },
       billing: {
         getEffectivePlan: async (clusterId: string) =>
@@ -149,6 +169,8 @@ describe("NodeDoctor.allocateUnassignedCapacity — unassigned cluster routing",
 });
 
 describe("NodeDoctor.migrateClusters — tier routing", () => {
+  before(ensureKeyPair);
+
   it("passes the cluster's effective tier to allocateSharedPool", async () => {
     const allocateCalls: { clusterId: string; tier: string }[] = [];
 
@@ -161,6 +183,7 @@ describe("NodeDoctor.migrateClusters — tier routing", () => {
         list: async () => ({ instances: [] }),
         listOrphanedDedicated: async () => [],
         releasePoolInstance: async () => {},
+        getRoutingKey: async () => "test-node",
       },
       clusters: { find: async () => null },
     } as any;
@@ -191,7 +214,7 @@ describe("NodeDoctor.migrateClusters — tier routing", () => {
 
     const db = {
       billing: { getEffectivePlan: async () => "hobby" },
-      instances: { list: async () => ({ instances: [] }), listOrphanedDedicated: async () => [], releasePoolInstance: async () => {} },
+      instances: { list: async () => ({ instances: [] }), listOrphanedDedicated: async () => [], releasePoolInstance: async () => {}, getRoutingKey: async () => "test-node" },
       clusters: { find: async () => null },
     } as any;
 

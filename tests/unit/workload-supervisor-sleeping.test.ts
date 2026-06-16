@@ -11,7 +11,7 @@ type FakeInstance = { id: string; tag: string; kind: "pool" | "dedicated"; clust
 type FakeService = { id: string; name: string; type: string; clusterId: string };
 type FakeCluster = { id: string; name: string; poolInstanceId?: string };
 
-function makeDb(clusters: FakeCluster[], services: FakeService[], instances: FakeInstance[]) {
+function makeDb(clusters: FakeCluster[], services: FakeService[], instances: FakeInstance[], plan = "hobby") {
   return {
     instances: {
       find: async (filter: any) => {
@@ -29,6 +29,7 @@ function makeDb(clusters: FakeCluster[], services: FakeService[], instances: Fak
       list: async (filter: any) => ({ services: services.filter(s => s.clusterId === filter.clusterId) }),
       upsert: async () => {},
     },
+    billing: { get: async (_id: string) => ({ plan }) },
     serviceSecrets: null,
   } as any;
 }
@@ -70,6 +71,7 @@ function makeConnectionManager(connectedTags: string[]) {
   return {
     hasNodeConnection: (tag: string) => connectedTags.includes(tag),
     sendTask: () => false,
+    getNodeConnectionsByClusterId: (_id: string) => [],
   } as any;
 }
 

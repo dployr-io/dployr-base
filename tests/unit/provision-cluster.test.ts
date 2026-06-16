@@ -17,6 +17,7 @@ function makeDb({
   cluster = { id: "cluster-1", poolInstanceId: null } as any,
   dedicated = null as any,
   assignPoolCalls = [] as string[],
+  assignPoolReturns = "pool-inst-1",
 } = {}) {
   return {
     clusters: {
@@ -29,6 +30,7 @@ function makeDb({
       },
       async assignPool(clusterId: string) {
         assignPoolCalls.push(clusterId);
+        return assignPoolReturns;
       },
     },
   } as any;
@@ -37,12 +39,14 @@ function makeDb({
 describe("AuthService.provisionCluster — pool assignment guard", () => {
   it("assigns hobby pool when cluster has no pool instance and no dedicated instance", async () => {
     const assigned: string[] = [];
-    const db = makeDb({ assignPoolCalls: assigned });
+    const db = makeDb({ assignPoolCalls: assigned, assignPoolReturns: "pool-inst-1" });
     const svc = new AuthService(db, makeKv(), makeEnv());
 
-    await svc.provisionCluster({ userId: "user-1" });
+    const result = await svc.provisionCluster({ userId: "user-1" });
 
     assert.deepEqual(assigned, ["cluster-1"], "must assign new cluster to pool");
+    assert.equal(result?.id, "cluster-1");
+    assert.equal(result?.poolInstanceId, "pool-inst-1", "must return the freshly assigned poolInstanceId");
   });
 
   it("skips pool assignment when cluster already has a poolInstanceId", async () => {
@@ -51,9 +55,10 @@ describe("AuthService.provisionCluster — pool assignment guard", () => {
     const db = makeDb({ cluster, assignPoolCalls: assigned });
     const svc = new AuthService(db, makeKv(), makeEnv());
 
-    await svc.provisionCluster({ userId: "user-1" });
+    const result = await svc.provisionCluster({ userId: "user-1" });
 
     assert.deepEqual(assigned, [], "must not re-assign a cluster that already has a pool instance");
+    assert.equal(result?.poolInstanceId, undefined, "must not expose poolInstanceId when cluster was already assigned");
   });
 
   it("skips pool assignment when cluster has a dedicated instance (pro tier)", async () => {
