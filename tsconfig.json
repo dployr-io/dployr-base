@@ -5,7 +5,7 @@
     "moduleResolution": "Node16",
     "strict": true,
     "skipLibCheck": true,
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
     "types": ["node"],
