@@ -12,7 +12,7 @@ import { VirtualMachine } from "@/types/vm.js";
 import { INSTANCE_POOL_QUOTA } from "../constants/instances.js";
 import { KV_KEYS } from "../constants/kv.js";
 import { DEFAULT_CAPACITY, INSTANCE_ENV_TAG, INSTANCE_MANAGED_TAG, INSTANCE_DO_NOT_REMOVE_TAG, PROVIDER_TO_INSTANCE_REGION } from "../constants/vm.js";
-import { POOL_CAPACITY_BY_TIER } from "../constants/instances.js";
+import { POOL_CAPACITY_BY_TIER, CLUSTER_LIMITS_BY_TIER } from "../constants/instances.js";
 import { InstancePool } from "@/services/pool.js";
 import { InstancePayload } from "../db/store/db/instances.js";
 import { Logger } from "@/lib/logger.js";
@@ -215,9 +215,13 @@ export class NodeDoctor extends EventEmittable {
 
     const unassigned = await this.db.instances.listUnassignedClusters();
     for (const { id: clusterId, name: clusterName } of unassigned) {
-      const plan = await this.db.billing.getEffectivePlan(clusterId);
-      await this.allocateForPlan(clusterId, clusterName, plan);
-      await this.emit("allocated", EVENTS.NODE.ALLOCATED.code);
+      try {
+        const plan = await this.db.billing.getEffectivePlan(clusterId);
+        await this.allocateForPlan(clusterId, clusterName, plan);
+        await this.emit("allocated", EVENTS.NODE.ALLOCATED.code);
+      } catch (err) {
+        this.log.error(`Failed to allocate cluster ${clusterName}`, { error: String(err) });
+      }
     }
   }
 
@@ -312,7 +316,10 @@ export class NodeDoctor extends EventEmittable {
         await this.emit(EVENTS.NODE.DRAINED.code, droplet.name);
       } catch (err) {
         this.log.error(`Failed to delete droplet ${droplet.name}`, { error: String(err) });
-        return;
+        const alreadyGone = String(err).includes("404") || String(err).includes("not_found");
+        if (!alreadyGone) return;
+        this.log.info(`Droplet ${droplet.name} already deleted from provider — cleaning up DB record`);
+        // Fall through to DB cleanup below
       }
     }
 
@@ -566,11 +573,23 @@ export class NodeDoctor extends EventEmittable {
       case "hobby":
       case "indie":
         await this.pool.allocateSharedPool(clusterId, plan);
+        await this.sendSetupClusterTask(clusterId, plan);
         break;
       case "pro":
         await this.db.instances.releasePoolInstance(clusterId);
         await this.pool.spawnDedicatedInstance({ clusterId, clusterName });
         break;
     }
+  }
+
+  async sendSetupClusterTask(clusterId: string, plan: SubscriptionPlan): Promise<void> {
+    const limits = CLUSTER_LIMITS_BY_TIER[plan];
+    if (!limits || limits.clusterMemory === 0) return;
+
+    const routingKey = await this.db.instances.getRoutingKey(clusterId);
+    const jwt = new JWTService(this.kv);
+    const token = await jwt.createInstanceAccessToken(undefined, routingKey, clusterId);
+    const task = new DployrdService().createSetupClusterTask(ulid(), clusterId, limits.clusterMemory, limits.clusterCpu, token);
+    this.conn.sendTask(routingKey, task);
   }
 }

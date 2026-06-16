@@ -125,7 +125,7 @@ export class AuthService {
    * If the pool is at capacity and VM/JWT services are provided, a new
    * instance is provisioned automatically.
    */
-  async provisionCluster({ userId, vmService, jwt, pool }: { userId: string; vmService?: VmProvider; jwt?: JWTService; pool?: InstancePool }): Promise<{ id: string } | null> {
+  async provisionCluster({ userId, pool }: { userId: string; pool?: InstancePool }): Promise<{ id: string; poolInstanceId?: string } | null> {
     let cluster: { id: string; poolInstanceId?: string | null } | null = null;
 
     try {
@@ -135,14 +135,15 @@ export class AuthService {
       return null;
     }
 
-    if (!cluster || cluster.poolInstanceId) return cluster;
+    if (!cluster || cluster.poolInstanceId) return { id: cluster.id };
 
     // Skip pool assignment if the cluster already has a dedicated instance (pro tier).
     const dedicated = await this.db.instances.find({ clusterId: cluster.id, kind: "dedicated" });
-    if (dedicated) return cluster;
+    if (dedicated) return { id: cluster.id };
 
     try {
-      await this.db.instances.assignPool(cluster.id, "hobby");
+      const poolInstanceId = await this.db.instances.assignPool(cluster.id, "hobby");
+      return { id: cluster.id, poolInstanceId };
     } catch (error) {
       if (error instanceof PoolCapacityExceededError && pool) {
         await pool.spawnPoolInstance({ clusterId: cluster.id, tier: "hobby" });
@@ -151,7 +152,7 @@ export class AuthService {
       }
     }
 
-    return cluster;
+    return { id: cluster.id };
   }
 
   /**
