@@ -29,7 +29,7 @@ function makeDb(clusters: FakeCluster[], services: FakeService[], instances: Fak
       list: async (filter: any) => ({ services: services.filter(s => s.clusterId === filter.clusterId) }),
       upsert: async () => {},
     },
-    billing: { get: async (_id: string) => ({ plan }) },
+    billing: { get: async (_id: string) => ({ plan }), getEffectivePlan: async (_id: string) => plan },
     serviceSecrets: null,
   } as any;
 }
