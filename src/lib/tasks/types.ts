@@ -95,3 +95,12 @@ export const SystemRestartSchema = z.object({
 });
 
 export type SystemRestartPayload = z.infer<typeof SystemRestartSchema>;
+
+// Setup cluster cgroup slice task payload
+export const SetupClusterSchema = z.object({
+  cluster_id: z.string().min(1),
+  cluster_memory: z.number().int(),
+  cluster_cpu: z.number().int(),
+});
+
+export type SetupClusterPayload = z.infer<typeof SetupClusterSchema>;

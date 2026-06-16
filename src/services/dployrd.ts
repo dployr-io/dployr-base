@@ -260,4 +260,14 @@ export class DployrdService {
       Status: "pending",
     };
   }
+
+  // Create a cluster cgroup slice setup task
+  createSetupClusterTask(taskId: string, clusterId: string, clusterMemory: number, clusterCpu: number, token?: string): NodeTask {
+    return {
+      ID: taskId,
+      Type: "clusters/setup:post",
+      Payload: { cluster_id: clusterId, cluster_memory: clusterMemory, cluster_cpu: clusterCpu, token },
+      Status: "pending",
+    };
+  }
 }

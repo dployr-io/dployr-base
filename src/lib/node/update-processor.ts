@@ -43,6 +43,7 @@ export class UpdateProcessor {
     this.handleMessageV1_1();
 
     for (const section of NODE_STATE_ENTITIES) {
+      if (section === "cluster_resources") continue; // stored per-cluster in node-handler
       const sectionData = (this.message as any)[section];
       if (sectionData !== undefined) {
         this.tasks.push(this.kv.entities.setEntity(KV_KEYS.INSTANCE.ENTITY(this.message.instance_id, section), sectionData));

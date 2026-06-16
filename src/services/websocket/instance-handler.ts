@@ -27,6 +27,7 @@ import { TraefikService } from "@/services/traefik-router.js";
 import { LokiClient } from "@/services/loki.js";
 import type { LokiStreamMeta } from "@/types/websocket-message.js";
 import { ulid } from "ulid";
+import { setupCluster } from "@/services/background/jobs/setup-cluster.js";
 
 export interface WebSocketHandlerConfig {
   connectionManager?: Partial<ConnectionManagerConfig>;
@@ -101,6 +102,9 @@ export class WebSocketHandler {
       this.kvStore.setNodeConnected(instanceTag).catch(() => {});
       worker.emit(NODES_HEALTH_JOB);
       worker.emit(NODES_SYNC_JOB);
+      this.setupClusterTasks(instanceTag).catch((err) => {
+        this.log.error("fireSetupClusterTasks failed", { instanceTag, error: String(err) });
+      });
     }
 
     // Handle reconnection for clients
@@ -147,6 +151,31 @@ export class WebSocketHandler {
       );
     } catch (err) {
       this.log.error(`Failed to send hello:`, err);
+    }
+  }
+
+  // Fire setup_cluster tasks for every cluster served by the instance that just
+  // connected. Runs on every connect so reboots are automatically covered.
+  private async setupClusterTasks(instanceTag: string): Promise<void> {
+    const instance = await this.dbStore.instances.find({ tag: instanceTag });
+    if (!instance) return;
+
+    if (instance.kind === "dedicated") {
+      if (instance.clusterId) {
+        this.log.info(`Dispatching setup_cluster for dedicated instance ${instanceTag}`);
+        worker.dispatch(setupCluster(instance.clusterId));
+      }
+      return;
+    }
+
+    const { clusters } = await this.dbStore.clusters.list({ instanceTag });
+    if (clusters.length === 0) {
+      this.log.debug(`No clusters assigned to pool instance ${instanceTag} — skipping setup_cluster`);
+      return;
+    }
+    this.log.info(`Dispatching setup_cluster for ${clusters.length} cluster(s) on ${instanceTag}`);
+    for (const cluster of clusters) {
+      worker.dispatch(setupCluster(cluster.id));
     }
   }
 
@@ -317,16 +346,19 @@ export async function setServicesLoadingMode(
   services: { list: (filter: { clusterId: string }) => Promise<{ services: { name: string }[] }> },
   kv: { put: (key: string, value: string) => Promise<void> },
   traefik: { setLoadingMode: (name: string) => Promise<void> },
+  opts?: { setSleepingFlag?: boolean },
 ): Promise<void> {
+  const setSleepingFlag = opts?.setSleepingFlag ?? true;
   const log = new Logger("WebSocket");
   for (const clusterId of clusterIds) {
     try {
       const { services: svcs } = await services.list({ clusterId });
       await Promise.all(
-        svcs.map((svc) => Promise.all([
-          traefik.setLoadingMode(svc.name),
-          kv.put(KV_KEYS.SERVICE.SLEEPING(svc.name), "1"),
-        ])),
+        svcs.map((svc) => {
+          const tasks: Promise<void>[] = [traefik.setLoadingMode(svc.name)];
+          if (setSleepingFlag) tasks.push(kv.put(KV_KEYS.SERVICE.SLEEPING(svc.name), "1"));
+          return Promise.all(tasks);
+        }),
       );
       if (svcs.length > 0) {
         log.info(`Set loading mode for ${svcs.length} service(s) in cluster ${clusterId}`);

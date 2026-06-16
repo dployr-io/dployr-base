@@ -13,6 +13,7 @@ import { getKVStore, getOAuthService, getDbStore, getJWTService, getEmailService
 import { authMiddleware } from "@/middleware/auth.js";
 import { worker } from "@/services/background/index.js";
 import { notify } from "@/services/background/jobs/notify.js";
+import { setupCluster } from "@/services/background/jobs/setup-cluster.js";
 import { Logger } from "@/lib/logger.js";
 import { isDisposableEmail } from "@/lib/email/blocklist.js";
 
@@ -93,9 +94,12 @@ auth.get("/callback/:provider", async (c) => {
       metadata: oAuthUser.metadata,
     });
 
-    const vmService = c.get("vmProvider") ?? undefined;
-    await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c), pool: getInstancePoolService(c) });
+    const provisioned = await authService.provisionCluster({ userId: user.id, pool: getInstancePoolService(c) });
     const { sessionId, clusters } = await authService.createSession({ user, meta: extractRequestMeta(c.req.raw) });
+
+    if (provisioned?.poolInstanceId) {
+      worker.dispatch(setupCluster(provisioned.id));
+    }
 
     await kv.logEvent({
       actor: { id: user.id, type: "user" },
@@ -220,10 +224,13 @@ auth.post("/login/email/verify", async (c) => {
     }
   }
 
-  const vmService = c.get("vmProvider") ?? undefined;
-  await authService.provisionCluster({ userId: user.id, vmService, jwt: getJWTService(c), pool: getInstancePoolService(c) });
+  const provisioned = await authService.provisionCluster({ userId: user.id, pool: getInstancePoolService(c) });
 
   const { sessionId, clusters } = await authService.createSession({ user, meta: extractRequestMeta(c.req.raw) });
+
+  if (provisioned?.poolInstanceId) {
+    worker.dispatch(setupCluster(provisioned.id));
+  }
 
   await kv.logEvent({
     actor: { id: user.id, type: "user" },

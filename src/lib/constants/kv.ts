@@ -80,6 +80,7 @@ export const KV_KEYS = {
     STATUS: (clusterId: string) => `cluster:${clusterId}:status`,
     RENAME_HISTORY: (clusterId: string) => `cluster:${clusterId}:renames`,
     WORKLOADS: (clusterId: string, nodeId: string) => `cluster:${clusterId}:node:${nodeId}:workloads`,
+    CLUSTER_RESOURCES: (clusterId: string, nodeId: string) => `cluster:${clusterId}:node:${nodeId}:cluster_resources`,
     SLEEPING_SERVICES: (clusterId: string) => `cluster:${clusterId}:sleeping`,
     DEDICATED_PROVISIONING: (clusterId: string) => `cluster:${clusterId}:dedicated:provisioning`,
   },
