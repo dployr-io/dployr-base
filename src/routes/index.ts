@@ -22,6 +22,7 @@ import oidc from "./oidc.js";
 import authTokens from "./auth-tokens.js";
 import twofa from "./twofa.js";
 import logs from "./logs.js";
+import status from "./status.js";
 import { getWS } from "@/lib/config/context.js";
 
 const VERSION = process.env.BASE_VERSION || "unknown";
@@ -49,6 +50,7 @@ export function registerRoutes(app: Hono<{ Bindings: Bindings; Variables: Variab
   app.route("/v1/proxy", proxy);
   app.route("/v1/billing", billing);
   app.route("/v1/logs", logs);
+  app.route("/v1/status", status);
   app.route("/webhooks", webhooks);
 
   // Health check endpoint

@@ -54,8 +54,11 @@ if (process.env.NODE_ENV !== "test") {
   app.use("/v1/*", globalRateLimit);
 }
 
-// CORS middleware
-app.use("/v1/*", createCorsMiddleware(getCorsConfig));
+// CORS middleware 
+app.use("/v1/*", async (c, next) => {
+  if (c.req.path === "/v1/status") return next();
+  return createCorsMiddleware(getCorsConfig)(c, next);
+});
 
 // Register all API routes
 registerRoutes(app);
